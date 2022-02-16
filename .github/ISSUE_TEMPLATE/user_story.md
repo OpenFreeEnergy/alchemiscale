@@ -7,6 +7,7 @@ assignees: ''
 
 ---
 
+<!-- Tell us about a need you have that this project can fulfill -->
 
 **In broad terms, what are you trying to do?**
 
@@ -15,6 +16,3 @@ assignees: ''
 
 
 **What problems do you anticipate with using this project to achieve the above?**
-
-
-
