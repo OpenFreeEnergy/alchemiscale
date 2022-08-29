@@ -1,0 +1,29 @@
+name: gufe
+channels:
+  - jaimergp/label/unsupported-cudatoolkit-shim
+  - conda-forge
+  - openeye
+dependencies:
+  - python =3.9
+  # gufe dependencies
+  - numpy
+  - networkx
+  - rdkit
+  - pip
+  - pydantic
+  - pytest
+  - pytest-xdist
+  - pytest-cov
+  - coverage
+  - openff-toolkit
+  - openff-units
+  - openeye-toolkits
+  - typing-extensions
+
+  # fah-alchemy dependencies
+  - neo4j-python-driver
+  - py2neo
+  - dask
+  - distributed
+  - boto3
+
