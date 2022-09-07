@@ -23,6 +23,7 @@ dependencies:
   # fah-alchemy dependencies
   - neo4j-python-driver
   - py2neo
+  - monotonic    # needed by py2neo, but not pulled in
   - dask
   - distributed
   - boto3
