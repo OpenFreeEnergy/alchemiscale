@@ -147,72 +147,80 @@ class Neo4jStore:
 
     def _subgraph_to_gufe(self, nodes: List[Node], subgraph: Subgraph):
         """Get a list of all `GufeTokenizable` objects within the given subgraph.
-        
+
         Any `GufeTokenizable` that requires nodes or relationships missing from the subgraph will not be returned.
-        
+
         Returns
         -------
         List[GufeTokenizable]
-        
+
         """
         nxg = self._subgraph_to_networkx(subgraph)
-        #nodes = list(reversed(list(nx.topological_sort(subgraph_to_networkx(sg)))))
-        
+        # nodes = list(reversed(list(nx.topological_sort(subgraph_to_networkx(sg)))))
+
         nodes_to_gufe = {}
-        
+
         gufe_objs = []
         for node in nodes:
             gufe_objs.append(self._node_to_gufe(node, nxg, nodes_to_gufe))
-            
+
         return gufe_objs
-    
+
     def _subgraph_to_networkx(self, subgraph: Subgraph):
         g = nx.DiGraph()
-        
+
         for node in subgraph.nodes:
             g.add_node(node, **dict(node))
-            
+
         for relationship in subgraph.relationships:
-            g.add_edge(relationship.start_node, relationship.end_node, **dict(relationship))
-            
+            g.add_edge(
+                relationship.start_node, relationship.end_node, **dict(relationship)
+            )
+
         return g
-    
-    def _node_to_gufe(self, node: Node, g: nx.DiGraph, mapping: Dict[Node, GufeTokenizable]):
+
+    def _node_to_gufe(
+        self, node: Node, g: nx.DiGraph, mapping: Dict[Node, GufeTokenizable]
+    ):
         # shortcut if we already have this object deserialized
-        if (gufe_obj := mapping.get(node)):
+        if gufe_obj := mapping.get(node):
             return gufe_obj
-        
+
         dct = dict(node)
         for key, value in dict(node).items():
             # deserialize json-serialized attributes
-            if key in dct['_json_props']:
+            if key in dct["_json_props"]:
                 dct[key] = json.loads(value)
-                
+
             # inject dependencies
             dep_edges = g.edges(node)
             postprocess = set()
             for edge in dep_edges:
                 u, v = edge
                 edgedct = g.get_edge_data(u, v)
-                if 'attribute' in edgedct:
-                    if 'key' in edgedct:
-                        if not edgedct['attribute'] in dct:
-                            dct[edgedct['attribute']] = dict()
-                        dct[edgedct['attribute']][edgedct['key']] = self._node_to_gufe(v, g, mapping)
-                    elif 'index' in edgedct:
-                        postprocess.add(edgedct['attribute'])
-                        if not edgedct['attribute'] in dct:
-                            dct[edgedct['attribute']] = list()
-                        dct[edgedct['attribute']].append((edgedct['index'], self._node_to_gufe(v, g, mapping)))
+                if "attribute" in edgedct:
+                    if "key" in edgedct:
+                        if not edgedct["attribute"] in dct:
+                            dct[edgedct["attribute"]] = dict()
+                        dct[edgedct["attribute"]][edgedct["key"]] = self._node_to_gufe(
+                            v, g, mapping
+                        )
+                    elif "index" in edgedct:
+                        postprocess.add(edgedct["attribute"])
+                        if not edgedct["attribute"] in dct:
+                            dct[edgedct["attribute"]] = list()
+                        dct[edgedct["attribute"]].append(
+                            (edgedct["index"], self._node_to_gufe(v, g, mapping))
+                        )
                     else:
-                        dct[edgedct['attribute']] = self._node_to_gufe(v, g, mapping)
-                        
+                        dct[edgedct["attribute"]] = self._node_to_gufe(v, g, mapping)
+
         # postprocess any attributes that are lists
         # needed because we don't control the order in which a list is built up
         # but can only order it post-hoc
         for attr in postprocess:
             dct[attr] = [j for i, j in sorted(dct[attr], key=lambda x: x[0])]
-            
+
         # remove all neo4j-specific keys
         dct.pop("_json_props", None)
         dct.pop("_gufe_key", None)
@@ -220,10 +228,9 @@ class Neo4jStore:
         dct.pop("_campaign", None)
         dct.pop("_project", None)
         dct.pop("_scoped_key", None)
-            
+
         mapping[node] = res = GufeTokenizable.from_shallow_dict(dct)
         return res
-    
 
     def create_network(self, network: AlchemicalNetwork, org, campaign, project):
         """Add an `AlchemicalNetwork` to the target neo4j database.
@@ -244,8 +251,10 @@ class Neo4jStore:
         try:
             self.graph.create(g)
         except ClientError:
-            raise ValueError("At least one component of the network already exists in the target database; "
-                             "consider using `update_network` if this is expected.")
+            raise ValueError(
+                "At least one component of the network already exists in the target database; "
+                "consider using `update_network` if this is expected."
+            )
 
     def update_network(self, network: AlchemicalNetwork, org, campaign, project):
         """Add an `AlchemicalNetwork` to the target neo4j database, even if
@@ -265,24 +274,33 @@ class Neo4jStore:
         )
         self.graph.merge(g, "GufeTokenizable", "_scoped_key")
 
-    def _query_obj(self, *, qualname, additional: Dict=None, key=None, org=None, campaign=None, project=None):
-        properties = {"_org": org,
-                      "_campaign": campaign,
-                      "_project": project}
-        
+    def _query_obj(
+        self,
+        *,
+        qualname,
+        additional: Dict = None,
+        key=None,
+        org=None,
+        campaign=None,
+        project=None,
+    ):
+        properties = {"_org": org, "_campaign": campaign, "_project": project}
+
         for (k, v) in list(properties.items()):
             if v is None:
                 properties.pop(k)
-                
+
         if key is not None:
-            properties['_gufe_key'] = str(key)
+            properties["_gufe_key"] = str(key)
 
         if additional is None:
             additional = {}
         properties.update(additional)
 
-        prop_string = ", ".join("{}: '{}'".format(key, value) for key, value in properties.items())
-    
+        prop_string = ", ".join(
+            "{}: '{}'".format(key, value) for key, value in properties.items()
+        )
+
         q = f"""
         MATCH p = (n:{qualname} {{{prop_string}}})-[r:DEPENDS_ON*]->(m) 
         WHERE NOT (m)-[:DEPENDS_ON]->()
@@ -290,37 +308,40 @@ class Neo4jStore:
         """
         nodes = set()
         subgraph = Subgraph()
-        
+
         for record in self.graph.run(q):
-            nodes.add(record['n'])
-            subgraph = subgraph | record['p']
-        
+            nodes.add(record["n"])
+            subgraph = subgraph | record["p"]
+
         return self._subgraph_to_gufe(nodes, subgraph)
-    
-    def query_networks(self, *, name=None, key=None, org=None, campaign=None, project=None):
-        """Query for `AlchemicalNetwork`s matching given attributes.
-    
-        """
-        additional = {'name': name}
-        return self._query_obj(
-                qualname='AlchemicalNetwork', 
-                additional=additional, 
-                key=key,
-                org=org,
-                campaign=campaign,
-                project=project)
 
-    def query_transformations(self, *, name=None, key=None, org=None, campaign=None, project=None):
+    def query_networks(
+        self, *, name=None, key=None, org=None, campaign=None, project=None
+    ):
+        """Query for `AlchemicalNetwork`s matching given attributes."""
+        additional = {"name": name}
         return self._query_obj(
-                qualname='Transformation', 
-                key=key,
-                org=org,
-                campaign=campaign,
-                project=project)
+            qualname="AlchemicalNetwork",
+            additional=additional,
+            key=key,
+            org=org,
+            campaign=campaign,
+            project=project,
+        )
 
+    def query_transformations(
+        self, *, name=None, key=None, org=None, campaign=None, project=None
+    ):
+        return self._query_obj(
+            qualname="Transformation",
+            key=key,
+            org=org,
+            campaign=campaign,
+            project=project,
+        )
 
     def get_transformations_for_chemicalsystem(self):
         ...
-    
+
     def get_transformations_result(self):
         ...
