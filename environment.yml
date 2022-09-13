@@ -27,4 +27,5 @@ dependencies:
   - dask
   - distributed
   - boto3
-
+  - fastapi
+  - uvicorn
