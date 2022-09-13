@@ -284,6 +284,7 @@ class Neo4jStore:
         campaign=None,
         project=None,
     ):
+        # TODO : add pagination
         properties = {"_org": org, "_campaign": campaign, "_project": project}
 
         for (k, v) in list(properties.items()):
@@ -295,14 +296,19 @@ class Neo4jStore:
 
         if additional is None:
             additional = {}
-        properties.update(additional)
+        properties.update({k: v for k, v in additional.items() if v is not None})
 
-        prop_string = ", ".join(
-            "{}: '{}'".format(key, value) for key, value in properties.items()
-        )
+        if not properties:
+            prop_string = ""
+        else:
+            prop_string = ", ".join(
+                "{}: '{}'".format(key, value) for key, value in properties.items()
+            )
+
+            prop_string = f" {{{prop_string}}}"
 
         q = f"""
-        MATCH p = (n:{qualname} {{{prop_string}}})-[r:DEPENDS_ON*]->(m) 
+        MATCH p = (n:{qualname}{prop_string})-[r:DEPENDS_ON*]->(m) 
         WHERE NOT (m)-[:DEPENDS_ON]->()
         RETURN n,p
         """
@@ -330,10 +336,28 @@ class Neo4jStore:
         )
 
     def query_transformations(
-        self, *, name=None, key=None, org=None, campaign=None, project=None
+        self, *, name=None, key=None, org=None, campaign=None, project=None,
+        chemical_systems=None
     ):
+        """Query for `Transformation`s matching given attributes."""
+        additional = {"name": name}
         return self._query_obj(
             qualname="Transformation",
+            additional=additional,
+            key=key,
+            org=org,
+            campaign=campaign,
+            project=project,
+        )
+
+    def query_chemicalsystems(
+        self, *, name=None, key=None, org=None, campaign=None, project=None
+    ):
+        """Query for `ChemicalSystem`s matching given attributes."""
+        additional = {"name": name}
+        return self._query_obj(
+            qualname="ChemicalSystem",
+            additional=additional,
             key=key,
             org=org,
             campaign=campaign,
