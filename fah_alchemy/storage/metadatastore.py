@@ -11,6 +11,10 @@ from py2neo.matching import NodeMatcher
 from py2neo.errors import ClientError
 
 
+class Neo4JStoreError(Exception):
+    ...
+
+
 class Neo4jStore:
     def __init__(self, graph: "py2neo.Graph"):
         self.graph = graph
@@ -19,7 +23,6 @@ class Neo4jStore:
     def _gufe_to_subgraph(
         self, sdct: Dict, labels: List[str], gufe_key, org, campaign, project
     ):
-
         subgraph = Subgraph()
         node = Node(*labels)
 
@@ -28,7 +31,7 @@ class Neo4jStore:
         node["_json_props"] = []
         node["_gufe_key"] = str(gufe_key)
         node.update({"_org": org, "_campaign": campaign, "_project": project})
-        node["_scoped_key"] = [node["_gufe_key"], org, campaign, project]
+        node["_scoped_key"] = "-".join([node["_gufe_key"], org, campaign, project])
 
         for key, value in sdct.items():
             if isinstance(value, dict):
@@ -232,47 +235,40 @@ class Neo4jStore:
         mapping[node] = res = GufeTokenizable.from_shallow_dict(dct)
         return res
 
-    def create_network(self, network: AlchemicalNetwork, org, campaign, project):
-        """Add an `AlchemicalNetwork` to the target neo4j database.
-
-        Will give a `ValueError` if any components already exist in the database.
-        If this is expected, consider using `update_network` instead.
-
-        """
-        g, n = self._gufe_to_subgraph(
-            network.to_shallow_dict(),
-            labels=["GufeTokenizable", network.__class__.__name__],
-            gufe_key=network.key,
-            org=org,
-            campaign=campaign,
-            project=project,
+    def _get_obj(
+        self,
+        *,
+        qualname,
+        scoped_key: str
+    ):
+        properties = {"_scoped_key": scoped_key}
+        prop_string = ", ".join(
+            "{}: '{}'".format(key, value) for key, value in properties.items()
         )
 
-        try:
-            self.graph.create(g)
-        except ClientError:
-            raise ValueError(
-                "At least one component of the network already exists in the target database; "
-                "consider using `update_network` if this is expected."
-            )
+        prop_string = f" {{{prop_string}}}"
 
-    def update_network(self, network: AlchemicalNetwork, org, campaign, project):
-        """Add an `AlchemicalNetwork` to the target neo4j database, even if
-        some of its components already exist in the database.
-
+        q = f"""
+        MATCH p = (n:{qualname}{prop_string})-[r:DEPENDS_ON*]->(m) 
+        WHERE NOT (m)-[:DEPENDS_ON]->()
+        RETURN n,p
         """
+        nodes = set()
+        subgraph = Subgraph()
 
-        ndict = network.to_shallow_dict()
+        for record in self.graph.run(q):
+            nodes.add(record["n"])
+            subgraph = subgraph | record["p"]
 
-        g, n = self._gufe_to_subgraph(
-            ndict,
-            labels=["GufeTokenizable", network.__class__.__name__],
-            gufe_key=network.key,
-            org=org,
-            campaign=campaign,
-            project=project,
-        )
-        self.graph.merge(g, "GufeTokenizable", "_scoped_key")
+        if len(nodes) > 1:
+            raise Neo4JStoreError("More than one result for given `scoped_key`; this should not be possible")
+
+        gufe_objs = self._subgraph_to_gufe(nodes, subgraph)
+
+        if len(gufe_objs) > 1:
+            raise Neo4JStoreError("More than one result for given `scoped_key`; this should not be possible")
+
+        return gufe_objs[0]
 
     def _query_obj(
         self,
@@ -321,8 +317,63 @@ class Neo4jStore:
 
         return self._subgraph_to_gufe(nodes, subgraph)
 
+
+    def create_network(self, network: AlchemicalNetwork, org, campaign, project):
+        """Add an `AlchemicalNetwork` to the target neo4j database.
+
+        Will give a `ValueError` if any components already exist in the database.
+        If this is expected, consider using `update_network` instead.
+
+        """
+        g, n = self._gufe_to_subgraph(
+            network.to_shallow_dict(),
+            labels=["GufeTokenizable", network.__class__.__name__],
+            gufe_key=network.key,
+            org=org,
+            campaign=campaign,
+            project=project,
+        )
+
+        try:
+            self.graph.create(g)
+        except ClientError:
+            raise ValueError(
+                "At least one component of the network already exists in the target database; "
+                "consider using `update_network` if this is expected."
+            )
+
+        return n['_scoped_key']
+
+    def update_network(self, network: AlchemicalNetwork, org, campaign, project):
+        """Add an `AlchemicalNetwork` to the target neo4j database, even if
+        some of its components already exist in the database.
+
+        """
+
+        ndict = network.to_shallow_dict()
+
+        g, n = self._gufe_to_subgraph(
+            ndict,
+            labels=["GufeTokenizable", network.__class__.__name__],
+            gufe_key=network.key,
+            org=org,
+            campaign=campaign,
+            project=project,
+        )
+        self.graph.merge(g, "GufeTokenizable", "_scoped_key")
+
+        return n['_scoped_key']
+
+    def get_network(self, *, scoped_key: str):
+        """Get a specific `AlchemicalNetwork` using its `scoped_key`."""
+
+        return self._get_obj(
+            qualname="AlchemicalNetwork",
+            scoped_key=scoped_key
+        )
+
     def query_networks(
-        self, *, name=None, key=None, org=None, campaign=None, project=None
+        self, *, name=None, key=None, org=None, campaign=None, project=None,
     ):
         """Query for `AlchemicalNetwork`s matching given attributes."""
         additional = {"name": name}
@@ -365,6 +416,9 @@ class Neo4jStore:
         )
 
     def get_transformations_for_chemicalsystem(self):
+        ...
+
+    def get_networks_for_transformation(self):
         ...
 
     def get_transformations_result(self):
