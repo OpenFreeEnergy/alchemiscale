@@ -5,10 +5,11 @@ import json
 from starlette.responses import JSONResponse
 from fastapi import APIRouter, FastAPI, Body
 from py2neo import Graph
-from pydantic import BaseModel
 
 from fah_alchemy.storage.metadatastore import Neo4jStore
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
+
+from .models import Scope
 
 
 graph = Graph("bolt://localhost:7687", 
@@ -28,11 +29,6 @@ class PermissiveJSONResponse(JSONResponse):
             indent=None,
             separators=(",", ":"),
         ).encode("utf-8")
-
-class Scope(BaseModel):
-    org: str
-    campaign: str
-    project: str
 
 
 n4js = Neo4jStore(graph)
@@ -85,3 +81,11 @@ async def transformations():
 @app.get("/chemicalsystems")
 async def chemicalsystems():
     return {"message": "nothing yet"}
+
+
+### compute
+
+@app.put("networks/{scoped_key}/strategy")
+def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
+    ...
+

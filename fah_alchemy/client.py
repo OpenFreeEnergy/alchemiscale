@@ -16,8 +16,8 @@ class FahAlchemyClient:
         """Submit an AlchemicalNetwork along with a compute Strategy.
 
         """
+        ...
 
-        
 
     def query_networks(self):
         ...

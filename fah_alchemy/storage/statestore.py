@@ -1,24 +1,34 @@
+import abc
 import json
-from typing import Dict, List
+from typing import Dict, List, Optional, Union
 import weakref
 
 import networkx as nx
-from gufe import AlchemicalNetwork
+from gufe import AlchemicalNetwork, Transformation, ProtocolDAGResult
 from gufe.tokenization import GufeTokenizable
 from gufe.storage.metadatastore import MetadataStore
 from py2neo import Graph, Node, Relationship, Subgraph
 from py2neo.matching import NodeMatcher
 from py2neo.errors import ClientError
 
+from .models import Task, ScopedKey
+from ..strategies import Strategy
+
 
 class Neo4JStoreError(Exception):
     ...
 
 
-class Neo4jStore:
+class FahAlchemyStateStore(abc.ABC):
+    ...
+
+
+class Neo4jStore(FahAlchemyStateStore):
     def __init__(self, graph: "py2neo.Graph"):
         self.graph = graph
         self.gufe_nodes = weakref.WeakValueDictionary()
+
+    ### gufe object handling
 
     def _gufe_to_subgraph(
         self, sdct: Dict, labels: List[str], gufe_key, org, campaign, project
@@ -31,7 +41,10 @@ class Neo4jStore:
         node["_json_props"] = []
         node["_gufe_key"] = str(gufe_key)
         node.update({"_org": org, "_campaign": campaign, "_project": project})
-        node["_scoped_key"] = "-".join([node["_gufe_key"], org, campaign, project])
+        node["_scoped_key"] = str(ScopedKey(gufe_key=node["_gufe_key"], 
+                                        org=org, 
+                                        campaign=campaign, 
+                                        project=project))
 
         for key, value in sdct.items():
             if isinstance(value, dict):
@@ -423,3 +436,58 @@ class Neo4jStore:
 
     def get_transformations_result(self):
         ...
+
+    ### compute
+
+    def set_strategy(
+            self,
+            strategy: Strategy,
+            network: AlchemicalNetwork,
+            org: str,
+            campaign: str,
+            project: str,
+        ) -> ScopedKey: 
+        """Set strategy for the given AlchemicalNetwork.
+
+        """
+        ...
+
+    def create_compute_task(
+            self, 
+            transformation: Union[Transformation, str],
+            org: str,
+            campaign: str,
+            project: str,
+            extend_from: Optional[ProtocolDAGResult] = None
+        ) -> Task:
+        """Add a compute task to a Transformation.
+
+        Note: this creates a compute task, but does not add it to any queues.
+
+        """
+
+        # create a new task for the suplied transformation
+
+
+        # add task to the end of the queue; use a cursor to query the queue for last
+        # item; add new FOLLOWS relationship 
+
+        ...
+
+    def action_compute_task(
+            self,
+            task: Union[Task, str],
+            network: Union[AlchemicalNetwork, str],
+
+        ) -> Task:
+        """Add a compute task to the compute queue for a given AlchemicalNetwork.
+
+        Note: the compute task must be within the same scope (org, campaign,
+        project) as the AlchemicalNetwork.
+
+        A given compute task can be represented in many AlchemicalNetwork
+        queues, or none at all.
+
+        """
+        ...
+
