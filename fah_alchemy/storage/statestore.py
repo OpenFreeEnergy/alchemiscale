@@ -5,7 +5,7 @@ import weakref
 
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ProtocolDAGResult
-from gufe.tokenization import GufeTokenizable
+from gufe.tokenization import GufeTokenizable, GufeKey
 from gufe.storage.metadatastore import MetadataStore
 from py2neo import Graph, Node, Relationship, Subgraph
 from py2neo.matching import NodeMatcher
@@ -13,6 +13,7 @@ from py2neo.errors import ClientError
 
 from .models import Task, ScopedKey
 from ..strategies import Strategy
+from ..models import Scope
 
 
 class Neo4JStoreError(Exception):
@@ -31,7 +32,11 @@ class Neo4jStore(FahAlchemyStateStore):
     ### gufe object handling
 
     def _gufe_to_subgraph(
-        self, sdct: Dict, labels: List[str], gufe_key, org, campaign, project
+            self, 
+            sdct: Dict,
+            labels: List[str],
+            gufe_key: GufeKey,
+            scope: Scope
     ):
         subgraph = Subgraph()
         node = Node(*labels)
@@ -40,30 +45,27 @@ class Neo4jStore(FahAlchemyStateStore):
         # apply decoding efficiently
         node["_json_props"] = []
         node["_gufe_key"] = str(gufe_key)
-        node.update({"_org": org, "_campaign": campaign, "_project": project})
-        node["_scoped_key"] = str(ScopedKey(gufe_key=node["_gufe_key"], 
-                                        org=org, 
-                                        campaign=campaign, 
-                                        project=project))
+        node.update({"_org": scope.org, "_campaign": scope.campaign, "_project": scope.project})
+        node["_scoped_key"] = str(ScopedKey(gufe_key=node["_gufe_key"], **scope.dict()))
 
         for key, value in sdct.items():
             if isinstance(value, dict):
                 if all([isinstance(x, GufeTokenizable) for x in value.values()]):
                     for k, v in value.items():
                         node_ = subgraph_ = self.gufe_nodes.get(
-                            (v.key, org, campaign, project)
+                            (v.key, scope.org, scope.campaign, scope.project)
                         )
                         if node_ is None:
                             subgraph_, node_ = self._gufe_to_subgraph(
                                 v.to_shallow_dict(),
                                 labels=["GufeTokenizable", v.__class__.__name__],
                                 gufe_key=v.key,
-                                org=org,
-                                campaign=campaign,
-                                project=project,
+                                org=scope.org,
+                                campaign=scope.campaign,
+                                project=scope.project,
                             )
                             self.gufe_nodes[
-                                (str(v.key), org, campaign, project)
+                                (str(v.key), scope.org, scope.campaign, scope.project)
                             ] = node_
                         subgraph = (
                             subgraph
@@ -72,9 +74,9 @@ class Neo4jStore(FahAlchemyStateStore):
                                 node_,
                                 attribute=key,
                                 key=k,
-                                _org=org,
-                                _campaign=campaign,
-                                _project=project,
+                                _org=scope.org,
+                                _campaign=scope.campaign,
+                                _project=scope.project,
                             )
                             | subgraph_
                         )
@@ -91,18 +93,18 @@ class Neo4jStore(FahAlchemyStateStore):
                 elif all([isinstance(x, GufeTokenizable) for x in value]):
                     for i, x in enumerate(value):
                         node_ = subgraph_ = self.gufe_nodes.get(
-                            (x.key, org, campaign, project)
+                            (x.key, scope.org, scope.campaign, scope.project)
                         )
                         if node_ is None:
                             subgraph_, node_ = self._gufe_to_subgraph(
                                 x.to_shallow_dict(),
                                 labels=["GufeTokenizable", x.__class__.__name__],
                                 gufe_key=x.key,
-                                org=org,
-                                campaign=campaign,
-                                project=project,
+                                org=scope.org,
+                                campaign=scope.campaign,
+                                project=scope.project,
                             )
-                            self.gufe_nodes[(x.key, org, campaign, project)] = node_
+                            self.gufe_nodes[(x.key, scope.org, scope.campaign, scope.project)] = node_
                         subgraph = (
                             subgraph
                             | Relationship.type("DEPENDS_ON")(
@@ -110,9 +112,9 @@ class Neo4jStore(FahAlchemyStateStore):
                                 node_,
                                 attribute=key,
                                 index=i,
-                                _org=org,
-                                _campaign=campaign,
-                                _project=project,
+                                _org=scope.org,
+                                _campaign=scope.campaign,
+                                _project=scope.project,
                             )
                             | subgraph_
                         )
@@ -130,27 +132,27 @@ class Neo4jStore(FahAlchemyStateStore):
                     node["_json_props"].append(key)
             elif isinstance(value, GufeTokenizable):
                 node_ = subgraph_ = self.gufe_nodes.get(
-                    (value.key, org, campaign, project)
+                    (value.key, scope.org, scope.campaign, scope.project)
                 )
                 if node_ is None:
                     subgraph_, node_ = self._gufe_to_subgraph(
                         value.to_shallow_dict(),
                         labels=["GufeTokenizable", value.__class__.__name__],
                         gufe_key=value.key,
-                        org=org,
-                        campaign=campaign,
-                        project=project,
+                        org=scope.org,
+                        campaign=scope.campaign,
+                        project=scope.project,
                     )
-                    self.gufe_nodes[(value.key, org, campaign, project)] = node_
+                    self.gufe_nodes[(value.key, scope.org, scope.campaign, scope.project)] = node_
                 subgraph = (
                     subgraph
                     | Relationship.type("DEPENDS_ON")(
                         node,
                         node_,
                         attribute=key,
-                        _org=org,
-                        _campaign=campaign,
-                        _project=project,
+                        _org=scope.org,
+                        _campaign=scope.campaign,
+                        _project=scope.project,
                     )
                     | subgraph_
                 )
@@ -286,15 +288,13 @@ class Neo4jStore(FahAlchemyStateStore):
     def _query_obj(
         self,
         *,
-        qualname,
+        qualname: str,
         additional: Dict = None,
-        key=None,
-        org=None,
-        campaign=None,
-        project=None,
+        key: GufeKey = None,
+        scope: Scope = Scope() 
     ):
         # TODO : add pagination
-        properties = {"_org": org, "_campaign": campaign, "_project": project}
+        properties = {"_org": scope.org, "_campaign": scope.campaign, "_project": scope.project}
 
         for (k, v) in list(properties.items()):
             if v is None:
@@ -331,7 +331,7 @@ class Neo4jStore(FahAlchemyStateStore):
         return self._subgraph_to_gufe(nodes, subgraph)
 
 
-    def create_network(self, network: AlchemicalNetwork, org, campaign, project):
+    def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Add an `AlchemicalNetwork` to the target neo4j database.
 
         Will give a `ValueError` if any components already exist in the database.
@@ -342,9 +342,7 @@ class Neo4jStore(FahAlchemyStateStore):
             network.to_shallow_dict(),
             labels=["GufeTokenizable", network.__class__.__name__],
             gufe_key=network.key,
-            org=org,
-            campaign=campaign,
-            project=project,
+            scope=scope
         )
 
         try:
@@ -357,7 +355,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return n['_scoped_key']
 
-    def update_network(self, network: AlchemicalNetwork, org, campaign, project):
+    def update_network(self, network: AlchemicalNetwork, scope: Scope):
         """Add an `AlchemicalNetwork` to the target neo4j database, even if
         some of its components already exist in the database.
 
@@ -369,9 +367,7 @@ class Neo4jStore(FahAlchemyStateStore):
             ndict,
             labels=["GufeTokenizable", network.__class__.__name__],
             gufe_key=network.key,
-            org=org,
-            campaign=campaign,
-            project=project,
+            scope=scope
         )
         self.graph.merge(g, "GufeTokenizable", "_scoped_key")
 
@@ -386,7 +382,7 @@ class Neo4jStore(FahAlchemyStateStore):
         )
 
     def query_networks(
-        self, *, name=None, key=None, org=None, campaign=None, project=None,
+        self, *, name=None, key=None, scope: Optional[Scope] = Scope() 
     ):
         """Query for `AlchemicalNetwork`s matching given attributes."""
         additional = {"name": name}
@@ -394,13 +390,11 @@ class Neo4jStore(FahAlchemyStateStore):
             qualname="AlchemicalNetwork",
             additional=additional,
             key=key,
-            org=org,
-            campaign=campaign,
-            project=project,
+            scope=scope
         )
 
     def query_transformations(
-        self, *, name=None, key=None, org=None, campaign=None, project=None,
+        self, *, name=None, key=None, scope: Scope = Scope(),
         chemical_systems=None
     ):
         """Query for `Transformation`s matching given attributes."""
@@ -409,13 +403,11 @@ class Neo4jStore(FahAlchemyStateStore):
             qualname="Transformation",
             additional=additional,
             key=key,
-            org=org,
-            campaign=campaign,
-            project=project,
+            scope=scope
         )
 
     def query_chemicalsystems(
-        self, *, name=None, key=None, org=None, campaign=None, project=None
+        self, *, name=None, key=None, scope: Scope = Scope()
     ):
         """Query for `ChemicalSystem`s matching given attributes."""
         additional = {"name": name}
@@ -423,9 +415,7 @@ class Neo4jStore(FahAlchemyStateStore):
             qualname="ChemicalSystem",
             additional=additional,
             key=key,
-            org=org,
-            campaign=campaign,
-            project=project,
+            scope=scope
         )
 
     def get_transformations_for_chemicalsystem(self):
@@ -442,48 +432,70 @@ class Neo4jStore(FahAlchemyStateStore):
     def set_strategy(
             self,
             strategy: Strategy,
-            network: AlchemicalNetwork,
-            org: str,
-            campaign: str,
-            project: str,
+            network: Union[AlchemicalNetwork, ScopedKey],
+            scope: Scope,
         ) -> ScopedKey: 
-        """Set strategy for the given AlchemicalNetwork.
+        """Set the compute Strategy for the given AlchemicalNetwork.
 
         """
         ...
 
-    def create_compute_task(
+    def create_task(
             self, 
-            transformation: Union[Transformation, str],
-            org: str,
-            campaign: str,
-            project: str,
+            transformation: Union[Transformation, ScopedKey],
+            scope: Scope,
             extend_from: Optional[ProtocolDAGResult] = None
         ) -> Task:
-        """Add a compute task to a Transformation.
+        """Add a compute Task to a Transformation.
 
-        Note: this creates a compute task, but does not add it to any queues.
+        Note: this creates a compute Task, but does not add it to any TaskQueues.
 
         """
 
-        # create a new task for the suplied transformation
+        # create a new task for the supplied transformation
+        # use a PERFORMS relationship
+        ...
 
+    def delete_task(
+            self, 
+            task: Union[Task, ScopedKey],
+        ) -> Task:
+        """Remove a compute Task from a Transformation.
+
+        This will also remove the Task from all TaskQueues it is a part of.
+
+        """
+
+        # create a new task for the supplied transformation
+        # use a PERFORMS relationship
+        ...
+
+    def action_task(
+            self,
+            task: Union[Task, ScopedKey],
+            network: Union[AlchemicalNetwork, ScopedKey],
+        ) -> Task:
+        """Add a compute Task to the TaskQueue for a given AlchemicalNetwork.
+
+        Note: the Task must be within the same scope as the AlchemicalNetwork.
+
+        A given compute task can be represented in any number of
+        AlchemicalNetwork queues, or none at all.
+
+        """
+        ...
 
         # add task to the end of the queue; use a cursor to query the queue for last
         # item; add new FOLLOWS relationship 
 
-        ...
-
-    def action_compute_task(
+    def cancel_task(
             self,
-            task: Union[Task, str],
-            network: Union[AlchemicalNetwork, str],
-
+            task: Union[Task, ScopedKey],
+            network: Union[AlchemicalNetwork, ScopedKey],
         ) -> Task:
-        """Add a compute task to the compute queue for a given AlchemicalNetwork.
+        """Remove a compute Task from the TaskQueue for a given AlchemicalNetwork.
 
-        Note: the compute task must be within the same scope (org, campaign,
-        project) as the AlchemicalNetwork.
+        Note: the Task must be within the same scope as the AlchemicalNetwork.
 
         A given compute task can be represented in many AlchemicalNetwork
         queues, or none at all.
@@ -491,3 +503,48 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         ...
 
+    def get_taskqueue(
+            self,
+            network: Union[AlchemicalNetwork, ScopedKey],
+            scope: Scope,
+        ):
+        ...
+
+    def query_tasks(
+            self,
+            network: Union[AlchemicalNetwork, ScopedKey],
+            transformation: Union[Transformation, ScopedKey],
+            scope: Scope,
+        ):
+        ...
+
+    def mark_task_ready(
+            self,
+            task: Union[Task, ScopedKey],
+        ):
+        ...
+
+    def mark_task_running(
+            self,
+            task: Union[Task, ScopedKey],
+            computekey: ComputeKey
+        ):
+        ...
+
+    def mark_task_complete(
+            self,
+            task: Union[Task, ScopedKey],
+        ):
+        ...
+
+    def mark_task_failed(
+            self,
+            task: Union[Task, ScopedKey],
+        ):
+        ...
+
+    def mark_task_defunct(
+            self,
+            task: Union[Task, ScopedKey],
+        ):
+        ...

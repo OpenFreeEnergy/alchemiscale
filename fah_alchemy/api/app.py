@@ -1,3 +1,8 @@
+"""FahClient RESTful API
+
+"""
+
+
 from typing import Any, Dict, List
 import os
 import json
@@ -9,7 +14,7 @@ from py2neo import Graph
 from fah_alchemy.storage.metadatastore import Neo4jStore
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 
-from .models import Scope
+from ..models import Scope
 
 
 graph = Graph("bolt://localhost:7687", 

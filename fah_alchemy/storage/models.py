@@ -3,9 +3,7 @@ from gufe.tokenization import GufeKey, GufeTokenizable
 
 
 class ScopedKey(BaseModel):
-    """
-
-    """
+    """Unique identifier for GufeTokenizables in state store."""
 
     gufe_key: GufeKey
     org: str
@@ -46,6 +44,7 @@ class TaskQueue(GufeTokenizable):
     def _defaults(self):
         ...
 
+
 class TaskArchive(GufeTokenizable):
     ...
 
@@ -58,3 +57,15 @@ class TaskArchive(GufeTokenizable):
     @property
     def _defaults(self):
         ...
+
+
+class ComputeKey(BaseModel):
+    """Unique identifier for FahAlchemyComputeService instances."""
+
+    identifier: str
+
+    def __repr__(self):   # pragma: no cover
+        return f"<ComputeKey('{str(self)}')>"
+
+    def __str__(self):
+        "-".join([self.identifier])
