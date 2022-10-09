@@ -1,4 +1,4 @@
-name: gufe
+name: test
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge

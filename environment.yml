@@ -1,4 +1,4 @@
-name: gufe
+name: fah-alchemy
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
