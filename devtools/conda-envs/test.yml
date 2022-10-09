@@ -32,5 +32,5 @@ dependencies:
   - pytest-cov
   - coverage
 
-  ## neo4j test server deployment
-  - grolt
+  - pip:
+    - grolt # neo4j test server deployment
