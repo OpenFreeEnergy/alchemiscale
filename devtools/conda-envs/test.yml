@@ -1,0 +1,36 @@
+name: gufe
+channels:
+  - jaimergp/label/unsupported-cudatoolkit-shim
+  - conda-forge
+  - openeye
+dependencies:
+  - python =3.9
+  # gufe dependencies
+  - numpy
+  - networkx
+  - rdkit
+  - pip
+  - pydantic
+  - openff-toolkit
+  - openff-units
+  - openeye-toolkits
+  - typing-extensions
+
+  # fah-alchemy dependencies
+  - neo4j-python-driver
+  - py2neo
+  - monotonic    # needed by py2neo, but not pulled in
+  - dask
+  - distributed
+  - boto3
+  - fastapi
+  - uvicorn
+
+  # testing
+  - pytest
+  - pytest-xdist
+  - pytest-cov
+  - coverage
+
+  ## neo4j test server deployment
+  - grolt
