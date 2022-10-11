@@ -14,7 +14,19 @@ class ScopedKey(BaseModel):
         return f"<ScopedKey('{str(self)}')>"
 
     def __str__(self):
-        "-".join([self.gufe_key, self.org, self.campaign, self.project])
+        return "-".join([self.gufe_key, self.org, self.campaign, self.project])
+
+
+class ComputeKey(BaseModel):
+    """Unique identifier for FahAlchemyComputeService instances."""
+
+    identifier: str
+
+    def __repr__(self):   # pragma: no cover
+        return f"<ComputeKey('{str(self)}')>"
+
+    def __str__(self):
+        return "-".join([self.identifier])
 
 
 class Task(GufeTokenizable):
@@ -59,13 +71,3 @@ class TaskArchive(GufeTokenizable):
         ...
 
 
-class ComputeKey(BaseModel):
-    """Unique identifier for FahAlchemyComputeService instances."""
-
-    identifier: str
-
-    def __repr__(self):   # pragma: no cover
-        return f"<ComputeKey('{str(self)}')>"
-
-    def __str__(self):
-        "-".join([self.identifier])

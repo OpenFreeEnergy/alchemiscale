@@ -1,6 +1,6 @@
-from .base import ExternalStorage
+from gufe.storage.externalresource.base import ExternalStorage
 
-from ..errors import (
+from gufe.storage.errors import (
     MissingExternalResourceError, ChangedExternalResourceError
 )
 

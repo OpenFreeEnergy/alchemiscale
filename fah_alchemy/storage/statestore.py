@@ -11,7 +11,7 @@ from py2neo import Graph, Node, Relationship, Subgraph
 from py2neo.matching import NodeMatcher
 from py2neo.errors import ClientError
 
-from .models import Task, ScopedKey
+from .models import ScopedKey, ComputeKey, Task, TaskQueue, TaskArchive
 from ..strategies import Strategy
 from ..models import Scope
 
@@ -25,6 +25,7 @@ class FahAlchemyStateStore(abc.ABC):
 
 
 class Neo4jStore(FahAlchemyStateStore):
+
     def __init__(self, graph: "py2neo.Graph"):
         self.graph = graph
         self.gufe_nodes = weakref.WeakValueDictionary()
@@ -60,9 +61,7 @@ class Neo4jStore(FahAlchemyStateStore):
                                 v.to_shallow_dict(),
                                 labels=["GufeTokenizable", v.__class__.__name__],
                                 gufe_key=v.key,
-                                org=scope.org,
-                                campaign=scope.campaign,
-                                project=scope.project,
+                                scope=scope
                             )
                             self.gufe_nodes[
                                 (str(v.key), scope.org, scope.campaign, scope.project)
@@ -100,9 +99,7 @@ class Neo4jStore(FahAlchemyStateStore):
                                 x.to_shallow_dict(),
                                 labels=["GufeTokenizable", x.__class__.__name__],
                                 gufe_key=x.key,
-                                org=scope.org,
-                                campaign=scope.campaign,
-                                project=scope.project,
+                                scope=scope
                             )
                             self.gufe_nodes[(x.key, scope.org, scope.campaign, scope.project)] = node_
                         subgraph = (
@@ -139,9 +136,7 @@ class Neo4jStore(FahAlchemyStateStore):
                         value.to_shallow_dict(),
                         labels=["GufeTokenizable", value.__class__.__name__],
                         gufe_key=value.key,
-                        org=scope.org,
-                        campaign=scope.campaign,
-                        project=scope.project,
+                        scope=scope
                     )
                     self.gufe_nodes[(value.key, scope.org, scope.campaign, scope.project)] = node_
                 subgraph = (
