@@ -34,3 +34,4 @@ dependencies:
 
   - pip:
     - grolt # neo4j test server deployment
+    - git+https://github.com/OpenFreeEnergy/gufe
