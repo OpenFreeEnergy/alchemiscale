@@ -1,6 +1,9 @@
 """Components for standing up services for integration tests, including databases.
 
 """
+
+### below from `py2neo.test.integration.conftest.py`
+
 from os import getenv
 
 from grolt import Neo4jService, Neo4jDirectorySpec
@@ -13,17 +16,6 @@ from py2neo.client import Connector
 
 NEO4J_PROCESS = {}
 NEO4J_VERSION = getenv("NEO4J_VERSION", "")
-
-
-UNSECURED_SCHEMES = ["neo4j", "bolt", "http"]
-ALL_SCHEMES = ["neo4j", "neo4j+s", "neo4j+ssc",
-               "bolt", "bolt+s", "bolt+ssc",
-               "http", "https", "http+s", "http+ssc"]
-SSC_SCHEMES = ["neo4j", "neo4j+ssc", "bolt", "bolt+ssc", "http", "http+ssc"]
-
-UNSECURED_LEGACY_SCHEMES = ["bolt", "http"]
-ALL_LEGACY_SCHEMES = ["bolt", "bolt+s", "bolt+ssc", "http", "https", "http+s", "http+ssc"]
-SSC_LEGACY_SCHEMES = ["bolt", "bolt+ssc", "http", "http+ssc"]
 
 
 class DeploymentProfile(object):
@@ -92,8 +84,7 @@ class TestProfile:
 
 # TODO: test with full certificates
 neo4j_deployment_profiles = [
-    DeploymentProfile(release=(4, 4), topology="CE", schemes=UNSECURED_SCHEMES),
-    DeploymentProfile(release=(4, 4), topology="CE", cert="ssc", schemes=SSC_SCHEMES),
+    DeploymentProfile(release=(4, 4), topology="CE", schemes=['bolt']),
 ]
 
 if NEO4J_VERSION == "LATEST":
