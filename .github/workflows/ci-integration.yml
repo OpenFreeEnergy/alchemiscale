@@ -64,7 +64,7 @@ jobs:
           pytest -v --cov=fah_alchemy --cov-report=xml fah_alchemy/tests/integration
 
       - name: codecov
-        if: ${{ github.repository == 'openforcefield/fah_alchemy'
+        if: ${{ github.repository == 'openforcefield/fah-alchemy'
                 && github.event != 'schedule' }}
         uses: codecov/codecov-action@v2
         with:
