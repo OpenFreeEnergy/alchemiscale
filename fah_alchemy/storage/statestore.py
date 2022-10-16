@@ -325,7 +325,6 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return self._subgraph_to_gufe(nodes, subgraph)
 
-
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Add an `AlchemicalNetwork` to the target neo4j database.
 
@@ -368,13 +367,16 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return n['_scoped_key']
 
-    def get_network(self, *, scoped_key: str):
+    def get_network(self, scoped_key: ScopedKey):
         """Get a specific `AlchemicalNetwork` using its `scoped_key`."""
 
         return self._get_obj(
             qualname="AlchemicalNetwork",
             scoped_key=scoped_key
         )
+
+    def delete_network(self, scoped_key: ScopedKey):
+        ...
 
     def query_networks(
         self, *, name=None, key=None, scope: Optional[Scope] = Scope() 

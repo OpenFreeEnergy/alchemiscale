@@ -13,16 +13,20 @@ from pytest import fixture
 from py2neo import ServiceProfile, Graph
 from py2neo.client import Connector
 
+from gufe import ChemicalSystem, Transformation, AlchemicalNetwork
+from openfe_benchmarks import tyk2
+
+from fah_alchemy.protocols import FAHOpenmmNonEquilibriumCyclingProtocol
+
 
 NEO4J_PROCESS = {}
 NEO4J_VERSION = getenv("NEO4J_VERSION", "")
 
 
 class DeploymentProfile(object):
-
     def __init__(self, release=None, topology=None, cert=None, schemes=None):
         self.release = release
-        self.topology = topology   # "CE|EE-SI|EE-C3|EE-C3-R2"
+        self.topology = topology  # "CE|EE-SI|EE-C3|EE-C3-R2"
         self.cert = cert
         self.schemes = schemes
 
@@ -35,7 +39,6 @@ class DeploymentProfile(object):
 
 
 class TestProfile:
-
     def __init__(self, deployment_profile=None, scheme=None):
         self.deployment_profile = deployment_profile
         self.scheme = scheme
@@ -76,34 +79,43 @@ class TestProfile:
             dir_spec = Neo4jDirectorySpec(certificates_dir=certificates_dir)
         else:
             dir_spec = None
-        with Neo4jService(name=service_name, image=self.release_str,
-                          auth=("neo4j", "password"), dir_spec=dir_spec) as service:
+        with Neo4jService(
+            name=service_name,
+            image=self.release_str,
+            auth=("neo4j", "password"),
+            dir_spec=dir_spec,
+        ) as service:
             uris = [router.uri(self.scheme) for router in service.routers()]
             yield service, uris[0]
 
 
 # TODO: test with full certificates
 neo4j_deployment_profiles = [
-    DeploymentProfile(release=(4, 4), topology="CE", schemes=['bolt']),
+    DeploymentProfile(release=(4, 4), topology="CE", schemes=["bolt"]),
 ]
 
 if NEO4J_VERSION == "LATEST":
     neo4j_deployment_profiles = neo4j_deployment_profiles[:1]
 elif NEO4J_VERSION == "4.x":
-    neo4j_deployment_profiles = [profile for profile in neo4j_deployment_profiles
-                                 if profile.release[0] == 4]
+    neo4j_deployment_profiles = [
+        profile for profile in neo4j_deployment_profiles if profile.release[0] == 4
+    ]
 elif NEO4J_VERSION == "4.4":
-    neo4j_deployment_profiles = [profile for profile in neo4j_deployment_profiles
-                                 if profile.release == (4, 4)]
+    neo4j_deployment_profiles = [
+        profile for profile in neo4j_deployment_profiles if profile.release == (4, 4)
+    ]
 
 
-neo4j_test_profiles = [TestProfile(deployment_profile, scheme=scheme)
-                       for deployment_profile in neo4j_deployment_profiles
-                       for scheme in deployment_profile.schemes]
+neo4j_test_profiles = [
+    TestProfile(deployment_profile, scheme=scheme)
+    for deployment_profile in neo4j_deployment_profiles
+    for scheme in deployment_profile.schemes
+]
 
-@fixture(scope="session",
-         params=neo4j_test_profiles,
-         ids=list(map(str, neo4j_test_profiles)))
+
+@fixture(
+    scope="session", params=neo4j_test_profiles, ids=list(map(str, neo4j_test_profiles))
+)
 def test_profile(request):
     test_profile = request.param
     yield test_profile
@@ -125,3 +137,54 @@ def uri(neo4j_service_and_uri):
 @fixture(scope="session")
 def graph(uri):
     return Graph(uri)
+
+
+### below specific to fah-alchemy
+
+# test alchemical networks
+
+
+@fixture(scope="session")
+def network_tyk2():
+
+    tyk2s = tyk2.get_system()
+
+    solvated = {
+        l.name: ChemicalSystem(
+            components={"ligand": l, "solvent": tyk2s.solvent_component},
+            name=f"{l.name}_water",
+        )
+        for l in tyk2s.ligand_components
+    }
+    complexes = {
+        l.name: ChemicalSystem(
+            components={
+                "ligand": l,
+                "solvent": tyk2s.solvent_component,
+                "protein": tyk2s.protein_component,
+            },
+            name=f"{l.name}_complex",
+        )
+        for l in tyk2s.ligand_components
+    }
+
+    complex_network = [
+        Transformation(
+            stateA=complexes[edge[0]],
+            stateB=complexes[edge[1]],
+            protocol=FAHOpenmmNonEquilibriumCyclingProtocol(settings=None),
+        )
+        for edge in tyk2s.connections
+    ]
+    solvent_network = [
+        Transformation(
+            stateA=solvated[edge[0]],
+            stateB=solvated[edge[1]],
+            protocol=FAHOpenmmNonEquilibriumCyclingProtocol(settings=None),
+        )
+        for edge in tyk2s.connections
+    ]
+
+    return AlchemicalNetwork(
+        edges=(solvent_network + complex_network), name="tyk2_relative_benchmark"
+    )
