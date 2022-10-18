@@ -68,4 +68,4 @@ class TestNeo4jStore(TestStateStore):
 
             assert n2["name"] == 'tyk2_relative_benchmark'
 
-            assert n2.identiy == n.identity
+            assert n2.identity == n.identity
