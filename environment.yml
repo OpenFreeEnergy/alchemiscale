@@ -11,10 +11,6 @@ dependencies:
   - rdkit
   - pip
   - pydantic
-  - pytest
-  - pytest-xdist
-  - pytest-cov
-  - coverage
   - openff-toolkit
   - openff-units
   - openeye-toolkits
@@ -29,3 +25,17 @@ dependencies:
   - boto3
   - fastapi
   - uvicorn
+
+  # testing
+  - pytest
+  - pytest-xdist
+  - pytest-cov
+  - coverage
+
+  # needed for openfe-benchmark tests
+  - lomap2>=2.1.0
+  - openmmtools
+  - openmmforcefields
+
+  - pip:
+    - grolt # neo4j test server deployment

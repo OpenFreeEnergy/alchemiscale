@@ -144,6 +144,7 @@ def graph(uri):
 
 # test alchemical networks
 
+# TODO: add in atom mapping once `gufe`#35 is settled
 
 @fixture(scope="session")
 def network_tyk2():

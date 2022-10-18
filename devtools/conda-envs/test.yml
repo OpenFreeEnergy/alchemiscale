@@ -31,6 +31,8 @@ dependencies:
   - pytest-xdist
   - pytest-cov
   - coverage
+
+  # needed for openfe-benchmark tests
   - lomap2>=2.1.0
   - openmmtools
   - openmmforcefields
