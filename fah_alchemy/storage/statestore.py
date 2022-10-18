@@ -1,4 +1,5 @@
 import abc
+from contextlib import contextmanager
 import json
 from typing import Dict, List, Optional, Union
 import weakref
@@ -11,9 +12,9 @@ from py2neo import Graph, Node, Relationship, Subgraph
 from py2neo.matching import NodeMatcher
 from py2neo.errors import ClientError
 
-from .models import ScopedKey, ComputeKey, Task, TaskQueue, TaskArchive
+from .models import ComputeKey, Task, TaskQueue, TaskArchive
 from ..strategies import Strategy
-from ..models import Scope
+from ..models import Scope, ScopeKey
 
 
 class Neo4JStoreError(Exception):
@@ -29,6 +30,13 @@ class Neo4jStore(FahAlchemyStateStore):
     def __init__(self, graph: "py2neo.Graph"):
         self.graph = graph
         self.gufe_nodes = weakref.WeakValueDictionary()
+
+    @contextmanager
+    def as_tempdb(self):
+        try:
+            yield
+        finally:
+            self.graph.delete_all()
 
     ### gufe object handling
 
@@ -47,7 +55,9 @@ class Neo4jStore(FahAlchemyStateStore):
         node["_json_props"] = []
         node["_gufe_key"] = str(gufe_key)
         node.update({"_org": scope.org, "_campaign": scope.campaign, "_project": scope.project})
-        node["_scoped_key"] = str(ScopedKey(gufe_key=node["_gufe_key"], **scope.dict()))
+
+        scoped_key = ScopedKey(gufe_key=node["_gufe_key"], **scope.dict())
+        node["_scoped_key"] = str(scoped_key)
 
         for key, value in sdct.items():
             if isinstance(value, dict):
@@ -57,7 +67,7 @@ class Neo4jStore(FahAlchemyStateStore):
                             (v.key, scope.org, scope.campaign, scope.project)
                         )
                         if node_ is None:
-                            subgraph_, node_ = self._gufe_to_subgraph(
+                            subgraph_, node_, scoped_key_ = self._gufe_to_subgraph(
                                 v.to_shallow_dict(),
                                 labels=["GufeTokenizable", v.__class__.__name__],
                                 gufe_key=v.key,
@@ -95,7 +105,7 @@ class Neo4jStore(FahAlchemyStateStore):
                             (x.key, scope.org, scope.campaign, scope.project)
                         )
                         if node_ is None:
-                            subgraph_, node_ = self._gufe_to_subgraph(
+                            subgraph_, node_, scoped_key_ = self._gufe_to_subgraph(
                                 x.to_shallow_dict(),
                                 labels=["GufeTokenizable", x.__class__.__name__],
                                 gufe_key=x.key,
@@ -132,7 +142,7 @@ class Neo4jStore(FahAlchemyStateStore):
                     (value.key, scope.org, scope.campaign, scope.project)
                 )
                 if node_ is None:
-                    subgraph_, node_ = self._gufe_to_subgraph(
+                    subgraph_, node_, scoped_key_ = self._gufe_to_subgraph(
                         value.to_shallow_dict(),
                         labels=["GufeTokenizable", value.__class__.__name__],
                         gufe_key=value.key,
@@ -156,7 +166,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
         subgraph = subgraph | node
 
-        return subgraph, node
+        return subgraph, node, scoped_key
 
     def _subgraph_to_gufe(self, nodes: List[Node], subgraph: Subgraph):
         """Get a list of all `GufeTokenizable` objects within the given subgraph.
@@ -325,14 +335,14 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return self._subgraph_to_gufe(nodes, subgraph)
 
-    def create_network(self, network: AlchemicalNetwork, scope: Scope):
+    def create_network(self, network: AlchemicalNetwork, scope: Scope) -> ScopedKey:
         """Add an `AlchemicalNetwork` to the target neo4j database.
 
         Will give a `ValueError` if any components already exist in the database.
         If this is expected, consider using `update_network` instead.
 
         """
-        g, n = self._gufe_to_subgraph(
+        g, n, scoped_key = self._gufe_to_subgraph(
             network.to_shallow_dict(),
             labels=["GufeTokenizable", network.__class__.__name__],
             gufe_key=network.key,
@@ -347,7 +357,7 @@ class Neo4jStore(FahAlchemyStateStore):
                 "consider using `update_network` if this is expected."
             )
 
-        return n['_scoped_key']
+        return scoped_key
 
     def update_network(self, network: AlchemicalNetwork, scope: Scope):
         """Add an `AlchemicalNetwork` to the target neo4j database, even if
@@ -357,7 +367,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
         ndict = network.to_shallow_dict()
 
-        g, n = self._gufe_to_subgraph(
+        g, n, scoped_key = self._gufe_to_subgraph(
             ndict,
             labels=["GufeTokenizable", network.__class__.__name__],
             gufe_key=network.key,
@@ -365,7 +375,7 @@ class Neo4jStore(FahAlchemyStateStore):
         )
         self.graph.merge(g, "GufeTokenizable", "_scoped_key")
 
-        return n['_scoped_key']
+        return scoped_key
 
     def get_network(self, scoped_key: ScopedKey):
         """Get a specific `AlchemicalNetwork` using its `scoped_key`."""

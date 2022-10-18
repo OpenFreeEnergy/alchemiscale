@@ -1,20 +1,6 @@
 from pydantic import BaseModel, Field
-from gufe.tokenization import GufeKey, GufeTokenizable
+from gufe.tokenization import GufeTokenizable
 
-
-class ScopedKey(BaseModel):
-    """Unique identifier for GufeTokenizables in state store."""
-
-    gufe_key: GufeKey
-    org: str
-    campaign: str
-    project: str
-
-    def __repr__(self):   # pragma: no cover
-        return f"<ScopedKey('{str(self)}')>"
-
-    def __str__(self):
-        return "-".join([self.gufe_key, self.org, self.campaign, self.project])
 
 
 class ComputeKey(BaseModel):
