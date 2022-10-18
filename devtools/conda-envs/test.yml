@@ -40,4 +40,4 @@ dependencies:
     - git+https://github.com/OpenFreeEnergy/gufe
     - git+https://github.com/OpenFreeEnergy/openfe
     - git+https://github.com/OpenFreeEnergy/openfe-benchmarks
-    - git+https://github.com/openforcefield/https://github.com/openforcefield/protein-ligand-benchmark
+    - git+https://github.com/openforcefield/protein-ligand-benchmark
