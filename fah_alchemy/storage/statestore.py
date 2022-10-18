@@ -14,7 +14,7 @@ from py2neo.errors import ClientError
 
 from .models import ComputeKey, Task, TaskQueue, TaskArchive
 from ..strategies import Strategy
-from ..models import Scope, ScopeKey
+from ..models import Scope, ScopedKey
 
 
 class Neo4JStoreError(Exception):
