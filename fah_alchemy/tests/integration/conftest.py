@@ -16,6 +16,7 @@ from py2neo.client import Connector
 from gufe import ChemicalSystem, Transformation, AlchemicalNetwork
 from openfe_benchmarks import tyk2
 
+from fah_alchemy.models import Scope
 from fah_alchemy.protocols import FAHOpenmmNonEquilibriumCyclingProtocol
 
 
@@ -188,3 +189,8 @@ def network_tyk2():
     return AlchemicalNetwork(
         edges=(solvent_network + complex_network), name="tyk2_relative_benchmark"
     )
+
+
+@fixture(scope="session")
+def scope_test():
+    return Scope(org="test-org", campaign="test-campaign", project="test-project")

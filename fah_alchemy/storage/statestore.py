@@ -33,6 +33,14 @@ class Neo4jStore(FahAlchemyStateStore):
 
     @contextmanager
     def as_tempdb(self):
+        """Context manager that deletes everything in the target database on entry and exit.
+
+        This is used mainly for testing.
+
+        WARNING: deletes any data in target database. Do not use if you are not okay with this.
+
+        """
+        self.graph.delete_all()
         try:
             yield
         finally:
