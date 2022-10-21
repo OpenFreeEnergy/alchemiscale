@@ -119,3 +119,31 @@ class TestNeo4jStore(TestStateStore):
 
             # add another task, this time with the scoped key for the transformation
 
+    def test_create_taskqueue(self, n4js, network_tyk2, scope_test):
+        with n4js.as_tempdb():
+            an = network_tyk2
+
+            # try creating a taskqueue for a network that is not present
+            with pytest.raises(ValueError):
+                task = n4js.create_taskqueue(
+                            network=an,
+                            scope=scope_test)
+
+            # add alchemical network, then try generating task
+            n4js.create_network(an, scope_test)
+
+            taskqueue_sk: ScopedKey = n4js.create_taskqueue(
+                        network=an,
+                        scope=scope_test)
+
+            n = n4js.graph.run(
+                    f"""
+                    match (n:TaskQueue {{_gufe_key: '{taskqueue_sk.gufe_key}', 
+                                                 _org: '{taskqueue_sk.org}', _campaign: '{taskqueue_sk.campaign}', 
+                                                 _project: '{taskqueue_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+                    return m
+                    """).to_subgraph()
+
+            assert n['_gufe_key'] == an.key
+
+            # add another task, this time with the scoped key for the transformation

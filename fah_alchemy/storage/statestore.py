@@ -472,6 +472,25 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         ...
 
+    def _get_obj_or_check_existence(
+            self,
+            obj: Union[GufeTokenizable, ScopedKey], 
+            cls: type[GufeTokenizable], 
+            scope: Scope
+        ) -> GufeTokenizable:
+        if isinstance(obj, (ScopedKey, str)):
+            obj = self._get_obj(cls.__name__,
+                                    scoped_key=obj)
+        elif isinstance(obj, cls):
+            # check that this transformation already exists in the db
+            scoped_key = ScopedKey(gufe_key=obj.key, **scope.dict())
+            exists = self.check_existence(cls.__name__, scoped_key=scoped_key)
+            
+            if not exists:
+                raise ValueError(f"No such {cls.__name__}present within this scope.")
+
+        return obj
+
     def create_taskqueue(
             self,
             network: Union[AlchemicalNetwork, ScopedKey],
@@ -483,16 +502,43 @@ class Neo4jStore(FahAlchemyStateStore):
         A TaskQueue is required to action Tasks for a given AlchemicalNetwork.
 
         """
-        if isinstance(network, (ScopedKey, str)):
-            network = self._get_obj("AlchemicalNetwork",
-                                    scoped_key=network)
-        elif isinstance(network, AlchemicalNetwork):
-            # check that this transformation already exists in the db
-            scoped_key = ScopedKey(gufe_key=network.key, **scope.dict())
-            exists = self.check_existence("AlchemicalNetwork", scoped_key=scoped_key)
-            
-            if not exists:
-                raise ValueError("No such Transformation present within this scope.")
+        network = self._get_obj_or_check_existence(network, AlchemicalNetwork, scope)
+
+        # if we already have a taskqueue for this network, return the existing
+        # ScopedKey and exit
+        
+
+        # create a new task queue for the supplied network
+        # use a PERFORMS relationship
+        subgraph, network_node, _ = self._gufe_to_subgraph(
+            network.to_shallow_dict(),
+            labels=["GufeTokenizable", network.__class__.__name__],
+            gufe_key=network.key,
+            scope=scope
+        )
+        
+        taskqueue = TaskQueue()
+        _, taskqueue_node, scoped_key = self._gufe_to_subgraph(
+                taskqueue.to_shallow_dict(),
+                labels=["GufeTokenizable", taskqueue.__class__.__name__],
+                gufe_key=taskqueue.key,
+                scope=scope
+                )
+
+        subgraph = subgraph | Relationship.type("PERFORMS")(
+               taskqueue_node,
+               network_node,
+               _org=scope.org,
+               _campaign=scope.campaign,
+               _project=scope.project,
+               )
+
+        self.graph.merge(subgraph, "GufeTokenizable", "_scoped_key")
+        
+        return scoped_key
+
+
+
 
 
     def set_taskqueue_weight(
@@ -513,20 +559,11 @@ class Neo4jStore(FahAlchemyStateStore):
         Note: this creates a compute Task, but does not add it to any TaskQueues.
 
         """
-        if isinstance(transformation, (ScopedKey, str)):
-            transformation = self._get_obj("Transformation",
-                                           scoped_key=transformation)
-        elif isinstance(transformation, Transformation):
-            # check that this transformation already exists in the db
-            scoped_key = ScopedKey(gufe_key=transformation.key, **scope.dict())
-            exists = self.check_existence("Transformation", scoped_key=scoped_key)
-            
-            if not exists:
-                raise ValueError("No such Transformation present within this scope.")
+        transformation = self._get_obj_or_check_existence(transformation, Transformation, scope)
 
         # create a new task for the supplied transformation
         # use a PERFORMS relationship
-        subgraph, node, _ = self._gufe_to_subgraph(
+        subgraph, transformation_node, _ = self._gufe_to_subgraph(
             transformation.to_shallow_dict(),
             labels=["GufeTokenizable", transformation.__class__.__name__],
             gufe_key=transformation.key,
@@ -547,7 +584,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
         subgraph = subgraph | Relationship.type("PERFORMS")(
                task_node,
-               node,
+               transformation_node,
                _org=scope.org,
                _campaign=scope.campaign,
                _project=scope.project,
