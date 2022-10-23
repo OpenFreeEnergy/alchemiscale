@@ -1,11 +1,12 @@
 from enum import Enum
-from typing import Union
+from typing import Union, Dict
 from uuid import uuid4
 
 
 from pydantic import BaseModel, Field
-from gufe.tokenization import GufeTokenizable
+from gufe.tokenization import GufeTokenizable, GufeKey
 
+from ..models import ScopedKey
 
 
 class ComputeKey(BaseModel):
@@ -18,6 +19,7 @@ class ComputeKey(BaseModel):
 
     def __str__(self):
         return "-".join([self.identifier])
+
 
 class TaskStatusEnum(Enum):
     complete = "complete"
@@ -39,28 +41,34 @@ class Task(GufeTokenizable):
 
     status: TaskStatusEnum
     priority: int
-    uuid: str
 
     def __init__(
             self, 
             status: Union[str, TaskStatusEnum] = TaskStatusEnum.waiting,
             priority: int = 1,
-            uuid = None
+            _key: str = None
         ):
+        if _key is not None:
+            self._key = GufeKey(_key)
+
         self.status: TaskStatusEnum = TaskStatusEnum(status)
         self.priority = priority
 
-        if uuid is None:
-            self.uuid = str(uuid4())
+    def _gufe_tokenize(self):
+        # tokenize with uuid
+        return uuid4()
 
     def _to_dict(self):
         return {'status': self.status.value,
                 'priority': self.priority,
-                'uuid': self.uuid}
+                '_key': str(self.key),
+               }
 
     @classmethod
     def _from_dict(cls, d):
         return cls(**d)
+
+
 
     def _defaults(self):
         return super()._defaults()
@@ -71,6 +79,10 @@ class TaskQueue(GufeTokenizable):
 
     Attributes
     ----------
+    network : str
+        ScopedKey of the AlchemicalNetwork this TaskQueue corresponds to.
+        Used to ensure that there is only one TaskQueue for a given
+        AlchemicalNetwork using neo4j constraints.
     weight : float
         Value between 0.0 and 1.0 giving the weight of this TaskQueue. This
         number is used to allocate attention to this TaskQueue relative to
@@ -83,22 +95,31 @@ class TaskQueue(GufeTokenizable):
 
     """
 
+    network: str
     weight: float
-    uuid: str
 
     def __init__(
             self, 
+            network: ScopedKey,
             weight: int = .5,
-            uuid = None
+            _key: str = None
         ):
+        if _key is not None:
+            self._key = GufeKey(_key)
+
+        self.network = network
         self.weight = weight
 
-        if uuid is None:
-            self.uuid = str(uuid4())
+    def _gufe_tokenize(self):
+        # tokenize with uuid
+        return self.network
 
     def _to_dict(self):
-        return {'weight': self.weight,
-                'uuid': self.uuid}
+        return {
+                'network': self.network,
+                'weight': self.weight,
+                '_key': str(self.key),
+               }
 
     @classmethod
     def _from_dict(cls, d):

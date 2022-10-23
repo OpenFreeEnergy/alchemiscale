@@ -265,7 +265,6 @@ class Neo4jStore(FahAlchemyStateStore):
 
     def _get_obj(
         self,
-        *,
         qualname,
         scoped_key: Union[ScopedKey, str]
     ):
@@ -472,24 +471,23 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         ...
 
-    def _get_obj_or_check_existence(
+    def _get_node_from_obj_or_sk(
             self,
             obj: Union[GufeTokenizable, ScopedKey], 
             cls: type[GufeTokenizable], 
             scope: Scope
         ) -> GufeTokenizable:
         if isinstance(obj, (ScopedKey, str)):
-            obj = self._get_obj(cls.__name__,
-                                    scoped_key=obj)
+            nodes, subgraph = self._get_obj(cls.__qualname__, scoped_key=obj)
         elif isinstance(obj, cls):
             # check that this transformation already exists in the db
             scoped_key = ScopedKey(gufe_key=obj.key, **scope.dict())
-            exists = self.check_existence(cls.__name__, scoped_key=scoped_key)
+            nodes, subgraph = self._get_obj(cls.__qualname__, scoped_key=scoped_key)
             
-            if not exists:
-                raise ValueError(f"No such {cls.__name__}present within this scope.")
+            if not nodes:
+                raise ValueError(f"No such {cls.__name__} present within this scope.")
 
-        return obj
+        return list(nodes)[0]
 
     def create_taskqueue(
             self,
@@ -502,22 +500,11 @@ class Neo4jStore(FahAlchemyStateStore):
         A TaskQueue is required to action Tasks for a given AlchemicalNetwork.
 
         """
-        network = self._get_obj_or_check_existence(network, AlchemicalNetwork, scope)
+        network_node = self._get_node_from_obj_or_sk(network, AlchemicalNetwork, scope)
 
-        # if we already have a taskqueue for this network, return the existing
-        # ScopedKey and exit
-        
-
-        # create a new task queue for the supplied network
+        # create a taskqueue for the supplied network
         # use a PERFORMS relationship
-        subgraph, network_node, _ = self._gufe_to_subgraph(
-            network.to_shallow_dict(),
-            labels=["GufeTokenizable", network.__class__.__name__],
-            gufe_key=network.key,
-            scope=scope
-        )
-        
-        taskqueue = TaskQueue()
+        taskqueue = TaskQueue(network=network_node['_scoped_key'])
         _, taskqueue_node, scoped_key = self._gufe_to_subgraph(
                 taskqueue.to_shallow_dict(),
                 labels=["GufeTokenizable", taskqueue.__class__.__name__],
@@ -525,7 +512,7 @@ class Neo4jStore(FahAlchemyStateStore):
                 scope=scope
                 )
 
-        subgraph = subgraph | Relationship.type("PERFORMS")(
+        subgraph = Relationship.type("PERFORMS")(
                taskqueue_node,
                network_node,
                _org=scope.org,
@@ -536,10 +523,6 @@ class Neo4jStore(FahAlchemyStateStore):
         self.graph.merge(subgraph, "GufeTokenizable", "_scoped_key")
         
         return scoped_key
-
-
-
-
 
     def set_taskqueue_weight(
             self,
@@ -559,17 +542,10 @@ class Neo4jStore(FahAlchemyStateStore):
         Note: this creates a compute Task, but does not add it to any TaskQueues.
 
         """
-        transformation = self._get_obj_or_check_existence(transformation, Transformation, scope)
+        transformation_node = self._get_node_from_obj_or_sk(transformation, Transformation, scope)
 
         # create a new task for the supplied transformation
         # use a PERFORMS relationship
-        subgraph, transformation_node, _ = self._gufe_to_subgraph(
-            transformation.to_shallow_dict(),
-            labels=["GufeTokenizable", transformation.__class__.__name__],
-            gufe_key=transformation.key,
-            scope=scope
-        )
-        
         task = Task()
         _, task_node, scoped_key = self._gufe_to_subgraph(
                 task.to_shallow_dict(),
@@ -582,7 +558,7 @@ class Neo4jStore(FahAlchemyStateStore):
             # check for existence of `ProtocolDAGResult` and set EXTENDS relationship
             ...
 
-        subgraph = subgraph | Relationship.type("PERFORMS")(
+        subgraph = Relationship.type("PERFORMS")(
                task_node,
                transformation_node,
                _org=scope.org,

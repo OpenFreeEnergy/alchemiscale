@@ -129,8 +129,8 @@ class TestNeo4jStore(TestStateStore):
                             network=an,
                             scope=scope_test)
 
-            # add alchemical network, then try generating task
-            n4js.create_network(an, scope_test)
+            # add alchemical network, then try adding a taskqueue
+            network_sk = n4js.create_network(an, scope_test)
 
             taskqueue_sk: ScopedKey = n4js.create_taskqueue(
                         network=an,
@@ -146,4 +146,19 @@ class TestNeo4jStore(TestStateStore):
 
             assert n['_gufe_key'] == an.key
 
-            # add another task, this time with the scoped key for the transformation
+            # try adding the task queue again; this should yield exactly the same node
+            taskqueue_sk2: ScopedKey = n4js.create_taskqueue(
+                        network=an,
+                        scope=scope_test)
+
+            assert taskqueue_sk2 == taskqueue_sk
+
+            n = n4js.graph.run(
+                    f"""
+                    match (n:TaskQueue {{network: '{network_sk}', 
+                                                 _org: '{taskqueue_sk.org}', _campaign: '{taskqueue_sk.campaign}', 
+                                                 _project: '{taskqueue_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+                    return n
+                    """)
+
+            assert len(list(n)) == 1
