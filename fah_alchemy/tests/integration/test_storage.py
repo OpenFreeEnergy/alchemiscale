@@ -132,10 +132,12 @@ class TestNeo4jStore(TestStateStore):
             # add alchemical network, then try adding a taskqueue
             network_sk = n4js.create_network(an, scope_test)
 
+            # create taskqueue
             taskqueue_sk: ScopedKey = n4js.create_taskqueue(
                         network=an,
                         scope=scope_test)
 
+            # verify creation looks as we expect
             n = n4js.graph.run(
                     f"""
                     match (n:TaskQueue {{_gufe_key: '{taskqueue_sk.gufe_key}', 
@@ -153,7 +155,7 @@ class TestNeo4jStore(TestStateStore):
 
             assert taskqueue_sk2 == taskqueue_sk
 
-            n = n4js.graph.run(
+            records = n4js.graph.run(
                     f"""
                     match (n:TaskQueue {{network: '{network_sk}', 
                                                  _org: '{taskqueue_sk.org}', _campaign: '{taskqueue_sk.campaign}', 
@@ -161,4 +163,35 @@ class TestNeo4jStore(TestStateStore):
                     return n
                     """)
 
-            assert len(list(n)) == 1
+            assert len(list(records)) == 1
+
+    def test_create_taskqueue_weight(self, n4js, network_tyk2, scope_test):
+        with n4js.as_tempdb():
+            an = network_tyk2
+
+            # add alchemical network, then try adding a taskqueue
+            network_sk = n4js.create_network(an, scope_test)
+
+            # create taskqueue
+            taskqueue_sk: ScopedKey = n4js.create_taskqueue(
+                        network=an,
+                        scope=scope_test)
+
+            n = n4js.graph.run(
+                    f"""
+                    match (n:TaskQueue)
+                    return n
+                    """).to_subgraph()
+
+            assert n['weight'] == .5
+
+            # change the weight
+            n4js.set_taskqueue_weight(an, scope_test, .7)
+
+            n = n4js.graph.run(
+                    f"""
+                    match (n:TaskQueue)
+                    return n
+                    """).to_subgraph()
+
+            assert n['weight'] == .7

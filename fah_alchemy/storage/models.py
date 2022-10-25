@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 from typing import Union, Dict
 from uuid import uuid4
@@ -21,6 +22,15 @@ class ComputeKey(BaseModel):
         return "-".join([self.identifier])
 
 
+class TaskProvenance(BaseModel):
+
+    computekey: ComputeKey
+    datetime_start: datetime
+    datetime_end: datetime
+
+    # this should include versions of various libraries
+
+
 class TaskStatusEnum(Enum):
     complete = "complete"
     waiting = "waiting"
@@ -32,15 +42,23 @@ class TaskStatusEnum(Enum):
 
 
 class Task(GufeTokenizable):
-    """A Task that can be used to generate a `ProtocolDAG` on a compute node
+    """A Task that can be used to generate a `ProtocolDAG` on a
+    compute node.
 
     Attributes
     ----------
+    status
+        Status of the task.
+    priority
+        Priority of the task; 1 is highest, larger values indicate lower priority.
+    claim
+        Identifier of the compute service that has a claim on this task.
 
     """
 
-    status: TaskStatusEnum
+    status: TaskStatusEnum 
     priority: int
+    claim: str
 
     def __init__(
             self, 

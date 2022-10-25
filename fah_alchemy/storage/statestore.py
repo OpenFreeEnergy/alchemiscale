@@ -1,7 +1,7 @@
 import abc
 from contextlib import contextmanager
 import json
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 import weakref
 
 import networkx as nx
@@ -46,6 +46,19 @@ class Neo4jStore(FahAlchemyStateStore):
         finally:
             self.graph.delete_all()
 
+    @contextmanager
+    def transaction(self):
+        """Context manager for a py2neo Transaction.
+
+        """
+        tx = self.graph.begin()
+        try:
+            yield tx
+        except:
+            self.graph.rollback(tx)
+        else:
+            self.graph.commit(tx)
+
     ### gufe object handling
 
     def _gufe_to_subgraph(
@@ -54,7 +67,7 @@ class Neo4jStore(FahAlchemyStateStore):
             labels: List[str],
             gufe_key: GufeKey,
             scope: Scope
-    ):
+    ) -> Tuple[Subgraph, Node, str]:
         subgraph = Subgraph()
         node = Node(*labels)
 
@@ -278,7 +291,8 @@ class Neo4jStore(FahAlchemyStateStore):
         q = f"""
         MATCH p = (n:{qualname}{prop_string})-[r:DEPENDS_ON*]->(m) 
         WHERE NOT (m)-[:DEPENDS_ON]->()
-        RETURN n,p
+        MATCH (independent:{qualname}{prop_string})
+        RETURN n,p,independent
         """
         nodes = set()
         subgraph = Subgraph()
@@ -286,6 +300,34 @@ class Neo4jStore(FahAlchemyStateStore):
         for record in self.graph.run(q):
             nodes.add(record["n"])
             subgraph = subgraph | record["p"]
+
+        if len(nodes) > 1:
+            raise Neo4JStoreError("More than one result for given `scoped_key`; this should not be possible")
+
+        return nodes, subgraph
+
+    def _get_independent_obj(
+        self,
+        qualname,
+        scoped_key: Union[ScopedKey, str]
+    ):
+        properties = {"_scoped_key": str(scoped_key)}
+        prop_string = ", ".join(
+            "{}: '{}'".format(key, value) for key, value in properties.items()
+        )
+
+        prop_string = f" {{{prop_string}}}"
+
+        q = f"""
+        MATCH (n:{qualname}{prop_string})
+        RETURN n
+        """
+        nodes = set()
+        subgraph = Subgraph()
+
+        for record in self.graph.run(q):
+            nodes.add(record["n"])
+            subgraph = record["n"]
 
         if len(nodes) > 1:
             raise Neo4JStoreError("More than one result for given `scoped_key`; this should not be possible")
@@ -475,17 +517,24 @@ class Neo4jStore(FahAlchemyStateStore):
             self,
             obj: Union[GufeTokenizable, ScopedKey], 
             cls: type[GufeTokenizable], 
-            scope: Scope
+            scope: Scope,
+            independent: bool = False
         ) -> GufeTokenizable:
+
+        if independent:
+            get_obj = self._get_independent_obj
+        else:
+            get_obj = self._get_obj
+
         if isinstance(obj, (ScopedKey, str)):
-            nodes, subgraph = self._get_obj(cls.__qualname__, scoped_key=obj)
+            nodes, subgraph = get_obj(cls.__qualname__, scoped_key=obj)
         elif isinstance(obj, cls):
-            # check that this transformation already exists in the db
+            # check that this object already exists in the db
             scoped_key = ScopedKey(gufe_key=obj.key, **scope.dict())
-            nodes, subgraph = self._get_obj(cls.__qualname__, scoped_key=scoped_key)
+            nodes, subgraph = get_obj(cls.__qualname__, scoped_key=scoped_key)
             
-            if not nodes:
-                raise ValueError(f"No such {cls.__name__} present within this scope.")
+        if not nodes:
+            raise ValueError(f"No such {cls.__name__} present within this scope.")
 
         return list(nodes)[0]
 
@@ -497,7 +546,11 @@ class Neo4jStore(FahAlchemyStateStore):
         """Create a TaskQueue for the given AlchemicalNetwork.
 
         An AlchemicalNetwork can have only one associated TaskQueue.
-        A TaskQueue is required to action Tasks for a given AlchemicalNetwork.
+        A TaskQueue is required to queue Tasks for a given AlchemicalNetwork.
+
+        This method will only creat a TaskQueue for an AlchemicalNetwork if it
+        doesn't already exist; it will return the scoped key for the TaskQueue
+        either way.
 
         """
         network_node = self._get_node_from_obj_or_sk(network, AlchemicalNetwork, scope)
@@ -520,29 +573,70 @@ class Neo4jStore(FahAlchemyStateStore):
                _project=scope.project,
                )
 
-        self.graph.merge(subgraph, "GufeTokenizable", "_scoped_key")
-        
+        # create head and tail node, attach to TaskQueue node
+        # head and tail connected via FOLLOWS relationship
+        head = Node("TaskQueueHead")
+        tail = Node("TaskQueueTail")
+
+        subgraph = subgraph | Relationship.type("TASKQUEUE_HEAD")(
+                taskqueue_node,
+                head)
+        subgraph = subgraph | Relationship.type("TASKQUEUE_TAIL")(
+                taskqueue_node,
+                tail)
+        subgraph = subgraph | Relationship.type("FOLLOWS")(
+                tail,
+                head)
+
+        # if the taskqueue already exists, this will rollback transaction
+        # automatically
+        with self.transaction() as tx:
+            tx.create(subgraph)
+
         return scoped_key
 
     def set_taskqueue_weight(
             self,
-            network,
-            scope: Scope
+            network: Union[AlchemicalNetwork, ScopedKey],
+            scope: Scope,
+            weight: float
         ):
-        ...
+        network_node = self._get_node_from_obj_or_sk(network, AlchemicalNetwork, scope)
+
+        ## this should be performed in a single cypher query, in place
+        q = f"""
+        MATCH (t:TaskQueue {{network: "{network_node['_scoped_key']}"}})
+        SET t.weight = {weight}
+        RETURN t
+        """
+        self.graph.run(q)
 
     def create_task(
             self, 
             transformation: Union[Transformation, ScopedKey, str],
             scope: Scope,
-            extend_from: Optional[ProtocolDAGResult] = None
+            extend_from: Optional[Task] = None,
         ) -> ScopedKey:
         """Add a compute Task to a Transformation.
 
         Note: this creates a compute Task, but does not add it to any TaskQueues.
 
+        Parameters
+        ----------
+        transformation
+            The Transformation to compute. 
+        scope
+            The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
+        extend_from
+            The Task to use as a starting point for this Task.
+            Will use the `ProtocolDAGResult` from the given Task as the
+            `extend_from` input for the Task's eventual call to `Protocol.create`.
+
         """
         transformation_node = self._get_node_from_obj_or_sk(transformation, Transformation, scope)
+
+        # TODO: if we want to inject Protocol information into our Task, we
+        # might want to instantiate the `gufe` object here; that should be safe
 
         # create a new task for the supplied transformation
         # use a PERFORMS relationship
@@ -566,9 +660,57 @@ class Neo4jStore(FahAlchemyStateStore):
                _project=scope.project,
                )
 
-        self.graph.merge(subgraph, "GufeTokenizable", "_scoped_key")
+        with self.transaction() as tx:
+            tx.create(subgraph)
         
         return scoped_key
+
+    def set_tasks(
+            self, 
+            transformation: Union[Transformation, ScopedKey, str],
+            scope: Scope,
+            extend_from: Optional[Task] = None,
+            count: int = 1,
+        ) -> ScopedKey:
+        """Set a fixed number of Tasks against the given Transformation if not
+        already present.
+
+        Note: Tasks created by this method are not added to any TaskQueues.
+
+        Parameters
+        ----------
+        transformation
+            The Transformation to compute.
+        scope
+            The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
+        extend_from
+            The Task to use as a starting point for this Task.
+            Will use the `ProtocolDAGResult` from the given Task as the
+            `extend_from` input for the Task's eventual call to `Protocol.create`.
+        count
+            The total number of tasks that should exist corresponding to the
+            specified `transformation`, `scope`, and `extend_from`.
+        """
+        # TODO: finish this one out when we have a reasonable approach to locking
+        # too hard to perform in a single Cypher query; unclear how to create many nodes in a loop
+        transformation_node = self._get_node_from_obj_or_sk(transformation, Transformation, scope)
+
+
+
+        ## this should be performed in a single cypher query, in place
+        ## this is really close to working, but still no dice if there are no existing tasks
+        ## might have to cut losses and just call `create_task` above first
+        q = f"""
+        MATCH (n:Transformtion 
+                {{_scoped_key: "{transformation_node['_scoped_key']}"}})
+                <-[:PERFORMS]-
+              (t:Task)
+        WITH count(*) as cnt
+        FOREACH (i in range(0, {count} - cnt) | 
+          MERGE (n)<-[:PERFORMS]-(t:Task)
+          )
+        """
+        self.graph.run(q)
 
     def delete_task(
             self, 
@@ -584,10 +726,10 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         ...
 
-    def action_task(
+    def queue_task(
             self,
             task: ScopedKey,
-            network: Union[AlchemicalNetwork, ScopedKey],
+            network: Union[AlchemicalNetwork, ScopedKey, str],
         ) -> Task:
         """Add a compute Task to the TaskQueue for a given AlchemicalNetwork.
 
@@ -597,13 +739,31 @@ class Neo4jStore(FahAlchemyStateStore):
         A given compute task can be represented in any number of
         AlchemicalNetwork queues, or none at all.
 
+        If this Task has an EXTENDS relationship to another Task, that Task must
+        be 'complete' before this Task can be added to *any* TaskQueue.
+
         """
-        ...
+        task_node = self._get_node_from_obj_or_sk(task, Task, None, independent=True)
+
+        scope = Scope(org=task_node['_org'], 
+                      campaign=task_node['_campaign'],
+                      project=task_node['_project'])
+
+        taskqueue_node = self._get_taskqueue(network, scope)
 
         # add task to the end of the queue; use a cursor to query the queue for last
         # item; add new FOLLOWS relationship 
 
-    def cancel_task(
+        q = f"""
+        MATCH {taskqueue_node}-[:TASKQUEUE_TAIL]->(tqt)-[tqtl:FOLLOWS]->(last)
+        WITH tqt, last
+        MATCH tn = {task_node}
+        CREATE (tqt)-[:FOLLOWS]->(tn)-[:FOLLOWS]->(last)
+        DELETE tqtl
+        """
+        self.graph.run(q)
+
+    def dequeue_task(
             self,
             task: Union[Task, ScopedKey],
             network: Union[AlchemicalNetwork, ScopedKey],
@@ -618,11 +778,37 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         ...
 
-    def get_taskqueue(
+    def _get_taskqueue(
+            self,
+            network: Union[AlchemicalNetwork, ScopedKey, str],
+            scope: Scope,
+        ):
+        """Get the TaskQueue for the given AlchemicalNetwork.
+
+        """
+        network_node = self._get_node_from_obj_or_sk(network, AlchemicalNetwork, scope)
+        node = self.graph.run(
+                f"""
+                match (n:TaskQueue {{network: "{network_node['_scoped_key']}", 
+                                             _org: '{scope.org}', _campaign: '{scope.campaign}', 
+                                             _project: '{scope.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+                return n
+                """).to_subgraph()
+
+        return node
+
+    def get_taskqueue_tasks(
             self,
             network: Union[AlchemicalNetwork, ScopedKey],
             scope: Scope,
         ):
+        """Get a list of Tasks in the TaskQueue, in 
+
+        """
+        ...
+
+    def claim_taskqueue_tasks(self):
+        # this method should 
         ...
 
     def query_tasks(
@@ -630,6 +816,12 @@ class Neo4jStore(FahAlchemyStateStore):
             network: Union[AlchemicalNetwork, ScopedKey],
             transformation: Union[Transformation, ScopedKey],
             scope: Scope,
+        ):
+        ...
+
+    def get_task_transformation(
+            self,
+            task: Union[Task, ScopedKey, str],
         ):
         ...
 
