@@ -12,7 +12,7 @@ from py2neo import Graph, Node, Relationship, Subgraph
 from py2neo.matching import NodeMatcher
 from py2neo.errors import ClientError
 
-from .models import ComputeKey, Task, TaskQueue, TaskArchive
+from .models import ComputeKey, Task, TaskQueue, TaskArchive, TaskStatusEnum
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
 
@@ -712,6 +712,15 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         self.graph.run(q)
 
+    def get_tasks(
+            self, 
+            transformation: Union[Transformation, ScopedKey, str],
+            scope: Scope,
+            extend_from: Optional[Task] = None,
+            status: List[TaskStatusEnum] = None
+        ) -> ScopedKey:
+        ...
+
     def delete_task(
             self, 
             task: Union[Task, ScopedKey],
@@ -730,7 +739,7 @@ class Neo4jStore(FahAlchemyStateStore):
             self,
             task: ScopedKey,
             network: Union[AlchemicalNetwork, ScopedKey, str],
-        ) -> Task:
+        ) -> ScopedKey:
         """Add a compute Task to the TaskQueue for a given AlchemicalNetwork.
 
         Note: the Task must be within the same scope as the AlchemicalNetwork,
@@ -755,13 +764,17 @@ class Neo4jStore(FahAlchemyStateStore):
         # item; add new FOLLOWS relationship 
 
         q = f"""
-        MATCH {taskqueue_node}-[:TASKQUEUE_TAIL]->(tqt)-[tqtl:FOLLOWS]->(last)
-        WITH tqt, last
-        MATCH tn = {task_node}
+        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}})-
+            [:TASKQUEUE_TAIL]
+            ->(tqt)-[tqtl:FOLLOWS]->(last)
+        WITH tqt, last, tqtl
+        MATCH (tn:Task {{_scoped_key: '{task_node['_scoped_key']}'}})
         CREATE (tqt)-[:FOLLOWS]->(tn)-[:FOLLOWS]->(last)
         DELETE tqtl
         """
         self.graph.run(q)
+
+        return ScopedKey.from_str(task_node['_scoped_key'])
 
     def dequeue_task(
             self,
@@ -776,7 +789,29 @@ class Neo4jStore(FahAlchemyStateStore):
         queues, or none at all.
 
         """
-        ...
+        task_node = self._get_node_from_obj_or_sk(task, Task, None, independent=True)
+
+        scope = Scope(org=task_node['_org'], 
+                      campaign=task_node['_campaign'],
+                      project=task_node['_project'])
+
+        taskqueue_node = self._get_taskqueue(network, scope)
+
+        # add task to the end of the queue; use a cursor to query the queue for last
+        # item; add new FOLLOWS relationship 
+
+        q = f"""
+        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}})-
+            [:TASKQUEUE_TAIL]
+            ->(tqt)-[tqtl:FOLLOWS]->(last)
+        WITH tqt, last, tqtl
+        MATCH (tn:Task {{_scoped_key: '{task_node['_scoped_key']}'}})
+        CREATE (tqt)-[:FOLLOWS]->(tn)-[:FOLLOWS]->(last)
+        DELETE tqtl
+        """
+        self.graph.run(q)
+
+        return ScopedKey.from_str(task_node['_scoped_key'])
 
     def _get_taskqueue(
             self,
