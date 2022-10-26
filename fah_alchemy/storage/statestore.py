@@ -291,8 +291,7 @@ class Neo4jStore(FahAlchemyStateStore):
         q = f"""
         MATCH p = (n:{qualname}{prop_string})-[r:DEPENDS_ON*]->(m) 
         WHERE NOT (m)-[:DEPENDS_ON]->()
-        MATCH (independent:{qualname}{prop_string})
-        RETURN n,p,independent
+        RETURN n,p
         """
         nodes = set()
         subgraph = Subgraph()
@@ -448,7 +447,7 @@ class Neo4jStore(FahAlchemyStateStore):
     def get_network(self, scoped_key: ScopedKey):
         """Get a specific `AlchemicalNetwork` using its `scoped_key`."""
 
-        return self._get_obj(
+        return self._get_gufe_obj(
             qualname="AlchemicalNetwork",
             scoped_key=scoped_key
         )

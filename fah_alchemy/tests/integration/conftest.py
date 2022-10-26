@@ -198,4 +198,4 @@ def network_tyk2():
 
 @fixture(scope="session")
 def scope_test():
-    return Scope(org="test-org", campaign="test-campaign", project="test-project")
+    return Scope(org="test_org", campaign="test_campaign", project="test_project")
