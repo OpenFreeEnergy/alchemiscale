@@ -621,8 +621,8 @@ class Neo4jStore(FahAlchemyStateStore):
 
         q = f"""
         MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}}),
-              (tq)-[TASKQUEUE_HEAD]->(tqh)<-[tqf:FOLLOWS* {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]-(task),
-              (tq)-[TASKQUEUE_TAIL]->(tqt)
+              (tq)-[:TASKQUEUE_HEAD]->(tqh)<-[tqf:FOLLOWS* {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]-(task),
+              (tq)-[:TASKQUEUE_TAIL]->(tqt)
         FOREACH (i in tqf | delete i)
         DETACH DELETE tq,tqh,tqt
         """
@@ -815,9 +815,9 @@ class Neo4jStore(FahAlchemyStateStore):
 
     def dequeue_task(
             self,
-            task: Union[Task, ScopedKey],
+            task: ScopedKey,
             network: Union[AlchemicalNetwork, ScopedKey],
-        ) -> Task:
+        ) -> ScopedKey:
         """Remove a compute Task from the TaskQueue for a given AlchemicalNetwork.
 
         Note: the Task must be within the same scope as the AlchemicalNetwork.
@@ -835,13 +835,12 @@ class Neo4jStore(FahAlchemyStateStore):
         taskqueue_node = self._get_taskqueue(network, scope)
 
         q = f"""
-        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}})-
-            [:TASKQUEUE_TAIL]
-            ->(tqt)-[tqtl:FOLLOWS]->(last)
-        WITH tqt, last, tqtl
-        MATCH (tn:Task {{_scoped_key: '{task_node['_scoped_key']}'}})
-        CREATE (tqt)-[:FOLLOWS]->(tn)-[:FOLLOWS]->(last)
-        DELETE tqtl
+        MATCH (task:Task {{_scoped_key: '{task_node['_scoped_key']}'}}),
+              (behind)-[behindf:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(task),
+              (task)-[aheadf:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(ahead)
+        WITH behind, behindf, task, aheadf, ahead
+        CREATE (behind)-[newf:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(ahead)
+        DELETE behindf, aheadf
         """
         self.graph.run(q)
 

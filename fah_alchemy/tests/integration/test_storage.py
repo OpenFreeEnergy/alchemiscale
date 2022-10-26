@@ -1,5 +1,6 @@
 import pytest
 
+from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
 
 from fah_alchemy.storage import Neo4jStore
@@ -93,9 +94,24 @@ class TestNeo4jStore(TestStateStore):
 
             assert an3 == an2 == an
 
+    def test_query_network(self, n4js, network_tyk2, scope_test):
+        with n4js.as_tempdb():
+            an = network_tyk2
+            an2 = AlchemicalNetwork(edges=list(an.edges)[:-2], name='incomplete')
 
-    def test_query_networks(self):
-        ...
+            sk: ScopedKey = n4js.create_network(an, scope_test)
+            sk2: ScopedKey = n4js.update_network(an2, scope_test)
+
+            all_networks = n4js.query_networks()
+            
+            assert an in all_networks
+            assert an2 in all_networks
+            assert len(all_networks) == 2
+
+            # add in a scope test
+
+            # add in a name test
+
 
     def test_query_transformations(self):
         ...
