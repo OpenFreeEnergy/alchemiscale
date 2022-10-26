@@ -444,6 +444,13 @@ class Neo4jStore(FahAlchemyStateStore):
     def delete_network(self, scoped_key: ScopedKey):
         ...
 
+        # first, delete its queue
+
+        q = f"""
+        MATCH (an:AlchemicalNetwork {{_scoped_key: '{scoped_key}'}})
+        DETACH DELETE an
+        """
+
     def get_network(self, scoped_key: ScopedKey):
         """Get a specific `AlchemicalNetwork` using its `scoped_key`."""
 
@@ -585,7 +592,8 @@ class Neo4jStore(FahAlchemyStateStore):
                 tail)
         subgraph = subgraph | Relationship.type("FOLLOWS")(
                 tail,
-                head)
+                head,
+                taskqueue=str(scoped_key))
 
         # if the taskqueue already exists, this will rollback transaction
         # automatically
@@ -593,6 +601,34 @@ class Neo4jStore(FahAlchemyStateStore):
             tx.create(subgraph)
 
         return scoped_key
+
+    def delete_taskqueue(
+            self,
+            network: Union[AlchemicalNetwork, ScopedKey],
+            scope: Scope,
+        ) -> ScopedKey:
+        """Create a TaskQueue for the given AlchemicalNetwork.
+
+        An AlchemicalNetwork can have only one associated TaskQueue.
+        A TaskQueue is required to queue Tasks for a given AlchemicalNetwork.
+
+        This method will only creat a TaskQueue for an AlchemicalNetwork if it
+        doesn't already exist; it will return the scoped key for the TaskQueue
+        either way.
+
+        """
+        taskqueue_node = self._get_taskqueue(network, scope)
+
+        q = f"""
+        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}}),
+              (tq)-[TASKQUEUE_HEAD]->(tqh)<-[tqf:FOLLOWS* {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]-(task),
+              (tq)-[TASKQUEUE_TAIL]->(tqt)
+        FOREACH (i in tqf | delete i)
+        DETACH DELETE tq,tqh,tqt
+        """
+        self.graph.run(q)
+
+        return ScopedKey.from_str(taskqueue_node['_scoped_key'])
 
     def set_taskqueue_weight(
             self,
@@ -694,18 +730,19 @@ class Neo4jStore(FahAlchemyStateStore):
         # too hard to perform in a single Cypher query; unclear how to create many nodes in a loop
         transformation_node = self._get_node_from_obj_or_sk(transformation, Transformation, scope)
 
-
-
         ## this should be performed in a single cypher query, in place
         ## this is really close to working, but still no dice if there are no existing tasks
         ## might have to cut losses and just call `create_task` above first
         q = f"""
         MATCH (n:Transformtion 
                 {{_scoped_key: "{transformation_node['_scoped_key']}"}})
-                <-[:PERFORMS]-
-              (t:Task)
-        WITH count(*) as cnt
-        FOREACH (i in range(0, {count} - cnt) | 
+        OPTIONAL MATCH (n)<-[:PERFORMS]-(t:Task)
+        WITH count(t) as cnt
+        CASE
+         WHEN cnt IS NULL THEN 0
+         ELSE cnt
+        END AS cnt_nonnull
+        FOREACH (i in range(0, {count} - cnt_nonnull) | 
           MERGE (n)<-[:PERFORMS]-(t:Task)
           )
         """
@@ -751,6 +788,9 @@ class Neo4jStore(FahAlchemyStateStore):
         be 'complete' before this Task can be added to *any* TaskQueue.
 
         """
+
+        # TODO: add in EXTENDS relationship handling documented above
+
         task_node = self._get_node_from_obj_or_sk(task, Task, None, independent=True)
 
         scope = Scope(org=task_node['_org'], 
@@ -759,16 +799,14 @@ class Neo4jStore(FahAlchemyStateStore):
 
         taskqueue_node = self._get_taskqueue(network, scope)
 
-        # add task to the end of the queue; use a cursor to query the queue for last
-        # item; add new FOLLOWS relationship 
-
         q = f"""
         MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}})-
             [:TASKQUEUE_TAIL]
-            ->(tqt)-[tqtl:FOLLOWS]->(last)
+            ->(tqt)-[tqtl:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(last)
         WITH tqt, last, tqtl
         MATCH (tn:Task {{_scoped_key: '{task_node['_scoped_key']}'}})
-        CREATE (tqt)-[:FOLLOWS]->(tn)-[:FOLLOWS]->(last)
+        CREATE (tqt)-[:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]
+            ->(tn)-[:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(last)
         DELETE tqtl
         """
         self.graph.run(q)
@@ -795,9 +833,6 @@ class Neo4jStore(FahAlchemyStateStore):
                       project=task_node['_project'])
 
         taskqueue_node = self._get_taskqueue(network, scope)
-
-        # add task to the end of the queue; use a cursor to query the queue for last
-        # item; add new FOLLOWS relationship 
 
         q = f"""
         MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}})-

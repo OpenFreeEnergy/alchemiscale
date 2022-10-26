@@ -25,9 +25,12 @@ class ScopedKey(BaseModel):
 
     @classmethod
     def from_str(cls, string):
-        prefix, token, org, campaign, project = str.split('-')
+        prefix, token, org, campaign, project = string.split('-')
         gufe_key = GufeKey(f"{prefix}-{token}")
 
-        return cls(gufe_key, org, campaign, project)
+        return cls(gufe_key=gufe_key, 
+                   org=org, 
+                   campaign=campaign, 
+                   project=project)
 
 

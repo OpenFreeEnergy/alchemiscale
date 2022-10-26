@@ -1,5 +1,7 @@
 import pytest
 
+from gufe.tokenization import TOKENIZABLE_REGISTRY
+
 from fah_alchemy.storage import Neo4jStore
 from fah_alchemy.models import Scope, ScopedKey
 
@@ -75,8 +77,22 @@ class TestNeo4jStore(TestStateStore):
     def test_delete_network(self):
         ...
 
-    def test_get_network(self):
-        ...
+    def test_get_network(self, n4js, network_tyk2, scope_test):
+        with n4js.as_tempdb():
+            an = network_tyk2
+            sk: ScopedKey = n4js.create_network(an, scope_test)
+
+            an2 = n4js.get_network(sk)
+
+            assert an2 == an
+            assert an2 is an
+
+            TOKENIZABLE_REGISTRY.clear()
+
+            an3 = n4js.get_network(sk)
+
+            assert an3 == an2 == an
+
 
     def test_query_networks(self):
         ...
