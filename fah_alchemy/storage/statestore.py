@@ -41,6 +41,7 @@ class Neo4jStore(FahAlchemyStateStore):
             yield tx
         except:
             self.graph.rollback(tx)
+            raise
         else:
             self.graph.commit(tx)
 
@@ -790,11 +791,13 @@ class Neo4jStore(FahAlchemyStateStore):
             ->(tqt)-[tqtl:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(last)
         WITH tqt, last, tqtl
         MATCH (tn:Task {{_scoped_key: '{task_node['_scoped_key']}'}})
+        WHERE NOT (tqt)-[:FOLLOWS* {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(tn)
         CREATE (tqt)-[:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]
             ->(tn)-[:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(last)
         DELETE tqtl
         """
-        self.graph.run(q)
+        with self.transaction() as tx:
+            tx.run(q)
 
         return ScopedKey.from_str(task_node['_scoped_key'])
 
