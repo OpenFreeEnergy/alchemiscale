@@ -24,93 +24,89 @@ class TestNeo4jStore(TestStateStore):
     ### gufe otject handling
 
     def test_create_network(self, n4js, network_tyk2, scope_test):
-        with n4js.as_tempdb():
-            an = network_tyk2
+        an = network_tyk2
 
-            sk: ScopedKey = n4js.create_network(an, scope_test)
+        sk: ScopedKey = n4js.create_network(an, scope_test)
 
-            out = n4js.graph.run(
-                    f"""
-                    match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
-                                                 _org: '{sk.org}', _campaign: '{sk.campaign}', 
-                                                 _project: '{sk.project}'}}) 
-                    return n
-                    """)
-            n = out.to_subgraph()
+        out = n4js.graph.run(
+                f"""
+                match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
+                                             _org: '{sk.org}', _campaign: '{sk.campaign}', 
+                                             _project: '{sk.project}'}}) 
+                return n
+                """)
+        n = out.to_subgraph()
 
-            assert n["name"] == 'tyk2_relative_benchmark'
+        assert n["name"] == 'tyk2_relative_benchmark'
 
     def test_update_network(self, n4js, network_tyk2, scope_test):
-        with n4js.as_tempdb():
-            an = network_tyk2
+        an = network_tyk2
 
-            sk: ScopedKey = n4js.create_network(an, scope_test)
+        sk: ScopedKey = n4js.create_network(an, scope_test)
 
-            n = n4js.graph.run(
-                    f"""
-                    match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
-                                                 _org: '{sk.org}', _campaign: '{sk.campaign}', 
-                                                 _project: '{sk.project}'}}) 
-                    return n
-                    """).to_subgraph()
+        n = n4js.graph.run(
+                f"""
+                match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
+                                             _org: '{sk.org}', _campaign: '{sk.campaign}', 
+                                             _project: '{sk.project}'}}) 
+                return n
+                """).to_subgraph()
 
-            assert n["name"] == 'tyk2_relative_benchmark'
+        assert n["name"] == 'tyk2_relative_benchmark'
 
-            with pytest.raises(ValueError):
-                n4js.create_network(an, scope_test)
+        with pytest.raises(ValueError):
+            n4js.create_network(an, scope_test)
 
-            sk2: ScopedKey = n4js.update_network(an, scope_test)
+        sk2: ScopedKey = n4js.update_network(an, scope_test)
 
-            assert sk2 == sk
+        assert sk2 == sk
 
-            n2 = n4js.graph.run(
-                    f"""
-                    match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
-                                                 _org: '{sk.org}', _campaign: '{sk.campaign}', 
-                                                 _project: '{sk.project}'}}) 
-                    return n
-                    """).to_subgraph()
+        n2 = n4js.graph.run(
+                f"""
+                match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
+                                             _org: '{sk.org}', _campaign: '{sk.campaign}', 
+                                             _project: '{sk.project}'}}) 
+                return n
+                """).to_subgraph()
 
-            assert n2["name"] == 'tyk2_relative_benchmark'
+        assert n2["name"] == 'tyk2_relative_benchmark'
 
-            assert n2.identity == n.identity
+        assert n2.identity == n.identity
 
     def test_delete_network(self):
         ...
 
     def test_get_network(self, n4js, network_tyk2, scope_test):
-        with n4js.as_tempdb():
-            an = network_tyk2
-            sk: ScopedKey = n4js.create_network(an, scope_test)
+        an = network_tyk2
+        sk: ScopedKey = n4js.create_network(an, scope_test)
 
-            an2 = n4js.get_network(sk)
+        an2 = n4js.get_network(sk)
 
-            assert an2 == an
-            assert an2 is an
+        assert an2 == an
+        assert an2 is an
 
-            TOKENIZABLE_REGISTRY.clear()
+        TOKENIZABLE_REGISTRY.clear()
 
-            an3 = n4js.get_network(sk)
+        an3 = n4js.get_network(sk)
 
-            assert an3 == an2 == an
+        assert an3 == an2 == an
 
     def test_query_network(self, n4js, network_tyk2, scope_test):
-        with n4js.as_tempdb():
-            an = network_tyk2
-            an2 = AlchemicalNetwork(edges=list(an.edges)[:-2], name='incomplete')
+        an = network_tyk2
+        an2 = AlchemicalNetwork(edges=list(an.edges)[:-2], name='incomplete')
 
-            sk: ScopedKey = n4js.create_network(an, scope_test)
-            sk2: ScopedKey = n4js.update_network(an2, scope_test)
+        sk: ScopedKey = n4js.create_network(an, scope_test)
+        sk2: ScopedKey = n4js.update_network(an2, scope_test)
 
-            all_networks = n4js.query_networks()
-            
-            assert an in all_networks
-            assert an2 in all_networks
-            assert len(all_networks) == 2
+        all_networks = n4js.query_networks()
+        
+        assert an in all_networks
+        assert an2 in all_networks
+        assert len(all_networks) == 2
 
-            # add in a scope test
+        # add in a scope test
 
-            # add in a name test
+        # add in a name test
 
 
     def test_query_transformations(self):
@@ -122,108 +118,105 @@ class TestNeo4jStore(TestStateStore):
     ### compute
 
     def test_create_task(self, n4js, network_tyk2, scope_test):
-        with n4js.as_tempdb():
-            an = network_tyk2
-            transformation = list(an.edges)[0]
+        an = network_tyk2
+        transformation = list(an.edges)[0]
 
-            # try creating a task for a transformation that is not present
-            with pytest.raises(ValueError):
-                task = n4js.create_task(
-                            transformation=transformation,
-                            scope=scope_test)
-
-            # add alchemical network, then try generating task
-            n4js.create_network(an, scope_test)
-
-            task_sk: ScopedKey = n4js.create_task(
+        # try creating a task for a transformation that is not present
+        with pytest.raises(ValueError):
+            task = n4js.create_task(
                         transformation=transformation,
                         scope=scope_test)
 
-            n = n4js.graph.run(
-                    f"""
-                    match (n:Task {{_gufe_key: '{task_sk.gufe_key}', 
-                                                 _org: '{task_sk.org}', _campaign: '{task_sk.campaign}', 
-                                                 _project: '{task_sk.project}'}})-[:PERFORMS]->(m:Transformation)
-                    return m
-                    """).to_subgraph()
+        # add alchemical network, then try generating task
+        n4js.create_network(an, scope_test)
 
-            assert n['_gufe_key'] == transformation.key
+        task_sk: ScopedKey = n4js.create_task(
+                    transformation=transformation,
+                    scope=scope_test)
 
-            # add another task, this time with the scoped key for the transformation
+        n = n4js.graph.run(
+                f"""
+                match (n:Task {{_gufe_key: '{task_sk.gufe_key}', 
+                                             _org: '{task_sk.org}', _campaign: '{task_sk.campaign}', 
+                                             _project: '{task_sk.project}'}})-[:PERFORMS]->(m:Transformation)
+                return m
+                """).to_subgraph()
+
+        assert n['_gufe_key'] == transformation.key
+
+        # add another task, this time with the scoped key for the transformation
 
     def test_create_taskqueue(self, n4js, network_tyk2, scope_test):
-        with n4js.as_tempdb():
-            an = network_tyk2
+        an = network_tyk2
 
-            # try creating a taskqueue for a network that is not present
-            with pytest.raises(ValueError):
-                task = n4js.create_taskqueue(
-                            network=an,
-                            scope=scope_test)
-
-            # add alchemical network, then try adding a taskqueue
-            network_sk = n4js.create_network(an, scope_test)
-
-            # create taskqueue
-            taskqueue_sk: ScopedKey = n4js.create_taskqueue(
+        # try creating a taskqueue for a network that is not present
+        with pytest.raises(ValueError):
+            task = n4js.create_taskqueue(
                         network=an,
                         scope=scope_test)
 
-            # verify creation looks as we expect
-            n = n4js.graph.run(
-                    f"""
-                    match (n:TaskQueue {{_gufe_key: '{taskqueue_sk.gufe_key}', 
-                                                 _org: '{taskqueue_sk.org}', _campaign: '{taskqueue_sk.campaign}', 
-                                                 _project: '{taskqueue_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
-                    return m
-                    """).to_subgraph()
+        # add alchemical network, then try adding a taskqueue
+        network_sk = n4js.create_network(an, scope_test)
 
-            assert n['_gufe_key'] == an.key
+        # create taskqueue
+        taskqueue_sk: ScopedKey = n4js.create_taskqueue(
+                    network=an,
+                    scope=scope_test)
 
-            # try adding the task queue again; this should yield exactly the same node
-            taskqueue_sk2: ScopedKey = n4js.create_taskqueue(
-                        network=an,
-                        scope=scope_test)
+        # verify creation looks as we expect
+        n = n4js.graph.run(
+                f"""
+                match (n:TaskQueue {{_gufe_key: '{taskqueue_sk.gufe_key}', 
+                                             _org: '{taskqueue_sk.org}', _campaign: '{taskqueue_sk.campaign}', 
+                                             _project: '{taskqueue_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+                return m
+                """).to_subgraph()
 
-            assert taskqueue_sk2 == taskqueue_sk
+        assert n['_gufe_key'] == an.key
 
-            records = n4js.graph.run(
-                    f"""
-                    match (n:TaskQueue {{network: '{network_sk}', 
-                                                 _org: '{taskqueue_sk.org}', _campaign: '{taskqueue_sk.campaign}', 
-                                                 _project: '{taskqueue_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
-                    return n
-                    """)
+        # try adding the task queue again; this should yield exactly the same node
+        taskqueue_sk2: ScopedKey = n4js.create_taskqueue(
+                    network=an,
+                    scope=scope_test)
 
-            assert len(list(records)) == 1
+        assert taskqueue_sk2 == taskqueue_sk
+
+        records = n4js.graph.run(
+                f"""
+                match (n:TaskQueue {{network: '{network_sk}', 
+                                             _org: '{taskqueue_sk.org}', _campaign: '{taskqueue_sk.campaign}', 
+                                             _project: '{taskqueue_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+                return n
+                """)
+
+        assert len(list(records)) == 1
 
     def test_create_taskqueue_weight(self, n4js, network_tyk2, scope_test):
-        with n4js.as_tempdb():
-            an = network_tyk2
+        an = network_tyk2
 
-            # add alchemical network, then try adding a taskqueue
-            network_sk = n4js.create_network(an, scope_test)
+        # add alchemical network, then try adding a taskqueue
+        network_sk = n4js.create_network(an, scope_test)
 
-            # create taskqueue
-            taskqueue_sk: ScopedKey = n4js.create_taskqueue(
-                        network=an,
-                        scope=scope_test)
+        # create taskqueue
+        taskqueue_sk: ScopedKey = n4js.create_taskqueue(
+                    network=an,
+                    scope=scope_test)
 
-            n = n4js.graph.run(
-                    f"""
-                    match (n:TaskQueue)
-                    return n
-                    """).to_subgraph()
+        n = n4js.graph.run(
+                f"""
+                match (n:TaskQueue)
+                return n
+                """).to_subgraph()
 
-            assert n['weight'] == .5
+        assert n['weight'] == .5
 
-            # change the weight
-            n4js.set_taskqueue_weight(an, scope_test, .7)
+        # change the weight
+        n4js.set_taskqueue_weight(an, scope_test, .7)
 
-            n = n4js.graph.run(
-                    f"""
-                    match (n:TaskQueue)
-                    return n
-                    """).to_subgraph()
+        n = n4js.graph.run(
+                f"""
+                match (n:TaskQueue)
+                return n
+                """).to_subgraph()
 
-            assert n['weight'] == .7
+        assert n['weight'] == .7

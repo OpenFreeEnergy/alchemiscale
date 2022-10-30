@@ -32,21 +32,6 @@ class Neo4jStore(FahAlchemyStateStore):
         self.gufe_nodes = weakref.WeakValueDictionary()
 
     @contextmanager
-    def as_tempdb(self):
-        """Context manager that deletes everything in the target database on entry and exit.
-
-        This is used mainly for testing.
-
-        WARNING: deletes any data in target database. Do not use if you are not okay with this.
-
-        """
-        self.graph.delete_all()
-        try:
-            yield
-        finally:
-            self.graph.delete_all()
-
-    @contextmanager
     def transaction(self):
         """Context manager for a py2neo Transaction.
 

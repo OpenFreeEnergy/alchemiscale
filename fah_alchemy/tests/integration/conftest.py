@@ -135,12 +135,19 @@ def uri(neo4j_service_and_uri):
     return uri
 
 
-@fixture(scope="session")
+@fixture(scope="function")
 def graph(uri):
     graph = Graph(uri)
 
     # set constraint that requires `GufeTokenizable`s to have a unique _scoped_key
-    graph.run("CREATE CONSTRAINT gufe_key FOR (n:GufeTokenizable) REQUIRE n._scoped_key is unique")
+    try:
+        graph.run("CREATE CONSTRAINT gufe_key FOR (n:GufeTokenizable) REQUIRE n._scoped_key is unique")
+    except:
+        pass
+
+    # clear graph contents; want a fresh state for database
+    graph.run("MATCH (n) DETACH DELETE n")
+    
     return graph
 
 
