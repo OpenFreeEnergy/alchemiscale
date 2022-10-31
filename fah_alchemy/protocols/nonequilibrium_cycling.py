@@ -1,7 +1,7 @@
 from typing import Optional, Iterable, List, Dict, Any
 
 from gufe.chemicalsystem import ChemicalSystem
-from gufe.mapping import Mapping
+from gufe.mapping import ComponentMapping
 
 from gufe.protocols import (
     Protocol,
@@ -44,7 +44,7 @@ class FAHOpenmmNonEquilibriumCyclingProtocol(Protocol):
         self,
         stateA: ChemicalSystem,
         stateB: ChemicalSystem,
-        mapping: Optional[Mapping] = None,
+        mapping: Optional[ComponentMapping] = None,
         extend_from: Optional[ProtocolDAGResult] = None,
     ) -> List[ProtocolUnit]:
 

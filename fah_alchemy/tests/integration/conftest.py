@@ -5,6 +5,7 @@
 ### below from `py2neo.test.integration.conftest.py`
 
 from os import getenv
+from time import sleep
 
 from grolt import Neo4jService, Neo4jDirectorySpec
 from grolt.security import install_self_signed_certificate
@@ -147,6 +148,8 @@ def graph(uri):
 
     # clear graph contents; want a fresh state for database
     graph.run("MATCH (n) DETACH DELETE n")
+
+    sleep(1)
     
     return graph
 

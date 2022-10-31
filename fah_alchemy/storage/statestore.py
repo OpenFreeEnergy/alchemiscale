@@ -1,6 +1,7 @@
 import abc
 from contextlib import contextmanager
 import json
+from time import sleep
 from typing import Dict, List, Optional, Union, Tuple
 import weakref
 
@@ -32,16 +33,17 @@ class Neo4jStore(FahAlchemyStateStore):
         self.gufe_nodes = weakref.WeakValueDictionary()
 
     @contextmanager
-    def transaction(self):
+    def transaction(self, readonly=False, ignore_exceptions=False):
         """Context manager for a py2neo Transaction.
 
         """
-        tx = self.graph.begin()
+        tx = self.graph.begin(readonly=readonly)
         try:
             yield tx
         except:
             self.graph.rollback(tx)
-            raise
+            if not ignore_exceptions:
+                raise
         else:
             self.graph.commit(tx)
 
@@ -374,7 +376,10 @@ class Neo4jStore(FahAlchemyStateStore):
         nodes = set()
         subgraph = Subgraph()
 
-        for record in self.graph.run(q):
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+        for record in res:
             nodes.add(record["n"])
             subgraph = subgraph | record["p"]
 
@@ -400,7 +405,8 @@ class Neo4jStore(FahAlchemyStateStore):
         )
 
         try:
-            self.graph.create(g)
+            with self.transaction() as tx:
+                tx.create(g)
         except ClientError:
             raise ValueError(
                 "At least one component of the network already exists in the target database; "
@@ -423,19 +429,49 @@ class Neo4jStore(FahAlchemyStateStore):
             gufe_key=network.key,
             scope=scope
         )
-        self.graph.merge(g, "GufeTokenizable", "_scoped_key")
+        with self.transaction() as tx:
+            tx.merge(g, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 
-    def delete_network(self, scoped_key: ScopedKey):
-        ...
+    def delete_network(
+            self,
+            network: Union[AlchemicalNetwork, ScopedKey],
+            scope: Scope,
+        ) -> ScopedKey:
+        """Delete the given `AlchemicalNetwork` from the database.
 
-        # first, delete its queue
+        This will not remove any `Transformation`s or `ChemicalSystem`s
+        associated with the `AlchemicalNetwork`, since these may be associated
+        with other `AlchemicalNetwork`s in the same `Scope`.
 
+        """
+        # note: something like the following could perhaps be used to delete everything that is *only*
+        # associated with this network
+        # not yet tested though
+        """
+        MATCH p = (n:AlchemicalNetwork {{_scoped_key: "{network_node['_scoped_key']}")-[r:DEPENDS_ON*]->(m),
+              (n)-[:DEPENDS_ON]->(t:Transformation),
+              (n)-[:DEPENDS_ON]->(c:ChemicalSystem)
+        OPTIONAL MATCH (o:AlchemicalNetwork)
+        WHERE NOT o._scoped_key = "{network_node['_scoped_key']}"
+          AND NOT (t)<-[:DEPENDS_ON]-(o)
+          AND NOT (c)<-[:DEPENDS_ON]-(o)
+        return distinct n,m
+        """
+
+        # first, delete the network's queue if present
+        with self.transaction() as tx:
+            tx.delete_taskqueue(network, scope)
+
+        network_node = self._get_node_from_obj_or_sk(network, AlchemicalNetwork, scope)
+
+        # then delete the network
         q = f"""
-        MATCH (an:AlchemicalNetwork {{_scoped_key: '{scoped_key}'}})
+        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network_node['_scoped_key']}"}})
         DETACH DELETE an
         """
+        return ScopedKey.from_str(network_node['_scoped_key'])
 
     def get_network(self, scoped_key: ScopedKey):
         """Get a specific `AlchemicalNetwork` using its `scoped_key`."""
@@ -583,7 +619,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
         # if the taskqueue already exists, this will rollback transaction
         # automatically
-        with self.transaction() as tx:
+        with self.transaction(ignore_exceptions=True) as tx:
             tx.create(subgraph)
 
         return scoped_key
@@ -630,7 +666,8 @@ class Neo4jStore(FahAlchemyStateStore):
         SET t.weight = {weight}
         RETURN t
         """
-        self.graph.run(q)
+        with self.transaction() as tx:
+            tx.run(q)
 
     def create_task(
             self, 
