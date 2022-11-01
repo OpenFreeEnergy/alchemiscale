@@ -139,19 +139,8 @@ def uri(neo4j_service_and_uri):
 @fixture(scope="function")
 def graph(uri):
     graph = Graph(uri)
-
-    # set constraint that requires `GufeTokenizable`s to have a unique _scoped_key
-    try:
-        graph.run("CREATE CONSTRAINT gufe_key FOR (n:GufeTokenizable) REQUIRE n._scoped_key is unique")
-    except:
-        pass
-
-    # clear graph contents; want a fresh state for database
-    graph.run("MATCH (n) DETACH DELETE n")
-
-    sleep(1)
-    
-    return graph
+    yield graph
+    graph.service.connector.close()
 
 
 ### below specific to fah-alchemy

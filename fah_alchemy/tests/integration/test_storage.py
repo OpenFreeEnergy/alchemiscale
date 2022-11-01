@@ -17,6 +17,18 @@ class TestNeo4jStore(TestStateStore):
 
     @pytest.fixture
     def n4js(self, graph):
+        # set constraint that requires `GufeTokenizable`s to have a unique _scoped_key
+        try:
+            graph.run("CREATE CONSTRAINT gufe_key FOR (n:GufeTokenizable) REQUIRE n._scoped_key is unique")
+        except:
+            pass
+    
+        # clear graph contents; want a fresh state for database
+        graph.run("MATCH (n) DETACH DELETE n")
+
+        # make sure we don't get objects with id 0 by creating at least one
+        graph.run("CREATE (NOPE)")
+
         return Neo4jStore(graph)
 
     def test_server(self, graph):
