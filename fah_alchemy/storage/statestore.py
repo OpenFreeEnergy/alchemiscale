@@ -47,7 +47,7 @@ class Neo4jStore(FahAlchemyStateStore):
         else:
             self.graph.commit(tx)
 
-    ### gufe object handling
+    ## gufe object handling
 
     def _gufe_to_subgraph(
             self, 
@@ -277,7 +277,8 @@ class Neo4jStore(FahAlchemyStateStore):
         prop_string = f" {{{prop_string}}}"
 
         q = f"""
-        MATCH p = (n:{qualname}{prop_string})-[r:DEPENDS_ON*]->(m) 
+        MATCH (n:{qualname}{prop_string})
+        OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m) 
         WHERE NOT (m)-[:DEPENDS_ON]->()
         RETURN n,p
         """
@@ -369,7 +370,8 @@ class Neo4jStore(FahAlchemyStateStore):
             prop_string = f" {{{prop_string}}}"
 
         q = f"""
-        MATCH p = (n:{qualname}{prop_string})-[r:DEPENDS_ON*]->(m) 
+        MATCH (n:{qualname}{prop_string})
+        OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m) 
         WHERE NOT (m)-[:DEPENDS_ON]->()
         RETURN n,p
         """
@@ -528,7 +530,7 @@ class Neo4jStore(FahAlchemyStateStore):
     def get_transformation_results(self):
         ...
 
-    ### compute
+    ## compute
 
     def set_strategy(
             self,
@@ -565,6 +567,8 @@ class Neo4jStore(FahAlchemyStateStore):
             raise ValueError(f"No such {cls.__name__} present within this scope.")
 
         return list(nodes)[0]
+
+    ## task queues
 
     def create_taskqueue(
             self,
@@ -624,6 +628,37 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return scoped_key
 
+    def query_taskqueues(
+            self,
+            scope: Optional[Scope] = Scope() 
+        ):
+        """Query for `TaskQueue`s matching the given criteria.
+
+        """
+        return self._query_obj(
+            qualname="TaskQueue",
+            scope=scope
+        )
+
+    def _get_taskqueue(
+            self,
+            network: Union[AlchemicalNetwork, ScopedKey, str],
+            scope: Scope,
+        ):
+        """Get the TaskQueue for the given AlchemicalNetwork.
+
+        """
+        network_node = self._get_node_from_obj_or_sk(network, AlchemicalNetwork, scope)
+        node = self.graph.run(
+                f"""
+                match (n:TaskQueue {{network: "{network_node['_scoped_key']}", 
+                                             _org: '{scope.org}', _campaign: '{scope.campaign}', 
+                                             _project: '{scope.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+                return n
+                """).to_subgraph()
+
+        return node
+
     def delete_taskqueue(
             self,
             network: Union[AlchemicalNetwork, ScopedKey],
@@ -668,6 +703,106 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         with self.transaction() as tx:
             tx.run(q)
+
+    def queue_task(
+            self,
+            task: ScopedKey,
+            network: Union[AlchemicalNetwork, ScopedKey, str],
+        ) -> ScopedKey:
+        """Add a compute Task to the TaskQueue for a given AlchemicalNetwork.
+
+        Note: the Task must be within the same scope as the AlchemicalNetwork,
+        and must correspond to a Transformation in the AlchemicalNetwork.
+
+        A given compute task can be represented in any number of
+        AlchemicalNetwork queues, or none at all.
+
+        If this Task has an EXTENDS relationship to another Task, that Task must
+        be 'complete' before this Task can be added to *any* TaskQueue.
+
+        """
+
+        # TODO: add in EXTENDS relationship handling documented above
+
+        task_node = self._get_node_from_obj_or_sk(task, Task, None, independent=True)
+
+        scope = Scope(org=task_node['_org'], 
+                      campaign=task_node['_campaign'],
+                      project=task_node['_project'])
+
+        taskqueue_node = self._get_taskqueue(network, scope)
+
+        q = f"""
+        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}})-
+            [:TASKQUEUE_TAIL]
+            ->(tqt)-[tqtl:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(last)
+        WITH tqt, last, tqtl
+        MATCH (tn:Task {{_scoped_key: '{task_node['_scoped_key']}'}})
+        WHERE NOT (tqt)-[:FOLLOWS* {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(tn)
+        CREATE (tqt)-[:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]
+            ->(tn)-[:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(last)
+        DELETE tqtl
+        """
+        with self.transaction() as tx:
+            tx.run(q)
+
+        return ScopedKey.from_str(task_node['_scoped_key'])
+
+    def dequeue_task(
+            self,
+            task: ScopedKey,
+            network: Union[AlchemicalNetwork, ScopedKey],
+        ) -> ScopedKey:
+        """Remove a compute Task from the TaskQueue for a given AlchemicalNetwork.
+
+        Note: the Task must be within the same scope as the AlchemicalNetwork.
+
+        A given compute task can be represented in many AlchemicalNetwork
+        queues, or none at all.
+
+        """
+        task_node = self._get_node_from_obj_or_sk(task, Task, None, independent=True)
+
+        scope = Scope(org=task_node['_org'], 
+                      campaign=task_node['_campaign'],
+                      project=task_node['_project'])
+
+        taskqueue_node = self._get_taskqueue(network, scope)
+
+        q = f"""
+        MATCH (task:Task {{_scoped_key: '{task_node['_scoped_key']}'}}),
+              (behind)-[behindf:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(task),
+              (task)-[aheadf:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(ahead)
+        WITH behind, behindf, task, aheadf, ahead
+        CREATE (behind)-[newf:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(ahead)
+        DELETE behindf, aheadf
+        """
+        self.graph.run(q)
+
+        return ScopedKey.from_str(task_node['_scoped_key'])
+
+    def get_taskqueue_tasks(
+            self,
+            network: Union[AlchemicalNetwork, ScopedKey],
+            scope: Scope,
+        ):
+        """Get a list of Tasks in the TaskQueue, in 
+
+        """
+        ...
+
+    def claim_taskqueue_task(
+            self,
+            network: Union[AlchemicalNetwork, ScopedKey],
+            scope: Scope,
+            ):
+        """Claim one or more taskqueue tasks.
+
+        """
+        # this method should 
+        ...
+
+    ## tasks
 
     def create_task(
             self, 
@@ -780,6 +915,14 @@ class Neo4jStore(FahAlchemyStateStore):
         ) -> ScopedKey:
         ...
 
+    def query_tasks(
+            self,
+            network: Union[AlchemicalNetwork, ScopedKey],
+            transformation: Union[Transformation, ScopedKey],
+            scope: Scope,
+        ):
+        ...
+
     def delete_task(
             self, 
             task: Union[Task, ScopedKey],
@@ -794,131 +937,14 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         ...
 
-    def queue_task(
-            self,
-            task: ScopedKey,
-            network: Union[AlchemicalNetwork, ScopedKey, str],
-        ) -> ScopedKey:
-        """Add a compute Task to the TaskQueue for a given AlchemicalNetwork.
-
-        Note: the Task must be within the same scope as the AlchemicalNetwork,
-        and must correspond to a Transformation in the AlchemicalNetwork.
-
-        A given compute task can be represented in any number of
-        AlchemicalNetwork queues, or none at all.
-
-        If this Task has an EXTENDS relationship to another Task, that Task must
-        be 'complete' before this Task can be added to *any* TaskQueue.
-
-        """
-
-        # TODO: add in EXTENDS relationship handling documented above
-
-        task_node = self._get_node_from_obj_or_sk(task, Task, None, independent=True)
-
-        scope = Scope(org=task_node['_org'], 
-                      campaign=task_node['_campaign'],
-                      project=task_node['_project'])
-
-        taskqueue_node = self._get_taskqueue(network, scope)
-
-        q = f"""
-        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}})-
-            [:TASKQUEUE_TAIL]
-            ->(tqt)-[tqtl:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(last)
-        WITH tqt, last, tqtl
-        MATCH (tn:Task {{_scoped_key: '{task_node['_scoped_key']}'}})
-        WHERE NOT (tqt)-[:FOLLOWS* {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(tn)
-        CREATE (tqt)-[:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]
-            ->(tn)-[:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(last)
-        DELETE tqtl
-        """
-        with self.transaction() as tx:
-            tx.run(q)
-
-        return ScopedKey.from_str(task_node['_scoped_key'])
-
-    def dequeue_task(
-            self,
-            task: ScopedKey,
-            network: Union[AlchemicalNetwork, ScopedKey],
-        ) -> ScopedKey:
-        """Remove a compute Task from the TaskQueue for a given AlchemicalNetwork.
-
-        Note: the Task must be within the same scope as the AlchemicalNetwork.
-
-        A given compute task can be represented in many AlchemicalNetwork
-        queues, or none at all.
-
-        """
-        task_node = self._get_node_from_obj_or_sk(task, Task, None, independent=True)
-
-        scope = Scope(org=task_node['_org'], 
-                      campaign=task_node['_campaign'],
-                      project=task_node['_project'])
-
-        taskqueue_node = self._get_taskqueue(network, scope)
-
-        q = f"""
-        MATCH (task:Task {{_scoped_key: '{task_node['_scoped_key']}'}}),
-              (behind)-[behindf:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(task),
-              (task)-[aheadf:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(ahead)
-        WITH behind, behindf, task, aheadf, ahead
-        CREATE (behind)-[newf:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(ahead)
-        DELETE behindf, aheadf
-        """
-        self.graph.run(q)
-
-        return ScopedKey.from_str(task_node['_scoped_key'])
-
-    def _get_taskqueue(
-            self,
-            network: Union[AlchemicalNetwork, ScopedKey, str],
-            scope: Scope,
-        ):
-        """Get the TaskQueue for the given AlchemicalNetwork.
-
-        """
-        network_node = self._get_node_from_obj_or_sk(network, AlchemicalNetwork, scope)
-        node = self.graph.run(
-                f"""
-                match (n:TaskQueue {{network: "{network_node['_scoped_key']}", 
-                                             _org: '{scope.org}', _campaign: '{scope.campaign}', 
-                                             _project: '{scope.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
-                return n
-                """).to_subgraph()
-
-        return node
-
-    def get_taskqueue_tasks(
-            self,
-            network: Union[AlchemicalNetwork, ScopedKey],
-            scope: Scope,
-        ):
-        """Get a list of Tasks in the TaskQueue, in 
-
-        """
-        ...
-
-    def claim_taskqueue_tasks(self):
-        """
-
-        """
-        # this method should 
-        ...
-
-    def query_tasks(
-            self,
-            network: Union[AlchemicalNetwork, ScopedKey],
-            transformation: Union[Transformation, ScopedKey],
-            scope: Scope,
-        ):
-        ...
-
     def get_task_transformation(
             self,
             task: Union[Task, ScopedKey, str],
         ):
+        """Get the `Transformation` and `ProtocolDAGResult` to extend from (if
+        present) for the given `Task`.
+
+        """
         ...
 
     def set_task_waiting(
@@ -962,4 +988,12 @@ class Neo4jStore(FahAlchemyStateStore):
             self,
             task: Union[Task, ScopedKey],
         ):
+        ...
+
+    ## admin
+
+    def generate_client_api_key(self):
+        ...
+
+    def generate_compute_api_key(self):
         ...

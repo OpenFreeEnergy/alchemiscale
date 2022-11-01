@@ -1,17 +1,22 @@
-"""FAHAlchemyComputeService
-
+"""FahAlchemyComputeService
 
 """
 
 import asyncio
 import sched
 import time
+import random
+from typing import Union, Optional
 from pathlib import Path
 from threading import Thread
 
 import requests
 
 from gufe.protocols.protocoldag import execute
+
+from .client import FahAlchemyComputeClient
+from ..storage.models import Task
+from ..models import Scope
 
 class SleepInterrupted(BaseException):
     """
@@ -61,10 +66,12 @@ class SynchronousComputeService:
     def __init__(
             self,
             compute_api_uri: str,
+            compute_api_key: str,
             name: str,
             shared_path: Path,
             sleep_interval: int = 30,
             heartbeat_frequency: int = 30,
+            scope: Optional[Scope] = None,
         ):
         """
 
@@ -76,6 +83,14 @@ class SynchronousComputeService:
         self.name = name
         self.sleep_interval = sleep_interval
         self.heartbeat_frequency = heartbeat_frequency
+
+        self.client = FahAlchemyComputeClient(
+                compute_api_uri,
+                compute_api_key
+                )
+
+        if scope is None:
+            self.scope = Scope()
 
         self.shared = shared_path
         self.scheduler = sched.scheduler(time.monotonic, time.sleep)
@@ -89,10 +104,24 @@ class SynchronousComputeService:
         """
         ...
 
-    def get_task(self):
-        """
+    def get_task(self) -> Union[Task, None]:
+        """Get a Task to execute from compute API.
+
+        Returns `None` if no Task was available matching service configuration.
 
         """
+        taskqueues = self.client.query_taskqueues(scope=self.scope)
+
+        # based on weights, choose taskqueue to draw from
+        taskqueue = random.choices(taskqueues, weights=[tq.weight for tq in taskqueues])
+
+        # claim a single task from the taskqueue
+        task = self.client.claim_taskqueue_task(taskqueue)
+
+        return task
+
+    
+    def task_to_protocoldag(self, task):
         ...
 
     def push_results(self):
@@ -120,19 +149,18 @@ class SynchronousComputeService:
             # get a task from the compute API
             task = self.get_task()
 
+            if task is None:
+                time.sleep(self.sleep_interval)
+                continue
+
             # obtain a ProtocolDAG from the task
-            protocoldag = task.to_protocoldag()
+            protocoldag = self.task_to_protocoldag(task)
 
             # execute the task
-            if task is not None:
-                result = execute(protocoldag, self.shared_path)
+            protocoldagresult = execute(protocoldag, self.shared_path)
 
             # push the result (or failure) back to the compute API
-            self.push_results(task, result)
-
-            time.sleep(self.sleep_interval)
-
-
+            self.push_results(task, protocoldagresult)
 
 
     def stop(self):

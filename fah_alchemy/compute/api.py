@@ -39,7 +39,7 @@ class PermissiveJSONResponse(JSONResponse):
 # TODO:
 # - add periodic removal of task claims from compute services that are no longer alive
 #   - can be done with an asyncio.sleeping task added to event loop: https://stackoverflow.com/questions/67154839/fastapi-best-way-to-run-continuous-get-requests-in-the-background
-# - 
+# - on startup, 
 
 n4js = Neo4jStore(graph)
 
@@ -51,7 +51,6 @@ app = FastAPI(
 @app.get("/info")
 async def info():
     return {"message": "nothing yet"}
-
 
 @app.get("/taskqueues")
 async def query_taskqueues(*, scope: Scope):
