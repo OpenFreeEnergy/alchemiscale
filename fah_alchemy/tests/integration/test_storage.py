@@ -22,12 +22,14 @@ class TestNeo4jStore(TestStateStore):
             graph.run("CREATE CONSTRAINT gufe_key FOR (n:GufeTokenizable) REQUIRE n._scoped_key is unique")
         except:
             pass
-    
-        # clear graph contents; want a fresh state for database
-        graph.run("MATCH (n) DETACH DELETE n")
 
         # make sure we don't get objects with id 0 by creating at least one
-        graph.run("CREATE (NOPE)")
+        # this is a compensating control for a bug in py2neo, where nodes with id 0 are not properly
+        # deduplicated by Subgraph set operations, which we currently rely on
+        graph.run("MERGE (:NOPE)")
+    
+        # clear graph contents; want a fresh state for database
+        graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
 
         return Neo4jStore(graph)
 

@@ -136,11 +136,10 @@ def uri(neo4j_service_and_uri):
     return uri
 
 
-@fixture(scope="function")
+@fixture(scope="session")
 def graph(uri):
     graph = Graph(uri)
-    yield graph
-    graph.service.connector.close()
+    return graph
 
 
 ### below specific to fah-alchemy

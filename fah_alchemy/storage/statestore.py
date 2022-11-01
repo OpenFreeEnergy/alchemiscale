@@ -202,11 +202,11 @@ class Neo4jStore(FahAlchemyStateStore):
         g = nx.DiGraph()
 
         for node in subgraph.nodes:
-            g.add_node(node.identity, **dict(node))
+            g.add_node(node, **dict(node))
 
         for relationship in subgraph.relationships:
             g.add_edge(
-                relationship.start_node.identity, relationship.end_node.identity, **dict(relationship)
+                relationship.start_node, relationship.end_node, **dict(relationship)
             )
 
         return g
@@ -225,7 +225,7 @@ class Neo4jStore(FahAlchemyStateStore):
                 dct[key] = json.loads(value)
 
             # inject dependencies
-            dep_edges = g.edges(node.identity)
+            dep_edges = g.edges(node)
             postprocess = set()
             for edge in dep_edges:
                 u, v = edge
@@ -279,15 +279,14 @@ class Neo4jStore(FahAlchemyStateStore):
         q = f"""
         MATCH p = (n:{qualname}{prop_string})-[r:DEPENDS_ON*]->(m) 
         WHERE NOT (m)-[:DEPENDS_ON]->()
-        RETURN DISTINCT n,r
+        RETURN n,p
         """
         nodes = set()
         subgraph = Subgraph()
 
         for record in self.graph.run(q):
             nodes.add(record["n"])
-            for relationship in record['r']:
-                subgraph = subgraph | relationship
+            subgraph = subgraph | record["p"]
 
         if len(nodes) > 1:
             raise Neo4JStoreError("More than one result for given `scoped_key`; this should not be possible")
@@ -372,7 +371,7 @@ class Neo4jStore(FahAlchemyStateStore):
         q = f"""
         MATCH p = (n:{qualname}{prop_string})-[r:DEPENDS_ON*]->(m) 
         WHERE NOT (m)-[:DEPENDS_ON]->()
-        RETURN DISTINCT n,r
+        RETURN n,p
         """
         nodes = set()
         subgraph = Subgraph()
@@ -382,8 +381,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
         for record in res:
             nodes.add(record["n"])
-            for relationship in record['r']:
-                subgraph = subgraph | relationship
+            subgraph = subgraph | record["p"]
 
         return self._subgraph_to_gufe(nodes, subgraph)
 
