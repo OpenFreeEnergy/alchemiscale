@@ -1,4 +1,4 @@
-"""FahClient RESTful API
+"""FahAlchemyClientAPI
 
 """
 
@@ -39,7 +39,7 @@ class PermissiveJSONResponse(JSONResponse):
 n4js = Neo4jStore(graph)
 
 app = FastAPI(
-        title="FahAlchemyAPIServer"
+        title="FahAlchemyClientAPI"
         )
 
 
@@ -53,7 +53,7 @@ async def users():
     return {"message": "nothing yet"}
 
 @app.get("/networks/", response_class=PermissiveJSONResponse)
-def query_networks(name: str = None):
+def query_networks(*, name: str = None, scope: Scope):
     networks = n4js.query_networks(name=name)
     return [n.to_dict() for n in networks]
 
