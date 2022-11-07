@@ -383,7 +383,12 @@ class Neo4jStore(FahAlchemyStateStore):
 
         for record in res:
             nodes.add(record["n"])
-            subgraph = subgraph | record["p"]
+            if record['p']:
+                # if there was a path match, add it all to the subgraph
+                subgraph = subgraph | record["p"]
+            else:
+                # if not, just add the node
+                subgraph = subgraph | record['n']
 
         return self._subgraph_to_gufe(nodes, subgraph)
 
@@ -392,32 +397,32 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return len(nodes) > 0
     
-    def create_network(self, network: AlchemicalNetwork, scope: Scope) -> ScopedKey:
-        """Add an `AlchemicalNetwork` to the target neo4j database.
+    #def create_network(self, network: AlchemicalNetwork, scope: Scope) -> ScopedKey:
+    #    """Add an `AlchemicalNetwork` to the target neo4j database.
 
-        Will give a `ValueError` if any components already exist in the database.
-        If this is expected, consider using `update_network` instead.
+    #    Will give a `ValueError` if any components already exist in the database.
+    #    If this is expected, consider using `update_network` instead.
 
-        """
-        g, n, scoped_key = self._gufe_to_subgraph(
-            network.to_shallow_dict(),
-            labels=["GufeTokenizable", network.__class__.__name__],
-            gufe_key=network.key,
-            scope=scope
-        )
+    #    """
+    #    g, n, scoped_key = self._gufe_to_subgraph(
+    #        network.to_shallow_dict(),
+    #        labels=["GufeTokenizable", network.__class__.__name__],
+    #        gufe_key=network.key,
+    #        scope=scope
+    #    )
 
-        try:
-            with self.transaction() as tx:
-                tx.create(g)
-        except ClientError:
-            raise ValueError(
-                "At least one component of the network already exists in the target database; "
-                "consider using `update_network` if this is expected."
-            )
+    #    try:
+    #        with self.transaction() as tx:
+    #            tx.create(g)
+    #    except ClientError:
+    #        raise ValueError(
+    #            "At least one component of the network already exists in the target database; "
+    #            "consider using `update_network` if this is expected."
+    #        )
 
-        return scoped_key
+    #    return scoped_key
 
-    def update_network(self, network: AlchemicalNetwork, scope: Scope):
+    def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Add an `AlchemicalNetwork` to the target neo4j database, even if
         some of its components already exist in the database.
 

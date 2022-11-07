@@ -76,6 +76,7 @@ def scope_params(org: str = None, campaign: str = None, project: str = None):
 async def info():
     return {"message": "nothing yet"}
 
+
 @app.get("/taskqueues")
 async def query_taskqueues(*, 
                            scope: Scope = Depends(scope_params), 
@@ -83,17 +84,21 @@ async def query_taskqueues(*,
     taskqueues = n4js.query_taskqueues(scope=scope)
     return [tq.to_dict() for tq in taskqueues]
 
+
 @app.get("/taskqueues/{scoped_key}")
 async def get_taskqueue():
     return {"message": "nothing yet"}
+
 
 @app.get("/taskqueues/{scoped_key}/tasks")
 async def get_taskqueue_tasks():
     return {"message": "nothing yet"}
 
+
 @app.patch("/taskqueues/{scoped_key}/tasks")
 async def claim_taskqueue_tasks():
     return {"message": "nothing yet"}
+
 
 @app.get("/chemicalsystems")
 async def chemicalsystems():

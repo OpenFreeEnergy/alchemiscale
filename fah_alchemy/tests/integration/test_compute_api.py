@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from gufe import AlchemicalNetwork
+from gufe.tokenization import GufeTokenizable
 
 from fah_alchemy.storage import Neo4jStore
 from fah_alchemy.compute import api
@@ -14,10 +15,15 @@ def n4js(graph, network_tyk2, scope_test):
 
     # set starting contents for all tests in this module
     n4js = Neo4jStore(graph)
-    n4js.create_network(network_tyk2, scope_test)
+    sk1 = n4js.create_network(network_tyk2, scope_test)
 
     # create another alchemical network
     an2 = AlchemicalNetwork(edges=list(network_tyk2.edges)[:-2], name='incomplete')
+    sk2 = n4js.create_network(an2, scope_test)
+
+    # add a taskqueue for each network
+    n4js.create_taskqueue(sk1, scope_test)
+    n4js.create_taskqueue(sk2, scope_test)
     
     return n4js
 
@@ -60,7 +66,5 @@ def test_query_taskqueues(network_tyk2, scope_test, n4js, compute_api):
     response = compute_api.get("/taskqueues")
     assert response.status_code == 200
 
-
-
-    
-
+    taskqueues = [GufeTokenizable.from_dict(i) for i in response.json()]
+    assert len(taskqueues) == 2

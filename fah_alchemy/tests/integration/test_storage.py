@@ -43,7 +43,7 @@ class TestNeo4jStore(TestStateStore):
 
         assert n["name"] == 'tyk2_relative_benchmark'
 
-    def test_update_network(self, n4js, network_tyk2, scope_test):
+    def test_create_overlapping_networks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
 
         sk: ScopedKey = n4js.create_network(an, scope_test)
@@ -58,10 +58,7 @@ class TestNeo4jStore(TestStateStore):
 
         assert n["name"] == 'tyk2_relative_benchmark'
 
-        with pytest.raises(ValueError):
-            n4js.create_network(an, scope_test)
-
-        sk2: ScopedKey = n4js.update_network(an, scope_test)
+        sk2: ScopedKey = n4js.create_network(an, scope_test)
 
         assert sk2 == sk
 
@@ -100,7 +97,7 @@ class TestNeo4jStore(TestStateStore):
         an2 = AlchemicalNetwork(edges=list(an.edges)[:-2], name='incomplete')
 
         sk: ScopedKey = n4js.create_network(an, scope_test)
-        sk2: ScopedKey = n4js.update_network(an2, scope_test)
+        sk2: ScopedKey = n4js.create_network(an2, scope_test)
 
         all_networks = n4js.query_networks()
         
