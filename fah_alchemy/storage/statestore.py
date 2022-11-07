@@ -631,7 +631,7 @@ class Neo4jStore(FahAlchemyStateStore):
     def query_taskqueues(
             self,
             scope: Optional[Scope] = Scope() 
-        ):
+        ) -> List[TaskQueue]:
         """Query for `TaskQueue`s matching the given criteria.
 
         """

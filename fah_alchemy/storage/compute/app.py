@@ -1,3 +1,0 @@
-"""ComputeService RESTful API
-
-"""
