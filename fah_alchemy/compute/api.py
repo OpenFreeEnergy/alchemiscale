@@ -24,10 +24,14 @@ class Settings(BaseSettings):
     match; case-insensitive.
 
     """
-    neo4j_url: str
-    neo4j_dbname: str = 'neo4j'
-    neo4j_user: str
-    neo4j_pass: str
+    NEO4J_URL: str
+    NEO4J_DBNAME: str = 'neo4j'
+    NEO4J_USER: str
+    NEO4J_PASS: str
+    FA_COMPUTE_API_HOST: str
+    FA_COMPUTE_API_PORT: int
+    FA_COMPUTE_API_LOGLEVEL: str = 'info'
+
 
 
 class PermissiveJSONResponse(JSONResponse):
@@ -61,10 +65,10 @@ def get_settings():
 @lru_cache()
 def get_n4js(settings: Settings = Depends(get_settings)):
 
-    graph = Graph(settings.neo4j_url, 
-                  auth=(settings.neo4j_user,
-                        settings.neo4j_pass),
-              name='neo4j')
+    graph = Graph(settings.NEO4J_URL, 
+                  auth=(settings.NEO4J_USER,
+                        settings.NEO4J_PASS),
+              name=settings.NEO4J_DBNAME)
     return Neo4jStore(graph)
 
 
