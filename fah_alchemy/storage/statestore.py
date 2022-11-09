@@ -264,11 +264,12 @@ class Neo4jStore(FahAlchemyStateStore):
         mapping[node] = res = GufeTokenizable.from_shallow_dict(dct)
         return res
 
-    def _get_obj(
+    def _get_node(
         self,
-        qualname,
         scoped_key: Union[ScopedKey, str]
     ):
+        qualname = scoped_key.qualname
+
         properties = {"_scoped_key": str(scoped_key)}
         prop_string = ", ".join(
             "{}: '{}'".format(key, value) for key, value in properties.items()
@@ -287,58 +288,19 @@ class Neo4jStore(FahAlchemyStateStore):
 
         for record in self.graph.run(q):
             nodes.add(record["n"])
-            subgraph = subgraph | record["p"]
+            if record['p'] is not None:
+                subgraph = subgraph | record["p"]
+            else:
+                subgraph = record['n']
 
-        if len(nodes) > 1:
-            raise Neo4JStoreError("More than one result for given `scoped_key`; this should not be possible")
-
-        return nodes, subgraph
-
-    def _get_independent_obj(
-        self,
-        qualname,
-        scoped_key: Union[ScopedKey, str]
-    ):
-        properties = {"_scoped_key": str(scoped_key)}
-        prop_string = ", ".join(
-            "{}: '{}'".format(key, value) for key, value in properties.items()
-        )
-
-        prop_string = f" {{{prop_string}}}"
-
-        q = f"""
-        MATCH (n:{qualname}{prop_string})
-        RETURN n
-        """
-        nodes = set()
-        subgraph = Subgraph()
-
-        for record in self.graph.run(q):
-            nodes.add(record["n"])
-            subgraph = record["n"]
-
-        if len(nodes) > 1:
-            raise Neo4JStoreError("More than one result for given `scoped_key`; this should not be possible")
+        if len(nodes) == 0:
+            raise ValueError("No such object in database")
+        elif len(nodes) > 1:
+            raise Neo4JStoreError("More than one such object in database; this should not be possible")
 
         return nodes, subgraph
 
-    def _get_gufe_obj(
-        self,
-        *,
-        qualname,
-        scoped_key: str
-    ):
-        nodes, subgraph = self._get_obj(qualname=qualname,
-                                        scoped_key=scoped_key)
-
-        gufe_objs = self._subgraph_to_gufe(nodes, subgraph)
-
-        if len(gufe_objs) > 1:
-            raise Neo4JStoreError("More than one result for given `scoped_key`; this should not be possible")
-
-        return gufe_objs[0]
-
-    def _query_scoped_key(
+    def _query(
         self,
         *,
         qualname: str,
@@ -383,7 +345,7 @@ class Neo4jStore(FahAlchemyStateStore):
         return [ScopedKey.from_str(i['_scoped_key']) for i in nodes]
 
     def check_existence(self, qualname, scoped_key: Union[ScopedKey, str]):
-        nodes, subgraph = self._get_obj(qualname=qualname, scoped_key=str(scoped_key))
+        nodes, subgraph = self._get_node(qualname=qualname, scoped_key=str(scoped_key))
 
         return len(nodes) > 0
 
@@ -393,19 +355,27 @@ class Neo4jStore(FahAlchemyStateStore):
             scope: Scope
     ):
         qualname = obj.__class__.__qualname__
-        res = self._query_scoped_key(
+        res = self._query(
             qualname=qualname,
             key=obj.key,
             scope=scope
         )
 
         if len(res) == 0:
-            raise ValueError("No such object in database.")
+            raise ValueError("No such object in database")
         elif len(res) > 1:
             raise Neo4JStoreError("More than one such object in database; this should not be possible")
 
         return res[0]
     
+    def get_gufe(
+        self,
+        scoped_key: ScopedKey
+    ):
+        nodes, subgraph = self._get_node(scoped_key=scoped_key)
+        gufe_objs = self._subgraph_to_gufe(nodes, subgraph)
+        return gufe_objs[0]
+
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Add an `AlchemicalNetwork` to the target neo4j database, even if
         some of its components already exist in the database.
@@ -463,20 +433,12 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         return ScopedKey.from_str(network_node['_scoped_key'])
 
-    def get_network(self, scoped_key: ScopedKey):
-        """Get a specific `AlchemicalNetwork` using its `scoped_key`."""
-
-        return self._get_gufe_obj(
-            qualname="AlchemicalNetwork",
-            scoped_key=scoped_key
-        )
-
     def query_networks(
         self, *, name=None, key=None, scope: Optional[Scope] = Scope() 
     ):
         """Query for `AlchemicalNetwork`s matching given attributes."""
         additional = {"name": name}
-        return self._query_scoped_key(
+        return self._query(
             qualname="AlchemicalNetwork",
             additional=additional,
             key=key,
@@ -489,7 +451,7 @@ class Neo4jStore(FahAlchemyStateStore):
     ):
         """Query for `Transformation`s matching given attributes."""
         additional = {"name": name}
-        return self._query_scoped_key(
+        return self._query(
             qualname="Transformation",
             additional=additional,
             key=key,
@@ -502,7 +464,7 @@ class Neo4jStore(FahAlchemyStateStore):
     ):
         """Query for `ChemicalSystem`s matching given attributes."""
         additional = {"name": name}
-        return self._query_scoped_key(
+        return self._query(
             qualname="ChemicalSystem",
             additional=additional,
             key=key,
@@ -529,31 +491,6 @@ class Neo4jStore(FahAlchemyStateStore):
 
         """
         ...
-
-    def _get_node_from_obj_or_sk(
-            self,
-            obj: Union[GufeTokenizable, ScopedKey], 
-            cls: type[GufeTokenizable], 
-            scope: Scope,
-            independent: bool = False
-        ) -> GufeTokenizable:
-
-        if independent:
-            get_obj = self._get_independent_obj
-        else:
-            get_obj = self._get_obj
-
-        if isinstance(obj, (ScopedKey, str)):
-            nodes, subgraph = get_obj(cls.__qualname__, scoped_key=obj)
-        elif isinstance(obj, cls):
-            # check that this object already exists in the db
-            scoped_key = ScopedKey(gufe_key=obj.key, **scope.dict())
-            nodes, subgraph = get_obj(cls.__qualname__, scoped_key=scoped_key)
-            
-        if not nodes:
-            raise ValueError(f"No such {cls.__name__} present within this scope.")
-
-        return list(nodes)[0]
 
     ## task queues
 
@@ -642,7 +579,7 @@ class Neo4jStore(FahAlchemyStateStore):
         """Query for `TaskQueue`s matching the given criteria.
 
         """
-        return self._query_scoped_key(
+        return self._query(
             qualname="TaskQueue",
             scope=scope
         )

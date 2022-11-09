@@ -222,3 +222,5 @@ class TestNeo4jStore(TestStateStore):
 
         assert n['weight'] == .7
 
+
+    def test_queue_task(self, n4js, 

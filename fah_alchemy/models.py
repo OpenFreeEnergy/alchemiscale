@@ -37,3 +37,7 @@ class ScopedKey(BaseModel):
     def scope(self):
         return Scope(
                 org=self.org, campaign=self.campaign, project=self.project)
+
+    @property
+    def qualname(self):
+        return self.gufe_key.split('-')[0]
