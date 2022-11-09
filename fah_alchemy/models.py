@@ -33,4 +33,7 @@ class ScopedKey(BaseModel):
                    campaign=campaign, 
                    project=project)
 
-
+    @property
+    def scope(self):
+        return Scope(
+                org=self.org, campaign=self.campaign, project=self.project)
