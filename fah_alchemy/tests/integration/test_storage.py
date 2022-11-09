@@ -222,5 +222,3 @@ class TestNeo4jStore(TestStateStore):
 
         assert n['weight'] == .7
 
-
-

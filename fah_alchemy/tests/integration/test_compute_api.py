@@ -147,3 +147,15 @@ class TestComputeClient:
 
         taskqueues = compute_client.query_taskqueues(scope_test)
 
+        assert len(taskqueues) == 2
+        assert all([tq.weight == .5 for tq in taskqueues])
+
+    def test_claim_taskqueue_task(self, 
+                              scope_test, 
+                              n4js_clear,
+                              compute_client: client.FahAlchemyComputeClient, 
+                              uvicorn_server
+                              ):
+
+        task = compute_client.claim_taskqueue_task(scope_test)
+

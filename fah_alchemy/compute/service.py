@@ -119,7 +119,6 @@ class SynchronousComputeService:
         task = self.client.claim_taskqueue_task(taskqueue)
 
         return task
-
     
     def task_to_protocoldag(self, task):
         ...
@@ -130,9 +129,14 @@ class SynchronousComputeService:
     def execute(self):
         ...
 
+    def start(self, task_limit: Optional[int] = None):
+        """Start the service.
 
-    def start(self):
-        """Start the service; will keep going until told to stop.
+        Parameters
+        ----------
+        task_limit
+            Number of tasks to complete before exiting.
+            If `None`, the service will continue until told to stop.
 
         """
         def scheduler_heartbeat():
@@ -141,7 +145,12 @@ class SynchronousComputeService:
 
         self.scheduler.enter(0, 2, scheduler_heartbeat)
 
+        counter = 0
         while True:
+
+            if task_limit is not None:
+                if counter >= task_limit:
+                    break
 
             if self._stop:
                 return
@@ -161,6 +170,8 @@ class SynchronousComputeService:
 
             # push the result (or failure) back to the compute API
             self.push_results(task, protocoldagresult)
+
+            counter += 1
 
 
     def stop(self):

@@ -89,9 +89,11 @@ async def query_taskqueues(*,
     return [tq.to_dict() for tq in taskqueues]
 
 
-@app.get("/taskqueues/{scoped_key}")
-async def get_taskqueue():
-    return {"message": "nothing yet"}
+#@app.get("/taskqueues/{scoped_key}")
+#async def get_taskqueue(scoped_key: str, 
+#                        *,
+#                        n4js: Neo4jStore = Depends(get_n4js)):
+#    return 
 
 
 @app.get("/taskqueues/{scoped_key}/tasks")

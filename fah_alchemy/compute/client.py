@@ -55,7 +55,6 @@ class FahAlchemyComputeClient:
 
         return taskqueues
 
-
     def get_taskqueue_tasks(self, scoped_key: ScopedKey) -> List[Task]:
         """Get list of `Task`s for the given `TaskQueue`.
 
