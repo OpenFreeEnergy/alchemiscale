@@ -1,10 +1,12 @@
 import pytest
 from time import sleep
+from typing import List, Dict
 
 from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
 
 from fah_alchemy.storage import Neo4jStore
+from fah_alchemy.storage.models import Task, TaskQueue
 from fah_alchemy.models import Scope, ScopedKey
 
 
@@ -58,8 +60,8 @@ class TestNeo4jStore(TestStateStore):
 
         assert n["name"] == 'tyk2_relative_benchmark'
 
+        # add the same network twice
         sk2: ScopedKey = n4js.create_network(an, scope_test)
-
         assert sk2 == sk
 
         n2 = n4js.graph.run(
@@ -71,8 +73,20 @@ class TestNeo4jStore(TestStateStore):
                 """).to_subgraph()
 
         assert n2["name"] == 'tyk2_relative_benchmark'
-
         assert n2.identity == n.identity
+
+        # add a slightly different network
+        an2 = AlchemicalNetwork(edges=list(an.edges)[:-1], name="tyk2_relative_benchmark_-1")
+        sk3 = n4js.create_network(an2, scope_test)
+        assert sk3 != sk
+
+        n3 = n4js.graph.run(
+                f"""
+                match (n:AlchemicalNetwork) 
+                return n
+                """).to_subgraph()
+
+        assert len(n3.nodes) == 2
 
     def test_delete_network(self):
         ...
@@ -81,14 +95,14 @@ class TestNeo4jStore(TestStateStore):
         an = network_tyk2
         sk: ScopedKey = n4js.create_network(an, scope_test)
 
-        an2 = n4js.get_network(sk)
+        an2 = n4js.get_gufe(sk)
 
         assert an2 == an
         assert an2 is an
 
         TOKENIZABLE_REGISTRY.clear()
 
-        an3 = n4js.get_network(sk)
+        an3 = n4js.get_gufe(sk)
 
         assert an3 == an2 == an
 
@@ -99,11 +113,11 @@ class TestNeo4jStore(TestStateStore):
         sk: ScopedKey = n4js.create_network(an, scope_test)
         sk2: ScopedKey = n4js.create_network(an2, scope_test)
 
-        all_networks = n4js.query_networks()
+        networks_sk: List[ScopedKey] = n4js.query_networks()
         
-        assert an in all_networks
-        assert an2 in all_networks
-        assert len(all_networks) == 2
+        assert sk in networks_sk
+        assert sk2 in networks_sk
+        assert len(networks_sk) == 2
 
         # add in a scope test
 
@@ -119,23 +133,16 @@ class TestNeo4jStore(TestStateStore):
     ### compute
 
     def test_create_task(self, n4js, network_tyk2, scope_test):
-        an = network_tyk2
-        transformation = list(an.edges)[0]
-
-        # try creating a task for a transformation that is not present
-        with pytest.raises(ValueError):
-            task = n4js.create_task(
-                        transformation=transformation,
-                        scope=scope_test)
-
         # add alchemical network, then try generating task
+        an = network_tyk2
         n4js.create_network(an, scope_test)
 
-        task_sk: ScopedKey = n4js.create_task(
-                    transformation=transformation,
-                    scope=scope_test)
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
-        n = n4js.graph.run(
+        task_sk: ScopedKey = n4js.create_task(transformation_sk)
+
+        m = n4js.graph.run(
                 f"""
                 match (n:Task {{_gufe_key: '{task_sk.gufe_key}', 
                                              _org: '{task_sk.org}', _campaign: '{task_sk.campaign}', 
@@ -143,29 +150,18 @@ class TestNeo4jStore(TestStateStore):
                 return m
                 """).to_subgraph()
 
-        assert n['_gufe_key'] == transformation.key
-
-        # add another task, this time with the scoped key for the transformation
+        assert m['_gufe_key'] == transformation.key
 
     def test_create_taskqueue(self, n4js, network_tyk2, scope_test):
-        an = network_tyk2
-
-        # try creating a taskqueue for a network that is not present
-        with pytest.raises(ValueError):
-            task = n4js.create_taskqueue(
-                        network=an,
-                        scope=scope_test)
-
         # add alchemical network, then try adding a taskqueue
+        an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
 
         # create taskqueue
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(
-                    network=an,
-                    scope=scope_test)
+        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
 
         # verify creation looks as we expect
-        n = n4js.graph.run(
+        m = n4js.graph.run(
                 f"""
                 match (n:TaskQueue {{_gufe_key: '{taskqueue_sk.gufe_key}', 
                                              _org: '{taskqueue_sk.org}', _campaign: '{taskqueue_sk.campaign}', 
@@ -173,12 +169,10 @@ class TestNeo4jStore(TestStateStore):
                 return m
                 """).to_subgraph()
 
-        assert n['_gufe_key'] == an.key
+        assert m['_gufe_key'] == an.key
 
         # try adding the task queue again; this should yield exactly the same node
-        taskqueue_sk2: ScopedKey = n4js.create_taskqueue(
-                    network=an,
-                    scope=scope_test)
+        taskqueue_sk2: ScopedKey = n4js.create_taskqueue(network_sk)
 
         assert taskqueue_sk2 == taskqueue_sk
 
@@ -194,14 +188,10 @@ class TestNeo4jStore(TestStateStore):
 
     def test_create_taskqueue_weight(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
-
-        # add alchemical network, then try adding a taskqueue
         network_sk = n4js.create_network(an, scope_test)
 
         # create taskqueue
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(
-                    network=an,
-                    scope=scope_test)
+        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
 
         n = n4js.graph.run(
                 f"""
@@ -212,7 +202,7 @@ class TestNeo4jStore(TestStateStore):
         assert n['weight'] == .5
 
         # change the weight
-        n4js.set_taskqueue_weight(an, scope_test, .7)
+        n4js.set_taskqueue_weight(network_sk, .7)
 
         n = n4js.graph.run(
                 f"""
@@ -222,5 +212,23 @@ class TestNeo4jStore(TestStateStore):
 
         assert n['weight'] == .7
 
+    def test_query_taskqueues(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
 
-    def test_queue_task(self, n4js, 
+        # add a slightly different network
+        an2 = AlchemicalNetwork(edges=list(an.edges)[:-1], name="tyk2_relative_benchmark_-1")
+        network_sk2 = n4js.create_network(an2, scope_test)
+        taskqueue_sk2: ScopedKey = n4js.create_taskqueue(network_sk2)
+
+        tq_sks: List[ScopedKey] = n4js.query_taskqueues()
+        assert len(tq_sks) == 2
+        assert all([isinstance(i, ScopedKey) for i in tq_sks])
+
+        tq_dict: Dict[ScopedKey, TaskQueue] = n4js.query_taskqueues(return_gufe=True)
+        assert len(tq_dict) == 2
+        assert all([isinstance(i, TaskQueue) for i in tq_dict.values()])
+
+    def test_queue_task(self, n4js):
+        ...

@@ -83,10 +83,15 @@ async def info():
 
 @app.get("/taskqueues")
 async def query_taskqueues(*, 
+                           return_gufe: bool = False,
                            scope: Scope = Depends(scope_params), 
                            n4js: Neo4jStore = Depends(get_n4js)):
-    taskqueues = n4js.query_taskqueues(scope=scope)
-    return [tq.to_dict() for tq in taskqueues]
+    taskqueues = n4js.query_taskqueues(scope=scope, return_gufe=return_gufe)
+
+    if return_gufe:
+        return {str(sk): tq.to_dict() for sk, tq in taskqueues.items()}
+    else:
+        return [str(sk) for sk in taskqueues]
 
 
 #@app.get("/taskqueues/{scoped_key}")

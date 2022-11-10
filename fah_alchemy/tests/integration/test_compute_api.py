@@ -9,6 +9,7 @@ import requests
 from gufe import AlchemicalNetwork
 from gufe.tokenization import GufeTokenizable
 
+from fah_alchemy.models import ScopedKey
 from fah_alchemy.storage import Neo4jStore
 from fah_alchemy.compute import api
 from fah_alchemy.compute import client
@@ -28,8 +29,8 @@ def n4js_clear(graph, network_tyk2, scope_test):
     sk2 = n4js.create_network(an2, scope_test)
 
     # add a taskqueue for each network
-    n4js.create_taskqueue(sk1, scope_test)
-    n4js.create_taskqueue(sk2, scope_test)
+    n4js.create_taskqueue(sk1)
+    n4js.create_taskqueue(sk2)
     
     return n4js
 
@@ -88,8 +89,16 @@ class TestComputeAPI:
         response = test_client.get("/taskqueues")
         assert response.status_code == 200
     
-        taskqueues = [GufeTokenizable.from_dict(i) for i in response.json()]
-        assert len(taskqueues) == 2
+        tq_sks = [ScopedKey.from_str(i) for i in response.json()]
+        assert len(tq_sks) == 2
+
+        # try getting back actual gufe objects
+        response = test_client.get("/taskqueues?return_gufe=True")
+        assert response.status_code == 200
+
+        tq_dict = {ScopedKey.from_str(k): GufeTokenizable.from_dict(v) for k, v in response.json().items()}
+        assert len(tq_dict) == 2
+        assert all([i.weight == .5 for i in tq_dict.values()])
 
 
 # client tests
@@ -148,7 +157,9 @@ class TestComputeClient:
         taskqueues = compute_client.query_taskqueues(scope_test)
 
         assert len(taskqueues) == 2
-        assert all([tq.weight == .5 for tq in taskqueues])
+
+        taskqueues = compute_client.query_taskqueues(scope_test, return_gufe=True)
+        assert all([tq.weight == .5 for tq in taskqueues.values()])
 
     def test_claim_taskqueue_task(self, 
                               scope_test, 
@@ -157,5 +168,5 @@ class TestComputeClient:
                               uvicorn_server
                               ):
 
-        task = compute_client.claim_taskqueue_task(scope_test)
-
+        ...
+        #task = compute_client.claim_taskqueue_task(scope_test)

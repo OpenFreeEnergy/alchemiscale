@@ -17,6 +17,9 @@ class ScopedKey(BaseModel):
     campaign: str
     project: str
 
+    class Config:
+        frozen = True
+
     def __repr__(self):   # pragma: no cover
         return f"<ScopedKey('{str(self)}')>"
 
@@ -41,3 +44,10 @@ class ScopedKey(BaseModel):
     @property
     def qualname(self):
         return self.gufe_key.split('-')[0]
+
+    def to_dict(self):
+        return self.dict()
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(**d)

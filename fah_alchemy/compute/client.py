@@ -36,8 +36,10 @@ class FahAlchemyComputeClient:
         url = urljoin(self.compute_api_url, resource)
         resp = requests.get(url, params=params)
 
-        # iterate through response
-        return [GufeTokenizable.from_dict(i) for i in resp.json()]
+        if params.get('return_gufe'):
+            return {ScopedKey.from_str(k): GufeTokenizable.from_dict(v) for k, v in resp.json().items()}
+        else:
+            return [ScopedKey.from_str(i) for i in resp.json()]
 
     def _get_resource(self, resource, params):
 
@@ -46,11 +48,11 @@ class FahAlchemyComputeClient:
 
         return GufeTokenizable.from_dict(resp.json())
 
-    def query_taskqueues(self, scope: Scope, limit=None, skip=None) -> List[TaskQueue]:
+    def query_taskqueues(self, scope: Scope, return_gufe=False, limit=None, skip=None) -> List[TaskQueue]:
         """Return all `TaskQueue`s corresponding to given `Scope`.
 
         """
-        params = dict(limit=limit, skip=skip, **scope.dict())
+        params = dict(return_gufe=return_gufe, limit=limit, skip=skip, **scope.dict())
         taskqueues = self._query_resource('/taskqueues', params=params)
 
         return taskqueues
