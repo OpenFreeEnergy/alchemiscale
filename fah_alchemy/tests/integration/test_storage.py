@@ -1,3 +1,5 @@
+import random
+
 import pytest
 from time import sleep
 from typing import List, Dict
@@ -8,6 +10,7 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY
 from fah_alchemy.storage import Neo4jStore
 from fah_alchemy.storage.models import Task, TaskQueue
 from fah_alchemy.models import Scope, ScopedKey
+
 
 
 class TestStateStore:
@@ -230,5 +233,59 @@ class TestNeo4jStore(TestStateStore):
         assert len(tq_dict) == 2
         assert all([isinstance(i, TaskQueue) for i in tq_dict.values()])
 
-    def test_queue_task(self, n4js):
-        ...
+    def test_queue_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # queue the tasks
+        n4js.queue_tasks(task_sks, taskqueue_sk)
+
+        # count tasks in queue
+        # find a way to check order
+
+        # add a second network, with the transformation above missing
+        # try to add a task from that transformation to the new network's queue
+        # this should fail
+
+
+    def test_claim_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # shuffle the tasks; want to check that order of claiming is actually
+        # based on order in queue
+        random.shuffle(task_sks)
+
+        # queue the tasks
+        n4js.queue_tasks(task_sks, taskqueue_sk)
+
+        # claim a single task; we expect this should be the first in the list
+        claimed = n4js.claim_task(taskqueue_sk, 'the best task handler')
+        assert claimed == task_sks[0]
+
+        # set all tasks to priority 5, fourth task to priority 1; claim should
+        # yield fourth task
+        for task_sk in task_sks[1:]:
+            n4js.set_task_priority(task_sk, 5)
+        n4js.set_task_priority(task_sks[3], 1)
+
+        claimed2 = n4js.claim_task(taskqueue_sk, 'another task handler')
+        assert claimed2 == task_sks[3]
+
+        # next task claimed should be the second task in line
+        claimed3 = n4js.claim_task(taskqueue_sk, 'yet another task handler')
+        assert claimed3 == task_sks[1]

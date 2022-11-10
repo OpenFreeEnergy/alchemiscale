@@ -454,18 +454,15 @@ class Neo4jStore(FahAlchemyStateStore):
           AND NOT (c)<-[:DEPENDS_ON]-(o)
         return distinct n,m
         """
-
         # first, delete the network's queue if present
         self.delete_taskqueue(network)
 
-        network_node = self._get_node(network)
-
         # then delete the network
         q = f"""
-        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network_node['_scoped_key']}"}})
+        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})
         DETACH DELETE an
         """
-        return ScopedKey.from_str(network_node['_scoped_key'])
+        return network
 
     def query_networks(
         self, *, name=None, key=None, scope: Optional[Scope] = Scope() 
@@ -667,11 +664,8 @@ class Neo4jStore(FahAlchemyStateStore):
             network: ScopedKey,
             weight: float
         ):
-        network_node = self._get_node(network)
-
-        ## this should be performed in a single cypher query, in place
         q = f"""
-        MATCH (t:TaskQueue {{network: "{network_node['_scoped_key']}"}})
+        MATCH (t:TaskQueue {{network: "{network}"}})
         SET t.weight = {weight}
         RETURN t
         """
@@ -682,10 +676,10 @@ class Neo4jStore(FahAlchemyStateStore):
             self,
             tasks: List[ScopedKey],
             taskqueue: ScopedKey,
-        ) -> ScopedKey:
-        """Add a compute Task to the TaskQueue for a given AlchemicalNetwork.
+        ) -> List[ScopedKey]:
+        """Add Tasks to the TaskQueue for a given AlchemicalNetwork.
 
-        Note: the Task must be within the same scope as the AlchemicalNetwork,
+        Note: the Tasks must be within the same scope as the AlchemicalNetwork,
         and must correspond to a Transformation in the AlchemicalNetwork.
 
         A given compute task can be represented in any number of
@@ -695,45 +689,44 @@ class Neo4jStore(FahAlchemyStateStore):
         be 'complete' before this Task can be added to *any* TaskQueue.
 
         """
-        # TODO: add in EXTENDS relationship handling documented above
-        # TODO: add check that Task corresponds to a Transformation on the given network
-        taskqueue_node = self._get_node_from_obj_or_sk(taskqueue, TaskQueue, scope)
-        
-        scoped_keys = []
         for t in tasks:
-            task_node = self._get_node_from_obj_or_sk(t, Task, None, independent=True)
-
-            scope = Scope(org=task_node['_org'], 
-                          campaign=task_node['_campaign'],
-                          project=task_node['_project'])
-
-
-            # TODO: add check that Task is connected to the given network via a
-            # fixed number of DEPENDS relationships
-
             q = f"""
-            MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}})-
-                [:TASKQUEUE_TAIL]
-                ->(tqt)-[tqtl:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(last)
+            // get our task queue, as well as tail and tail relationship to last in line
+            MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue}'}})-[:TASKQUEUE_TAIL]->
+                      (tqt)-[tqtl:FOLLOWS {{taskqueue: '{taskqueue}'}}]->
+                      (last),
+                  (tq)-[:PERFORMS]->(an:AlchemicalNetwork)
             WITH tqt, last, tqtl
-            MATCH (tn:Task {{_scoped_key: '{task_node['_scoped_key']}'}})
-            WHERE NOT (tqt)-[:FOLLOWS* {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(tn)
-            CREATE (tqt)-[:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]
-                ->(tn)-[:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(last)
+            
+            // get the task we want to add to the queue; check that it connects to same network
+            // if it has an EXTENDS relationship, get the task it extends
+            MATCH (tn:Task {{_scoped_key: '{t}'}})-[:PERFORMS*]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
+            OPTIONAL MATCH (tn)-[:EXTENDS]->(other_task:Task)
+
+            // only proceed for cases where task is not already in queue and only EXTENDS a 'complete' task
+            WHERE NOT (tqt)-[:FOLLOWS* {{taskqueue: '{taskqueue}'}}]->(tn)
+              AND other_task.status = 'complete'
+
+            // create the connections that add it to the end of the queue, and delete old queue tail connection
+            CREATE (tqt)-[:FOLLOWS {{taskqueue: '{taskqueue}'}}] ->
+                      (tn)-[:FOLLOWS {{taskqueue: '{taskqueue}'}}]->(last)
             DELETE tqtl
+
+            RETURN tn
             """
             with self.transaction() as tx:
-                tx.run(q)
+                res = tx.run(q)
 
-            scoped_keys.append(ScopedKey.from_str(task_node['_scoped_key']))
+            if len(list(res)) == 0:
+                raise ValueError(f"Task '{t}' not found in same network as given TaskQueue")
 
-        return scoped_keys
+        return tasks
 
     def dequeue_tasks(
             self,
             tasks: List[ScopedKey],
             taskqueue: ScopedKey,
-        ) -> ScopedKey:
+        ) -> List[ScopedKey]:
         """Remove a compute Task from the TaskQueue for a given AlchemicalNetwork.
 
         Note: the Task must be within the same scope as the AlchemicalNetwork.
@@ -742,26 +735,26 @@ class Neo4jStore(FahAlchemyStateStore):
         queues, or none at all.
 
         """
-        task_node = self._get_node_from_obj_or_sk(task, Task, None, independent=True)
+        for t in tasks:
+            q = f"""
+            // get our task queue, as well as the task we want to remove, and
+            // the nodes ahead and behind it 
+            MATCH (task:Task {{_scoped_key: '{t}'}}),
+                  (behind)-[behindf:FOLLOWS {{taskqueue: '{taskqueue}'}}]->(task),
+                  (task)-[aheadf:FOLLOWS {{taskqueue: '{taskqueue}'}}]->(ahead)
+            WITH behind, behindf, task, aheadf, ahead
 
-        scope = Scope(org=task_node['_org'], 
-                      campaign=task_node['_campaign'],
-                      project=task_node['_project'])
+            // create connection between behind and ahead nodes
+            CREATE (behind)-[newf:FOLLOWS {{taskqueue: '{taskqueue}'}}]->(ahead)
 
-        taskqueue_node = self._get_taskqueue(network, scope)
+            // delete connections between node to remove and behind, ahead nodes
+            DELETE behindf, aheadf
 
-        q = f"""
-        MATCH (task:Task {{_scoped_key: '{task_node['_scoped_key']}'}}),
-              (behind)-[behindf:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(task),
-              (task)-[aheadf:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(ahead)
-        WITH behind, behindf, task, aheadf, ahead
-        CREATE (behind)-[newf:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(ahead)
-        DELETE behindf, aheadf
-        """
-        with self.transaction() as tx:
-            tx.run(q)
+            """
+            with self.transaction() as tx:
+                tx.run(q)
 
-        return ScopedKey.from_str(task_node['_scoped_key'])
+        return tasks
 
     def get_taskqueue_tasks(
             self,
@@ -776,57 +769,62 @@ class Neo4jStore(FahAlchemyStateStore):
             self,
             taskqueue: ScopedKey,
             claimant: str,
-            count: int = 1
+            #count: int = 1
             ) -> ScopedKey:
-        """Claim one or more TaskQueue Tasks.
+        """Claim a TaskQueue Task.
 
         """
-        taskqueue_node = self._get_taskqueue(network, scope)
+        # may need to resort to doing a transaction with a lock on the taskqueue
+        #with self.transaction() as tx:
+
+        #    lock = f"""
+        #    MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue}'}})
+        #    apoc.lock.nodes(tq)
+
+        #    MATCH p = match (tq)-->(tail)-[:FOLLOWS*]->(t:Task)-[:FOLLOWS*]->(head)<--(tq) 
+        #    RETURN p
+        #    """
+        #    subgraph = Subgraph()
+        #    res = tx.run(lock)
+        #    for record in res:
+        #        subgraph = subgraph | record['p']
+
+        #    g = self._subgraph_to_networkx(subgraph)
 
         # need to check if path order is guaranteed with approach below
 
         q = f"""
-        // get all tasks in queue
-        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}})-[:TASKQUEUE_HEAD]->(head:TaskQueueHead),
-              (head:TaskQueueHead)-[:FOLLOWS* {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(task2:Task)
-        WHERE task2.status = 'waiting'
-        WITH DISTINCT task2 as tsk2 ORDER BY tsk2.priority
-            WITH COLLLECT(tsk2) as t2
-        CASE
-         WHEN task1.priority = t2[0].priority THEN task1
-         ELSE t2[0]
-        END AS chosen
-        SET chosen.status = 'running', chosen.claim = '{claimant}'
-        RETURN chosen
-        """
-
-        q = f"""
-        // get first task in line
-        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}}),
-              (head:TaskQueueHead)-[:FOLLOWS {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(task1:Task)
+        // get list of all 'waiting' tasks in the queue
+        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue}'}})-->
+              (head:TaskQueueHead)<-[:FOLLOWS* {{taskqueue: '{taskqueue}'}}]-(task1:Task)
         WHERE task1.status = 'waiting'
-        // get all tasks
-        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}}),
-              (head:TaskQueueHead)-[:FOLLOWS* {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]->(task2:Task)
+
+        // get list of all 'waiting' tasks in the queue, but we'll order by priority
+        MATCH (tq)-->(head)<-[:FOLLOWS* {{taskqueue: '{taskqueue}'}}]-(task2:Task)
         WHERE task2.status = 'waiting'
-        WITH DISTINCT task2 as tsk2 ORDER BY tsk2.priority
-            WITH COLLLECT(tsk2) as t2
-        CASE
-         WHEN task1.priority = t2[0].priority THEN task1
-         ELSE t2[0]
+
+        // build our task lists, order second list by priority
+        WITH COLLECT(task1) as tsk1, task2 ORDER BY task2.priority
+        WITH tsk1, COLLECT(task2) as tsk2
+
+        // compare the first member of each list
+        // select first in line if priority same as highest priority
+        // otherwise select highest priority
+        WITH CASE
+         WHEN tsk1[0].priority = tsk2[0].priority THEN tsk1[0]
+         ELSE tsk2[0]
         END AS chosen
+
+        // finally, make the claim
         SET chosen.status = 'running', chosen.claim = '{claimant}'
+
         RETURN chosen
         """
         with self.transaction() as tx:
             res = tx.run(q)
 
         node = res.to_subgraph()
-
-        # TODO: return scoped key
-        task = self._subgraph_to_gufe([node], node)
-
-        return task
+        return ScopedKey.from_str(node['_scoped_key'])
 
     ## tasks
 
@@ -927,6 +925,19 @@ class Neo4jStore(FahAlchemyStateStore):
           )
         """
         self.graph.run(q)
+
+    def set_task_priority(
+            self,
+            task: ScopedKey,
+            priority: int
+        ):
+        q = f"""
+        MATCH (t:Task {{_scoped_key: "{task}"}})
+        SET t.priority = {priority}
+        RETURN t
+        """
+        with self.transaction() as tx:
+            tx.run(q)
 
     def get_task(
             self, 
