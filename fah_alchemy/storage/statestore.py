@@ -668,7 +668,7 @@ class Neo4jStore(FahAlchemyStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
-    def queue_tasks(
+    def queue_taskqueue_tasks(
             self,
             tasks: List[ScopedKey],
             taskqueue: ScopedKey,
@@ -717,7 +717,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return tasks
 
-    def dequeue_tasks(
+    def dequeue_taskqueue_tasks(
             self,
             tasks: List[ScopedKey],
             taskqueue: ScopedKey,
@@ -780,7 +780,7 @@ class Neo4jStore(FahAlchemyStateStore):
         else:
             return [ScopedKey.from_str(t['_scoped_key']) for t in tasks]
 
-    def claim_tasks(
+    def claim_taskqueue_tasks(
             self,
             taskqueue: ScopedKey,
             claimant: str,
@@ -930,15 +930,6 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         with self.transaction() as tx:
             tx.run(q)
-
-    def get_task(
-            self, 
-            task: ScopedKey,
-            transformation: ScopedKey,
-            extend_from: Optional[ScopedKey] = None,
-            status: List[TaskStatusEnum] = None
-        ) -> ScopedKey:
-        ...
 
     def query_tasks(
             self,

@@ -72,17 +72,21 @@ class SynchronousComputeService:
             sleep_interval: int = 30,
             heartbeat_frequency: int = 30,
             scope: Optional[Scope] = None,
+            limit: int = 1
         ):
         """
 
         Parameters
         ----------
+        limit
+            Maximum number of Tasks to claim at a time from a TaskQueue.
 
         """
         self.compute_api_uri = compute_api_uri
         self.name = name
         self.sleep_interval = sleep_interval
         self.heartbeat_frequency = heartbeat_frequency
+        self.limit = limit
 
         self.client = FahAlchemyComputeClient(
                 compute_api_uri,
@@ -104,21 +108,24 @@ class SynchronousComputeService:
         """
         ...
 
-    def get_task(self) -> Union[Task, None]:
+    def get_tasks(self, count=1) -> Union[Task, None]:
         """Get a Task to execute from compute API.
 
         Returns `None` if no Task was available matching service configuration.
 
         """
-        taskqueues = self.client.query_taskqueues(scope=self.scope)
+        taskqueues = self.client.query_taskqueues(scope=self.scope, return_gufe=True)
 
         # based on weights, choose taskqueue to draw from
-        taskqueue = random.choices(taskqueues, weights=[tq.weight for tq in taskqueues])
+        taskqueue = random.choices(
+                list(taskqueues.keys()), 
+                weights=[tq.weight for tq in taskqueues.values()])[0]
 
-        # claim a single task from the taskqueue
-        task = self.client.claim_taskqueue_task(taskqueue)
+        # claim tasks from the taskqueue
+        tasks = self.client.claim_taskqueue_tasks(
+                taskqueue, claimant=self.name, count=self.limit)
 
-        return task
+        return tasks
     
     def task_to_protocoldag(self, task):
         ...
@@ -156,7 +163,7 @@ class SynchronousComputeService:
                 return
 
             # get a task from the compute API
-            task = self.get_task()
+            tasks = self.get_tasks(self.limit)
 
             if task is None:
                 time.sleep(self.sleep_interval)

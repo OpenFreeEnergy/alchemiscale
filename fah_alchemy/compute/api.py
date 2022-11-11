@@ -16,7 +16,7 @@ from py2neo import Graph
 from fah_alchemy.storage.statestore import Neo4jStore
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 
-from ..models import Scope
+from ..models import Scope, ScopedKey
 
 
 class Settings(BaseSettings):
@@ -101,14 +101,22 @@ async def query_taskqueues(*,
 #    return 
 
 
-@app.get("/taskqueues/{scoped_key}/tasks")
+@app.get("/taskqueues/{taskqueue}/tasks")
 async def get_taskqueue_tasks():
     return {"message": "nothing yet"}
 
 
-@app.patch("/taskqueues/{scoped_key}/tasks")
-async def claim_taskqueue_tasks():
-    return {"message": "nothing yet"}
+@app.post("/taskqueues/{taskqueue}/claim")
+async def claim_taskqueue_tasks(taskqueue,
+                                *,
+                                claimant: str = Body(),
+                                count: int = Body(),
+                                n4js: Neo4jStore = Depends(get_n4js)):
+    tasks = n4js.claim_taskqueue_tasks(taskqueue=taskqueue,
+                                       claimant=claimant,
+                                       count=count)
+
+    return [str(t) if t is not None else None for t in tasks]
 
 
 @app.get("/chemicalsystems")
