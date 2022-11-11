@@ -248,12 +248,20 @@ class TestNeo4jStore(TestStateStore):
         n4js.queue_tasks(task_sks, taskqueue_sk)
 
         # count tasks in queue
-        # find a way to check order
+        queued_task_sks = n4js.get_taskqueue_tasks(taskqueue_sk)
+        assert task_sks == queued_task_sks
 
         # add a second network, with the transformation above missing
         # try to add a task from that transformation to the new network's queue
         # this should fail
+        an2 = AlchemicalNetwork(edges=list(an.edges)[1:], name="tyk2_relative_benchmark_-1")
+        assert transformation not in an2.edges
 
+        network_sk2 = n4js.create_network(an2, scope_test)
+        taskqueue_sk2: ScopedKey = n4js.create_taskqueue(network_sk2)
+
+        with pytest.raises(ValueError, match="not found in same network"):
+            task_sks_fail = n4js.queue_tasks(task_sks, taskqueue_sk2)
 
     def test_claim_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
@@ -270,12 +278,16 @@ class TestNeo4jStore(TestStateStore):
         # based on order in queue
         random.shuffle(task_sks)
 
+        # try to claim from an empty queue
+        nothing = n4js.claim_tasks(taskqueue_sk, 'early bird task handler')
+        assert nothing[0] is None
+
         # queue the tasks
         n4js.queue_tasks(task_sks, taskqueue_sk)
 
         # claim a single task; we expect this should be the first in the list
-        claimed = n4js.claim_task(taskqueue_sk, 'the best task handler')
-        assert claimed == task_sks[0]
+        claimed = n4js.claim_tasks(taskqueue_sk, 'the best task handler')
+        assert claimed[0] == task_sks[0]
 
         # set all tasks to priority 5, fourth task to priority 1; claim should
         # yield fourth task
@@ -283,9 +295,21 @@ class TestNeo4jStore(TestStateStore):
             n4js.set_task_priority(task_sk, 5)
         n4js.set_task_priority(task_sks[3], 1)
 
-        claimed2 = n4js.claim_task(taskqueue_sk, 'another task handler')
-        assert claimed2 == task_sks[3]
+        claimed2 = n4js.claim_tasks(taskqueue_sk, 'another task handler')
+        assert claimed2[0] == task_sks[3]
 
         # next task claimed should be the second task in line
-        claimed3 = n4js.claim_task(taskqueue_sk, 'yet another task handler')
-        assert claimed3 == task_sks[1]
+        claimed3 = n4js.claim_tasks(taskqueue_sk, 'yet another task handler')
+        assert claimed3[0] == task_sks[1]
+
+        # try to claim multiple tasks
+        claimed4 = n4js.claim_tasks(taskqueue_sk, 'last task handler', count=4)
+        assert claimed4[0] == task_sks[2]
+        assert claimed4[1:] == task_sks[4:7]
+
+        # exhaust the queue
+        claimed5 = n4js.claim_tasks(taskqueue_sk, 'last task handler', count=3)
+
+        # try to claim from a queue with no tasks available
+        claimed6 = n4js.claim_tasks(taskqueue_sk, 'last task handler', count=2)
+        assert claimed6 == [None]*2

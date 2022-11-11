@@ -583,28 +583,18 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return scoped_key
 
-    def get_taskqueues(
-            self,
-            scoped_key: ScopedKey,
-        ) -> ScopedKey:
-        """Get a TaskQueue from its AlchemicalNetwork or directly with its `scoped_key`.
-
-        """
-        network_node = self._get_node_from_obj_or_sk(network, AlchemicalNetwork, scope)
-
-        # if the taskqueue already exists, this will rollback transaction
-        # automatically
-        with self.transaction(ignore_exceptions=True) as tx:
-            tx.run(q)
-
-        return scoped_key
-
     def query_taskqueues(
             self,
             scope: Optional[Scope] = Scope(),
-            return_gufe=False
-        ) -> List[TaskQueue]:
+            return_gufe: bool = False
+        ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskQueue]]:
         """Query for `TaskQueue`s matching the given criteria.
+
+        Parameters
+        ----------
+        return_gufe
+            If True, return a dict with `ScopedKey`s as keys, `TaskQueue`
+            instances as values. Otherwise, return a list of `ScopedKey`s.
 
         """
         return self._query(
@@ -613,24 +603,30 @@ class Neo4jStore(FahAlchemyStateStore):
                 return_gufe=return_gufe
             )
 
-    def _get_taskqueue(
+    def get_taskqueue(
             self,
             network: ScopedKey,
-            scope: Scope,
-        ) -> Node:
+            return_gufe: bool = False
+        ) -> Union[ScopedKey, TaskQueue]:
         """Get the TaskQueue for the given AlchemicalNetwork.
 
+        Parameters
+        ----------
+        return_gufe
+            If True, return a `TaskQueue` instance.
+            Otherwise, return a `ScopedKey`.
+
         """
-        network_node = self._get_node(network)
         node = self.graph.run(
                 f"""
-                match (n:TaskQueue {{network: "{network_node['_scoped_key']}", 
-                                             _org: '{scope.org}', _campaign: '{scope.campaign}', 
-                                             _project: '{scope.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+                match (n:TaskQueue {{network: "{network}"}})-[:PERFORMS]->(m:AlchemicalNetwork)
                 return n
                 """).to_subgraph()
 
-        return node
+        if return_gufe:
+            return self._subgraph_to_gufe([node], node)[node]
+        else:
+            return ScopedKey.from_str(node['_scoped_key'])
 
     def delete_taskqueue(
             self,
@@ -646,18 +642,18 @@ class Neo4jStore(FahAlchemyStateStore):
         either way.
 
         """
-        taskqueue_node = self._get_taskqueue(network)
+        taskqueue = self.get_taskqueue(network)
 
         q = f"""
-        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_node['_scoped_key']}'}}),
-              (tq)-[:TASKQUEUE_HEAD]->(tqh)<-[tqf:FOLLOWS* {{taskqueue: '{taskqueue_node['_scoped_key']}'}}]-(task),
+        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue}'}}),
+              (tq)-[:TASKQUEUE_HEAD]->(tqh)<-[tqf:FOLLOWS* {{taskqueue: '{taskqueue}'}}]-(task),
               (tq)-[:TASKQUEUE_TAIL]->(tqt)
         FOREACH (i in tqf | delete i)
         DETACH DELETE tq,tqh,tqt
         """
         self.graph.run(q)
 
-        return ScopedKey.from_str(taskqueue_node['_scoped_key'])
+        return taskqueue
 
     def set_taskqueue_weight(
             self,
@@ -696,7 +692,6 @@ class Neo4jStore(FahAlchemyStateStore):
                       (tqt)-[tqtl:FOLLOWS {{taskqueue: '{taskqueue}'}}]->
                       (last),
                   (tq)-[:PERFORMS]->(an:AlchemicalNetwork)
-            WITH tqt, last, tqtl
             
             // get the task we want to add to the queue; check that it connects to same network
             // if it has an EXTENDS relationship, get the task it extends
@@ -715,9 +710,9 @@ class Neo4jStore(FahAlchemyStateStore):
             RETURN tn
             """
             with self.transaction() as tx:
-                res = tx.run(q)
+                task = tx.run(q).to_subgraph()
 
-            if len(list(res)) == 0:
+            if task is None:
                 raise ValueError(f"Task '{t}' not found in same network as given TaskQueue")
 
         return tasks
@@ -758,41 +753,53 @@ class Neo4jStore(FahAlchemyStateStore):
 
     def get_taskqueue_tasks(
             self,
-            taskqueue: Union[TaskQueue, ScopedKey],
-        ):
+            taskqueue: ScopedKey,
+            return_gufe=False
+        ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
         """Get a list of Tasks in the TaskQueue, in queued order.
 
         """
-        ...
+        q = f"""
+        // get list of all 'waiting' tasks in the queue
+        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue}'}})-->
+              (head:TaskQueueHead)<-[:FOLLOWS* {{taskqueue: '{taskqueue}'}}]-(task:Task)
+        RETURN task
+        """
+        with self.transaction() as tx:
+            res = tx.run(q)
 
-    def claim_task(
+        tasks = []
+        subgraph = Subgraph()
+        for record in res:
+            tasks.append(record['task'])
+            subgraph = subgraph | record['task']
+
+        if return_gufe:
+            return {ScopedKey.from_str(k['_scoped_key']): v
+                    for k, v in self._subgraph_to_gufe(tasks, subgraph).items()}
+        else:
+            return [ScopedKey.from_str(t['_scoped_key']) for t in tasks]
+
+    def claim_tasks(
             self,
             taskqueue: ScopedKey,
             claimant: str,
-            #count: int = 1
-            ) -> ScopedKey:
+            count: int = 1
+            ) -> List[ScopedKey]:
         """Claim a TaskQueue Task.
 
+        This method will claim Tasks from a TaskQueue according to the following scheme:
+        1. the first Task in the queue if its priority is equal to that of the highest priority Task.
+        2. otherwise, the highest priority Task.
+
+        If no Task is available, then `None` is given in its place.
+
+        Parameters
+        ----------
+        count
+            Claim the given number of Tasks in a single transaction.
+
         """
-        # may need to resort to doing a transaction with a lock on the taskqueue
-        #with self.transaction() as tx:
-
-        #    lock = f"""
-        #    MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue}'}})
-        #    apoc.lock.nodes(tq)
-
-        #    MATCH p = match (tq)-->(tail)-[:FOLLOWS*]->(t:Task)-[:FOLLOWS*]->(head)<--(tq) 
-        #    RETURN p
-        #    """
-        #    subgraph = Subgraph()
-        #    res = tx.run(lock)
-        #    for record in res:
-        #        subgraph = subgraph | record['p']
-
-        #    g = self._subgraph_to_networkx(subgraph)
-
-        # need to check if path order is guaranteed with approach below
-
         q = f"""
         // get list of all 'waiting' tasks in the queue
         MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue}'}})-->
@@ -820,11 +827,12 @@ class Neo4jStore(FahAlchemyStateStore):
 
         RETURN chosen
         """
+        tasks = []
         with self.transaction() as tx:
-            res = tx.run(q)
+            for i in range(count):
+                tasks.append(tx.run(q).to_subgraph())
 
-        node = res.to_subgraph()
-        return ScopedKey.from_str(node['_scoped_key'])
+        return [ScopedKey.from_str(t['_scoped_key']) if t is not None else None for t in tasks]
 
     ## tasks
 
@@ -904,27 +912,11 @@ class Neo4jStore(FahAlchemyStateStore):
             The total number of tasks that should exist corresponding to the
             specified `transformation`, `scope`, and `extend_from`.
         """
+        raise NotImplementedError
         # TODO: finish this one out when we have a reasonable approach to locking
         # too hard to perform in a single Cypher query; unclear how to create many nodes in a loop
         transformation_node = self._get_node_from_obj_or_sk(transformation, Transformation, scope)
 
-        ## this should be performed in a single cypher query, in place
-        ## this is really close to working, but still no dice if there are no existing tasks
-        ## might have to cut losses and just call `create_task` above first
-        q = f"""
-        MATCH (n:Transformtion 
-                {{_scoped_key: "{transformation_node['_scoped_key']}"}})
-        OPTIONAL MATCH (n)<-[:PERFORMS]-(t:Task)
-        WITH count(t) as cnt
-        CASE
-         WHEN cnt IS NULL THEN 0
-         ELSE cnt
-        END AS cnt_nonnull
-        FOREACH (i in range(0, {count} - cnt_nonnull) | 
-          MERGE (n)<-[:PERFORMS]-(t:Task)
-          )
-        """
-        self.graph.run(q)
 
     def set_task_priority(
             self,
@@ -956,7 +948,7 @@ class Neo4jStore(FahAlchemyStateStore):
             extend_from: Optional[ScopedKey] = None,
             status: Optional[List[TaskStatusEnum]] = None
         ):
-        ...
+        raise NotImplementedError
 
     def delete_task(
             self, 
