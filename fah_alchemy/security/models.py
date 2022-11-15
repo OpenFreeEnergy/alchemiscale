@@ -33,7 +33,7 @@ class CredentialedUser(User, CredentialedEntity):
 
 class ComputeService(BaseModel):
     identifier: str
-    disabled: Optional[bool] = None
+    disabled: bool = False
     scopes: Optional[List[str]] = None
 
 

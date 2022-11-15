@@ -16,8 +16,9 @@ from .models import Token, TokenData, User, CredentialedUser, CredentialedEntity
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-def authenticate(db, identifier: str, key: str) -> CredentialedEntity:
-    entity: CredentialedEntity = db.get_credentialed_entity(identifier)
+
+def authenticate(db, cls, identifier: str, key: str) -> CredentialedEntity:
+    entity: CredentialedEntity = db.get_credentialed_entity(identifier, cls)
     if entity is None:
         return False
     if not pwd_context.verify(key, entity.hashed_key):
@@ -25,7 +26,12 @@ def authenticate(db, identifier: str, key: str) -> CredentialedEntity:
     return entity
 
 
+def hash_key(key):
+    return pwd_context.hash(key)
+
+
 def create_access_token(
+        *,
         data: dict, 
         secret_key: str,
         expires_seconds: Optional[int] = 900,
@@ -42,8 +48,9 @@ def create_access_token(
 
 
 def get_token_data(
-        secret_key: str,
+        *,
         token: str,
+        secret_key: str,
         jwt_algorithm: Optional[str] = "HS256"
         ) -> TokenData:
     credentials_exception = HTTPException(

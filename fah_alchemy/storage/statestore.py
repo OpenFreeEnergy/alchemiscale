@@ -10,12 +10,15 @@ from gufe import AlchemicalNetwork, Transformation, ProtocolDAGResult
 from gufe.tokenization import GufeTokenizable, GufeKey
 from gufe.storage.metadatastore import MetadataStore
 from py2neo import Graph, Node, Relationship, Subgraph
+from py2neo.database import Transaction
 from py2neo.matching import NodeMatcher
 from py2neo.errors import ClientError
 
 from .models import ComputeKey, Task, TaskQueue, TaskArchive, TaskStatusEnum
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
+
+from ..security.models import CredentialedEntity
 
 
 class Neo4JStoreError(Exception):
@@ -33,7 +36,7 @@ class Neo4jStore(FahAlchemyStateStore):
         self.gufe_nodes = weakref.WeakValueDictionary()
 
     @contextmanager
-    def transaction(self, readonly=False, ignore_exceptions=False):
+    def transaction(self, readonly=False, ignore_exceptions=False) -> Transaction:
         """Context manager for a py2neo Transaction.
 
         """
@@ -1010,8 +1013,33 @@ class Neo4jStore(FahAlchemyStateStore):
 
     ## admin
 
-    def generate_client_api_key(self):
-        ...
+    def create_credentialed_entity(self, entity: CredentialedEntity):
+        """Create a new credentialed entity, such as a user or compute service.
 
-    def generate_compute_api_key(self):
-        ...
+        If an entity of this type with the same `identifier` already exists,
+        then this will overwrite its properties, including credential.
+
+        """
+        node = Node('CredentialedEntity', entity.__class__.__name__,
+                    **entity.dict())
+
+        with self.transaction() as tx:
+            tx.merge(node, primary_label=entity.__class__.__name__, primary_key='identifier')
+
+
+    def get_credentialed_entity(self, identifier: str, cls: type[CredentialedEntity]):
+        """Create a new credentialed entity, such as a user or compute service.
+
+        If an entity of this type with the same `identifier` already exists,
+        then this will overwrite its properties, including credential.
+
+        """
+        q = f"""
+        MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
+        RETURN n
+        """
+
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+        return cls(**dict(res.to_subgraph()))

@@ -67,7 +67,8 @@ class SynchronousComputeService:
     def __init__(
             self,
             compute_api_uri: str,
-            compute_api_key: str,
+            identifier: str,
+            key: str,
             name: str,
             shared_path: Path,
             sleep_interval: int = 30,
@@ -91,7 +92,8 @@ class SynchronousComputeService:
 
         self.client = FahAlchemyComputeClient(
                 compute_api_uri,
-                compute_api_key
+                identifier,
+                key
                 )
 
         if scope is None:

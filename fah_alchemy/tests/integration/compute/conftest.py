@@ -5,18 +5,25 @@ import pytest
 import uvicorn
 import requests
 from fastapi.testclient import TestClient
+from passlib.context import CryptContext
 
 from gufe import AlchemicalNetwork
 
 from fah_alchemy.storage import Neo4jStore
-from fah_alchemy.compute import api
-from fah_alchemy.compute import client
+from fah_alchemy.compute import api, client
+from fah_alchemy.security.models import CredentialedComputeService
+from fah_alchemy.security.auth import hash_key
 
 
 ## compute api
 
+@pytest.fixture(scope='module')
+def compute_service_identity():
+    return dict(identifier='test-compute-service', key='strong passphrase lol')
+
+
 @pytest.fixture
-def n4js_clear(graph, network_tyk2, scope_test):
+def n4js_clear(graph, network_tyk2, scope_test, compute_service_identity):
     # clear graph contents; want a fresh state for database
     graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
 
@@ -31,6 +38,10 @@ def n4js_clear(graph, network_tyk2, scope_test):
     # add a taskqueue for each network
     n4js.create_taskqueue(sk1)
     n4js.create_taskqueue(sk2)
+
+    n4js.create_credentialed_entity(CredentialedComputeService(
+            identifier=compute_service_identity['identifier'],
+            hashed_key=hash_key(compute_service_identity['key'])))
     
     return n4js
 
@@ -57,6 +68,7 @@ def get_settings_override():
             NEO4J_URL="bolt://localhost:7687",
             FA_COMPUTE_API_HOST="127.0.0.1",
             FA_COMPUTE_API_PORT=8000,
+            JWT_SECRET_KEY="2b10413694ca71ce0516584758f25fa7315972e76a25adfd2c36dc56a03bebc2"
             )
 
 @pytest.fixture(scope='module')
@@ -112,9 +124,10 @@ def uvicorn_server(compute_api):
 
 
 @pytest.fixture(scope='module')
-def compute_client(uvicorn_server):
+def compute_client(uvicorn_server, compute_service_identity):
     
     return client.FahAlchemyComputeClient(
             compute_api_url="http://127.0.0.1:8000/",
-            compute_api_key=None
+            identifier=compute_service_identity['identifier'],
+            key=compute_service_identity['key']
             )
