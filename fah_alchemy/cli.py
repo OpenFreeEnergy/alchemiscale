@@ -33,14 +33,17 @@ def synchronous(
 
 
 @cli.group()
-def storage():
+def database():
     ...
 
-@storage.command()
+@database.command()
 def init():
     """Initialize the Neo4j database.
 
     """
+
+    # set constraints for `GufeTokenizable`s, `CredentialedEntity`s
+    # add a node to compensate for bug in py2neo: https://github.com/py2neo-org/py2neo/pull/951
     ...
 
 
