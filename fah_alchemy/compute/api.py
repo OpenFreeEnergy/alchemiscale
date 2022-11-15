@@ -21,7 +21,9 @@ from ..models import Scope, ScopedKey
 from ..security.auth import authenticate, create_access_token, get_token_data
 from ..security.models import Token, TokenData, CredentialedComputeService
 
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
 
 class Settings(BaseSettings):
     """Automatically populates settings from environment variables where they

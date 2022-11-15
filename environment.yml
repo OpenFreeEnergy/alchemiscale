@@ -31,6 +31,8 @@ dependencies:
   - passlib
   - bcrypt
   - python-multipart
+  - starlette
+  - httpx
 
   # testing
   - pytest
