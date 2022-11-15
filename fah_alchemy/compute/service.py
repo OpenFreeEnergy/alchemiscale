@@ -6,7 +6,7 @@ import asyncio
 import sched
 import time
 import random
-from typing import Union, Optional
+from typing import Union, Optional, List, Dict
 from pathlib import Path
 from threading import Thread
 
@@ -15,8 +15,9 @@ import requests
 from gufe.protocols.protocoldag import execute
 
 from .client import FahAlchemyComputeClient
-from ..storage.models import Task
-from ..models import Scope
+from ..storage.models import Task, TaskQueue
+from ..models import Scope, ScopedKey
+
 
 class SleepInterrupted(BaseException):
     """
@@ -114,10 +115,10 @@ class SynchronousComputeService:
         Returns `None` if no Task was available matching service configuration.
 
         """
-        taskqueues = self.client.query_taskqueues(scope=self.scope, return_gufe=True)
+        taskqueues: Dict[ScopedKey, TaskQueue] = self.client.query_taskqueues(scope=self.scope, return_gufe=True)
 
         # based on weights, choose taskqueue to draw from
-        taskqueue = random.choices(
+        taskqueue: List[ScopedKey] = random.choices(
                 list(taskqueues.keys()), 
                 weights=[tq.weight for tq in taskqueues.values()])[0]
 
@@ -127,8 +128,12 @@ class SynchronousComputeService:
 
         return tasks
     
-    def task_to_protocoldag(self, task):
+    def task_to_protocoldag(self, task: ScopedKey):
+        """Given a Task, produce a corresponding ProtocolDAG that can be executed.
+
+        """
         ...
+        
 
     def push_results(self):
         ...
@@ -165,20 +170,24 @@ class SynchronousComputeService:
             # get a task from the compute API
             tasks = self.get_tasks(self.limit)
 
-            if task is None:
+            if all([task is None for task in tasks]):
                 time.sleep(self.sleep_interval)
                 continue
 
-            # obtain a ProtocolDAG from the task
-            protocoldag = self.task_to_protocoldag(task)
+            for task in tasks:
+                if task is None:
+                    continue
 
-            # execute the task
-            protocoldagresult = execute(protocoldag, self.shared_path)
+                # obtain a ProtocolDAG from the task
+                protocoldag = self.task_to_protocoldag(task)
 
-            # push the result (or failure) back to the compute API
-            self.push_results(task, protocoldagresult)
+                # execute the task
+                protocoldagresult = execute(protocoldag, self.shared_path)
 
-            counter += 1
+                # push the result (or failure) back to the compute API
+                self.push_results(task, protocoldagresult)
+
+                counter += 1
 
 
     def stop(self):
@@ -245,7 +254,7 @@ class AsynchronousComputeService(SynchronousComputeService):
 
 
 
-class FahAlchemyComputeService(AsynchronousComputeService):
+class FahComputeService(AsynchronousComputeService):
     """Folding@Home-based compute service.
 
     This service is designed for production use with Folding@Home.

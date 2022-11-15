@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Union, Dict
+from typing import Union, Dict, Optional
 from uuid import uuid4
 
 
@@ -159,4 +159,3 @@ class TaskArchive(GufeTokenizable):
 
     def _defaults(self):
         return super()._defaults()
-

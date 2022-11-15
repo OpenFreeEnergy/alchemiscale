@@ -29,7 +29,7 @@ class FahAlchemyStateStore(abc.ABC):
 class Neo4jStore(FahAlchemyStateStore):
 
     def __init__(self, graph: "py2neo.Graph"):
-        self.graph = graph
+        self.graph: Graph = graph
         self.gufe_nodes = weakref.WeakValueDictionary()
 
     @contextmanager

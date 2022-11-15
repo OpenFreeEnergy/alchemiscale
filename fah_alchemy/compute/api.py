@@ -6,18 +6,22 @@
 from typing import Any, Dict, List
 import os
 import json
+from datetime import timedelta
 from functools import lru_cache
 
 from pydantic import BaseSettings
 from starlette.responses import JSONResponse
-from fastapi import FastAPI, Body, Depends
+from fastapi import FastAPI, Body, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from py2neo import Graph
-
-from fah_alchemy.storage.statestore import Neo4jStore
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 
+from ..storage.statestore import Neo4jStore
 from ..models import Scope, ScopedKey
+from ..security.auth import authenticate, create_access_token, get_token_data
+from ..security.models import Token, TokenData
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 class Settings(BaseSettings):
     """Automatically populates settings from environment variables where they
@@ -28,10 +32,12 @@ class Settings(BaseSettings):
     NEO4J_DBNAME: str = 'neo4j'
     NEO4J_USER: str
     NEO4J_PASS: str
-    FA_COMPUTE_API_HOST: str
-    FA_COMPUTE_API_PORT: int
+    FA_COMPUTE_API_HOST: str = '127.0.0.1'
+    FA_COMPUTE_API_PORT: int = 80
     FA_COMPUTE_API_LOGLEVEL: str = 'info'
-
+    JWT_SECRET_KEY: str
+    JWT_EXPIRE_SECONDS: int = 1800
+    JWT_ALGORITHM: str = 'HS256'
 
 
 class PermissiveJSONResponse(JSONResponse):
@@ -76,6 +82,41 @@ def scope_params(org: str = None, campaign: str = None, project: str = None):
     return Scope(org=org, campaign=campaign, project=project)
 
 
+async def get_token_data_depends(
+        token: str = Depends(oauth2_scheme),
+        settings: Settings = Depends(get_settings),
+        ) -> TokenData:
+    return get_token_data(
+            secret_key=settings.JWT_SECRET_KEY,
+            token=token,
+            jwt_algorithm=settings.JWT_ALGORITHM)
+
+
+@app.post("/token", response_model=Token)
+async def get_access_token(form_data: OAuth2PasswordRequestForm = Depends(),
+                           settings: Settings = Depends(get_settings),
+                           n4js: Neo4jStore = Depends(get_n4js)):
+
+    entity = authenticate(n4js, form_data.username, form_data.password)
+
+    if entity is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect identity or key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token = create_access_token(
+        data={"sub": entity.identifier,
+              "scopes": entity.scopes}, 
+        secret_key=settings.JWT_SECRET_KEY,
+        expires_seconds=settings.JWT_EXPIRE_SECONDS,
+        jwt_algorithm=settings.JWT_ALGORITHM
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
 @app.get("/info")
 async def info():
     return {"message": "nothing yet"}
@@ -111,7 +152,9 @@ async def claim_taskqueue_tasks(taskqueue,
                                 *,
                                 claimant: str = Body(),
                                 count: int = Body(),
-                                n4js: Neo4jStore = Depends(get_n4js)):
+                                n4js: Neo4jStore = Depends(get_n4js),
+                                tokendata: TokenData = Depends(get_token_data_depends)
+                                ):
     tasks = n4js.claim_taskqueue_tasks(taskqueue=taskqueue,
                                        claimant=claimant,
                                        count=count)
