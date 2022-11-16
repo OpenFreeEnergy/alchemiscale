@@ -11,18 +11,15 @@ from functools import lru_cache
 
 from starlette.responses import JSONResponse
 from fastapi import FastAPI, Body, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from py2neo import Graph
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 
 from ..settings import Settings, get_settings
 from ..storage.statestore import Neo4jStore
 from ..models import Scope, ScopedKey
-from ..security.auth import authenticate, create_access_token, get_token_data
-from ..security.models import Token, TokenData, CredentialedComputeService
-
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+from ..security.auth import authenticate, create_access_token, get_token_data, oauth2_scheme
+from ..security.models import Token, TokenData, CredentialedComputeIdentity
 
 
 class PermissiveJSONResponse(JSONResponse):
@@ -77,7 +74,7 @@ async def get_access_token(form_data: OAuth2PasswordRequestForm = Depends(),
                            settings: Settings = Depends(get_settings),
                            n4js: Neo4jStore = Depends(get_n4js)):
 
-    entity = authenticate(n4js, CredentialedComputeService, form_data.username, form_data.password)
+    entity = authenticate(n4js, CredentialedComputeIdentity, form_data.username, form_data.password)
 
     if entity is None:
         raise HTTPException(

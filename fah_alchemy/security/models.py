@@ -19,7 +19,7 @@ class CredentialedEntity(BaseModel):
     expires: Optional[datetime] = None
 
 
-class User(BaseModel):
+class UserIdentity(BaseModel):
     identifier: str
     email: Optional[str] = None
     full_name: Optional[str] = None
@@ -27,15 +27,15 @@ class User(BaseModel):
     scopes: Optional[List[str]] = None
 
 
-class CredentialedUser(User, CredentialedEntity):
+class CredentialedUser(UserIdentity, CredentialedEntity):
     ...
 
 
-class ComputeService(BaseModel):
+class ComputeIdentity(BaseModel):
     identifier: str
     disabled: bool = False
     scopes: Optional[List[str]] = None
 
 
-class CredentialedComputeService(ComputeService, CredentialedEntity):
+class CredentialedComputeIdentity(ComputeIdentity, CredentialedEntity):
     ...

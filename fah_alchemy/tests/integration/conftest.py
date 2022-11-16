@@ -8,7 +8,7 @@
 from os import getenv
 from time import sleep
 
-from grolt import Neo4jService, Neo4jDirectorySpec
+from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
 from pytest import fixture
 
@@ -128,7 +128,10 @@ def test_profile(request):
 def neo4j_service_and_uri(test_profile):
     for service, uri in test_profile.generate_uri("py2neo"):
         yield service, uri
-    return
+
+    # prune all docker volumes left behind
+    docker.volumes.prune()
+    return 
 
 
 @fixture(scope="session")
