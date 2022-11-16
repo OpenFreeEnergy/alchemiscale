@@ -53,7 +53,6 @@ def database():
 @click.option('--jwt-secret', help="JSON web token secret")
 def init(url, user, password, dbname, jwt_secret):
     """Initialize the Neo4j database.
-
     """
     from .compute.api import Settings, get_n4js
     selected = {"NEO4J_URL": url, "NEO4J_DBNAME": dbname,
