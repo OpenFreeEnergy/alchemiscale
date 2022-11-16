@@ -13,7 +13,7 @@ from fah_alchemy.settings import Settings, get_settings
 from fah_alchemy.storage import Neo4jStore
 from fah_alchemy.compute import api, client
 from fah_alchemy.security.models import CredentialedComputeIdentity
-from fah_alchemy.security.auth import hash_key
+from fah_alchemy.security.auth import hash_key, generate_secret_key
 
 
 ## compute api
@@ -60,7 +60,7 @@ def get_settings_override():
             NEO4J_URL="bolt://localhost:7687",
             FA_COMPUTE_API_HOST="127.0.0.1",
             FA_COMPUTE_API_PORT=8000,
-            JWT_SECRET_KEY="2b10413694ca71ce0516584758f25fa7315972e76a25adfd2c36dc56a03bebc2"
+            JWT_SECRET_KEY='98d11ba9ca329a4e5a6626faeffc6a9b9fb04e2745cff030f7d6793751bb8245',
             )
 
 @pytest.fixture(scope='module')
