@@ -15,7 +15,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from py2neo import Graph
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 
-from ..settings import Settings
+from ..settings import Settings, get_settings
 from ..storage.statestore import Neo4jStore
 from ..models import Scope, ScopedKey
 from ..security.auth import authenticate, create_access_token, get_token_data
