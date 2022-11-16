@@ -1,7 +1,6 @@
 import click
 import uvicorn
 
-from .compute.api import Settings
 
 
 
@@ -47,26 +46,33 @@ def database():
     ...
 
 @database.command()
-@click.argument('neo4j_url', help="database URI")
+@click.option('--url', help="database URI", type=str)
 @click.option('--user', help="database user name")
 @click.option('--password', help="database password")
 @click.option('--dbname', help="custom database name, default 'neo4j'")
-def init(neo4j_url, user, password):
+@click.option('--jwt-secret', help="JSON web token secret")
+def init(url, user, password, dbname, jwt_secret):
     """Initialize the Neo4j database.
 
     """
-    defaults = Settings()
-    graph = ... 
+    from .compute.api import Settings, get_n4js
+    selected = {"NEO4J_URL": url, "NEO4J_DBNAME": dbname,
+                "NEO4J_USER": user, "NEO4J_PASS": password,
+                "JWT_SECRET_KEY": jwt_secret}
+    update = {k: v for k, v in selected.items() if v}  # remove the Nones
+    settings = Settings(**update)
+    store = get_n4js(settings)
+
     constraint_q = ("CREATE CONSTRAINT gufe_key FOR (n:GufeTokenizable) "
                     "REQUIRE n._scoped_key is unique")
 
     try:
-        graph.run(constraint_q)
+        store.graph.run(constraint_q)
     except:
         pass
 
     # https://github.com/py2neo-org/py2neo/pull/951
-    graph.run("MERGE (:NOPE)")
+    store.graph.run("MERGE (:NOPE)")
 
 
 @cli.group()
