@@ -9,13 +9,13 @@ import json
 from datetime import timedelta
 from functools import lru_cache
 
-from pydantic import BaseSettings
 from starlette.responses import JSONResponse
 from fastapi import FastAPI, Body, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from py2neo import Graph
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 
+from ..settings import Settings, get_settings
 from ..storage.statestore import Neo4jStore
 from ..models import Scope, ScopedKey
 from ..security.auth import authenticate, create_access_token, get_token_data
@@ -23,23 +23,6 @@ from ..security.models import Token, TokenData, CredentialedComputeService
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-
-class Settings(BaseSettings):
-    """Automatically populates settings from environment variables where they
-    match; case-insensitive.
-
-    """
-    NEO4J_URL: str
-    NEO4J_DBNAME: str = 'neo4j'
-    NEO4J_USER: str
-    NEO4J_PASS: str
-    FA_COMPUTE_API_HOST: str = '127.0.0.1'
-    FA_COMPUTE_API_PORT: int = 80
-    FA_COMPUTE_API_LOGLEVEL: str = 'info'
-    JWT_SECRET_KEY: str
-    JWT_EXPIRE_SECONDS: int = 1800
-    JWT_ALGORITHM: str = 'HS256'
 
 
 class PermissiveJSONResponse(JSONResponse):
@@ -63,11 +46,6 @@ class PermissiveJSONResponse(JSONResponse):
 app = FastAPI(
         title="FahAlchemyComputeAPI"
         )
-
-
-@lru_cache()
-def get_settings():
-    return Settings()
 
 
 @lru_cache()
