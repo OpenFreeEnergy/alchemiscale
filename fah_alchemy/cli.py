@@ -10,7 +10,20 @@ def cli():
     ...
 
 
-# settings = @click.Parameter
+
+# reusable parameters to ensure consistent naming and help strings
+JWT_TOKEN_OPTION = click.option(
+    '--jwt-secret', type=str, help="JSON web token secret"
+)
+DBNAME_OPTION = click.option(
+    '--dbname', help="custom database name, default 'neo4j'"
+)
+
+def get_settings_from_options(kwargs):
+    from .compute.api import Settings
+    update = {k: v for k, v in kwargs.items() if v}  # remove the Nones
+    return Settings(**update)
+
 
 @cli.command(
     help="Start the client API service."
@@ -49,17 +62,16 @@ def database():
 @click.option('--url', help="database URI", type=str)
 @click.option('--user', help="database user name")
 @click.option('--password', help="database password")
-@click.option('--dbname', help="custom database name, default 'neo4j'")
-@click.option('--jwt-secret', help="JSON web token secret")
+@DBNAME_OPTION
+@JWT_TOKEN_OPTION
 def init(url, user, password, dbname, jwt_secret):
     """Initialize the Neo4j database.
     """
-    from .compute.api import Settings, get_n4js
-    selected = {"NEO4J_URL": url, "NEO4J_DBNAME": dbname,
-                "NEO4J_USER": user, "NEO4J_PASS": password,
-                "JWT_SECRET_KEY": jwt_secret}
-    update = {k: v for k, v in selected.items() if v}  # remove the Nones
-    settings = Settings(**update)
+    from compute.api import get_n4js
+    cli_values = {"NEO4J_URL": url, "NEO4J_DBNAME": dbname,
+                  "NEO4J_USER": user, "NEO4J_PASS": password,
+                  "JWT_SECRET_KEY": jwt_secret}
+    settings = get_settings_from_options(cli_values)
     store = get_n4js(settings)
 
     constraint_q = ("CREATE CONSTRAINT gufe_key FOR (n:GufeTokenizable) "
