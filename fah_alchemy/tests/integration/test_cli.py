@@ -62,7 +62,15 @@ def test_database_init(uri):
     graph = Graph(uri)
     graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
 
-    env_vars = ...
+    env_vars = {
+        "NEO4J_URL": uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+        "JWT_SECRET_KEY": "secret",  # is there a specific version of this?
+    }
 
     # run the CLI
     runner = CliRunner()
+    with set_env_vars(env_vars):
+        runner.invoke(cli, ['database', 'init'])
+        # TODO: what should I be asserting here?
