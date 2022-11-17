@@ -3,11 +3,19 @@ from click.testing import CliRunner
 
 import contextlib
 import os
+import traceback
 
 from grolt import Neo4jService
 from py2neo import Graph
 
 from fah_alchemy.cli import get_settings_from_options, cli
+
+def assert_click_success(result):
+    if result.exit_code != 0:  # -no-cov-  (only occurs on test error)
+        print(result.output)
+        traceback.print_tb(result.exc_info[2])
+        print(result.exc_info[0], result.exc_info[1])
+    assert result.exit_code == 0
 
 
 # based on https://stackoverflow.com/a/34333710
@@ -72,5 +80,7 @@ def test_database_init(uri):
     # run the CLI
     runner = CliRunner()
     with set_env_vars(env_vars):
-        runner.invoke(cli, ['database', 'init'])
+        result = runner.invoke(cli, ['database', 'init'])
+        assert_click_success(result)
+
         # TODO: what should I be asserting here?
