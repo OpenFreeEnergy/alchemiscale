@@ -9,21 +9,22 @@ from passlib.context import CryptContext
 
 from gufe import AlchemicalNetwork
 
+from fah_alchemy.settings import Settings, get_settings
 from fah_alchemy.storage import Neo4jStore
 from fah_alchemy.compute import api, client
-from fah_alchemy.security.models import CredentialedComputeService
-from fah_alchemy.security.auth import hash_key
+from fah_alchemy.security.models import CredentialedComputeIdentity
+from fah_alchemy.security.auth import hash_key, generate_secret_key
 
 
 ## compute api
 
 @pytest.fixture(scope='module')
-def compute_service_identity():
+def compute_identity():
     return dict(identifier='test-compute-service', key='strong passphrase lol')
 
 
 @pytest.fixture
-def n4js_clear(graph, network_tyk2, scope_test, compute_service_identity):
+def n4js_clear(graph, network_tyk2, scope_test, compute_identity):
     # clear graph contents; want a fresh state for database
     graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
 
@@ -39,9 +40,9 @@ def n4js_clear(graph, network_tyk2, scope_test, compute_service_identity):
     n4js.create_taskqueue(sk1)
     n4js.create_taskqueue(sk2)
 
-    n4js.create_credentialed_entity(CredentialedComputeService(
-            identifier=compute_service_identity['identifier'],
-            hashed_key=hash_key(compute_service_identity['key'])))
+    n4js.create_credentialed_entity(CredentialedComputeIdentity(
+            identifier=compute_identity['identifier'],
+            hashed_key=hash_key(compute_identity['key'])))
     
     return n4js
 
@@ -51,24 +52,15 @@ def n4js(graph, network_tyk2, scope_test):
     return Neo4jStore(graph)
 
 
-
-#def get_settings_override():
-#    # settings overrides for test suite
-#    return api.Settings(
-#            neo4j_url = "bolt://localhost:7687",
-#            neo4j_user = "neo4j",
-#            neo4j_user = "password"
-#            )
-
 def get_settings_override():
     # settings overrides for test suite
-    return api.Settings(
+    return Settings(
             NEO4J_USER='neo4j',
             NEO4J_PASS='password',
             NEO4J_URL="bolt://localhost:7687",
             FA_COMPUTE_API_HOST="127.0.0.1",
             FA_COMPUTE_API_PORT=8000,
-            JWT_SECRET_KEY="2b10413694ca71ce0516584758f25fa7315972e76a25adfd2c36dc56a03bebc2"
+            JWT_SECRET_KEY='98d11ba9ca329a4e5a6626faeffc6a9b9fb04e2745cff030f7d6793751bb8245',
             )
 
 @pytest.fixture(scope='module')
@@ -124,10 +116,10 @@ def uvicorn_server(compute_api):
 
 
 @pytest.fixture(scope='module')
-def compute_client(uvicorn_server, compute_service_identity):
+def compute_client(uvicorn_server, compute_identity):
     
     return client.FahAlchemyComputeClient(
             compute_api_url="http://127.0.0.1:8000/",
-            identifier=compute_service_identity['identifier'],
-            key=compute_service_identity['key']
+            identifier=compute_identity['identifier'],
+            key=compute_identity['key']
             )

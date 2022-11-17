@@ -4,17 +4,23 @@
 
 from datetime import datetime, timedelta
 from typing import Union, Optional
+import secrets
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
-from .models import Token, TokenData, User, CredentialedUser, CredentialedEntity
+from .models import Token, TokenData, CredentialedEntity
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+
+def generate_secret_key():
+    return secrets.token_hex(32)
 
 
 def authenticate(db, cls, identifier: str, key: str) -> CredentialedEntity:
