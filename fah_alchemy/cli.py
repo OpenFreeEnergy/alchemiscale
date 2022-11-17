@@ -1,23 +1,13 @@
 import click
-import uvicorn
 
 
+def dictify_callback(ctx, param, value):
+    return {param.envvar: value}
 
-
-
-@click.group()
-def cli():
-    ...
-
-
-
-# reusable parameters to ensure consistent naming and help strings
-JWT_TOKEN_OPTION = click.option(
-    '--jwt-secret', type=str, help="JSON web token secret"
-)
-DBNAME_OPTION = click.option(
-    '--dbname', help="custom database name, default 'neo4j'"
-)
+SETTINGS_OPTION_KWARGS = {
+    'show_envvar': True,
+    'callback': dictify_callback,
+}
 
 def get_settings_from_options(kwargs):
     from .compute.api import Settings
@@ -25,12 +15,26 @@ def get_settings_from_options(kwargs):
     return Settings(**update)
 
 
+@click.group()
+def cli():
+    ...
+
+
+# reusable parameters to ensure consistent naming and help strings
+JWT_TOKEN_OPTION = click.option(
+    '--jwt-secret', type=str, help="JSON web token secret",
+    envvar="JWT_SECRET_KEY", **SETTINGS_OPTION_KWARGS
+)
+DBNAME_OPTION = click.option(
+    '--dbname', type=str, help="custom database name, default 'neo4j'",
+    envvar="NEO4J_DBNAME", **SETTINGS_OPTION_KWARGS
+)
+
+
 @cli.command(
     help="Start the client API service."
 )
-@click.option('--port', help="the port to run this service on",
-              type=int, default=None)
-def api(port):
+def api():
     ...
 
 
@@ -48,7 +52,7 @@ def api():
     ...
 
 @compute.command(
-    help="Start the a synchronous compute service."
+    help="Start the synchronous compute service."
 )
 def synchronous():
     ...
@@ -59,18 +63,22 @@ def database():
     ...
 
 @database.command()
-@click.option('--url', help="database URI", type=str)
-@click.option('--user', help="database user name")
-@click.option('--password', help="database password")
+@click.option('--url', help="database URI", type=str, envvar="NEO4J_URL",
+              **SETTINGS_OPTION_KWARGS)
+@click.option('--user', help="database user name", type=str,
+                 envvar="NEO4J_USER", **SETTINGS_OPTION_KWARGS)
+@click.option('--password', help="database password", type=str,
+                 envvar="NEO4J_PASS", **SETTINGS_OPTION_KWARGS)
 @DBNAME_OPTION
 @JWT_TOKEN_OPTION
 def init(url, user, password, dbname, jwt_secret):
     """Initialize the Neo4j database.
+
+    Note that options here can be set by environment variables, as shown on
+    each option.
     """
     from compute.api import get_n4js
-    cli_values = {"NEO4J_URL": url, "NEO4J_DBNAME": dbname,
-                  "NEO4J_USER": user, "NEO4J_PASS": password,
-                  "JWT_SECRET_KEY": jwt_secret}
+    cli_values = url | user | password | dbname | jwt_secret
     settings = get_settings_from_options(cli_values)
     store = get_n4js(settings)
 
