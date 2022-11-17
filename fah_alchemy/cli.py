@@ -11,7 +11,7 @@ SETTINGS_OPTION_KWARGS = {
 
 def get_settings_from_options(kwargs):
     from .compute.api import Settings
-    update = {k: v for k, v in kwargs.items() if v}  # remove the Nones
+    update = {k: v for k, v in kwargs.items() if v is not None}
     return Settings(**update)
 
 
