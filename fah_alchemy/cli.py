@@ -77,7 +77,7 @@ def init(url, user, password, dbname, jwt_secret):
     Note that options here can be set by environment variables, as shown on
     each option.
     """
-    from compute.api import get_n4js
+    from .compute.api import get_n4js
     cli_values = url | user | password | dbname | jwt_secret
     settings = get_settings_from_options(cli_values)
     store = get_n4js(settings)
