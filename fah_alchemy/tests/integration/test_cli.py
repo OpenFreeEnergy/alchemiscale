@@ -5,10 +5,10 @@ import contextlib
 import os
 import traceback
 
-from grolt import Neo4jService
-from py2neo import Graph
-
 from fah_alchemy.cli import get_settings_from_options, cli
+from fah_alchemy.settings import Neo4jStoreSettings
+from fah_alchemy.storage.statestore import Neo4JStoreError
+
 
 def assert_click_success(result):
     if result.exit_code != 0:  # -no-cov-  (only occurs on test error)
@@ -36,7 +36,6 @@ def set_env_vars(env):
         "NEO4J_URL": "https://foo",
         "NEO4J_USER": "me",
         "NEO4J_PASS": "correct-horse-battery-staple",
-        "JWT_SECRET_KEY": "setec-astronomy",
     },  # all CLI options given (test without env vars)
     {
         "NEO4J_URL": "https://baz",
@@ -47,7 +46,6 @@ def test_get_settings_from_options(cli_vars):
         "NEO4J_URL": "https://bar",
         "NEO4J_USER": "you",
         "NEO4J_PASS": "Tr0ub4dor&3",
-        "JWT_SECRET_KEY": "too-many-secrets",
     }
     # if we give all by CLI, we don't need the env_vars
     context_vars = {} if len(cli_vars) == 4 else env_vars
@@ -58,23 +56,24 @@ def test_get_settings_from_options(cli_vars):
     kwargs = {k: cli_vars[k] if k in cli_vars else None
               for k in expected}
     with set_env_vars(context_vars):
-        settings = get_settings_from_options(kwargs)
+        settings = get_settings_from_options(kwargs, Neo4jStoreSettings)
         settings_dict = settings.dict()
 
     for key in expected:
         assert expected[key] == settings_dict[key]
 
 
-def test_database_init(uri):
+def test_database_init(n4js):
     # ensure the database is empty
-    graph = Graph(uri)
-    graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
+    n4js.graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
+    
+    with pytest.raises(Neo4JStoreError):
+        n4js.check()
 
     env_vars = {
-        "NEO4J_URL": uri,
+        "NEO4J_URL": n4js.graph.service.uri,
         "NEO4J_USER": "neo4j",
         "NEO4J_PASS": "password",
-        "JWT_SECRET_KEY": "secret",  # is there a specific version of this?
     }
 
     # run the CLI
@@ -83,4 +82,4 @@ def test_database_init(uri):
         result = runner.invoke(cli, ['database', 'init'])
         assert_click_success(result)
 
-        # TODO: what should I be asserting here?
+    assert n4js.check() is None

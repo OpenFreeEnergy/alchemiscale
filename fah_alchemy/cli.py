@@ -16,15 +16,14 @@ SETTINGS_OPTION_KWARGS = {
     'callback': envvar_dictify,
 }
 
-def get_settings_from_options(kwargs):
+def get_settings_from_options(kwargs, settings_cls):
     """Create a settings object from a dict.
 
     This first strips all items with value None (which will be defaults) so
     that they don't override settings defaults.
     """
-    from .compute.api import Settings
     update = {k: v for k, v in kwargs.items() if v is not None}
-    return Settings(**update)
+    return settings_cls(**update)
 
 
 @click.group()
@@ -82,28 +81,70 @@ def database():
 @click.option('--password', help="database password", type=str,
                  envvar="NEO4J_PASS", **SETTINGS_OPTION_KWARGS)
 @DBNAME_OPTION
-@JWT_TOKEN_OPTION
-def init(url, user, password, dbname, jwt_secret):
+def init(url, user, password, dbname):
     """Initialize the Neo4j database.
 
     Note that options here can be set by environment variables, as shown on
     each option.
     """
-    from .compute.api import get_n4js
-    cli_values = url | user | password | dbname | jwt_secret
-    settings = get_settings_from_options(cli_values)
-    store = get_n4js(settings)
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
 
-    constraint_q = ("CREATE CONSTRAINT gufe_key FOR (n:GufeTokenizable) "
-                    "REQUIRE n._scoped_key is unique")
+    cli_values = url | user | password | dbname
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
 
-    try:
-        store.graph.run(constraint_q)
-    except:
-        pass
+    n4js = get_n4js(settings)
+    n4js.initialize()
 
-    # https://github.com/py2neo-org/py2neo/pull/951
-    store.graph.run("MERGE (:NOPE)")
+
+@database.command()
+@click.option('--url', help="database URI", type=str, envvar="NEO4J_URL",
+              **SETTINGS_OPTION_KWARGS)
+@click.option('--user', help="database user name", type=str,
+                 envvar="NEO4J_USER", **SETTINGS_OPTION_KWARGS)
+@click.option('--password', help="database password", type=str,
+                 envvar="NEO4J_PASS", **SETTINGS_OPTION_KWARGS)
+@DBNAME_OPTION
+def check(url, user, password, dbname):
+    """Check consistency of database.
+
+    Note that options here can be set by environment variables, as shown on
+    each option.
+    """
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
+
+    cli_values = url | user | password | dbname
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
+
+    n4js = get_n4js(settings)
+    if n4js.check() is None:
+        print("No inconsistencies found found in database.")
+
+
+@database.command()
+@click.option('--url', help="database URI", type=str, envvar="NEO4J_URL",
+              **SETTINGS_OPTION_KWARGS)
+@click.option('--user', help="database user name", type=str,
+                 envvar="NEO4J_USER", **SETTINGS_OPTION_KWARGS)
+@click.option('--password', help="database password", type=str,
+                 envvar="NEO4J_PASS", **SETTINGS_OPTION_KWARGS)
+@DBNAME_OPTION
+def reset(url, user, password, dbname):
+    """Remove all data from database; undo `init`.
+
+    Note that options here can be set by environment variables, as shown on
+    each option.
+    """
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
+
+    cli_values = url | user | password | dbname
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
+
+    n4js = get_n4js(settings)
+    n4js.reset()
+
 
 
 @cli.group()

@@ -10,7 +10,7 @@ class TestSynchronousComputeService:
 
     
     @pytest.fixture
-    def service(self, n4js_clear, compute_client, tmpdir):
+    def service(self, n4js_preloaded, compute_client, tmpdir):
         with tmpdir.as_cwd():
             return SynchronousComputeService(
                     compute_api_uri=compute_client.compute_api_url,

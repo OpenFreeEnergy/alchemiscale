@@ -16,7 +16,7 @@ class TestComputeAPI:
         assert response.status_code == 200
     
     
-    def test_query_taskqueues(self, n4js_clear, test_client):
+    def test_query_taskqueues(self, n4js_preloaded, test_client):
     
         response = test_client.get("/taskqueues")
         assert response.status_code == 200
@@ -39,7 +39,7 @@ class TestComputeClient:
 
     def test_query_taskqueues(self, 
                               scope_test, 
-                              n4js_clear,
+                              n4js_preloaded,
                               compute_client: client.FahAlchemyComputeClient, 
                               uvicorn_server
                               ):
@@ -53,7 +53,7 @@ class TestComputeClient:
 
     def test_claim_taskqueue_task(self, 
                               scope_test, 
-                              n4js_clear,
+                              n4js_preloaded,
                               compute_client: client.FahAlchemyComputeClient, 
                               uvicorn_server
                               ):
