@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     JWT_EXPIRE_SECONDS: int = 1800
     JWT_ALGORITHM: str = 'HS256'
 
+    class Config:
+        frozen = True
+
 
 @lru_cache()
 def get_settings():
