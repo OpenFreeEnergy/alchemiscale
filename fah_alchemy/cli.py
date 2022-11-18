@@ -1,15 +1,27 @@
 import click
 
 
-def dictify_callback(ctx, param, value):
+def envvar_dictify(ctx, param, value):
+    """Callback to return a dict of param's envvar to value.
+
+    This ensures that the envvar name only has to be entered as a string
+    once within the click system. It requires that the parameter this
+    callback is attached to defines its envvar.
+    """
     return {param.envvar: value}
 
+# use these extra kwargs with any option from a settings parameter.
 SETTINGS_OPTION_KWARGS = {
     'show_envvar': True,
-    'callback': dictify_callback,
+    'callback': envvar_dictify,
 }
 
 def get_settings_from_options(kwargs):
+    """Create a settings object from a dict.
+
+    This first strips all items with value None (which will be defaults) so
+    that they don't override settings defaults.
+    """
     from .compute.api import Settings
     update = {k: v for k, v in kwargs.items() if v is not None}
     return Settings(**update)
