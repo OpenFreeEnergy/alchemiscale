@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     JWT_EXPIRE_SECONDS: int = 1800
     JWT_ALGORITHM: str = 'HS256'
 
-    def __hash__(self):
-        return hash(tuple(self.dict().items()))
+    class Config:
+        frozen = True
 
 
 @lru_cache()
