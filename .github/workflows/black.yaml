@@ -1,4 +1,4 @@
-name: "black"
+name: "Formatting - black"
 on:
   pull_request:
     branches:
@@ -16,29 +16,14 @@ defaults:
     shell: bash -l {0}
 
 jobs:
-  mypy:
+  black:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
 
-      - uses: conda-incubator/setup-miniconda@v2
-        with:
-            auto-update-conda: true
-            use-mamba: true
-            python-version: 3.9
-            miniforge-variant: Mambaforge
-            environment-file: devtools/conda-envs/test.yml
-            activate-environment: test
-
       - name: "Install steps"
         run: |
           python -m pip install black
-          python setup.py develop --no-deps
 
-      - name: "Environment Information"
-        run: |
-          mamba info -a
-          mamba list
-
-      - name: "Lint with mypy"
+      - name: "Run the black check"
         run: black --check fah_alchemy
