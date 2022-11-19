@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from gufe.tokenization import GufeKey
 
 
@@ -23,6 +23,10 @@ class ScopedKey(BaseModel):
     org: str
     campaign: str
     project: str
+
+    @validator('gufe_key')
+    def cast_gufe_key(cls, v):
+        return GufeKey(v)
 
     class Config:
         frozen = True

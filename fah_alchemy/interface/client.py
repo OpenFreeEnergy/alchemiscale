@@ -15,12 +15,15 @@ class FahAlchemyClientError(FahAlchemyBaseClientError):
     ...
 
 
-class FahAlchemyClient:
+class FahAlchemyClient(FahAlchemyBaseClient):
     """Client for user interaction with API service."""
 
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Submit an AlchemicalNetwork along with a compute Strategy."""
         ...
+        data = dict(network=network.to_dict(), scope=scope.dict())
+        scoped_key = self._post_resource("/networks", data)
+        return ScopedKey.from_str(scoped_key)
 
     def query_networks(self):
         ...

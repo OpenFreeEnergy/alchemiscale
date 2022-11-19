@@ -5,7 +5,6 @@ import pytest
 import uvicorn
 import requests
 from fastapi.testclient import TestClient
-from passlib.context import CryptContext
 
 from gufe import AlchemicalNetwork
 
@@ -13,7 +12,7 @@ from fah_alchemy.settings import ComputeAPISettings, get_jwt_settings
 from fah_alchemy.storage import Neo4jStore, get_n4js
 from fah_alchemy.compute import api, client
 from fah_alchemy.security.models import CredentialedComputeIdentity, TokenData
-from fah_alchemy.security.auth import hash_key, generate_secret_key
+from fah_alchemy.security.auth import hash_key
 from fah_alchemy.base.api import get_token_data_depends
 
 

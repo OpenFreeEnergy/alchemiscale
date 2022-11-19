@@ -37,7 +37,7 @@ async def info():
     return {"message": "nothing yet"}
 
 
-@app.get("/networks/", response_class=PermissiveJSONResponse)
+@app.get("/networks", response_class=PermissiveJSONResponse)
 async def query_networks(
     *,
     name: str = None,
@@ -63,17 +63,15 @@ def get_network(
     return network.to_dict()
 
 
-@app.post("/networks", response_class=PermissiveJSONResponse)
+@app.post("/networks", response_model=ScopedKey)
 def create_network(
     *,
     network: Dict = Body(...),
-    scope: Scope = Depends(scope_params),
+    scope: Scope, 
     n4js: Neo4jStore = Depends(get_n4js),
 ):
-
     an = AlchemicalNetwork.from_dict(network)
-    scoped_key = n4js.create_network(an, scope.org, scope.campaign, scope.project)
-    return scoped_key
+    return n4js.create_network(network=an, scope=scope)
 
 
 @app.get("/transformations")

@@ -478,9 +478,9 @@ class Neo4jStore(FahAlchemyStateStore):
         else:
             return [ScopedKey.from_str(i["_scoped_key"]) for i in nodes]
 
-    def check_existence(self, scoped_key: Union[ScopedKey, str]):
+    def check_existence(self, scoped_key: ScopedKey):
         try:
-            self._get_node(scoped_key=str(scoped_key))
+            self._get_node(scoped_key=scoped_key)
         except KeyError:
             return False
 
