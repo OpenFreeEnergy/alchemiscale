@@ -4,7 +4,6 @@ from pydantic import BaseSettings
 
 
 class FrozenSettings(BaseSettings):
-
     class Config:
         frozen = True
 
@@ -68,4 +67,3 @@ def get_api_settings():
 @lru_cache()
 def get_compute_api_settings():
     return ComputeAPISettings()
-

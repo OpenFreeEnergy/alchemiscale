@@ -6,11 +6,8 @@
 from typing import Any, Dict, List
 import os
 import json
-from datetime import timedelta
-from functools import lru_cache
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
 
 from ..base.api import PermissiveJSONResponse, scope_params, get_token_data_depends, base_router
 from ..settings import ComputeAPISettings, get_compute_api_settings, get_jwt_settings
@@ -25,9 +22,7 @@ from ..security.models import Token, TokenData, CredentialedComputeIdentity
 #   - can be done with an asyncio.sleeping task added to event loop: https://stackoverflow.com/questions/67154839/fastapi-best-way-to-run-continuous-get-requests-in-the-background
 # - on startup, 
 
-app = FastAPI(
-        title="FahAlchemyComputeAPI",
-        )
+app = FastAPI(title="FahAlchemyComputeAPI")
 app.dependency_overrides[get_jwt_settings] = get_compute_api_settings
 app.include_router(base_router)
 
