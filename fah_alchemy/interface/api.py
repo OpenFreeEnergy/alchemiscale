@@ -67,7 +67,7 @@ def get_network(
 def create_network(
     *,
     network: Dict = Body(...),
-    scope: Scope, 
+    scope: Scope,
     n4js: Neo4jStore = Depends(get_n4js),
 ):
     an = AlchemicalNetwork.from_dict(network)

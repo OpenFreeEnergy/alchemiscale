@@ -24,7 +24,7 @@ class ScopedKey(BaseModel):
     campaign: str
     project: str
 
-    @validator('gufe_key')
+    @validator("gufe_key")
     def cast_gufe_key(cls, v):
         return GufeKey(v)
 

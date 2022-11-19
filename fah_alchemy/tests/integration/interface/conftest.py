@@ -73,7 +73,9 @@ def user_api(n4js):
 
     api.app.dependency_overrides[get_n4js] = get_n4js_override
     api.app.dependency_overrides[get_jwt_settings] = get_user_settings_override
-    api.app.dependency_overrides[get_token_data_depends] = get_token_data_depends_override
+    api.app.dependency_overrides[
+        get_token_data_depends
+    ] = get_token_data_depends_override
     return api.app
 
 

@@ -44,7 +44,4 @@ class FahAlchemyComputeClient(FahAlchemyBaseClient):
         data = dict(claimant=claimant, count=count)
         tasks = self._post_resource(f"taskqueues/{taskqueue}/claim", data)
 
-        return [
-            ScopedKey.from_str(t) if t is not None else None
-            for t in tasks
-        ]
+        return [ScopedKey.from_str(t) if t is not None else None for t in tasks]
