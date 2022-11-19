@@ -21,11 +21,8 @@ class TestNeo4jStore(TestStateStore):
     ...
 
     @pytest.fixture
-    def n4js(self, graph):
-        # clear graph contents; want a fresh state for database
-        graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
-
-        return Neo4jStore(graph)
+    def n4js(self, n4js_fresh):
+        return n4js_fresh
 
     def test_server(self, graph):
         graph.service.system_graph.call("dbms.security.listUsers")

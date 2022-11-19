@@ -15,8 +15,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from py2neo import Graph
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 
-from ..settings import Settings, get_settings
-from ..storage.statestore import Neo4jStore
+from ..settings import ComputeAPISettings, get_compute_api_settings
+from ..storage.statestore import Neo4jStore, get_n4js
 from ..models import Scope, ScopedKey
 from ..security.auth import authenticate, create_access_token, get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedComputeIdentity
@@ -44,24 +44,13 @@ app = FastAPI(
         title="FahAlchemyComputeAPI"
         )
 
-
-@lru_cache()
-def get_n4js(settings: Settings = Depends(get_settings)):
-
-    graph = Graph(settings.NEO4J_URL, 
-                  auth=(settings.NEO4J_USER,
-                        settings.NEO4J_PASS),
-              name=settings.NEO4J_DBNAME)
-    return Neo4jStore(graph)
-
-
 def scope_params(org: str = None, campaign: str = None, project: str = None):
     return Scope(org=org, campaign=campaign, project=project)
 
 
 async def get_token_data_depends(
         token: str = Depends(oauth2_scheme),
-        settings: Settings = Depends(get_settings),
+        settings: ComputeAPISettings = Depends(get_compute_api_settings),
         ) -> TokenData:
     return get_token_data(
             secret_key=settings.JWT_SECRET_KEY,
@@ -71,7 +60,7 @@ async def get_token_data_depends(
 
 @app.post("/token", response_model=Token)
 async def get_access_token(form_data: OAuth2PasswordRequestForm = Depends(),
-                           settings: Settings = Depends(get_settings),
+                           settings: ComputeAPISettings = Depends(get_compute_api_settings),
                            n4js: Neo4jStore = Depends(get_n4js)):
 
     entity = authenticate(n4js, CredentialedComputeIdentity, form_data.username, form_data.password)
