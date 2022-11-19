@@ -11,7 +11,7 @@ from starlette.responses import JSONResponse
 from fastapi import APIRouter, FastAPI, Body
 from py2neo import Graph
 
-from fah_alchemy.storage.metadatastore import Neo4jStore
+from fah_alchemy.storage.statestore import Neo4jStore
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 
 from ..models import Scope
