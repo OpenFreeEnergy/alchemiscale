@@ -3,7 +3,13 @@ from functools import lru_cache
 from pydantic import BaseSettings
 
 
-class Neo4jStoreSettings(BaseSettings):
+class FrozenSettings(BaseSettings):
+
+    class Config:
+        frozen = True
+
+
+class Neo4jStoreSettings(FrozenSettings):
     """Automatically populates settings from environment variables where they
     match; case-insensitive.
 
@@ -13,10 +19,18 @@ class Neo4jStoreSettings(BaseSettings):
     NEO4J_USER: str
     NEO4J_PASS: str
 
-    class Config:
-        frozen = True
 
-class APISettings(Neo4jStoreSettings):
+class JWTSettings(BaseSettings):
+    """Automatically populates settings from environment variables where they
+    match; case-insensitive.
+
+    """
+    JWT_SECRET_KEY: str
+    JWT_EXPIRE_SECONDS: int = 1800
+    JWT_ALGORITHM: str = 'HS256'
+
+
+class APISettings(Neo4jStoreSettings, JWTSettings):
     """Automatically populates settings from environment variables where they
     match; case-insensitive.
 
@@ -24,12 +38,9 @@ class APISettings(Neo4jStoreSettings):
     FA_API_HOST: str = '127.0.0.1'
     FA_API_PORT: int = 80
     FA_API_LOGLEVEL: str = 'info'
-    JWT_SECRET_KEY: str
-    JWT_EXPIRE_SECONDS: int = 1800
-    JWT_ALGORITHM: str = 'HS256'
 
 
-class ComputeAPISettings(Neo4jStoreSettings):
+class ComputeAPISettings(Neo4jStoreSettings, JWTSettings):
     """Automatically populates settings from environment variables where they
     match; case-insensitive.
 
@@ -37,9 +48,6 @@ class ComputeAPISettings(Neo4jStoreSettings):
     FA_COMPUTE_API_HOST: str = '127.0.0.1'
     FA_COMPUTE_API_PORT: int = 80
     FA_COMPUTE_API_LOGLEVEL: str = 'info'
-    JWT_SECRET_KEY: str
-    JWT_EXPIRE_SECONDS: int = 1800
-    JWT_ALGORITHM: str = 'HS256'
 
 
 @lru_cache()

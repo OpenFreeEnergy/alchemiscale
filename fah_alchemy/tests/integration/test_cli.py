@@ -10,12 +10,12 @@ from fah_alchemy.settings import Neo4jStoreSettings
 from fah_alchemy.storage.statestore import Neo4JStoreError
 
 
-def assert_click_success(result):
+def click_success(result):
     if result.exit_code != 0:  # -no-cov-  (only occurs on test error)
         print(result.output)
         traceback.print_tb(result.exc_info[2])
         print(result.exc_info[0], result.exc_info[1])
-    assert result.exit_code == 0
+    return result.exit_code == 0
 
 
 # based on https://stackoverflow.com/a/34333710
@@ -80,6 +80,58 @@ def test_database_init(n4js):
     runner = CliRunner()
     with set_env_vars(env_vars):
         result = runner.invoke(cli, ['database', 'init'])
-        assert_click_success(result)
+        assert click_success(result)
 
     assert n4js.check() is None
+
+
+def test_database_check(n4js_fresh, network_tyk2, scope_test):
+    n4js = n4js_fresh
+
+    # set starting contents 
+    n4js.create_network(network_tyk2, scope_test)
+
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+
+    # run the CLI
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        result = runner.invoke(cli, ['database', 'check'])
+        assert click_success(result)
+
+        n4js.reset()
+
+        result = runner.invoke(cli, ['database', 'check'])
+        assert not click_success(result)
+
+        n4js.initialize()
+
+        result = runner.invoke(cli, ['database', 'check'])
+        assert click_success(result)
+
+def test_database_reset(n4js_fresh, network_tyk2, scope_test):
+    n4js = n4js_fresh
+
+    # set starting contents 
+    n4js.create_network(network_tyk2, scope_test)
+
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+
+    # run the CLI
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        result = runner.invoke(cli, ['database', 'reset'])
+        assert click_success(result)
+
+    assert n4js.graph.run("MATCH (n) WHERE NOT n:NOPE RETURN n").to_subgraph() is None
+
+    with pytest.raises(Neo4JStoreError):
+        n4js.check()
