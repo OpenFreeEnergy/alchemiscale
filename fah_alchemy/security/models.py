@@ -27,7 +27,7 @@ class UserIdentity(BaseModel):
     scopes: Optional[List[str]] = None
 
 
-class CredentialedUser(UserIdentity, CredentialedEntity):
+class CredentialedUserIdentity(UserIdentity, CredentialedEntity):
     ...
 
 

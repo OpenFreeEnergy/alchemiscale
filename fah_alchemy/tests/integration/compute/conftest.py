@@ -20,7 +20,7 @@ from fah_alchemy.security.auth import hash_key, generate_secret_key
 
 @pytest.fixture(scope='module')
 def compute_identity():
-    return dict(identifier='test-compute-service', key='strong passphrase lol')
+    return dict(identifier='test-compute-identity', key='strong passphrase lol')
 
 
 @pytest.fixture

@@ -29,6 +29,9 @@ class JWTSettings(BaseSettings):
     JWT_EXPIRE_SECONDS: int = 1800
     JWT_ALGORITHM: str = 'HS256'
 
+    class Config:
+        frozen = True
+
 
 class APISettings(Neo4jStoreSettings, JWTSettings):
     """Automatically populates settings from environment variables where they

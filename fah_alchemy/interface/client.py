@@ -6,7 +6,7 @@ import requests
 
 from gufe import AlchemicalNetwork
 
-from .strategies import Strategy
+from ..strategies import Strategy
 
 
 class FahAlchemyClient:

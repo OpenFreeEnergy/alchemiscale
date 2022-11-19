@@ -8,10 +8,12 @@ class Scope(BaseModel):
     campaign: Optional[str] = None
     project: Optional[str] = None
 
+    class Config:
+        frozen = True
+
     def overlap(self, other):
         """Return True if this Scope overlaps with another"""
         return NotImplementedError
-
 
 
 class ScopedKey(BaseModel):

@@ -159,6 +159,7 @@ def add():
     """
     ...
 
+
 @user.command()
 def list_scope():
     """List all scopes for the given user.
@@ -166,12 +167,14 @@ def list_scope():
     """
     ...
 
+
 @user.command()
 def add_scope():
     """Add a scope for the given user(s).
 
     """
     ...
+
 
 @user.command()
 def remove_scope():
