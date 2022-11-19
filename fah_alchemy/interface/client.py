@@ -16,20 +16,14 @@ class FahAlchemyClientError(FahAlchemyBaseClientError):
 
 
 class FahAlchemyClient:
-    """Client for user interaction with API service.
-
-    """
+    """Client for user interaction with API service."""
 
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
-        """Submit an AlchemicalNetwork along with a compute Strategy.
-
-        """
+        """Submit an AlchemicalNetwork along with a compute Strategy."""
         ...
-
 
     def query_networks(self):
         ...
-
 
     def get_network(self, scoped_key: str):
         ...

@@ -16,7 +16,12 @@ from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from ..settings import JWTSettings, get_jwt_settings
 from ..storage.statestore import Neo4jStore, get_n4js
 from ..models import Scope, ScopedKey
-from ..security.auth import authenticate, create_access_token, get_token_data, oauth2_scheme
+from ..security.auth import (
+    authenticate,
+    create_access_token,
+    get_token_data,
+    oauth2_scheme,
+)
 from ..security.models import Token, TokenData, CredentialedComputeIdentity
 
 
@@ -38,23 +43,29 @@ def scope_params(org: str = None, campaign: str = None, project: str = None):
 
 
 async def get_token_data_depends(
-        token: str = Depends(oauth2_scheme),
-        settings: JWTSettings = Depends(get_jwt_settings),
-        ) -> TokenData:
+    token: str = Depends(oauth2_scheme),
+    settings: JWTSettings = Depends(get_jwt_settings),
+) -> TokenData:
     return get_token_data(
-            secret_key=settings.JWT_SECRET_KEY,
-            token=token,
-            jwt_algorithm=settings.JWT_ALGORITHM)
+        secret_key=settings.JWT_SECRET_KEY,
+        token=token,
+        jwt_algorithm=settings.JWT_ALGORITHM,
+    )
 
 
 base_router = APIRouter()
 
-@base_router.post("/token", response_model=Token)
-async def get_access_token(form_data: OAuth2PasswordRequestForm = Depends(),
-                           settings: JWTSettings = Depends(get_jwt_settings),
-                           n4js: Neo4jStore = Depends(get_n4js)):
 
-    entity = authenticate(n4js, CredentialedComputeIdentity, form_data.username, form_data.password)
+@base_router.post("/token", response_model=Token)
+async def get_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    settings: JWTSettings = Depends(get_jwt_settings),
+    n4js: Neo4jStore = Depends(get_n4js),
+):
+
+    entity = authenticate(
+        n4js, CredentialedComputeIdentity, form_data.username, form_data.password
+    )
 
     if entity is None:
         raise HTTPException(
@@ -64,11 +75,10 @@ async def get_access_token(form_data: OAuth2PasswordRequestForm = Depends(),
         )
 
     access_token = create_access_token(
-        data={"sub": entity.identifier,
-              "scopes": entity.scopes}, 
+        data={"sub": entity.identifier, "scopes": entity.scopes},
         secret_key=settings.JWT_SECRET_KEY,
         expires_seconds=settings.JWT_EXPIRE_SECONDS,
-        jwt_algorithm=settings.JWT_ALGORITHM
+        jwt_algorithm=settings.JWT_ALGORITHM,
     )
 
     return {"access_token": access_token, "token_type": "bearer"}

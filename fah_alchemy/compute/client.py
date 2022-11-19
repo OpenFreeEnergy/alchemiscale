@@ -22,32 +22,29 @@ class FahAlchemyComputeClientError(FahAlchemyBaseClientError):
 
 
 class FahAlchemyComputeClient(FahAlchemyBaseClient):
-    """Client for compute service interaction with compute API service.
+    """Client for compute service interaction with compute API service."""
 
-    """
-
-    def query_taskqueues(self, scope: Scope, return_gufe=False, limit=None, skip=None) -> List[TaskQueue]:
-        """Return all `TaskQueue`s corresponding to given `Scope`.
-
-        """
+    def query_taskqueues(
+        self, scope: Scope, return_gufe=False, limit=None, skip=None
+    ) -> List[TaskQueue]:
+        """Return all `TaskQueue`s corresponding to given `Scope`."""
         params = dict(return_gufe=return_gufe, limit=limit, skip=skip, **scope.dict())
-        taskqueues = self._query_resource('/taskqueues', params=params)
+        taskqueues = self._query_resource("/taskqueues", params=params)
 
         return taskqueues
 
     def get_taskqueue_tasks(self, taskqueue: ScopedKey) -> List[Task]:
-        """Get list of `Task`s for the given `TaskQueue`.
+        """Get list of `Task`s for the given `TaskQueue`."""
+        self._get_resource(f"taskqueues/{taskqueue}/tasks")
 
-        """
-        self._get_resource(f'taskqueues/{taskqueue}/tasks')
-
-
-    def claim_taskqueue_tasks(self, taskqueue: ScopedKey, claimant: str, count: int = 1) -> Task:
-        """Claim a `Task` from the specified `TaskQueue`
-
-        """
+    def claim_taskqueue_tasks(
+        self, taskqueue: ScopedKey, claimant: str, count: int = 1
+    ) -> Task:
+        """Claim a `Task` from the specified `TaskQueue`"""
         data = dict(claimant=claimant, count=count)
-        tasks = self._post_resource(f'taskqueues/{taskqueue}/claim', data)
+        tasks = self._post_resource(f"taskqueues/{taskqueue}/claim", data)
 
-        return [ScopedKey.from_str(t['_scoped_key']) if t is not None else None for t in tasks]
-
+        return [
+            ScopedKey.from_str(t["_scoped_key"]) if t is not None else None
+            for t in tasks
+        ]

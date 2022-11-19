@@ -65,17 +65,17 @@ class SynchronousComputeService:
     """
 
     def __init__(
-            self,
-            api_url: str,
-            identifier: str,
-            key: str,
-            name: str,
-            shared_path: Path,
-            sleep_interval: int = 30,
-            heartbeat_frequency: int = 30,
-            scope: Optional[Scope] = None,
-            limit: int = 1
-        ):
+        self,
+        api_url: str,
+        identifier: str,
+        key: str,
+        name: str,
+        shared_path: Path,
+        sleep_interval: int = 30,
+        heartbeat_frequency: int = 30,
+        scope: Optional[Scope] = None,
+        limit: int = 1,
+    ):
         """
 
         Parameters
@@ -90,11 +90,7 @@ class SynchronousComputeService:
         self.heartbeat_frequency = heartbeat_frequency
         self.limit = limit
 
-        self.client = FahAlchemyComputeClient(
-                api_url,
-                identifier,
-                key
-                )
+        self.client = FahAlchemyComputeClient(api_url, identifier, key)
 
         if scope is None:
             self.scope = Scope()
@@ -104,11 +100,8 @@ class SynchronousComputeService:
 
         self._stop = False
 
-
     def heartbeat(self):
-        """Deliver a heartbeat to the compute API, indicating this service is still alive.
-
-        """
+        """Deliver a heartbeat to the compute API, indicating this service is still alive."""
         ...
 
     def get_tasks(self, count=1) -> Union[Task, None]:
@@ -117,25 +110,25 @@ class SynchronousComputeService:
         Returns `None` if no Task was available matching service configuration.
 
         """
-        taskqueues: Dict[ScopedKey, TaskQueue] = self.client.query_taskqueues(scope=self.scope, return_gufe=True)
+        taskqueues: Dict[ScopedKey, TaskQueue] = self.client.query_taskqueues(
+            scope=self.scope, return_gufe=True
+        )
 
         # based on weights, choose taskqueue to draw from
         taskqueue: List[ScopedKey] = random.choices(
-                list(taskqueues.keys()), 
-                weights=[tq.weight for tq in taskqueues.values()])[0]
+            list(taskqueues.keys()), weights=[tq.weight for tq in taskqueues.values()]
+        )[0]
 
         # claim tasks from the taskqueue
         tasks = self.client.claim_taskqueue_tasks(
-                taskqueue, claimant=self.name, count=self.limit)
+            taskqueue, claimant=self.name, count=self.limit
+        )
 
         return tasks
-    
-    def task_to_protocoldag(self, task: ScopedKey):
-        """Given a Task, produce a corresponding ProtocolDAG that can be executed.
 
-        """
+    def task_to_protocoldag(self, task: ScopedKey):
+        """Given a Task, produce a corresponding ProtocolDAG that can be executed."""
         ...
-        
 
     def push_results(self):
         ...
@@ -153,6 +146,7 @@ class SynchronousComputeService:
             If `None`, the service will continue until told to stop.
 
         """
+
         def scheduler_heartbeat():
             self.heartbeat()
             self.scheduler.enter(self.heartbeat_frequency, 1, scheduler_heartbeat)
@@ -191,34 +185,12 @@ class SynchronousComputeService:
 
                 counter += 1
 
-
     def stop(self):
         self._stop = True
 
         # Interrupt the scheduler (will finish if in the middle of an update or something, but will
         # cancel running calculations)
         self.int_sleep.interrupt()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 class AsynchronousComputeService(SynchronousComputeService):
@@ -229,23 +201,17 @@ class AsynchronousComputeService(SynchronousComputeService):
 
     """
 
-    def __init__(
-            self,
-            api_url
-        ):
+    def __init__(self, api_url):
         self.scheduler = sched.scheduler(time.monotonic, time.sleep)
-        #self.loop = asyncio.get_event_loop()
+        # self.loop = asyncio.get_event_loop()
 
         self._stop = False
-
 
     def get_new_tasks(self):
         ...
 
     def start(self):
-        """Start the service; will keep going until told to stop.
-
-        """
+        """Start the service; will keep going until told to stop."""
         while True:
 
             if self._stop:
@@ -255,29 +221,22 @@ class AsynchronousComputeService(SynchronousComputeService):
         self._stop = True
 
 
-
 class FahComputeService(AsynchronousComputeService):
     """Folding@Home-based compute service.
 
     This service is designed for production use with Folding@Home.
 
     """
-    def __init__(
-            self,
-            object_store,
-            fah_work_server
-        ):
+
+    def __init__(self, object_store, fah_work_server):
 
         self.scheduler = sched.scheduler(time.time, self.int_sleep)
         self.loop = asyncio.get_event_loop()
 
         self._stop = False
 
-
     async def get_new_tasks(self):
         ...
-
-
 
     def start(self):
         ...
@@ -285,7 +244,6 @@ class FahComputeService(AsynchronousComputeService):
 
             if self._stop:
                 return
-
 
     def stop(self):
         ...

@@ -132,7 +132,7 @@ def neo4j_service_and_uri(test_profile):
 
     # prune all docker volumes left behind
     docker.volumes.prune()
-    return 
+    return
 
 
 @fixture(scope="session")
@@ -149,9 +149,11 @@ def graph(uri):
 ## data
 ### below specific to fah-alchemy
 
-@fixture(scope='module')
+
+@fixture(scope="module")
 def n4js(graph):
     return Neo4jStore(graph)
+
 
 @fixture
 def n4js_fresh(graph):
@@ -166,6 +168,7 @@ def n4js_fresh(graph):
 # test alchemical networks
 
 # TODO: add in atom mapping once `gufe`#35 is settled
+
 
 @fixture(scope="session")
 def network_tyk2():

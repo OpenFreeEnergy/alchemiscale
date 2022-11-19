@@ -30,17 +30,20 @@ def set_env_vars(env):
         os.environ.update(old_env)
 
 
-@pytest.mark.parametrize('cli_vars', [
-    {},  # no cli options; all from env
-    {
-        "NEO4J_URL": "https://foo",
-        "NEO4J_USER": "me",
-        "NEO4J_PASS": "correct-horse-battery-staple",
-    },  # all CLI options given (test without env vars)
-    {
-        "NEO4J_URL": "https://baz",
-    },  # some CLI options given (test that we override)
-])
+@pytest.mark.parametrize(
+    "cli_vars",
+    [
+        {},  # no cli options; all from env
+        {
+            "NEO4J_URL": "https://foo",
+            "NEO4J_USER": "me",
+            "NEO4J_PASS": "correct-horse-battery-staple",
+        },  # all CLI options given (test without env vars)
+        {
+            "NEO4J_URL": "https://baz",
+        },  # some CLI options given (test that we override)
+    ],
+)
 def test_get_settings_from_options(cli_vars):
     env_vars = {
         "NEO4J_URL": "https://bar",
@@ -53,8 +56,7 @@ def test_get_settings_from_options(cli_vars):
     expected = env_vars | cli_vars
     expected["NEO4J_DBNAME"] = "neo4j"  # leave as default
 
-    kwargs = {k: cli_vars[k] if k in cli_vars else None
-              for k in expected}
+    kwargs = {k: cli_vars[k] if k in cli_vars else None for k in expected}
     with set_env_vars(context_vars):
         settings = get_settings_from_options(kwargs, Neo4jStoreSettings)
         settings_dict = settings.dict()
@@ -66,7 +68,7 @@ def test_get_settings_from_options(cli_vars):
 def test_database_init(n4js):
     # ensure the database is empty
     n4js.graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
-    
+
     with pytest.raises(Neo4JStoreError):
         n4js.check()
 
@@ -79,7 +81,7 @@ def test_database_init(n4js):
     # run the CLI
     runner = CliRunner()
     with set_env_vars(env_vars):
-        result = runner.invoke(cli, ['database', 'init'])
+        result = runner.invoke(cli, ["database", "init"])
         assert click_success(result)
 
     assert n4js.check() is None
@@ -88,7 +90,7 @@ def test_database_init(n4js):
 def test_database_check(n4js_fresh, network_tyk2, scope_test):
     n4js = n4js_fresh
 
-    # set starting contents 
+    # set starting contents
     n4js.create_network(network_tyk2, scope_test)
 
     env_vars = {
@@ -100,23 +102,24 @@ def test_database_check(n4js_fresh, network_tyk2, scope_test):
     # run the CLI
     runner = CliRunner()
     with set_env_vars(env_vars):
-        result = runner.invoke(cli, ['database', 'check'])
+        result = runner.invoke(cli, ["database", "check"])
         assert click_success(result)
 
         n4js.reset()
 
-        result = runner.invoke(cli, ['database', 'check'])
+        result = runner.invoke(cli, ["database", "check"])
         assert not click_success(result)
 
         n4js.initialize()
 
-        result = runner.invoke(cli, ['database', 'check'])
+        result = runner.invoke(cli, ["database", "check"])
         assert click_success(result)
+
 
 def test_database_reset(n4js_fresh, network_tyk2, scope_test):
     n4js = n4js_fresh
 
-    # set starting contents 
+    # set starting contents
     n4js.create_network(network_tyk2, scope_test)
 
     env_vars = {
@@ -128,7 +131,7 @@ def test_database_reset(n4js_fresh, network_tyk2, scope_test):
     # run the CLI
     runner = CliRunner()
     with set_env_vars(env_vars):
-        result = runner.invoke(cli, ['database', 'reset'])
+        result = runner.invoke(cli, ["database", "reset"])
         assert click_success(result)
 
     assert n4js.graph.run("MATCH (n) WHERE NOT n:NOPE RETURN n").to_subgraph() is None

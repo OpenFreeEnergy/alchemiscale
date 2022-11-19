@@ -21,16 +21,9 @@ class FahAlchemyBaseClientError(Exception):
 
 
 class FahAlchemyBaseClient:
-    """Base class for FahAlchemy API clients.
+    """Base class for FahAlchemy API clients."""
 
-    """
-
-    def __init__(self, 
-                 api_url,
-                 identifier,
-                 key,
-                 max_retries=5
-        ):
+    def __init__(self, api_url, identifier, key, max_retries=5):
 
         self.api_url = api_url
         self.identifier = identifier
@@ -45,18 +38,18 @@ class FahAlchemyBaseClient:
 
     def _get_token(self):
 
-        data = {'username': self.identifier,
-                'password': self.key}
+        data = {"username": self.identifier, "password": self.key}
 
-        url = urljoin(self.api_url, '/token')
+        url = urljoin(self.api_url, "/token")
         resp = requests.post(url, data=data)
 
-        self._jwtoken = resp.json()['access_token']
-        self._headers = {"Authorization": f"Bearer {self._jwtoken}",
-                        "Content-type": "application/json"}
+        self._jwtoken = resp.json()["access_token"]
+        self._headers = {
+            "Authorization": f"Bearer {self._jwtoken}",
+            "Content-type": "application/json",
+        }
 
     def _use_token(f):
-
         @wraps(f)
         def _wrapper(self, *args, **kwargs):
             if self._jwtoken is None:
@@ -73,20 +66,23 @@ class FahAlchemyBaseClient:
                     retries += 1
 
         return _wrapper
-    
+
     @_use_token
     def _query_resource(self, resource, params):
 
         url = urljoin(self.api_url, resource)
-        resp = requests.get(url, 
-                            params=params,
-                            headers=self._headers)
+        resp = requests.get(url, params=params, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise FahAlchemyBaseClientError(f"Status Code {resp.status_code} : {resp.reason}")
+            raise FahAlchemyBaseClientError(
+                f"Status Code {resp.status_code} : {resp.reason}"
+            )
 
-        if params.get('return_gufe'):
-            return {ScopedKey.from_str(k): GufeTokenizable.from_dict(v) for k, v in resp.json().items()}
+        if params.get("return_gufe"):
+            return {
+                ScopedKey.from_str(k): GufeTokenizable.from_dict(v)
+                for k, v in resp.json().items()
+            }
         else:
             return [ScopedKey.from_str(i) for i in resp.json()]
 
@@ -94,12 +90,12 @@ class FahAlchemyBaseClient:
     def _get_resource(self, resource, params):
 
         url = urljoin(self.api_url, resource)
-        resp = requests.get(url, 
-                            params=params,
-                            headers=self._headers)
+        resp = requests.get(url, params=params, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise FahAlchemyBaseClientError(f"Status Code {resp.status_code} : {resp.reason}")
+            raise FahAlchemyBaseClientError(
+                f"Status Code {resp.status_code} : {resp.reason}"
+            )
 
         return GufeTokenizable.from_dict(resp.json())
 
@@ -108,12 +104,11 @@ class FahAlchemyBaseClient:
         url = urljoin(self.api_url, resource)
 
         jsondata = json.dumps(data)
-        resp = requests.post(
-                url, 
-                data=jsondata,
-                headers=self._headers)
+        resp = requests.post(url, data=jsondata, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise FahAlchemyBaseClientError(f"Status Code {resp.status_code} : {resp.reason}")
+            raise FahAlchemyBaseClientError(
+                f"Status Code {resp.status_code} : {resp.reason}"
+            )
 
         return resp.json()
