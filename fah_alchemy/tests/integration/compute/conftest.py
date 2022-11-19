@@ -9,7 +9,7 @@ from passlib.context import CryptContext
 
 from gufe import AlchemicalNetwork
 
-from fah_alchemy.settings import Settings, get_settings
+from fah_alchemy.settings import ComputeAPISettings, get_compute_api_settings
 from fah_alchemy.storage import Neo4jStore
 from fah_alchemy.compute import api, client
 from fah_alchemy.security.models import CredentialedComputeIdentity
@@ -24,12 +24,10 @@ def compute_identity():
 
 
 @pytest.fixture
-def n4js_clear(graph, network_tyk2, scope_test, compute_identity):
-    # clear graph contents; want a fresh state for database
-    graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
+def n4js_preloaded(n4js_fresh, network_tyk2, scope_test, compute_identity):
+    n4js = n4js_fresh
 
-    # set starting contents for all tests in this module
-    n4js = Neo4jStore(graph)
+    # set starting contents for many of the tests in this module
     sk1 = n4js.create_network(network_tyk2, scope_test)
 
     # create another alchemical network
@@ -47,14 +45,9 @@ def n4js_clear(graph, network_tyk2, scope_test, compute_identity):
     return n4js
 
 
-@pytest.fixture(scope='module')
-def n4js(graph, network_tyk2, scope_test):
-    return Neo4jStore(graph)
-
-
 def get_settings_override():
     # settings overrides for test suite
-    return Settings(
+    return ComputeAPISettings(
             NEO4J_USER='neo4j',
             NEO4J_PASS='password',
             NEO4J_URL="bolt://localhost:7687",
@@ -70,7 +63,7 @@ def compute_api(n4js):
         return n4js
 
     api.app.dependency_overrides[api.get_n4js] = get_n4js_override
-    api.app.dependency_overrides[api.get_settings] = get_settings_override
+    api.app.dependency_overrides[get_compute_api_settings] = get_settings_override
     return api.app
 
 

@@ -1,6 +1,7 @@
 import abc
 from contextlib import contextmanager
 import json
+from functools import lru_cache
 from time import sleep
 from typing import Dict, List, Optional, Union, Tuple
 import weakref
@@ -19,6 +20,19 @@ from ..strategies import Strategy
 from ..models import Scope, ScopedKey
 
 from ..security.models import CredentialedEntity
+from ..settings import Neo4jStoreSettings, get_neo4jstore_settings
+
+
+@lru_cache()
+def get_n4js(settings: Neo4jStoreSettings):
+    """Convenience function for getting a Neo4jStore directly from settings.
+
+    """
+    graph = Graph(settings.NEO4J_URL, 
+                  auth=(settings.NEO4J_USER,
+                        settings.NEO4J_PASS),
+              name=settings.NEO4J_DBNAME)
+    return Neo4jStore(graph)
 
 
 class Neo4JStoreError(Exception):
@@ -30,6 +44,17 @@ class FahAlchemyStateStore(abc.ABC):
 
 
 class Neo4jStore(FahAlchemyStateStore):
+
+    # uniqueness constraints applied to the database; key is node label,
+    # 'property' is the property on which uniqueness is guaranteed for nodes
+    # with that label
+    constraints = {"GufeTokenizable": {'name': 'scoped_key',
+                                       'property': '_scoped_key'},
+                   "CredentialedUserIdentity": {'name': 'user_identifier',
+                                                'property': 'identifier'},
+                   "CredentialedComputeIdentity": {'name': 'compute_identifier',
+                                                   'property': 'identifier'},
+                   }
 
     def __init__(self, graph: "py2neo.Graph"):
         self.graph: Graph = graph
@@ -49,6 +74,62 @@ class Neo4jStore(FahAlchemyStateStore):
                 raise
         else:
             self.graph.commit(tx)
+
+    def initialize(self):
+        """Initialize database.
+
+        Ensures that constraints and any other required structures are in place.
+        Should be used on any Neo4j database prior to use for fah-alchemy.
+
+        """
+        for label, values in self.constraints.items():
+            self.graph.run(f"""
+                CREATE CONSTRAINT {values['name']} IF NOT EXISTS 
+                FOR (n:{label}) REQUIRE n.{values['property']} is unique
+            """)
+
+        # make sure we don't get objects with id 0 by creating at least one
+        # this is a compensating control for a bug in py2neo, where nodes with id 0 are not properly
+        # deduplicated by Subgraph set operations, which we currently rely on
+        # see this PR: https://github.com/py2neo-org/py2neo/pull/951
+        self.graph.run("MERGE (:NOPE)")
+
+    def check(self):
+        """Check consistency of database.
+
+        Will raise `Neo4JStoreError` if any state check fails.
+        If no check fails, will return without any exception.
+        
+        """
+        constraints = {rec['name']: rec for rec in self.graph.run('show constraints')}
+
+        if len(constraints) != len(self.constraints):
+            raise Neo4JStoreError(f"Number of constraints in database is {len(constraints)}; expected {len(self.constraints)}")
+
+        for label, values in self.constraints.items():
+            constraint = constraints[values['name']]
+            if not (constraint['labelsOrTypes'] == [label] and
+                    constraint['properties'] == [values['property']]):
+                raise Neo4JStoreError(f"Constraint {constraint['name']} does not have expected form")
+
+        nope = self.graph.run("MATCH (n:NOPE) RETURN n").to_subgraph()
+        if nope.identity != 0:
+            raise Neo4JStoreError("Identity of NOPE node is not exactly 0")
+
+    def reset(self):
+        """Remove all data from database; undo all components in `initialize`.
+
+        """
+        # we'll keep NOPE around to avoid a case where Neo4j doesn't give it id 0
+        # after a series of wipes; appears to happen often enough in tests
+        # can remove this once py2neo#951 merged
+        #self.graph.run("MATCH (n) DETACH DELETE n")
+        self.graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
+
+        for label, values in self.constraints.items():
+            self.graph.run(f"""
+                DROP CONSTRAINT {values['name']} IF EXISTS 
+            """)
 
     ## gufe object handling
 
