@@ -1,4 +1,4 @@
-"""fah-alchemy client for interacting with API server.
+"""Client for interacting with user-facing API.
 
 """
 

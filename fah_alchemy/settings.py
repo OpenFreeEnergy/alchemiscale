@@ -20,7 +20,7 @@ class Neo4jStoreSettings(FrozenSettings):
     NEO4J_PASS: str
 
 
-class JWTSettings(BaseSettings):
+class JWTSettings(FrozenSettings):
     """Automatically populates settings from environment variables where they
     match; case-insensitive.
 
@@ -28,9 +28,6 @@ class JWTSettings(BaseSettings):
     JWT_SECRET_KEY: str
     JWT_EXPIRE_SECONDS: int = 1800
     JWT_ALGORITHM: str = 'HS256'
-
-    class Config:
-        frozen = True
 
 
 class APISettings(Neo4jStoreSettings, JWTSettings):
@@ -56,6 +53,11 @@ class ComputeAPISettings(Neo4jStoreSettings, JWTSettings):
 @lru_cache()
 def get_neo4jstore_settings():
     return Neo4jStoreSettings()
+
+
+@lru_cache()
+def get_jwt_settings():
+    return JWTSettings()
 
 
 @lru_cache()

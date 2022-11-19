@@ -9,11 +9,12 @@ from passlib.context import CryptContext
 
 from gufe import AlchemicalNetwork
 
-from fah_alchemy.settings import ComputeAPISettings, get_compute_api_settings
-from fah_alchemy.storage import Neo4jStore
+from fah_alchemy.settings import ComputeAPISettings, get_jwt_settings
+from fah_alchemy.storage import Neo4jStore, get_n4js
 from fah_alchemy.compute import api, client
-from fah_alchemy.security.models import CredentialedComputeIdentity
+from fah_alchemy.security.models import CredentialedComputeIdentity, TokenData
 from fah_alchemy.security.auth import hash_key, generate_secret_key
+from fah_alchemy.base.api import get_token_data_depends
 
 
 ## compute api
@@ -45,7 +46,7 @@ def n4js_preloaded(n4js_fresh, network_tyk2, scope_test, compute_identity):
     return n4js
 
 
-def get_settings_override():
+def get_compute_settings_override():
     # settings overrides for test suite
     return ComputeAPISettings(
             NEO4J_USER='neo4j',
@@ -56,14 +57,20 @@ def get_settings_override():
             JWT_SECRET_KEY='98d11ba9ca329a4e5a6626faeffc6a9b9fb04e2745cff030f7d6793751bb8245',
             )
 
+def get_token_data_depends_override():
+    token_data = TokenData(entity="carl",
+                           scopes="*-*-*")
+    return token_data
+
 @pytest.fixture(scope='module')
 def compute_api(n4js):
 
     def get_n4js_override():
         return n4js
 
-    api.app.dependency_overrides[api.get_n4js] = get_n4js_override
-    api.app.dependency_overrides[get_compute_api_settings] = get_settings_override
+    api.app.dependency_overrides[get_n4js] = get_n4js_override
+    api.app.dependency_overrides[get_jwt_settings] = get_compute_settings_override
+    api.app.dependency_overrides[get_token_data_depends] = get_compute_settings_override
     return api.app
 
 
@@ -86,7 +93,7 @@ def run_server(fastapi_app, settings):
 
 @pytest.fixture(scope='module')
 def uvicorn_server(compute_api):
-    settings = get_settings_override()
+    settings = get_compute_settings_override()
     proc = Process(target=run_server, args=(compute_api, settings), daemon=True)
     proc.start() 
 
@@ -112,7 +119,7 @@ def uvicorn_server(compute_api):
 def compute_client(uvicorn_server, compute_identity):
     
     return client.FahAlchemyComputeClient(
-            compute_api_url="http://127.0.0.1:8000/",
+            api_url="http://127.0.0.1:8000/",
             identifier=compute_identity['identifier'],
             key=compute_identity['key']
             )

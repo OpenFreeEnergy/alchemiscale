@@ -66,7 +66,7 @@ class SynchronousComputeService:
 
     def __init__(
             self,
-            compute_api_uri: str,
+            api_url: str,
             identifier: str,
             key: str,
             name: str,
@@ -84,14 +84,14 @@ class SynchronousComputeService:
             Maximum number of Tasks to claim at a time from a TaskQueue.
 
         """
-        self.compute_api_uri = compute_api_uri
+        self.api_url = api_url
         self.name = name
         self.sleep_interval = sleep_interval
         self.heartbeat_frequency = heartbeat_frequency
         self.limit = limit
 
         self.client = FahAlchemyComputeClient(
-                compute_api_uri,
+                api_url,
                 identifier,
                 key
                 )
@@ -231,7 +231,7 @@ class AsynchronousComputeService(SynchronousComputeService):
 
     def __init__(
             self,
-            compute_api_uri
+            api_url
         ):
         self.scheduler = sched.scheduler(time.monotonic, time.sleep)
         #self.loop = asyncio.get_event_loop()

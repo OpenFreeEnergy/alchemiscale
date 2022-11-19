@@ -13,7 +13,7 @@ class TestSynchronousComputeService:
     def service(self, n4js_preloaded, compute_client, tmpdir):
         with tmpdir.as_cwd():
             return SynchronousComputeService(
-                    compute_api_uri=compute_client.compute_api_url,
+                    api_url=compute_client.api_url,
                     identifier=compute_client.identifier,
                     key=compute_client.key,
                     name='test_compute_service',
