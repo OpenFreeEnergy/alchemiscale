@@ -28,12 +28,14 @@ def get_settings_from_options(kwargs, settings_cls):
     update = {k: v for k, v in kwargs.items() if v is not None}
     return settings_cls(**update)
 
+
 def api_starting_params(func):
     workers = click.option('--workers', type=int, help="number of workers",
                            default=1)
     host = click.option('--host', type=str, help="IP address of host")
     port = click.option('--port', type=int, help="port")
     return workers(host(port(func)))
+
 
 class ApiApplication(gunicorn.app.base.BaseApplication):
     def __init__(self, app, workers, bind):
@@ -48,10 +50,12 @@ class ApiApplication(gunicorn.app.base.BaseApplication):
     def load_config(self):
         self.cfg.set('workers', self.workers)
         self.cfg.set('bind', self.bind)
+        self.cfg.set('worker_class', "uvicorn.workers.UvicornWorker")
+
 
 def start_api(api_app, workers, host, port):
     gunicorn_app = ApiApplication(api_app, workers, bind=f"{host}:{port}")
-    # gunicorn_app.run()
+    gunicorn_app.run()
 
 
 
@@ -91,10 +95,13 @@ def compute():
     ...
 
 
-@compute.command(help="Start the compute API service.")
-def api():
+@compute.command(
+    help="Start the compute API service."
+)
+@api_starting_params
+def api(workers, host, port):
     from fah_alchemy.compute.api import app
-    start_api(app)
+    start_api(app, workers, host, port)
 
 
 @compute.command(help="Start the synchronous compute service.")

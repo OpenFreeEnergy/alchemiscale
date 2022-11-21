@@ -5,7 +5,13 @@ import contextlib
 import os
 import traceback
 
-from fah_alchemy.cli import get_settings_from_options, cli
+import requests
+from fastapi import FastAPI
+from gunicorn.arbiter import Arbiter
+
+from fah_alchemy.cli import (
+    get_settings_from_options, cli, ApiApplication
+)
 from fah_alchemy.settings import Neo4jStoreSettings
 from fah_alchemy.storage.statestore import Neo4JStoreError
 
@@ -30,20 +36,47 @@ def set_env_vars(env):
         os.environ.update(old_env)
 
 
-@pytest.mark.parametrize(
-    "cli_vars",
-    [
-        {},  # no cli options; all from env
-        {
-            "NEO4J_URL": "https://foo",
-            "NEO4J_USER": "me",
-            "NEO4J_PASS": "correct-horse-battery-staple",
-        },  # all CLI options given (test without env vars)
-        {
-            "NEO4J_URL": "https://baz",
-        },  # some CLI options given (test that we override)
-    ],
-)
+@pytest.fixture
+def gunicorn_arbiter():
+    # based on the FastAPI docs
+    app = FastAPI()
+    @app.get("/")
+    def read_root():
+        return {"Hello": "World"}
+
+    gunicorn_app = ApiApplication(app, workers=2, bind="127.0.0.1:50000")
+    arbiter = Arbiter(gunicorn_app)
+    try:
+        arbiter.start()
+        arbiter.manage_workers()
+        yield arbiter
+    finally:
+        arbiter.stop()
+
+
+
+def test_api_application(gunicorn_arbiter):
+    # this checks that the gunicorn BaseApplication subclass works correctly
+    # with a FastAPI app
+    arbiter = gunicorn_arbiter
+    assert len(arbiter.WORKERS) == 2
+    response = requests.get("http://127.0.0.1:50000/")
+    assert response.status_code == 200
+    assert response.json() == {"Hello": "World"}
+
+
+
+@pytest.mark.parametrize('cli_vars', [
+    {},  # no cli options; all from env
+    {
+        "NEO4J_URL": "https://foo",
+        "NEO4J_USER": "me",
+        "NEO4J_PASS": "correct-horse-battery-staple",
+    },  # all CLI options given (test without env vars)
+    {
+        "NEO4J_URL": "https://baz",
+    },  # some CLI options given (test that we override)
+])
 def test_get_settings_from_options(cli_vars):
     env_vars = {
         "NEO4J_URL": "https://bar",
