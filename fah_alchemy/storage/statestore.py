@@ -25,13 +25,12 @@ from ..settings import Neo4jStoreSettings, get_neo4jstore_settings
 
 @lru_cache()
 def get_n4js(settings: Neo4jStoreSettings):
-    """Convenience function for getting a Neo4jStore directly from settings.
-
-    """
-    graph = Graph(settings.NEO4J_URL, 
-                  auth=(settings.NEO4J_USER,
-                        settings.NEO4J_PASS),
-              name=settings.NEO4J_DBNAME)
+    """Convenience function for getting a Neo4jStore directly from settings."""
+    graph = Graph(
+        settings.NEO4J_URL,
+        auth=(settings.NEO4J_USER, settings.NEO4J_PASS),
+        name=settings.NEO4J_DBNAME,
+    )
     return Neo4jStore(graph)
 
 
@@ -48,13 +47,17 @@ class Neo4jStore(FahAlchemyStateStore):
     # uniqueness constraints applied to the database; key is node label,
     # 'property' is the property on which uniqueness is guaranteed for nodes
     # with that label
-    constraints = {"GufeTokenizable": {'name': 'scoped_key',
-                                       'property': '_scoped_key'},
-                   "CredentialedUserIdentity": {'name': 'user_identifier',
-                                                'property': 'identifier'},
-                   "CredentialedComputeIdentity": {'name': 'compute_identifier',
-                                                   'property': 'identifier'},
-                   }
+    constraints = {
+        "GufeTokenizable": {"name": "scoped_key", "property": "_scoped_key"},
+        "CredentialedUserIdentity": {
+            "name": "user_identifier",
+            "property": "identifier",
+        },
+        "CredentialedComputeIdentity": {
+            "name": "compute_identifier",
+            "property": "identifier",
+        },
+    }
 
     def __init__(self, graph: "py2neo.Graph"):
         self.graph: Graph = graph
@@ -62,9 +65,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
     @contextmanager
     def transaction(self, readonly=False, ignore_exceptions=False) -> Transaction:
-        """Context manager for a py2neo Transaction.
-
-        """
+        """Context manager for a py2neo Transaction."""
         tx = self.graph.begin(readonly=readonly)
         try:
             yield tx
@@ -83,10 +84,12 @@ class Neo4jStore(FahAlchemyStateStore):
 
         """
         for label, values in self.constraints.items():
-            self.graph.run(f"""
+            self.graph.run(
+                f"""
                 CREATE CONSTRAINT {values['name']} IF NOT EXISTS 
                 FOR (n:{label}) REQUIRE n.{values['property']} is unique
-            """)
+            """
+            )
 
         # make sure we don't get objects with id 0 by creating at least one
         # this is a compensating control for a bug in py2neo, where nodes with id 0 are not properly
@@ -99,46 +102,48 @@ class Neo4jStore(FahAlchemyStateStore):
 
         Will raise `Neo4JStoreError` if any state check fails.
         If no check fails, will return without any exception.
-        
+
         """
-        constraints = {rec['name']: rec for rec in self.graph.run('show constraints')}
+        constraints = {rec["name"]: rec for rec in self.graph.run("show constraints")}
 
         if len(constraints) != len(self.constraints):
-            raise Neo4JStoreError(f"Number of constraints in database is {len(constraints)}; expected {len(self.constraints)}")
+            raise Neo4JStoreError(
+                f"Number of constraints in database is {len(constraints)}; expected {len(self.constraints)}"
+            )
 
         for label, values in self.constraints.items():
-            constraint = constraints[values['name']]
-            if not (constraint['labelsOrTypes'] == [label] and
-                    constraint['properties'] == [values['property']]):
-                raise Neo4JStoreError(f"Constraint {constraint['name']} does not have expected form")
+            constraint = constraints[values["name"]]
+            if not (
+                constraint["labelsOrTypes"] == [label]
+                and constraint["properties"] == [values["property"]]
+            ):
+                raise Neo4JStoreError(
+                    f"Constraint {constraint['name']} does not have expected form"
+                )
 
         nope = self.graph.run("MATCH (n:NOPE) RETURN n").to_subgraph()
         if nope.identity != 0:
             raise Neo4JStoreError("Identity of NOPE node is not exactly 0")
 
     def reset(self):
-        """Remove all data from database; undo all components in `initialize`.
-
-        """
+        """Remove all data from database; undo all components in `initialize`."""
         # we'll keep NOPE around to avoid a case where Neo4j doesn't give it id 0
         # after a series of wipes; appears to happen often enough in tests
         # can remove this once py2neo#951 merged
-        #self.graph.run("MATCH (n) DETACH DELETE n")
+        # self.graph.run("MATCH (n) DETACH DELETE n")
         self.graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
 
         for label, values in self.constraints.items():
-            self.graph.run(f"""
+            self.graph.run(
+                f"""
                 DROP CONSTRAINT {values['name']} IF EXISTS 
-            """)
+            """
+            )
 
     ## gufe object handling
 
     def _gufe_to_subgraph(
-            self, 
-            sdct: Dict,
-            labels: List[str],
-            gufe_key: GufeKey,
-            scope: Scope
+        self, sdct: Dict, labels: List[str], gufe_key: GufeKey, scope: Scope
     ) -> Tuple[Subgraph, Node, str]:
         subgraph = Subgraph()
         node = Node(*labels)
@@ -147,7 +152,9 @@ class Neo4jStore(FahAlchemyStateStore):
         # apply decoding efficiently
         node["_json_props"] = []
         node["_gufe_key"] = str(gufe_key)
-        node.update({"_org": scope.org, "_campaign": scope.campaign, "_project": scope.project})
+        node.update(
+            {"_org": scope.org, "_campaign": scope.campaign, "_project": scope.project}
+        )
 
         scoped_key = ScopedKey(gufe_key=node["_gufe_key"], **scope.dict())
         node["_scoped_key"] = str(scoped_key)
@@ -164,7 +171,7 @@ class Neo4jStore(FahAlchemyStateStore):
                                 v.to_shallow_dict(),
                                 labels=["GufeTokenizable", v.__class__.__name__],
                                 gufe_key=v.key,
-                                scope=scope
+                                scope=scope,
                             )
                             self.gufe_nodes[
                                 (str(v.key), scope.org, scope.campaign, scope.project)
@@ -202,9 +209,11 @@ class Neo4jStore(FahAlchemyStateStore):
                                 x.to_shallow_dict(),
                                 labels=["GufeTokenizable", x.__class__.__name__],
                                 gufe_key=x.key,
-                                scope=scope
+                                scope=scope,
                             )
-                            self.gufe_nodes[(x.key, scope.org, scope.campaign, scope.project)] = node_
+                            self.gufe_nodes[
+                                (x.key, scope.org, scope.campaign, scope.project)
+                            ] = node_
                         subgraph = (
                             subgraph
                             | Relationship.type("DEPENDS_ON")(
@@ -239,9 +248,11 @@ class Neo4jStore(FahAlchemyStateStore):
                         value.to_shallow_dict(),
                         labels=["GufeTokenizable", value.__class__.__name__],
                         gufe_key=value.key,
-                        scope=scope
+                        scope=scope,
                     )
-                    self.gufe_nodes[(value.key, scope.org, scope.campaign, scope.project)] = node_
+                    self.gufe_nodes[
+                        (value.key, scope.org, scope.campaign, scope.project)
+                    ] = node_
                 subgraph = (
                     subgraph
                     | Relationship.type("DEPENDS_ON")(
@@ -262,9 +273,7 @@ class Neo4jStore(FahAlchemyStateStore):
         return subgraph, node, scoped_key
 
     def _subgraph_to_gufe(
-            self,
-            nodes: List[Node],
-            subgraph: Subgraph
+        self, nodes: List[Node], subgraph: Subgraph
     ) -> Dict[Node, GufeTokenizable]:
         """Get a Dict `GufeTokenizable` objects within the given subgraph.
 
@@ -383,15 +392,17 @@ class Neo4jStore(FahAlchemyStateStore):
 
         for record in self.graph.run(q):
             nodes.add(record["n"])
-            if return_subgraph and record['p'] is not None:
+            if return_subgraph and record["p"] is not None:
                 subgraph = subgraph | record["p"]
             else:
-                subgraph = record['n']
+                subgraph = record["n"]
 
         if len(nodes) == 0:
             raise KeyError("No such object in database")
         elif len(nodes) > 1:
-            raise Neo4JStoreError("More than one such object in database; this should not be possible")
+            raise Neo4JStoreError(
+                "More than one such object in database; this should not be possible"
+            )
 
         if return_subgraph:
             return list(nodes)[0], subgraph
@@ -407,7 +418,11 @@ class Neo4jStore(FahAlchemyStateStore):
         scope: Scope = Scope(),
         return_gufe=False,
     ):
-        properties = {"_org": scope.org, "_campaign": scope.campaign, "_project": scope.project}
+        properties = {
+            "_org": scope.org,
+            "_campaign": scope.campaign,
+            "_project": scope.project,
+        }
 
         for (k, v) in list(properties.items()):
             if v is None:
@@ -450,48 +465,41 @@ class Neo4jStore(FahAlchemyStateStore):
 
         for record in res:
             nodes.add(record["n"])
-            if return_gufe and record['p'] is not None:
+            if return_gufe and record["p"] is not None:
                 subgraph = subgraph | record["p"]
             else:
-                subgraph = record['n']
+                subgraph = record["n"]
 
         if return_gufe:
-            return {ScopedKey.from_str(k['_scoped_key']): v
-                    for k, v in self._subgraph_to_gufe(nodes, subgraph).items()}
+            return {
+                ScopedKey.from_str(k["_scoped_key"]): v
+                for k, v in self._subgraph_to_gufe(nodes, subgraph).items()
+            }
         else:
-            return [ScopedKey.from_str(i['_scoped_key']) for i in nodes]
+            return [ScopedKey.from_str(i["_scoped_key"]) for i in nodes]
 
-    def check_existence(self, scoped_key: Union[ScopedKey, str]):
+    def check_existence(self, scoped_key: ScopedKey):
         try:
-            self._get_node(scoped_key=str(scoped_key))
+            self._get_node(scoped_key=scoped_key)
         except KeyError:
             return False
 
         return True
 
-    def get_scoped_key(
-            self,
-            obj: GufeTokenizable,
-            scope: Scope
-    ):
+    def get_scoped_key(self, obj: GufeTokenizable, scope: Scope):
         qualname = obj.__class__.__qualname__
-        res = self._query(
-            qualname=qualname,
-            key=obj.key,
-            scope=scope
-        )
+        res = self._query(qualname=qualname, key=obj.key, scope=scope)
 
         if len(res) == 0:
             raise KeyError("No such object in database")
         elif len(res) > 1:
-            raise Neo4JStoreError("More than one such object in database; this should not be possible")
+            raise Neo4JStoreError(
+                "More than one such object in database; this should not be possible"
+            )
 
         return res[0]
-    
-    def get_gufe(
-        self,
-        scoped_key: ScopedKey
-    ):
+
+    def get_gufe(self, scoped_key: ScopedKey):
         node, subgraph = self._get_node(scoped_key=scoped_key, return_subgraph=True)
         return self._subgraph_to_gufe([node], subgraph)[node]
 
@@ -507,7 +515,7 @@ class Neo4jStore(FahAlchemyStateStore):
             ndict,
             labels=["GufeTokenizable", network.__class__.__name__],
             gufe_key=network.key,
-            scope=scope
+            scope=scope,
         )
         with self.transaction() as tx:
             tx.merge(g, "GufeTokenizable", "_scoped_key")
@@ -515,9 +523,9 @@ class Neo4jStore(FahAlchemyStateStore):
         return scoped_key
 
     def delete_network(
-            self,
-            network: ScopedKey,
-        ) -> ScopedKey:
+        self,
+        network: ScopedKey,
+    ) -> ScopedKey:
         """Delete the given `AlchemicalNetwork` from the database.
 
         This will not remove any `Transformation`s or `ChemicalSystem`s
@@ -548,42 +556,29 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         return network
 
-    def query_networks(
-        self, *, name=None, key=None, scope: Optional[Scope] = Scope() 
-    ):
+    def query_networks(self, *, name=None, key=None, scope: Optional[Scope] = Scope()):
         """Query for `AlchemicalNetwork`s matching given attributes."""
         additional = {"name": name}
         return self._query(
-            qualname="AlchemicalNetwork",
-            additional=additional,
-            key=key,
-            scope=scope
+            qualname="AlchemicalNetwork", additional=additional, key=key, scope=scope
         )
 
     def query_transformations(
-        self, *, name=None, key=None, scope: Scope = Scope(),
-        chemical_systems=None
+        self, *, name=None, key=None, scope: Scope = Scope(), chemical_systems=None
     ):
         """Query for `Transformation`s matching given attributes."""
         additional = {"name": name}
         return self._query(
-            qualname="Transformation",
-            additional=additional,
-            key=key,
-            scope=scope
+            qualname="Transformation", additional=additional, key=key, scope=scope
         )
 
     def query_chemicalsystems(
-        self, *, name=None, key=None, scope: Scope = Scope(),
-        transformations=None
+        self, *, name=None, key=None, scope: Scope = Scope(), transformations=None
     ):
         """Query for `ChemicalSystem`s matching given attributes."""
         additional = {"name": name}
         return self._query(
-            qualname="ChemicalSystem",
-            additional=additional,
-            key=key,
-            scope=scope
+            qualname="ChemicalSystem", additional=additional, key=key, scope=scope
         )
 
     def get_transformations_for_chemicalsystem(self):
@@ -598,21 +593,19 @@ class Neo4jStore(FahAlchemyStateStore):
     ## compute
 
     def set_strategy(
-            self,
-            strategy: Strategy,
-            network: ScopedKey,
-        ) -> ScopedKey: 
-        """Set the compute Strategy for the given AlchemicalNetwork.
-
-        """
+        self,
+        strategy: Strategy,
+        network: ScopedKey,
+    ) -> ScopedKey:
+        """Set the compute Strategy for the given AlchemicalNetwork."""
         ...
 
     ## task queues
 
     def create_taskqueue(
-            self,
-            network: ScopedKey,
-        ) -> ScopedKey:
+        self,
+        network: ScopedKey,
+    ) -> ScopedKey:
         """Create a TaskQueue for the given AlchemicalNetwork.
 
         An AlchemicalNetwork can have only one associated TaskQueue.
@@ -630,35 +623,30 @@ class Neo4jStore(FahAlchemyStateStore):
         # use a PERFORMS relationship
         taskqueue = TaskQueue(network=str(network))
         _, taskqueue_node, scoped_key = self._gufe_to_subgraph(
-                taskqueue.to_shallow_dict(),
-                labels=["GufeTokenizable", taskqueue.__class__.__name__],
-                gufe_key=taskqueue.key,
-                scope=scope
-                )
+            taskqueue.to_shallow_dict(),
+            labels=["GufeTokenizable", taskqueue.__class__.__name__],
+            gufe_key=taskqueue.key,
+            scope=scope,
+        )
 
         subgraph = Relationship.type("PERFORMS")(
-               taskqueue_node,
-               network_node,
-               _org=scope.org,
-               _campaign=scope.campaign,
-               _project=scope.project,
-               )
+            taskqueue_node,
+            network_node,
+            _org=scope.org,
+            _campaign=scope.campaign,
+            _project=scope.project,
+        )
 
         # create head and tail node, attach to TaskQueue node
         # head and tail connected via FOLLOWS relationship
         head = Node("TaskQueueHead")
         tail = Node("TaskQueueTail")
 
-        subgraph = subgraph | Relationship.type("TASKQUEUE_HEAD")(
-                taskqueue_node,
-                head)
-        subgraph = subgraph | Relationship.type("TASKQUEUE_TAIL")(
-                taskqueue_node,
-                tail)
+        subgraph = subgraph | Relationship.type("TASKQUEUE_HEAD")(taskqueue_node, head)
+        subgraph = subgraph | Relationship.type("TASKQUEUE_TAIL")(taskqueue_node, tail)
         subgraph = subgraph | Relationship.type("FOLLOWS")(
-                tail,
-                head,
-                taskqueue=str(scoped_key))
+            tail, head, taskqueue=str(scoped_key)
+        )
 
         # if the taskqueue already exists, this will rollback transaction
         # automatically
@@ -668,10 +656,8 @@ class Neo4jStore(FahAlchemyStateStore):
         return scoped_key
 
     def query_taskqueues(
-            self,
-            scope: Optional[Scope] = Scope(),
-            return_gufe: bool = False
-        ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskQueue]]:
+        self, scope: Optional[Scope] = Scope(), return_gufe: bool = False
+    ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskQueue]]:
         """Query for `TaskQueue`s matching the given criteria.
 
         Parameters
@@ -681,17 +667,11 @@ class Neo4jStore(FahAlchemyStateStore):
             instances as values. Otherwise, return a list of `ScopedKey`s.
 
         """
-        return self._query(
-                qualname="TaskQueue",
-                scope=scope,
-                return_gufe=return_gufe
-            )
+        return self._query(qualname="TaskQueue", scope=scope, return_gufe=return_gufe)
 
     def get_taskqueue(
-            self,
-            network: ScopedKey,
-            return_gufe: bool = False
-        ) -> Union[ScopedKey, TaskQueue]:
+        self, network: ScopedKey, return_gufe: bool = False
+    ) -> Union[ScopedKey, TaskQueue]:
         """Get the TaskQueue for the given AlchemicalNetwork.
 
         Parameters
@@ -702,20 +682,21 @@ class Neo4jStore(FahAlchemyStateStore):
 
         """
         node = self.graph.run(
-                f"""
+            f"""
                 match (n:TaskQueue {{network: "{network}"}})-[:PERFORMS]->(m:AlchemicalNetwork)
                 return n
-                """).to_subgraph()
+                """
+        ).to_subgraph()
 
         if return_gufe:
             return self._subgraph_to_gufe([node], node)[node]
         else:
-            return ScopedKey.from_str(node['_scoped_key'])
+            return ScopedKey.from_str(node["_scoped_key"])
 
     def delete_taskqueue(
-            self,
-            network: ScopedKey,
-        ) -> ScopedKey:
+        self,
+        network: ScopedKey,
+    ) -> ScopedKey:
         """Create a TaskQueue for the given AlchemicalNetwork.
 
         An AlchemicalNetwork can have only one associated TaskQueue.
@@ -739,11 +720,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return taskqueue
 
-    def set_taskqueue_weight(
-            self,
-            network: ScopedKey,
-            weight: float
-        ):
+    def set_taskqueue_weight(self, network: ScopedKey, weight: float):
         q = f"""
         MATCH (t:TaskQueue {{network: "{network}"}})
         SET t.weight = {weight}
@@ -753,10 +730,10 @@ class Neo4jStore(FahAlchemyStateStore):
             tx.run(q)
 
     def queue_taskqueue_tasks(
-            self,
-            tasks: List[ScopedKey],
-            taskqueue: ScopedKey,
-        ) -> List[ScopedKey]:
+        self,
+        tasks: List[ScopedKey],
+        taskqueue: ScopedKey,
+    ) -> List[ScopedKey]:
         """Add Tasks to the TaskQueue for a given AlchemicalNetwork.
 
         Note: the Tasks must be within the same scope as the AlchemicalNetwork,
@@ -797,15 +774,17 @@ class Neo4jStore(FahAlchemyStateStore):
                 task = tx.run(q).to_subgraph()
 
             if task is None:
-                raise ValueError(f"Task '{t}' not found in same network as given TaskQueue")
+                raise ValueError(
+                    f"Task '{t}' not found in same network as given TaskQueue"
+                )
 
         return tasks
 
     def dequeue_taskqueue_tasks(
-            self,
-            tasks: List[ScopedKey],
-            taskqueue: ScopedKey,
-        ) -> List[ScopedKey]:
+        self,
+        tasks: List[ScopedKey],
+        taskqueue: ScopedKey,
+    ) -> List[ScopedKey]:
         """Remove a compute Task from the TaskQueue for a given AlchemicalNetwork.
 
         Note: the Task must be within the same scope as the AlchemicalNetwork.
@@ -836,13 +815,9 @@ class Neo4jStore(FahAlchemyStateStore):
         return tasks
 
     def get_taskqueue_tasks(
-            self,
-            taskqueue: ScopedKey,
-            return_gufe=False
-        ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
-        """Get a list of Tasks in the TaskQueue, in queued order.
-
-        """
+        self, taskqueue: ScopedKey, return_gufe=False
+    ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
+        """Get a list of Tasks in the TaskQueue, in queued order."""
         q = f"""
         // get list of all 'waiting' tasks in the queue
         MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue}'}})-->
@@ -855,21 +830,20 @@ class Neo4jStore(FahAlchemyStateStore):
         tasks = []
         subgraph = Subgraph()
         for record in res:
-            tasks.append(record['task'])
-            subgraph = subgraph | record['task']
+            tasks.append(record["task"])
+            subgraph = subgraph | record["task"]
 
         if return_gufe:
-            return {ScopedKey.from_str(k['_scoped_key']): v
-                    for k, v in self._subgraph_to_gufe(tasks, subgraph).items()}
+            return {
+                ScopedKey.from_str(k["_scoped_key"]): v
+                for k, v in self._subgraph_to_gufe(tasks, subgraph).items()
+            }
         else:
-            return [ScopedKey.from_str(t['_scoped_key']) for t in tasks]
+            return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
     def claim_taskqueue_tasks(
-            self,
-            taskqueue: ScopedKey,
-            claimant: str,
-            count: int = 1
-            ) -> List[ScopedKey]:
+        self, taskqueue: ScopedKey, claimant: str, count: int = 1
+    ) -> List[ScopedKey]:
         """Claim a TaskQueue Task.
 
         This method will claim Tasks from a TaskQueue according to the following scheme:
@@ -916,15 +890,18 @@ class Neo4jStore(FahAlchemyStateStore):
             for i in range(count):
                 tasks.append(tx.run(q).to_subgraph())
 
-        return [ScopedKey.from_str(t['_scoped_key']) if t is not None else None for t in tasks]
+        return [
+            ScopedKey.from_str(t["_scoped_key"]) if t is not None else None
+            for t in tasks
+        ]
 
     ## tasks
 
     def create_task(
-            self, 
-            transformation: ScopedKey,
-            extend_from: Optional[Task] = None,
-        ) -> ScopedKey:
+        self,
+        transformation: ScopedKey,
+        extend_from: Optional[Task] = None,
+    ) -> ScopedKey:
         """Add a compute Task to a Transformation.
 
         Note: this creates a compute Task, but does not add it to any TaskQueues.
@@ -932,7 +909,7 @@ class Neo4jStore(FahAlchemyStateStore):
         Parameters
         ----------
         transformation
-            The Transformation to compute. 
+            The Transformation to compute.
         scope
             The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
         extend_from
@@ -948,35 +925,35 @@ class Neo4jStore(FahAlchemyStateStore):
         # use a PERFORMS relationship
         task = Task()
         _, task_node, scoped_key = self._gufe_to_subgraph(
-                task.to_shallow_dict(),
-                labels=["GufeTokenizable", task.__class__.__name__],
-                gufe_key=task.key,
-                scope=scope
-                )
+            task.to_shallow_dict(),
+            labels=["GufeTokenizable", task.__class__.__name__],
+            gufe_key=task.key,
+            scope=scope,
+        )
 
         if extend_from:
             # check for existence of `ProtocolDAGResult` and set EXTENDS relationship
             ...
 
         subgraph = Relationship.type("PERFORMS")(
-               task_node,
-               transformation_node,
-               _org=scope.org,
-               _campaign=scope.campaign,
-               _project=scope.project,
-               )
+            task_node,
+            transformation_node,
+            _org=scope.org,
+            _campaign=scope.campaign,
+            _project=scope.project,
+        )
 
         with self.transaction() as tx:
             tx.create(subgraph)
-        
+
         return scoped_key
 
     def set_tasks(
-            self, 
-            transformation: ScopedKey,
-            extend_from: Optional[Task] = None,
-            count: int = 1,
-        ) -> ScopedKey:
+        self,
+        transformation: ScopedKey,
+        extend_from: Optional[Task] = None,
+        count: int = 1,
+    ) -> ScopedKey:
         """Set a fixed number of Tasks against the given Transformation if not
         already present.
 
@@ -999,14 +976,11 @@ class Neo4jStore(FahAlchemyStateStore):
         raise NotImplementedError
         # TODO: finish this one out when we have a reasonable approach to locking
         # too hard to perform in a single Cypher query; unclear how to create many nodes in a loop
-        transformation_node = self._get_node_from_obj_or_sk(transformation, Transformation, scope)
+        transformation_node = self._get_node_from_obj_or_sk(
+            transformation, Transformation, scope
+        )
 
-
-    def set_task_priority(
-            self,
-            task: ScopedKey,
-            priority: int
-        ):
+    def set_task_priority(self, task: ScopedKey, priority: int):
         q = f"""
         MATCH (t:Task {{_scoped_key: "{task}"}})
         SET t.priority = {priority}
@@ -1016,19 +990,19 @@ class Neo4jStore(FahAlchemyStateStore):
             tx.run(q)
 
     def query_tasks(
-            self,
-            scope: Optional[Scope] = None,
-            network: Optional[ScopedKey] = None,
-            transformation: Optional[ScopedKey] = None,
-            extend_from: Optional[ScopedKey] = None,
-            status: Optional[List[TaskStatusEnum]] = None
-        ):
+        self,
+        scope: Optional[Scope] = None,
+        network: Optional[ScopedKey] = None,
+        transformation: Optional[ScopedKey] = None,
+        extend_from: Optional[ScopedKey] = None,
+        status: Optional[List[TaskStatusEnum]] = None,
+    ):
         raise NotImplementedError
 
     def delete_task(
-            self, 
-            task: ScopedKey,
-        ) -> Task:
+        self,
+        task: ScopedKey,
+    ) -> Task:
         """Remove a compute Task from a Transformation.
 
         This will also remove the Task from all TaskQueues it is a part of.
@@ -1040,9 +1014,9 @@ class Neo4jStore(FahAlchemyStateStore):
         ...
 
     def get_task_transformation(
-            self,
-            task: ScopedKey,
-        ):
+        self,
+        task: ScopedKey,
+    ):
         """Get the `Transformation` and `ProtocolDAGResult` to extend from (if
         present) for the given `Task`.
 
@@ -1050,46 +1024,42 @@ class Neo4jStore(FahAlchemyStateStore):
         ...
 
     def set_task_waiting(
-            self,
-            task: Union[Task, ScopedKey],
-        ):
+        self,
+        task: Union[Task, ScopedKey],
+    ):
         ...
 
-    def set_task_running(
-            self,
-            task: Union[Task, ScopedKey],
-            computekey: ComputeKey
-        ):
+    def set_task_running(self, task: Union[Task, ScopedKey], computekey: ComputeKey):
         ...
 
     def set_task_complete(
-            self,
-            task: Union[Task, ScopedKey],
-        ):
+        self,
+        task: Union[Task, ScopedKey],
+    ):
         ...
 
     def set_task_error(
-            self,
-            task: Union[Task, ScopedKey],
-        ):
+        self,
+        task: Union[Task, ScopedKey],
+    ):
         ...
 
     def set_task_cancelled(
-            self,
-            task: Union[Task, ScopedKey],
-        ):
+        self,
+        task: Union[Task, ScopedKey],
+    ):
         ...
 
     def set_task_invalid(
-            self,
-            task: Union[Task, ScopedKey],
-        ):
+        self,
+        task: Union[Task, ScopedKey],
+    ):
         ...
 
     def set_task_deleted(
-            self,
-            task: Union[Task, ScopedKey],
-        ):
+        self,
+        task: Union[Task, ScopedKey],
+    ):
         ...
 
     ## admin
@@ -1101,12 +1071,12 @@ class Neo4jStore(FahAlchemyStateStore):
         then this will overwrite its properties, including credential.
 
         """
-        node = Node('CredentialedEntity', entity.__class__.__name__,
-                    **entity.dict())
+        node = Node("CredentialedEntity", entity.__class__.__name__, **entity.dict())
 
         with self.transaction() as tx:
-            tx.merge(node, primary_label=entity.__class__.__name__, primary_key='identifier')
-
+            tx.merge(
+                node, primary_label=entity.__class__.__name__, primary_key="identifier"
+            )
 
     def get_credentialed_entity(self, identifier: str, cls: type[CredentialedEntity]):
         """Create a new credentialed entity, such as a user or compute service.

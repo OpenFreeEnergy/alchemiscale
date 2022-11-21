@@ -8,7 +8,6 @@ from gufe.tokenization import GufeTokenizable
 class Strategy(GufeTokenizable):
     ...
 
-
     def _to_dict(self):
         ...
 

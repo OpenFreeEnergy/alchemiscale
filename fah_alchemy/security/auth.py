@@ -37,12 +37,12 @@ def hash_key(key):
 
 
 def create_access_token(
-        *,
-        data: dict, 
-        secret_key: str,
-        expires_seconds: Optional[int] = 900,
-        jwt_algorithm: Optional[str] = "HS256"
-        ) -> str:
+    *,
+    data: dict,
+    secret_key: str,
+    expires_seconds: Optional[int] = 900,
+    jwt_algorithm: Optional[str] = "HS256"
+) -> str:
 
     to_encode = data.copy()
 
@@ -54,11 +54,8 @@ def create_access_token(
 
 
 def get_token_data(
-        *,
-        token: str,
-        secret_key: str,
-        jwt_algorithm: Optional[str] = "HS256"
-        ) -> TokenData:
+    *, token: str, secret_key: str, jwt_algorithm: Optional[str] = "HS256"
+) -> TokenData:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -67,8 +64,7 @@ def get_token_data(
     try:
         payload = jwt.decode(token, secret_key, algorithms=[jwt_algorithm])
 
-        token_data = TokenData(entity=payload.get('sub'),
-                               scopes=payload.get('scopes'))
+        token_data = TokenData(entity=payload.get("sub"), scopes=payload.get("scopes"))
     except JWTError:
         raise credentials_exception
 

@@ -11,11 +11,11 @@ from gufe.protocols import (
     ProtocolDAGResult,
     ProtocolUnitResult,
     Context,
-    execute
+    execute,
 )
 
-class FAHOpenmmNonEquilibriumCyclingResult(ProtocolResult):
 
+class FAHOpenmmNonEquilibriumCyclingResult(ProtocolResult):
     def get_estimate(self):
         ...
 
@@ -34,7 +34,7 @@ class FAHOpenmmNonEquilibriumCyclingProtocol(Protocol):
     """
 
     _results_cls = FAHOpenmmNonEquilibriumCyclingResult
-    _supported_engines = ['openmm']
+    _supported_engines = ["openmm"]
 
     @classmethod
     def _default_settings(cls):
@@ -57,7 +57,8 @@ class FAHOpenmmNonEquilibriumCyclingProtocol(Protocol):
             stateB=stateB,
             mapping=mapping,
             start=extend_from,
-            some_dict={'a': 2, 'b': 12})
+            some_dict={"a": 2, "b": 12},
+        )
 
         # inputs to `ProtocolUnit.__init__` should either be `Gufe` objects
         # or JSON-serializable objects

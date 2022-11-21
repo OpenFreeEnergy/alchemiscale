@@ -1,1 +1,4 @@
-from .nonequilibrium_cycling import FAHOpenmmNonEquilibriumCyclingProtocol, FAHOpenmmNonEquilibriumCyclingResult
+from .nonequilibrium_cycling import (
+    FAHOpenmmNonEquilibriumCyclingProtocol,
+    FAHOpenmmNonEquilibriumCyclingResult,
+)

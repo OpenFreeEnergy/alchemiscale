@@ -6,93 +6,48 @@
 from typing import Any, Dict, List
 import os
 import json
-from datetime import timedelta
-from functools import lru_cache
 
-from starlette.responses import JSONResponse
-from fastapi import FastAPI, Body, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from py2neo import Graph
-from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
+from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
 
-from ..settings import ComputeAPISettings, get_compute_api_settings
+from ..base.api import (
+    PermissiveJSONResponse,
+    scope_params,
+    get_token_data_depends,
+    base_router,
+)
+from ..settings import ComputeAPISettings, get_compute_api_settings, get_jwt_settings
 from ..storage.statestore import Neo4jStore, get_n4js
 from ..models import Scope, ScopedKey
-from ..security.auth import authenticate, create_access_token, get_token_data, oauth2_scheme
+from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedComputeIdentity
-
-
-class PermissiveJSONResponse(JSONResponse):
-    media_type = "application/json"
-
-    def render(self, content: Any) -> bytes:
-        return json.dumps(
-            content,
-            ensure_ascii=False,
-            allow_nan=True,
-            indent=None,
-            separators=(",", ":"),
-        ).encode("utf-8")
 
 
 # TODO:
 # - add periodic removal of task claims from compute services that are no longer alive
 #   - can be done with an asyncio.sleeping task added to event loop: https://stackoverflow.com/questions/67154839/fastapi-best-way-to-run-continuous-get-requests-in-the-background
-# - on startup, 
+# - on startup,
 
-app = FastAPI(
-        title="FahAlchemyComputeAPI"
-        )
+app = FastAPI(title="FahAlchemyComputeAPI")
+app.dependency_overrides[get_jwt_settings] = get_compute_api_settings
+app.include_router(base_router)
 
-def scope_params(org: str = None, campaign: str = None, project: str = None):
-    return Scope(org=org, campaign=campaign, project=project)
-
-
-async def get_token_data_depends(
-        token: str = Depends(oauth2_scheme),
-        settings: ComputeAPISettings = Depends(get_compute_api_settings),
-        ) -> TokenData:
-    return get_token_data(
-            secret_key=settings.JWT_SECRET_KEY,
-            token=token,
-            jwt_algorithm=settings.JWT_ALGORITHM)
+router = APIRouter(
+    dependencies=[Depends(get_token_data_depends)],
+)
 
 
-@app.post("/token", response_model=Token)
-async def get_access_token(form_data: OAuth2PasswordRequestForm = Depends(),
-                           settings: ComputeAPISettings = Depends(get_compute_api_settings),
-                           n4js: Neo4jStore = Depends(get_n4js)):
-
-    entity = authenticate(n4js, CredentialedComputeIdentity, form_data.username, form_data.password)
-
-    if entity is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect identity or key",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    access_token = create_access_token(
-        data={"sub": entity.identifier,
-              "scopes": entity.scopes}, 
-        secret_key=settings.JWT_SECRET_KEY,
-        expires_seconds=settings.JWT_EXPIRE_SECONDS,
-        jwt_algorithm=settings.JWT_ALGORITHM
-    )
-
-    return {"access_token": access_token, "token_type": "bearer"}
-
-
-@app.get("/info")
+@router.get("/info")
 async def info():
     return {"message": "nothing yet"}
 
 
-@app.get("/taskqueues")
-async def query_taskqueues(*, 
-                           return_gufe: bool = False,
-                           scope: Scope = Depends(scope_params), 
-                           n4js: Neo4jStore = Depends(get_n4js)):
+@router.get("/taskqueues")
+async def query_taskqueues(
+    *,
+    return_gufe: bool = False,
+    scope: Scope = Depends(scope_params),
+    n4js: Neo4jStore = Depends(get_n4js),
+):
     taskqueues = n4js.query_taskqueues(scope=scope, return_gufe=return_gufe)
 
     if return_gufe:
@@ -101,33 +56,36 @@ async def query_taskqueues(*,
         return [str(sk) for sk in taskqueues]
 
 
-#@app.get("/taskqueues/{scoped_key}")
-#async def get_taskqueue(scoped_key: str, 
+# @app.get("/taskqueues/{scoped_key}")
+# async def get_taskqueue(scoped_key: str,
 #                        *,
 #                        n4js: Neo4jStore = Depends(get_n4js)):
-#    return 
+#    return
 
 
-@app.get("/taskqueues/{taskqueue}/tasks")
+@router.get("/taskqueues/{taskqueue}/tasks")
 async def get_taskqueue_tasks():
     return {"message": "nothing yet"}
 
 
-@app.post("/taskqueues/{taskqueue}/claim")
-async def claim_taskqueue_tasks(taskqueue,
-                                *,
-                                claimant: str = Body(),
-                                count: int = Body(),
-                                n4js: Neo4jStore = Depends(get_n4js),
-                                tokendata: TokenData = Depends(get_token_data_depends)
-                                ):
-    tasks = n4js.claim_taskqueue_tasks(taskqueue=taskqueue,
-                                       claimant=claimant,
-                                       count=count)
+@router.post("/taskqueues/{taskqueue}/claim")
+async def claim_taskqueue_tasks(
+    taskqueue,
+    *,
+    claimant: str = Body(),
+    count: int = Body(),
+    n4js: Neo4jStore = Depends(get_n4js),
+):
+    tasks = n4js.claim_taskqueue_tasks(
+        taskqueue=taskqueue, claimant=claimant, count=count
+    )
 
     return [str(t) if t is not None else None for t in tasks]
 
 
-@app.get("/chemicalsystems")
+@router.get("/chemicalsystems")
 async def chemicalsystems():
     return {"message": "nothing yet"}
+
+
+app.include_router(router)
