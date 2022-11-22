@@ -18,8 +18,8 @@ class TestComputeClient:
         compute_client_wrong_credential: client.FahAlchemyComputeClient,
         uvicorn_server,
     ):
-        with pytest.raises(client.FahAlchemyBaseClientError):
-            taskqueues = compute_client_wrong_credential.query_taskqueues(scope_test)
+        with pytest.raises(client.FahAlchemyComputeClientError):
+            compute_client_wrong_credential.get_info()
 
     def test_refresh_credential(
         self,

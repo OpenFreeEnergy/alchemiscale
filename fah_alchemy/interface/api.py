@@ -39,12 +39,18 @@ router = APIRouter(
 )
 
 
-@app.get("/info")
+
+@app.get("/ping")
+async def ping():
+    return {"api": "FahAlchemyAPI"}
+
+
+@router.get("/info")
 async def info():
     return {"message": "nothing yet"}
 
 
-@app.get("/networks", response_class=PermissiveJSONResponse)
+@router.get("/networks", response_class=PermissiveJSONResponse)
 async def query_networks(
     *,
     name: str = None,
@@ -61,7 +67,7 @@ async def query_networks(
         return [str(sk) for sk in networks]
 
 
-@app.get("/networks/{scoped_key}", response_class=PermissiveJSONResponse)
+@router.get("/networks/{scoped_key}", response_class=PermissiveJSONResponse)
 def get_network(
     scoped_key: str,
     n4js: Neo4jStore = Depends(get_n4js),
@@ -70,7 +76,7 @@ def get_network(
     return network.to_dict()
 
 
-@app.post("/networks", response_model=ScopedKey)
+@router.post("/networks", response_model=ScopedKey)
 def create_network(
     *,
     network: Dict = Body(...),
@@ -81,12 +87,12 @@ def create_network(
     return n4js.create_network(network=an, scope=scope)
 
 
-@app.get("/transformations")
+@router.get("/transformations")
 async def transformations():
     return {"message": "nothing yet"}
 
 
-@app.get("/chemicalsystems")
+@router.get("/chemicalsystems")
 async def chemicalsystems():
     return {"message": "nothing yet"}
 
@@ -94,6 +100,9 @@ async def chemicalsystems():
 ### compute
 
 
-@app.put("networks/{scoped_key}/strategy")
+@router.put("networks/{scoped_key}/strategy")
 def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
     ...
+
+
+app.include_router(router)

@@ -1,14 +1,9 @@
 import pytest
 import json
 
-from gufe.tokenization import GufeTokenizable
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 
 from fah_alchemy.models import ScopedKey
-from fah_alchemy.interface import client
-
-
-# api tests
 
 
 class TestAPI:
@@ -44,15 +39,3 @@ class TestAPI:
         assert n4js.check_existence(sk)
 
 
-# client tests
-
-
-class TestClient:
-    def test_create_network(
-        self,
-        scope_test,
-        n4js_preloaded,
-        user_client: client.FahAlchemyClient,
-        uvicorn_server,
-    ):
-        ...

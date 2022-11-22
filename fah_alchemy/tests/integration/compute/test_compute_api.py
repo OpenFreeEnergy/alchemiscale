@@ -6,9 +6,6 @@ from fah_alchemy.models import ScopedKey
 from fah_alchemy.compute import client
 
 
-# api tests
-
-
 class TestComputeAPI:
     def test_info(self, test_client):
 

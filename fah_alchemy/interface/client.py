@@ -18,6 +18,8 @@ class FahAlchemyClientError(FahAlchemyBaseClientError):
 class FahAlchemyClient(FahAlchemyBaseClient):
     """Client for user interaction with API service."""
 
+    _exception = FahAlchemyClientError
+
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Submit an AlchemicalNetwork along with a compute Strategy."""
         ...

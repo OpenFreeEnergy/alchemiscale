@@ -122,3 +122,6 @@ class FahAlchemyBaseClient:
             )
 
         return resp.json()
+
+    def get_info(self):
+        return self._get_resource('/info', params={}, return_gufe=False)
