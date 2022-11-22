@@ -24,6 +24,9 @@ class FahAlchemyComputeClientError(FahAlchemyBaseClientError):
 class FahAlchemyComputeClient(FahAlchemyBaseClient):
     """Client for compute service interaction with compute API service."""
 
+    def get_info(self):
+        return self._get_resource('/info', params={}, return_gufe=False)
+
     def query_taskqueues(
         self, scope: Scope, return_gufe=False, limit=None, skip=None
     ) -> List[TaskQueue]:

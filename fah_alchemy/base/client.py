@@ -23,6 +23,8 @@ class FahAlchemyBaseClientError(Exception):
 class FahAlchemyBaseClient:
     """Base class for FahAlchemy API clients."""
 
+    _exception = FahAlchemyBaseClientError
+
     def __init__(self, api_url, identifier, key, max_retries=5):
 
         self.api_url = api_url
@@ -43,6 +45,11 @@ class FahAlchemyBaseClient:
         url = urljoin(self.api_url, "/token")
         resp = requests.post(url, data=data)
 
+        if not 200 <= resp.status_code < 300:
+            raise self._exception(
+                f"Status Code {resp.status_code} : {resp.reason}"
+            )
+
         self._jwtoken = resp.json()["access_token"]
         self._headers = {
             "Authorization": f"Bearer {self._jwtoken}",
@@ -59,7 +66,7 @@ class FahAlchemyBaseClient:
             while True:
                 try:
                     return f(self, *args, **kwargs)
-                except FahAlchemyBaseClientError:
+                except self._exception:
                     self._get_token()
                     if retries >= self.max_retries:
                         raise
@@ -74,7 +81,7 @@ class FahAlchemyBaseClient:
         resp = requests.get(url, params=params, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise FahAlchemyBaseClientError(
+            raise self._exception(
                 f"Status Code {resp.status_code} : {resp.reason}"
             )
 
@@ -87,17 +94,20 @@ class FahAlchemyBaseClient:
             return [ScopedKey.from_str(i) for i in resp.json()]
 
     @_use_token
-    def _get_resource(self, resource, params):
+    def _get_resource(self, resource, params, return_gufe=True):
 
         url = urljoin(self.api_url, resource)
         resp = requests.get(url, params=params, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise FahAlchemyBaseClientError(
+            raise self._exception(
                 f"Status Code {resp.status_code} : {resp.reason}"
             )
 
-        return GufeTokenizable.from_dict(resp.json())
+        if return_gufe:
+            return GufeTokenizable.from_dict(resp.json())
+        else:
+            return resp.json()
 
     @_use_token
     def _post_resource(self, resource, data):
@@ -107,7 +117,7 @@ class FahAlchemyBaseClient:
         resp = requests.post(url, data=jsondata, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise FahAlchemyBaseClientError(
+            raise self._exception(
                 f"Status Code {resp.status_code} : {resp.reason}"
             )
 

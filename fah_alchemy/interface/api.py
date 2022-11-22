@@ -15,17 +15,24 @@ from ..base.api import (
     scope_params,
     get_token_data_depends,
     base_router,
+    get_cred_entity
 )
 from ..settings import ComputeAPISettings, get_api_settings, get_jwt_settings
 from ..storage.statestore import Neo4jStore, get_n4js
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
-from ..security.models import Token, TokenData, CredentialedComputeIdentity
+from ..security.models import Token, TokenData, CredentialedUserIdentity
 
 
 app = FastAPI(title="FahAlchemyAPI")
 app.dependency_overrides[get_jwt_settings] = get_api_settings
 app.include_router(base_router)
+
+
+def get_cred_user():
+    return CredentialedUserIdentity
+
+app.dependency_overrides[get_cred_entity] = get_cred_user
 
 router = APIRouter(
     dependencies=[Depends(get_token_data_depends)],

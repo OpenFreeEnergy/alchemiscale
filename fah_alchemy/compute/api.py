@@ -14,6 +14,7 @@ from ..base.api import (
     scope_params,
     get_token_data_depends,
     base_router,
+    get_cred_entity
 )
 from ..settings import ComputeAPISettings, get_compute_api_settings, get_jwt_settings
 from ..storage.statestore import Neo4jStore, get_n4js
@@ -31,9 +32,20 @@ app = FastAPI(title="FahAlchemyComputeAPI")
 app.dependency_overrides[get_jwt_settings] = get_compute_api_settings
 app.include_router(base_router)
 
+
+def get_cred_compute():
+    return CredentialedComputeIdentity
+
+app.dependency_overrides[get_cred_entity] = get_cred_compute
+
+
 router = APIRouter(
     dependencies=[Depends(get_token_data_depends)],
 )
+
+@app.get("/ping")
+async def ping():
+    return {"api": "FahAlchemyComputeAPI"}
 
 
 @router.get("/info")

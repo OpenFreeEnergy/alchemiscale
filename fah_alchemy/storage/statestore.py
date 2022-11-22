@@ -1062,7 +1062,7 @@ class Neo4jStore(FahAlchemyStateStore):
     ):
         ...
 
-    ## admin
+    ## authentication
 
     def create_credentialed_entity(self, entity: CredentialedEntity):
         """Create a new credentialed entity, such as a user or compute service.
@@ -1093,4 +1093,15 @@ class Neo4jStore(FahAlchemyStateStore):
         with self.transaction() as tx:
             res = tx.run(q)
 
-        return cls(**dict(res.to_subgraph()))
+        nodes = set()
+        for record in res:
+            nodes.add(record['n'])
+
+        if len(nodes) == 0:
+            raise KeyError("No such object in database")
+        elif len(nodes) > 1:
+            raise Neo4JStoreError(
+                "More than one such object in database; this should not be possible"
+            )
+
+        return cls(**dict(list(nodes)[0]))

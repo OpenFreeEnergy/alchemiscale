@@ -10,6 +10,8 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY
 from fah_alchemy.storage import Neo4jStore
 from fah_alchemy.storage.models import Task, TaskQueue
 from fah_alchemy.models import Scope, ScopedKey
+from fah_alchemy.security.models import CredentialedUserIdentity, CredentialedComputeIdentity
+from fah_alchemy.security.auth import hash_key
 
 
 class TestStateStore:
@@ -329,3 +331,41 @@ class TestNeo4jStore(TestStateStore):
             taskqueue_sk, "last task handler", count=2
         )
         assert claimed6 == [None] * 2
+
+    ### authentication
+
+    def test_create_credentialed_entity(self, n4js: Neo4jStore):
+
+        user = CredentialedUserIdentity(
+            identifier='bill',
+            hashed_key=hash_key("and ted"),
+            )
+
+        n4js.create_credentialed_entity(user)
+
+        n = n4js.graph.run(
+            f"""
+            match (n:CredentialedUserIdentity {{identifier: '{user.identifier}'}})
+            return n
+            """).to_subgraph()
+
+        assert n['identifier'] == user.identifier
+        assert n['hashed_key'] == user.hashed_key
+
+    def test_get_credentialed_entity(self, n4js: Neo4jStore):
+
+        user = CredentialedUserIdentity(
+            identifier='bill',
+            hashed_key=hash_key("and ted"),
+            )
+
+        n4js.create_credentialed_entity(user)
+
+        # get the user back
+        user_g = n4js.get_credentialed_entity(user.identifier, CredentialedUserIdentity)
+
+        assert user_g == user
+
+        # try to get a compute identity instead
+        with pytest.raises(KeyError):
+            n4js.get_credentialed_entity(user.identifier, CredentialedComputeIdentity)
