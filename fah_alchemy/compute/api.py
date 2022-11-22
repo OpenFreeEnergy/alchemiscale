@@ -8,6 +8,7 @@ import os
 import json
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
+from gufe.tokenization import GufeTokenizable
 
 from ..base.api import (
     PermissiveJSONResponse,
@@ -93,6 +94,29 @@ async def claim_taskqueue_tasks(
     )
 
     return [str(t) if t is not None else None for t in tasks]
+
+
+@router.get("/tasks/{task}/transformation", response_class=PermissiveJSONResponse)
+async def get_task_transformation(
+    task,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js),
+):
+    transformation, protocoldagresult = n4js.get_task_transformation(task=task)
+
+    return (transformation.to_dict(),
+            protocoldagresult.to_dict() if protocoldagresult is not None else None)
+
+
+@router.post("/tasks/{task}/result", response_model=ScopedKey)
+def set_task_result(
+    task,
+    *,
+    protocoldagresult: Dict = Body(...),
+    n4js: Neo4jStore = Depends(get_n4js),
+):
+    pdr = GufeTokenizable.from_dict(protocoldagresult)
+    return n4js.set_task_result(task-task, protocoldagresult=pdr)
 
 
 @router.get("/chemicalsystems")

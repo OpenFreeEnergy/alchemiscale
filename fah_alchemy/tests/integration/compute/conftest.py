@@ -1,4 +1,5 @@
 from copy import copy
+from collections import defaultdict
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,7 +26,7 @@ def compute_identity():
 
 @pytest.fixture
 def n4js_preloaded(n4js_fresh, network_tyk2, scope_test, compute_identity):
-    n4js = n4js_fresh
+    n4js: Neo4jStore = n4js_fresh
 
     # set starting contents for many of the tests in this module
     sk1 = n4js.create_network(network_tyk2, scope_test)
@@ -35,15 +36,34 @@ def n4js_preloaded(n4js_fresh, network_tyk2, scope_test, compute_identity):
     sk2 = n4js.create_network(an2, scope_test)
 
     # add a taskqueue for each network
-    n4js.create_taskqueue(sk1)
-    n4js.create_taskqueue(sk2)
+    tq_sk1 = n4js.create_taskqueue(sk1)
+    tq_sk2 = n4js.create_taskqueue(sk2)
 
+    # create a compute credential
     n4js.create_credentialed_entity(
         CredentialedComputeIdentity(
             identifier=compute_identity["identifier"],
             hashed_key=hash_key(compute_identity["key"]),
         )
     )
+
+    # spawn tasks for a select set of transformations
+    transformations = list(an2.edges)[0:3]
+    task_sks = defaultdict(list)
+    for transformation in transformations:
+        trans_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        extend_from = None
+        for i in range(3):
+            extend_from = n4js.create_task(trans_sk, extend_from=extend_from)
+            task_sks[transformation].append(extend_from)
+
+    # add tasks to both task queues
+    n4js.queue_taskqueue_tasks([task_sks[transformation][0] for transformation in transformations],
+                               tq_sk1)
+
+    n4js.queue_taskqueue_tasks([task_sks[transformation][0] for transformation in transformations[::-1]],
+                                tq_sk2)
 
     return n4js
 

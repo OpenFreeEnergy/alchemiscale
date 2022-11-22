@@ -67,12 +67,13 @@ async def query_networks(
         return [str(sk) for sk in networks]
 
 
-@router.get("/networks/{scoped_key}", response_class=PermissiveJSONResponse)
+@router.get("/networks/{network}", response_class=PermissiveJSONResponse)
 def get_network(
-    scoped_key: str,
+    network,
+    *, 
     n4js: Neo4jStore = Depends(get_n4js),
 ):
-    network = n4js.get_network(scoped_key=scoped_key)
+    network = n4js.get_gufe(scoped_key=network)
     return network.to_dict()
 
 

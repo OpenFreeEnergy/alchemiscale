@@ -2,6 +2,7 @@
 
 """
 
+from typing import Union
 import requests
 
 from gufe import AlchemicalNetwork
@@ -30,8 +31,14 @@ class FahAlchemyClient(FahAlchemyBaseClient):
     def query_networks(self):
         ...
 
-    def get_network(self, scoped_key: str):
+    def get_network(self, network: Union[ScopedKey,str]):
         ...
+
+        network = self._get_resource(f"networks/{network}", 
+                                      {}, 
+                                      return_gufe=True)
+
+        return network
 
     def set_strategy(self, network: ScopedKey, strategy: Strategy):
         ...

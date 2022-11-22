@@ -12,7 +12,7 @@ from threading import Thread
 
 import requests
 
-from gufe.protocols.protocoldag import execute
+from gufe.protocols.protocoldag import execute, ProtocolDAG, ProtocolDAGResult
 
 from .client import FahAlchemyComputeClient
 from ..storage.models import Task, TaskQueue
@@ -104,7 +104,7 @@ class SynchronousComputeService:
         """Deliver a heartbeat to the compute API, indicating this service is still alive."""
         ...
 
-    def get_tasks(self, count=1) -> Union[Task, None]:
+    def get_tasks(self, count=1) -> List[Optional[ScopedKey]]:
         """Get a Task to execute from compute API.
 
         Returns `None` if no Task was available matching service configuration.
@@ -121,20 +121,49 @@ class SynchronousComputeService:
 
         # claim tasks from the taskqueue
         tasks = self.client.claim_taskqueue_tasks(
-            taskqueue, claimant=self.name, count=self.limit
+            taskqueue, claimant=self.name, count=count
         )
 
         return tasks
 
-    def task_to_protocoldag(self, task: ScopedKey):
+    def task_to_protocoldag(self, task: ScopedKey) -> ProtocolDAG:
         """Given a Task, produce a corresponding ProtocolDAG that can be executed."""
         ...
 
-    def push_results(self):
-        ...
+        transformation, protocoldag = self.client.get_task_transformation(task)
 
-    def execute(self):
-        ...
+        return transformation.protocol.create(
+                stateA=transformation.stateA,
+                stateB=transformation.stateB,
+                mapping=transformation.mapping,
+                extend_from=protocoldag,
+                name=str(task))
+
+    def push_result(self, 
+                     task: ScopedKey, 
+                     protocoldagresult: ProtocolDAGResult) -> ScopedKey:
+
+        # TODO: this method should postprocess any paths,
+        # leaf nodes in DAG for blob results that should go to object store
+
+        # TODO: add check that this protocoldagresult actually corresponds to
+        # the given task
+        return self.client.set_task_result(task, protocoldagresult)
+
+    def execute(self, task: ScopedKey) -> ScopedKey:
+        """Executes given Task.
+
+        Returns ScopedKey of ProtocolDAGResult following push to database.
+
+        """
+        # obtain a ProtocolDAG from the task
+        protocoldag = self.task_to_protocoldag(task)
+
+        # execute the task
+        protocoldagresult = execute(protocoldag, shared=self.shared)
+
+        # push the result (or failure) back to the compute API
+        return self.push_result(task, protocoldagresult)
 
     def start(self, task_limit: Optional[int] = None):
         """Start the service.
@@ -164,7 +193,7 @@ class SynchronousComputeService:
                 return
 
             # get a task from the compute API
-            tasks = self.get_tasks(self.limit)
+            tasks: List[ScopedKey] = self.get_tasks(self.limit)
 
             if all([task is None for task in tasks]):
                 time.sleep(self.sleep_interval)
@@ -174,14 +203,7 @@ class SynchronousComputeService:
                 if task is None:
                     continue
 
-                # obtain a ProtocolDAG from the task
-                protocoldag = self.task_to_protocoldag(task)
-
-                # execute the task
-                protocoldagresult = execute(protocoldag, self.shared_path)
-
-                # push the result (or failure) back to the compute API
-                self.push_results(task, protocoldagresult)
+                self.execute(task)
 
                 counter += 1
 
