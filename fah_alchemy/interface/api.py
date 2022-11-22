@@ -15,29 +15,42 @@ from ..base.api import (
     scope_params,
     get_token_data_depends,
     base_router,
+    get_cred_entity,
 )
 from ..settings import ComputeAPISettings, get_api_settings, get_jwt_settings
 from ..storage.statestore import Neo4jStore, get_n4js
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
-from ..security.models import Token, TokenData, CredentialedComputeIdentity
+from ..security.models import Token, TokenData, CredentialedUserIdentity
 
 
 app = FastAPI(title="FahAlchemyAPI")
 app.dependency_overrides[get_jwt_settings] = get_api_settings
 app.include_router(base_router)
 
+
+def get_cred_user():
+    return CredentialedUserIdentity
+
+
+app.dependency_overrides[get_cred_entity] = get_cred_user
+
 router = APIRouter(
     dependencies=[Depends(get_token_data_depends)],
 )
 
 
-@app.get("/info")
+@app.get("/ping")
+async def ping():
+    return {"api": "FahAlchemyAPI"}
+
+
+@router.get("/info")
 async def info():
     return {"message": "nothing yet"}
 
 
-@app.get("/networks", response_class=PermissiveJSONResponse)
+@router.get("/networks", response_class=PermissiveJSONResponse)
 async def query_networks(
     *,
     name: str = None,
@@ -54,16 +67,17 @@ async def query_networks(
         return [str(sk) for sk in networks]
 
 
-@app.get("/networks/{scoped_key}", response_class=PermissiveJSONResponse)
+@router.get("/networks/{network}", response_class=PermissiveJSONResponse)
 def get_network(
-    scoped_key: str,
+    network,
+    *,
     n4js: Neo4jStore = Depends(get_n4js),
 ):
-    network = n4js.get_network(scoped_key=scoped_key)
+    network = n4js.get_gufe(scoped_key=network)
     return network.to_dict()
 
 
-@app.post("/networks", response_model=ScopedKey)
+@router.post("/networks", response_model=ScopedKey)
 def create_network(
     *,
     network: Dict = Body(...),
@@ -74,12 +88,12 @@ def create_network(
     return n4js.create_network(network=an, scope=scope)
 
 
-@app.get("/transformations")
+@router.get("/transformations")
 async def transformations():
     return {"message": "nothing yet"}
 
 
-@app.get("/chemicalsystems")
+@router.get("/chemicalsystems")
 async def chemicalsystems():
     return {"message": "nothing yet"}
 
@@ -87,6 +101,9 @@ async def chemicalsystems():
 ### compute
 
 
-@app.put("networks/{scoped_key}/strategy")
+@router.put("networks/{scoped_key}/strategy")
 def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
     ...
+
+
+app.include_router(router)

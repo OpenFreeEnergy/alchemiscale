@@ -22,7 +22,7 @@ from ..security.auth import (
     get_token_data,
     oauth2_scheme,
 )
-from ..security.models import Token, TokenData, CredentialedComputeIdentity
+from ..security.models import Token, TokenData, CredentialedEntity
 
 
 class PermissiveJSONResponse(JSONResponse):
@@ -53,6 +53,10 @@ async def get_token_data_depends(
     )
 
 
+async def get_cred_entity():
+    return CredentialedEntity
+
+
 base_router = APIRouter()
 
 
@@ -61,11 +65,10 @@ async def get_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     settings: JWTSettings = Depends(get_jwt_settings),
     n4js: Neo4jStore = Depends(get_n4js),
+    cred_cls: CredentialedEntity = Depends(get_cred_entity),
 ):
 
-    entity = authenticate(
-        n4js, CredentialedComputeIdentity, form_data.username, form_data.password
-    )
+    entity = authenticate(n4js, cred_cls, form_data.username, form_data.password)
 
     if entity is None:
         raise HTTPException(

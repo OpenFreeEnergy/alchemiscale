@@ -6,9 +6,6 @@ from fah_alchemy.models import ScopedKey
 from fah_alchemy.compute import client
 
 
-# api tests
-
-
 class TestComputeAPI:
     def test_info(self, test_client):
 
@@ -33,34 +30,3 @@ class TestComputeAPI:
         }
         assert len(tq_dict) == 2
         assert all([i.weight == 0.5 for i in tq_dict.values()])
-
-
-# client tests
-
-
-class TestComputeClient:
-    def test_query_taskqueues(
-        self,
-        scope_test,
-        n4js_preloaded,
-        compute_client: client.FahAlchemyComputeClient,
-        uvicorn_server,
-    ):
-
-        taskqueues = compute_client.query_taskqueues(scope_test)
-
-        assert len(taskqueues) == 2
-
-        taskqueues = compute_client.query_taskqueues(scope_test, return_gufe=True)
-        assert all([tq.weight == 0.5 for tq in taskqueues.values()])
-
-    def test_claim_taskqueue_task(
-        self,
-        scope_test,
-        n4js_preloaded,
-        compute_client: client.FahAlchemyComputeClient,
-        uvicorn_server,
-    ):
-
-        ...
-        # task = compute_client.claim_taskqueue_task(scope_test)

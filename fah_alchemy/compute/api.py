@@ -8,12 +8,14 @@ import os
 import json
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
+from gufe.tokenization import GufeTokenizable
 
 from ..base.api import (
     PermissiveJSONResponse,
     scope_params,
     get_token_data_depends,
     base_router,
+    get_cred_entity,
 )
 from ..settings import ComputeAPISettings, get_compute_api_settings, get_jwt_settings
 from ..storage.statestore import Neo4jStore, get_n4js
@@ -31,9 +33,22 @@ app = FastAPI(title="FahAlchemyComputeAPI")
 app.dependency_overrides[get_jwt_settings] = get_compute_api_settings
 app.include_router(base_router)
 
+
+def get_cred_compute():
+    return CredentialedComputeIdentity
+
+
+app.dependency_overrides[get_cred_entity] = get_cred_compute
+
+
 router = APIRouter(
     dependencies=[Depends(get_token_data_depends)],
 )
+
+
+@app.get("/ping")
+async def ping():
+    return {"api": "FahAlchemyComputeAPI"}
 
 
 @router.get("/info")
@@ -81,6 +96,31 @@ async def claim_taskqueue_tasks(
     )
 
     return [str(t) if t is not None else None for t in tasks]
+
+
+@router.get("/tasks/{task}/transformation", response_class=PermissiveJSONResponse)
+async def get_task_transformation(
+    task,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js),
+):
+    transformation, protocoldagresult = n4js.get_task_transformation(task=task)
+
+    return (
+        transformation.to_dict(),
+        protocoldagresult.to_dict() if protocoldagresult is not None else None,
+    )
+
+
+@router.post("/tasks/{task}/result", response_model=ScopedKey)
+def set_task_result(
+    task,
+    *,
+    protocoldagresult: Dict = Body(...),
+    n4js: Neo4jStore = Depends(get_n4js),
+):
+    pdr = GufeTokenizable.from_dict(protocoldagresult)
+    return n4js.set_task_result(task - task, protocoldagresult=pdr)
 
 
 @router.get("/chemicalsystems")

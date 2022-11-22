@@ -16,6 +16,7 @@ from py2neo import ServiceProfile, Graph
 from py2neo.client import Connector
 
 from gufe import ChemicalSystem, Transformation, AlchemicalNetwork
+from gufe.tests.test_protocol import DummyProtocol
 from openfe_benchmarks import tyk2
 
 from fah_alchemy.models import Scope
@@ -198,7 +199,7 @@ def network_tyk2():
         Transformation(
             stateA=complexes[edge[0]],
             stateB=complexes[edge[1]],
-            protocol=FAHOpenmmNonEquilibriumCyclingProtocol(settings=None),
+            protocol=DummyProtocol(settings=None),
         )
         for edge in tyk2s.connections
     ]
@@ -206,7 +207,7 @@ def network_tyk2():
         Transformation(
             stateA=solvated[edge[0]],
             stateB=solvated[edge[1]],
-            protocol=FAHOpenmmNonEquilibriumCyclingProtocol(settings=None),
+            protocol=DummyProtocol(settings=None),
         )
         for edge in tyk2s.connections
     ]

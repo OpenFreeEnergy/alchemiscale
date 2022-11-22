@@ -900,7 +900,7 @@ class Neo4jStore(FahAlchemyStateStore):
     def create_task(
         self,
         transformation: ScopedKey,
-        extend_from: Optional[Task] = None,
+        extend_from: Optional[ScopedKey] = None,
     ) -> ScopedKey:
         """Add a compute Task to a Transformation.
 
@@ -913,7 +913,7 @@ class Neo4jStore(FahAlchemyStateStore):
         scope
             The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
         extend_from
-            The Task to use as a starting point for this Task.
+            The ScopedKey of the Task to use as a starting point for this Task.
             Will use the `ProtocolDAGResult` from the given Task as the
             `extend_from` input for the Task's eventual call to `Protocol.create`.
 
@@ -931,11 +931,19 @@ class Neo4jStore(FahAlchemyStateStore):
             scope=scope,
         )
 
-        if extend_from:
-            # check for existence of `ProtocolDAGResult` and set EXTENDS relationship
-            ...
+        subgraph = Subgraph()
 
-        subgraph = Relationship.type("PERFORMS")(
+        if extend_from is not None:
+            previous_task_node = self._get_node(extend_from)
+            subgraph = subgraph | Relationship.type("EXTENDS")(
+                task_node,
+                previous_task_node,
+                _org=scope.org,
+                _campaign=scope.campaign,
+                _project=scope.project,
+            )
+
+        subgraph = subgraph | Relationship.type("PERFORMS")(
             task_node,
             transformation_node,
             _org=scope.org,
@@ -1016,12 +1024,72 @@ class Neo4jStore(FahAlchemyStateStore):
     def get_task_transformation(
         self,
         task: ScopedKey,
-    ):
+    ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
         """Get the `Transformation` and `ProtocolDAGResult` to extend from (if
         present) for the given `Task`.
 
         """
-        ...
+        q = f"""
+        MATCH (task:Task {{_scoped_key: "{task}"}})-[:PERFORMS]->(trans:Transformation)
+        OPTIONAL MATCH (task)-[:EXTENDS]->(prev:Task)-[:RESULTS_IN]->(result:ProtocolDAGResult)
+        RETURN trans, result
+        """
+
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+        transformations = []
+        results = []
+        for record in res:
+            transformations.append(record["trans"])
+            results.append(record["result"])
+
+        if len(transformations) == 0 or len(results) == 0:
+            raise KeyError("No such object in database")
+        elif len(transformations) > 1 or len(results) > 1:
+            raise Neo4JStoreError(
+                "More than one such object in database; this should not be possible"
+            )
+
+        transformation = self.get_gufe(
+            ScopedKey.from_str(transformations[0]["_scoped_key"])
+        )
+        protocol_dag_result = (
+            self.get_gufe(ScopedKey.from_str(results[0]["_scoped_key"]))
+            if results[0] is not None
+            else None
+        )
+
+        return transformation, protocol_dag_result
+
+    def set_task_result(
+        self, task: ScopedKey, protocol_dag_result: ProtocolDAGResult
+    ) -> ScopedKey:
+
+        scope = task.scope
+        task_node = self._get_node(task)
+
+        # create a new task for the supplied transformation
+        # use a PERFORMS relationship
+        subgraph, protocoldagresult_node, scoped_key = self._gufe_to_subgraph(
+            protocol_dag_result.to_shallow_dict(),
+            labels=["GufeTokenizable", protocol_dag_result.__class__.__name__],
+            gufe_key=protocol_dag_result.key,
+            scope=scope,
+        )
+
+        subgraph = subgraph | Relationship.type("RESULTS_IN")(
+            task_node,
+            protocoldagresult_node,
+            _org=scope.org,
+            _campaign=scope.campaign,
+            _project=scope.project,
+        )
+
+        with self.transaction() as tx:
+            tx.create(subgraph)
+
+        return scoped_key
 
     def set_task_waiting(
         self,
@@ -1062,7 +1130,7 @@ class Neo4jStore(FahAlchemyStateStore):
     ):
         ...
 
-    ## admin
+    ## authentication
 
     def create_credentialed_entity(self, entity: CredentialedEntity):
         """Create a new credentialed entity, such as a user or compute service.
@@ -1093,4 +1161,15 @@ class Neo4jStore(FahAlchemyStateStore):
         with self.transaction() as tx:
             res = tx.run(q)
 
-        return cls(**dict(res.to_subgraph()))
+        nodes = set()
+        for record in res:
+            nodes.add(record["n"])
+
+        if len(nodes) == 0:
+            raise KeyError("No such object in database")
+        elif len(nodes) > 1:
+            raise Neo4JStoreError(
+                "More than one such object in database; this should not be possible"
+            )
+
+        return cls(**dict(list(nodes)[0]))
