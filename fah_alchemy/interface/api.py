@@ -15,7 +15,7 @@ from ..base.api import (
     scope_params,
     get_token_data_depends,
     base_router,
-    get_cred_entity
+    get_cred_entity,
 )
 from ..settings import ComputeAPISettings, get_api_settings, get_jwt_settings
 from ..storage.statestore import Neo4jStore, get_n4js
@@ -32,12 +32,12 @@ app.include_router(base_router)
 def get_cred_user():
     return CredentialedUserIdentity
 
+
 app.dependency_overrides[get_cred_entity] = get_cred_user
 
 router = APIRouter(
     dependencies=[Depends(get_token_data_depends)],
 )
-
 
 
 @app.get("/ping")
@@ -70,7 +70,7 @@ async def query_networks(
 @router.get("/networks/{network}", response_class=PermissiveJSONResponse)
 def get_network(
     network,
-    *, 
+    *,
     n4js: Neo4jStore = Depends(get_n4js),
 ):
     network = n4js.get_gufe(scoped_key=network)

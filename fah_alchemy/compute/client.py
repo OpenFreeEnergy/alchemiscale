@@ -50,18 +50,23 @@ class FahAlchemyComputeClient(FahAlchemyBaseClient):
 
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]
 
-    def get_task_transformation(self, task: ScopedKey) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
+    def get_task_transformation(
+        self, task: ScopedKey
+    ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
 
-        transformation, protocoldagresult = self._get_resource(f"tasks/{task}/transformation", 
-                                                                 {}, 
-                                                                 return_gufe=False)
+        transformation, protocoldagresult = self._get_resource(
+            f"tasks/{task}/transformation", {}, return_gufe=False
+        )
 
-        return (GufeTokenizable.from_dict(transformation),
-                GufeTokenizable.from_dict(protocoldagresult) if protocoldagresult else None)
+        return (
+            GufeTokenizable.from_dict(transformation),
+            GufeTokenizable.from_dict(protocoldagresult) if protocoldagresult else None,
+        )
 
-    def set_task_result(self, task: ScopedKey, protocoldagresult: ProtocolDAGResult) -> ScopedKey:
+    def set_task_result(
+        self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
+    ) -> ScopedKey:
         data = dict(protocoldagresult=protocoldagresult.to_dict())
         pdr_sk = self._post_resource(f"tasks/{task}/result", data)
 
         return ScopedKey.from_str(pdr_sk)
-

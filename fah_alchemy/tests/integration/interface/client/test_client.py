@@ -51,4 +51,3 @@ class TestClient:
         sleep(settings.JWT_EXPIRE_SECONDS + 2)
         user_client.get_info()
         assert token != user_client._jwtoken
-

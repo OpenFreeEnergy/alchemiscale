@@ -133,15 +133,16 @@ class SynchronousComputeService:
         transformation, protocoldag = self.client.get_task_transformation(task)
 
         return transformation.protocol.create(
-                stateA=transformation.stateA,
-                stateB=transformation.stateB,
-                mapping=transformation.mapping,
-                extend_from=protocoldag,
-                name=str(task))
+            stateA=transformation.stateA,
+            stateB=transformation.stateB,
+            mapping=transformation.mapping,
+            extend_from=protocoldag,
+            name=str(task),
+        )
 
-    def push_result(self, 
-                     task: ScopedKey, 
-                     protocoldagresult: ProtocolDAGResult) -> ScopedKey:
+    def push_result(
+        self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
+    ) -> ScopedKey:
 
         # TODO: this method should postprocess any paths,
         # leaf nodes in DAG for blob results that should go to object store

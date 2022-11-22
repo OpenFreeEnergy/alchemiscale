@@ -37,5 +37,3 @@ class TestAPI:
 
         # check presence of network in database
         assert n4js.check_existence(sk)
-
-

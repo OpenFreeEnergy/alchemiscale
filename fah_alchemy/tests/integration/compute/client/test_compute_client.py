@@ -10,7 +10,6 @@ from fah_alchemy.tests.integration.compute.utils import get_compute_settings_ove
 
 
 class TestComputeClient:
-
     def test_wrong_credential(
         self,
         scope_test,

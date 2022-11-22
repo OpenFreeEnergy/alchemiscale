@@ -59,11 +59,14 @@ def n4js_preloaded(n4js_fresh, network_tyk2, scope_test, compute_identity):
             task_sks[transformation].append(extend_from)
 
     # add tasks to both task queues
-    n4js.queue_taskqueue_tasks([task_sks[transformation][0] for transformation in transformations],
-                               tq_sk1)
+    n4js.queue_taskqueue_tasks(
+        [task_sks[transformation][0] for transformation in transformations], tq_sk1
+    )
 
-    n4js.queue_taskqueue_tasks([task_sks[transformation][0] for transformation in transformations[::-1]],
-                                tq_sk2)
+    n4js.queue_taskqueue_tasks(
+        [task_sks[transformation][0] for transformation in transformations[::-1]],
+        tq_sk2,
+    )
 
     return n4js
 
@@ -82,7 +85,9 @@ def compute_api_no_auth(n4js):
 
     api.app.dependency_overrides[get_n4js] = get_n4js_override
     api.app.dependency_overrides[get_jwt_settings] = get_compute_settings_override
-    api.app.dependency_overrides[get_token_data_depends] = get_token_data_depends_override
+    api.app.dependency_overrides[
+        get_token_data_depends
+    ] = get_token_data_depends_override
     yield api.app
     api.app.dependency_overrides = overrides
 

@@ -14,6 +14,7 @@ from fah_alchemy.tests.integration.interface.utils import get_user_settings_over
 
 ## user client
 
+
 @pytest.fixture(scope="module")
 def user_api(n4js):
     def get_n4js_override():

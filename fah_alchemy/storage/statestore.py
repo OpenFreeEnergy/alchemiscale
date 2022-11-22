@@ -936,12 +936,12 @@ class Neo4jStore(FahAlchemyStateStore):
         if extend_from is not None:
             previous_task_node = self._get_node(extend_from)
             subgraph = subgraph | Relationship.type("EXTENDS")(
-                    task_node,
-                    previous_task_node,
-                    _org=scope.org,
-                    _campaign=scope.campaign,
-                    _project=scope.project,
-                )
+                task_node,
+                previous_task_node,
+                _org=scope.org,
+                _campaign=scope.campaign,
+                _project=scope.project,
+            )
 
         subgraph = subgraph | Relationship.type("PERFORMS")(
             task_node,
@@ -1041,8 +1041,8 @@ class Neo4jStore(FahAlchemyStateStore):
         transformations = []
         results = []
         for record in res:
-            transformations.append(record['trans'])
-            results.append(record['result'])
+            transformations.append(record["trans"])
+            results.append(record["result"])
 
         if len(transformations) == 0 or len(results) == 0:
             raise KeyError("No such object in database")
@@ -1051,16 +1051,20 @@ class Neo4jStore(FahAlchemyStateStore):
                 "More than one such object in database; this should not be possible"
             )
 
-        transformation = self.get_gufe(ScopedKey.from_str(transformations[0]['_scoped_key']))
-        protocol_dag_result = (self.get_gufe(ScopedKey.from_str(results[0]['_scoped_key']))
-                               if results[0] is not None else None)
+        transformation = self.get_gufe(
+            ScopedKey.from_str(transformations[0]["_scoped_key"])
+        )
+        protocol_dag_result = (
+            self.get_gufe(ScopedKey.from_str(results[0]["_scoped_key"]))
+            if results[0] is not None
+            else None
+        )
 
         return transformation, protocol_dag_result
 
     def set_task_result(
-            self,
-            task: ScopedKey,
-            protocol_dag_result: ProtocolDAGResult) -> ScopedKey:
+        self, task: ScopedKey, protocol_dag_result: ProtocolDAGResult
+    ) -> ScopedKey:
 
         scope = task.scope
         task_node = self._get_node(task)
@@ -1159,7 +1163,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
         nodes = set()
         for record in res:
-            nodes.add(record['n'])
+            nodes.add(record["n"])
 
         if len(nodes) == 0:
             raise KeyError("No such object in database")

@@ -15,7 +15,7 @@ from ..base.api import (
     scope_params,
     get_token_data_depends,
     base_router,
-    get_cred_entity
+    get_cred_entity,
 )
 from ..settings import ComputeAPISettings, get_compute_api_settings, get_jwt_settings
 from ..storage.statestore import Neo4jStore, get_n4js
@@ -37,12 +37,14 @@ app.include_router(base_router)
 def get_cred_compute():
     return CredentialedComputeIdentity
 
+
 app.dependency_overrides[get_cred_entity] = get_cred_compute
 
 
 router = APIRouter(
     dependencies=[Depends(get_token_data_depends)],
 )
+
 
 @app.get("/ping")
 async def ping():
@@ -104,8 +106,10 @@ async def get_task_transformation(
 ):
     transformation, protocoldagresult = n4js.get_task_transformation(task=task)
 
-    return (transformation.to_dict(),
-            protocoldagresult.to_dict() if protocoldagresult is not None else None)
+    return (
+        transformation.to_dict(),
+        protocoldagresult.to_dict() if protocoldagresult is not None else None,
+    )
 
 
 @router.post("/tasks/{task}/result", response_model=ScopedKey)
@@ -116,7 +120,7 @@ def set_task_result(
     n4js: Neo4jStore = Depends(get_n4js),
 ):
     pdr = GufeTokenizable.from_dict(protocoldagresult)
-    return n4js.set_task_result(task-task, protocoldagresult=pdr)
+    return n4js.set_task_result(task - task, protocoldagresult=pdr)
 
 
 @router.get("/chemicalsystems")

@@ -18,6 +18,7 @@ from fah_alchemy.tests.integration.compute.utils import get_compute_settings_ove
 
 ## compute client
 
+
 @pytest.fixture(scope="module")
 def compute_api(n4js):
     def get_n4js_override():

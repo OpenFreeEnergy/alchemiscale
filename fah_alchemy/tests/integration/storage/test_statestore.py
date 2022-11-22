@@ -10,7 +10,10 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY
 from fah_alchemy.storage import Neo4jStore
 from fah_alchemy.storage.models import Task, TaskQueue
 from fah_alchemy.models import Scope, ScopedKey
-from fah_alchemy.security.models import CredentialedUserIdentity, CredentialedComputeIdentity
+from fah_alchemy.security.models import (
+    CredentialedUserIdentity,
+    CredentialedComputeIdentity,
+)
 from fah_alchemy.security.auth import hash_key
 
 
@@ -337,9 +340,9 @@ class TestNeo4jStore(TestStateStore):
     def test_create_credentialed_entity(self, n4js: Neo4jStore):
 
         user = CredentialedUserIdentity(
-            identifier='bill',
+            identifier="bill",
             hashed_key=hash_key("and ted"),
-            )
+        )
 
         n4js.create_credentialed_entity(user)
 
@@ -347,17 +350,18 @@ class TestNeo4jStore(TestStateStore):
             f"""
             match (n:CredentialedUserIdentity {{identifier: '{user.identifier}'}})
             return n
-            """).to_subgraph()
+            """
+        ).to_subgraph()
 
-        assert n['identifier'] == user.identifier
-        assert n['hashed_key'] == user.hashed_key
+        assert n["identifier"] == user.identifier
+        assert n["hashed_key"] == user.hashed_key
 
     def test_get_credentialed_entity(self, n4js: Neo4jStore):
 
         user = CredentialedUserIdentity(
-            identifier='bill',
+            identifier="bill",
             hashed_key=hash_key("and ted"),
-            )
+        )
 
         n4js.create_credentialed_entity(user)
 

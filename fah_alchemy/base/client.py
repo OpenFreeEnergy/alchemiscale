@@ -46,9 +46,7 @@ class FahAlchemyBaseClient:
         resp = requests.post(url, data=data)
 
         if not 200 <= resp.status_code < 300:
-            raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason}"
-            )
+            raise self._exception(f"Status Code {resp.status_code} : {resp.reason}")
 
         self._jwtoken = resp.json()["access_token"]
         self._headers = {
@@ -81,9 +79,7 @@ class FahAlchemyBaseClient:
         resp = requests.get(url, params=params, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason}"
-            )
+            raise self._exception(f"Status Code {resp.status_code} : {resp.reason}")
 
         if params.get("return_gufe"):
             return {
@@ -100,9 +96,7 @@ class FahAlchemyBaseClient:
         resp = requests.get(url, params=params, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason}"
-            )
+            raise self._exception(f"Status Code {resp.status_code} : {resp.reason}")
 
         if return_gufe:
             return GufeTokenizable.from_dict(resp.json())
@@ -117,11 +111,9 @@ class FahAlchemyBaseClient:
         resp = requests.post(url, data=jsondata, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason}"
-            )
+            raise self._exception(f"Status Code {resp.status_code} : {resp.reason}")
 
         return resp.json()
 
     def get_info(self):
-        return self._get_resource('/info', params={}, return_gufe=False)
+        return self._get_resource("/info", params={}, return_gufe=False)

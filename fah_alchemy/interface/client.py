@@ -31,12 +31,10 @@ class FahAlchemyClient(FahAlchemyBaseClient):
     def query_networks(self):
         ...
 
-    def get_network(self, network: Union[ScopedKey,str]):
+    def get_network(self, network: Union[ScopedKey, str]):
         ...
 
-        network = self._get_resource(f"networks/{network}", 
-                                      {}, 
-                                      return_gufe=True)
+        network = self._get_resource(f"networks/{network}", {}, return_gufe=True)
 
         return network
 
