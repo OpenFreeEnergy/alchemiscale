@@ -7,7 +7,7 @@ import traceback
 
 import requests
 from fastapi import FastAPI
-from gunicorn.arbiter import Arbiter
+from fah_alchemy.tests.integration.utils import running_service
 
 from fah_alchemy.cli import (
     get_settings_from_options, cli, ApiApplication
@@ -36,33 +36,37 @@ def set_env_vars(env):
         os.environ.update(old_env)
 
 
-@pytest.fixture
-def gunicorn_arbiter():
-    # based on the FastAPI docs
-    app = FastAPI()
-    @app.get("/")
-    def read_root():
-        return {"Hello": "World"}
-
-    gunicorn_app = ApiApplication(app, workers=2, bind="127.0.0.1:50000")
-    arbiter = Arbiter(gunicorn_app)
-    try:
-        arbiter.start()
-        arbiter.manage_workers()
-        yield arbiter
-    finally:
-        arbiter.stop()
+toyapp = FastAPI()
+@toyapp.get("/ping")
+def read_root():
+    return {"Hello": "World"}
 
 
-
-def test_api_application(gunicorn_arbiter):
+def test_api_application():
     # this checks that the gunicorn BaseApplication subclass works correctly
     # with a FastAPI app
-    arbiter = gunicorn_arbiter
-    assert len(arbiter.WORKERS) == 2
-    response = requests.get("http://127.0.0.1:50000/")
+    workers = 2
+    host = "127.0.0.1"
+    port = 50100
+    app = ApiApplication.from_parameters(toyapp, workers, host, port)
+
+    expected_ping = {"Hello": "World"}
+    with running_service(app.run, port, args=tuple()):
+        response = requests.get("http://{host}:{port}/ping")
+
     assert response.status_code == 200
-    assert response.json() == {"Hello": "World"}
+    assert response.json() == expected_ping
+
+
+def test_api():
+    workers = 2
+    host = "127.0.0.1"
+    port = 50100
+    invocation = ['api', '--workers', workers, '--host', host, '--port',
+                  port]
+    runner = CliRunner()
+    with running_service(runner.invoke, (cli, invocation)):
+        response = requests
 
 
 

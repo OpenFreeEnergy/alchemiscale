@@ -44,6 +44,10 @@ class ApiApplication(gunicorn.app.base.BaseApplication):
         self.bind = bind
         super().__init__()
 
+    @classmethod
+    def from_parameters(cls, app, workers, host, port):
+        return cls(app, workers, bind=f"{host}:{port}")
+
     def load(self):
         return self.app
 
