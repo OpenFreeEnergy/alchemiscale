@@ -1,4 +1,4 @@
-name: test
+name: base
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
