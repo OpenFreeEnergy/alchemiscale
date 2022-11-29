@@ -1,4 +1,4 @@
-name: test
+name: fah-alchemy-test
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
@@ -52,5 +52,5 @@ dependencies:
     - grolt # neo4j test server deployment
     - git+https://github.com/OpenFreeEnergy/gufe
     - git+https://github.com/OpenFreeEnergy/openfe
-    - "git+https://github.com/dotsdl/openfe-benchmarks@protein-fix"
-    - git+https://github.com/openforcefield/protein-ligand-benchmark
+    - git+https://github.com/OpenFreeEnergy/openfe-benchmarks
+    #- git+https://github.com/openforcefield/protein-ligand-benchmark

@@ -1,4 +1,4 @@
-name: fah-alchemy
+name: fah-alchemy-dev
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
@@ -42,6 +42,9 @@ dependencies:
   - pytest-xdist
   - pytest-cov
   - coverage
+
+  # doc generation
+  - sphinx
 
   # needed for openfe-benchmark tests
   - lomap2>=2.1.0

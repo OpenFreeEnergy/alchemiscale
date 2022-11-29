@@ -1,0 +1,32 @@
+name: fah-alchemy-client
+channels:
+  - jaimergp/label/unsupported-cudatoolkit-shim
+  - conda-forge
+dependencies:
+  - python =3.9
+
+  # gufe dependencies
+  - numpy
+  - networkx
+  - rdkit
+  - pip
+  - pydantic
+  - openff-toolkit
+  - openff-units
+  - typing-extensions
+  
+  # for aws storage
+  - boto3 
+
+  ## cli
+  - click
+
+  # needed for openfe-benchmark tests
+  - lomap2>=2.1.0
+  - openmmtools
+  - openmmforcefields
+
+  - pip:
+    - git+https://github.com/OpenFreeEnergy/gufe
+    - git+https://github.com/OpenFreeEnergy/openfe
+    - git+https://github.com/OpenFreeEnergy/openfe-benchmarks
