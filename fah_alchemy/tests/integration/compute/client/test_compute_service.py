@@ -44,11 +44,11 @@ class TestSynchronousComputeService:
 
         assert len(protocoldag.protocol_units) == 23
 
-    def test_execute(self, n4js_preloaded, service, network_tyk2, scope_test):
-        n4js: Neo4jStore = n4js_preloaded
-        network_sk = n4js.get_scoped_key(network_tyk2, scope_test)
-        tq_sk = n4js.get_taskqueue(network_sk)
-
-        task_sks = n4js.get_taskqueue_tasks(tq_sk)
-
-        protocoldagresult_sk = service.execute(task_sks[0])
+#    def test_execute(self, n4js_preloaded, service, network_tyk2, scope_test):
+#        n4js: Neo4jStore = n4js_preloaded
+#        network_sk = n4js.get_scoped_key(network_tyk2, scope_test)
+#        tq_sk = n4js.get_taskqueue(network_sk)
+#
+#        task_sks = n4js.get_taskqueue_tasks(tq_sk)
+#
+#        protocoldagresult_sk = service.execute(task_sks[0])

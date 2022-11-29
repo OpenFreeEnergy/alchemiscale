@@ -11,7 +11,7 @@ from gufe.protocols import (
     ProtocolDAGResult,
     ProtocolUnitResult,
     Context,
-    execute,
+    execute_DAG,
 )
 
 

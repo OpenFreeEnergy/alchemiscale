@@ -10,7 +10,7 @@ from functools import wraps
 import requests
 from requests.auth import HTTPBasicAuth
 
-from gufe.tokenization import GufeTokenizable
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from ..models import Scope, ScopedKey
 from ..storage.models import TaskQueue, Task
@@ -107,7 +107,7 @@ class FahAlchemyBaseClient:
     def _post_resource(self, resource, data):
         url = urljoin(self.api_url, resource)
 
-        jsondata = json.dumps(data)
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
         resp = requests.post(url, data=jsondata, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:

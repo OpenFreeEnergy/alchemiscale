@@ -12,7 +12,7 @@ from threading import Thread
 
 import requests
 
-from gufe.protocols.protocoldag import execute, ProtocolDAG, ProtocolDAGResult
+from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from .client import FahAlchemyComputeClient
 from ..storage.models import Task, TaskQueue
@@ -149,7 +149,9 @@ class SynchronousComputeService:
 
         # TODO: add check that this protocoldagresult actually corresponds to
         # the given task
-        return self.client.set_task_result(task, protocoldagresult)
+        sk = self.client.set_task_result(task, protocoldagresult)
+
+        # TODO: remove claim on task, set to complete; remove from queues
 
     def execute(self, task: ScopedKey) -> ScopedKey:
         """Executes given Task.
@@ -161,10 +163,10 @@ class SynchronousComputeService:
         protocoldag = self.task_to_protocoldag(task)
 
         # execute the task
-        protocoldagresult = execute(protocoldag, shared=self.shared)
+        protocoldagresult = execute_DAG(protocoldag, shared=self.shared)
 
         # push the result (or failure) back to the compute API
-        return self.push_result(task, protocoldagresult)
+        result = self.push_result(task, protocoldagresult)
 
     def start(self, task_limit: Optional[int] = None):
         """Start the service.
