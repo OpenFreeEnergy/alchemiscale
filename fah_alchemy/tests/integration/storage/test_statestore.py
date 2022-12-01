@@ -335,6 +335,11 @@ class TestNeo4jStore(TestStateStore):
         )
         assert claimed6 == [None] * 2
 
+    def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        # need to understand why ProtocolDAGResult fails to be represented as
+        # subgraph
+        ...
+
     ### authentication
 
     def test_create_credentialed_entity(self, n4js: Neo4jStore):

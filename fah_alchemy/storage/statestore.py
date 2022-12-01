@@ -1087,7 +1087,7 @@ class Neo4jStore(FahAlchemyStateStore):
         )
 
         with self.transaction() as tx:
-            tx.create(subgraph)
+            tx.merge(subgraph)
 
         return scoped_key
 
