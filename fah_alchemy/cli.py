@@ -87,7 +87,7 @@ DBNAME_OPTION = click.option(
 
 @cli.command(
              name="api",
-             help="Start the client API service",
+             help="Start the user-facing API service",
              )
 @api_starting_params
 def api(workers, host, port):

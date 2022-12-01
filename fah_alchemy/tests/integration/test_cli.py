@@ -52,7 +52,7 @@ def test_api_application():
 
     expected_ping = {"Hello": "World"}
     with running_service(app.run, port, args=tuple()):
-        response = requests.get("http://{host}:{port}/ping")
+        response = requests.get(f"http://{host}:{port}/ping")
 
     assert response.status_code == 200
     assert response.json() == expected_ping
@@ -65,7 +65,7 @@ def test_api():
     invocation = ['api', '--workers', workers, '--host', host, '--port',
                   port]
     runner = CliRunner()
-    with running_service(runner.invoke, (cli, invocation)):
+    with running_service(runner.invoke, port, (cli, invocation)):
         response = requests
 
 
