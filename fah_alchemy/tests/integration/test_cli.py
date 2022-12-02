@@ -45,7 +45,7 @@ def read_root():
 def test_api_application():
     # this checks that the gunicorn BaseApplication subclass works correctly
     # with a FastAPI app
-    workers = 2
+    workers = 1
     host = "127.0.0.1"
     port = 50100
     app = ApiApplication.from_parameters(toyapp, workers, host, port)
@@ -59,7 +59,7 @@ def test_api_application():
 
 
 def test_api():
-    workers = 2
+    workers = 1
     host = "127.0.0.1"
     port = 50100
     invocation = ["api", "--workers", workers, "--host", host, "--port", port]
