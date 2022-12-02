@@ -90,7 +90,21 @@ DBNAME_OPTION = click.option(
 @api_starting_params
 def api(workers, host, port):
     from fah_alchemy.interface.api import app
-    from .settings import APISettings
+    from .settings import APISettings, get_jwt_settings
+    from .security.auth import generate_secret_key
+
+    # CONSIDER GENERATING A JWT_SECRET_KEY if none provided with
+    # key = generate_secret_key()
+    # CONVENIENT FOR THE SINGLE-SERVER CASE HERE
+
+    def get_settings_override():
+        # settings overrides for test suite
+        return APISettings(
+            ## INJECT ANY SETTINGS GIVEN BY CLI OPTIONS HERE
+            ## OTHERWISE WILL COME FROM ENV VARIABLES
+        )
+
+    app.dependency_overrides[get_jwt_settings] = get_settings_override
 
     start_api(app, workers, host, port)
 
