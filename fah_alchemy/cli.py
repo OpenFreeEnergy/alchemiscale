@@ -30,10 +30,9 @@ def get_settings_from_options(kwargs, settings_cls):
 
 
 def api_starting_params(func):
-    workers = click.option('--workers', type=int, help="number of workers",
-                           default=1)
-    host = click.option('--host', type=str, help="IP address of host")
-    port = click.option('--port', type=int, help="port")
+    workers = click.option("--workers", type=int, help="number of workers", default=1)
+    host = click.option("--host", type=str, help="IP address of host")
+    port = click.option("--port", type=int, help="port")
     return workers(host(port(func)))
 
 
@@ -52,15 +51,14 @@ class ApiApplication(gunicorn.app.base.BaseApplication):
         return self.app
 
     def load_config(self):
-        self.cfg.set('workers', self.workers)
-        self.cfg.set('bind', self.bind)
-        self.cfg.set('worker_class', "uvicorn.workers.UvicornWorker")
+        self.cfg.set("workers", self.workers)
+        self.cfg.set("bind", self.bind)
+        self.cfg.set("worker_class", "uvicorn.workers.UvicornWorker")
 
 
 def start_api(api_app, workers, host, port):
     gunicorn_app = ApiApplication(api_app, workers, bind=f"{host}:{port}")
     gunicorn_app.run()
-
 
 
 @click.group()
@@ -74,39 +72,40 @@ JWT_TOKEN_OPTION = click.option(
     type=str,
     help="JSON web token secret",
     envvar="JWT_SECRET_KEY",
-    **SETTINGS_OPTION_KWARGS
+    **SETTINGS_OPTION_KWARGS,
 )
 DBNAME_OPTION = click.option(
     "--dbname",
     type=str,
     help="custom database name, default 'neo4j'",
     envvar="NEO4J_DBNAME",
-    **SETTINGS_OPTION_KWARGS
+    **SETTINGS_OPTION_KWARGS,
 )
 
 
 @cli.command(
-             name="api",
-             help="Start the user-facing API service",
-             )
+    name="api",
+    help="Start the user-facing API service",
+)
 @api_starting_params
 def api(workers, host, port):
     from fah_alchemy.interface.api import app
     from .settings import APISettings
+
     start_api(app, workers, host, port)
+
 
 @cli.group(help="Subcommands for the compute service")
 def compute():
     ...
 
 
-@compute.command(
-    help="Start the compute API service."
-)
+@compute.command(help="Start the compute API service.")
 @api_starting_params
 def api(workers, host, port):
     from fah_alchemy.compute.api import app
     from .settings import ComputeAPISettings
+
     start_api(app, workers, host, port)
 
 
@@ -129,14 +128,14 @@ def database():
     help="database user name",
     type=str,
     envvar="NEO4J_USER",
-    **SETTINGS_OPTION_KWARGS
+    **SETTINGS_OPTION_KWARGS,
 )
 @click.option(
     "--password",
     help="database password",
     type=str,
     envvar="NEO4J_PASS",
-    **SETTINGS_OPTION_KWARGS
+    **SETTINGS_OPTION_KWARGS,
 )
 @DBNAME_OPTION
 def init(url, user, password, dbname):
@@ -164,14 +163,14 @@ def init(url, user, password, dbname):
     help="database user name",
     type=str,
     envvar="NEO4J_USER",
-    **SETTINGS_OPTION_KWARGS
+    **SETTINGS_OPTION_KWARGS,
 )
 @click.option(
     "--password",
     help="database password",
     type=str,
     envvar="NEO4J_PASS",
-    **SETTINGS_OPTION_KWARGS
+    **SETTINGS_OPTION_KWARGS,
 )
 @DBNAME_OPTION
 def check(url, user, password, dbname):
@@ -200,14 +199,14 @@ def check(url, user, password, dbname):
     help="database user name",
     type=str,
     envvar="NEO4J_USER",
-    **SETTINGS_OPTION_KWARGS
+    **SETTINGS_OPTION_KWARGS,
 )
 @click.option(
     "--password",
     help="database password",
     type=str,
     envvar="NEO4J_PASS",
-    **SETTINGS_OPTION_KWARGS
+    **SETTINGS_OPTION_KWARGS,
 )
 @DBNAME_OPTION
 def reset(url, user, password, dbname):

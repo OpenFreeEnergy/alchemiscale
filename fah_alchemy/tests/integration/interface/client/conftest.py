@@ -40,8 +40,10 @@ def run_server(fastapi_app, settings):
 @pytest.fixture(scope="module")
 def uvicorn_server(user_api):
     settings = get_user_settings_override()
-    with running_service(run_server, port=settings.FA_API_PORT, args=(user_api, settings)):
-        yield 
+    with running_service(
+        run_server, port=settings.FA_API_PORT, args=(user_api, settings)
+    ):
+        yield
 
 
 @pytest.fixture(scope="module")

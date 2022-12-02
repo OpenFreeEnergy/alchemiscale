@@ -29,4 +29,4 @@ def running_service(target, port, args):
 
     proc.terminate()
     while proc.is_alive():
-        sleep(.1)
+        sleep(0.1)

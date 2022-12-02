@@ -9,9 +9,7 @@ import requests
 from fastapi import FastAPI
 from fah_alchemy.tests.integration.utils import running_service
 
-from fah_alchemy.cli import (
-    get_settings_from_options, cli, ApiApplication
-)
+from fah_alchemy.cli import get_settings_from_options, cli, ApiApplication
 from fah_alchemy.settings import Neo4jStoreSettings
 from fah_alchemy.storage.statestore import Neo4JStoreError
 
@@ -37,6 +35,8 @@ def set_env_vars(env):
 
 
 toyapp = FastAPI()
+
+
 @toyapp.get("/ping")
 def read_root():
     return {"Hello": "World"}
@@ -62,8 +62,7 @@ def test_api():
     workers = 2
     host = "127.0.0.1"
     port = 50100
-    invocation = ['api', '--workers', workers, '--host', host, '--port',
-                  port]
+    invocation = ["api", "--workers", workers, "--host", host, "--port", port]
     expected_ping = {"api": "FahAlchemyAPI"}
 
     runner = CliRunner()
@@ -78,8 +77,16 @@ def test_compute_api():
     workers = 2
     host = "127.0.0.1"
     port = 50100
-    invocation = ['compute', 'api', '--workers', workers, '--host', host, '--port',
-                  port]
+    invocation = [
+        "compute",
+        "api",
+        "--workers",
+        workers,
+        "--host",
+        host,
+        "--port",
+        port,
+    ]
     expected_ping = {"api": "FahAlchemyComputeAPI"}
 
     runner = CliRunner()
@@ -90,17 +97,20 @@ def test_compute_api():
     assert response.json() == expected_ping
 
 
-@pytest.mark.parametrize('cli_vars', [
-    {},  # no cli options; all from env
-    {
-        "NEO4J_URL": "https://foo",
-        "NEO4J_USER": "me",
-        "NEO4J_PASS": "correct-horse-battery-staple",
-    },  # all CLI options given (test without env vars)
-    {
-        "NEO4J_URL": "https://baz",
-    },  # some CLI options given (test that we override)
-])
+@pytest.mark.parametrize(
+    "cli_vars",
+    [
+        {},  # no cli options; all from env
+        {
+            "NEO4J_URL": "https://foo",
+            "NEO4J_USER": "me",
+            "NEO4J_PASS": "correct-horse-battery-staple",
+        },  # all CLI options given (test without env vars)
+        {
+            "NEO4J_URL": "https://baz",
+        },  # some CLI options given (test that we override)
+    ],
+)
 def test_get_settings_from_options(cli_vars):
     env_vars = {
         "NEO4J_URL": "https://bar",
