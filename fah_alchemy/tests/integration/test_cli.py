@@ -64,10 +64,30 @@ def test_api():
     port = 50100
     invocation = ['api', '--workers', workers, '--host', host, '--port',
                   port]
+    expected_ping = {"api": "FahAlchemyAPI"}
+
     runner = CliRunner()
     with running_service(runner.invoke, port, (cli, invocation)):
-        response = requests
+        response = requests.get(f"http://{host}:{port}/ping")
 
+    assert response.status_code == 200
+    assert response.json() == expected_ping
+
+
+def test_compute_api():
+    workers = 2
+    host = "127.0.0.1"
+    port = 50100
+    invocation = ['compute', 'api', '--workers', workers, '--host', host, '--port',
+                  port]
+    expected_ping = {"api": "FahAlchemyComputeAPI"}
+
+    runner = CliRunner()
+    with running_service(runner.invoke, port, (cli, invocation)):
+        response = requests.get(f"http://{host}:{port}/ping")
+
+    assert response.status_code == 200
+    assert response.json() == expected_ping
 
 
 @pytest.mark.parametrize('cli_vars', [

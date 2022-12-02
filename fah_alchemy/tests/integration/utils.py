@@ -9,6 +9,9 @@ def running_service(target, port, args):
     proc = multiprocessing.Process(target=target, args=args, daemon=True)
     proc.start()
 
+    if not proc.is_alive():
+        raise RuntimeError("The test server could not be started.")
+
     timeout = True
     for _ in range(40):
         try:
@@ -24,4 +27,6 @@ def running_service(target, port, args):
 
     yield
 
-    proc.kill()
+    proc.terminate()
+    while proc.is_alive():
+        sleep(.1)

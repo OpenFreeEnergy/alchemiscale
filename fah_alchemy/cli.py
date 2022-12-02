@@ -92,6 +92,7 @@ DBNAME_OPTION = click.option(
 @api_starting_params
 def api(workers, host, port):
     from fah_alchemy.interface.api import app
+    from .settings import APISettings
     start_api(app, workers, host, port)
 
 @cli.group(help="Subcommands for the compute service")
@@ -105,6 +106,7 @@ def compute():
 @api_starting_params
 def api(workers, host, port):
     from fah_alchemy.compute.api import app
+    from .settings import ComputeAPISettings
     start_api(app, workers, host, port)
 
 

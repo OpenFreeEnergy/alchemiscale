@@ -1,4 +1,3 @@
-from multiprocessing import Process
 import pytest
 import uvicorn
 from copy import copy
@@ -10,6 +9,7 @@ from fah_alchemy.storage import get_n4js
 from fah_alchemy.interface import api, client
 
 from fah_alchemy.tests.integration.interface.utils import get_user_settings_override
+from fah_alchemy.tests.integration.utils import running_service
 
 
 ## user client
@@ -40,25 +40,8 @@ def run_server(fastapi_app, settings):
 @pytest.fixture(scope="module")
 def uvicorn_server(user_api):
     settings = get_user_settings_override()
-    proc = Process(target=run_server, args=(user_api, settings), daemon=True)
-    proc.start()
-
-    timeout = True
-    for _ in range(40):
-        try:
-            ping = requests.get(f"http://127.0.0.1:8000/ping")
-            ping.raise_for_status()
-        except IOError:
-            sleep(0.25)
-            continue
-        timeout = False
-        break
-    if timeout:
-        raise RuntimeError("The test server could not be reached.")
-
-    yield
-
-    proc.kill()  # Cleanup after test
+    with running_service(run_server, port=settings.FA_API_PORT, args=(user_api, settings)):
+        yield 
 
 
 @pytest.fixture(scope="module")
