@@ -2,6 +2,7 @@ name: fah-alchemy-client
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
+  - openeye
 dependencies:
   - python =3.9
 
@@ -14,19 +15,29 @@ dependencies:
   - openff-toolkit
   - openff-units
   - typing-extensions
-  
-  # for aws storage
-  - boto3 
 
+  # perses dependencies
+  - tqdm
+  - openmm
+  
   ## cli
   - click
 
-  # needed for openfe-benchmark tests
+  # needed for openfe
   - lomap2>=2.1.0
+   
+  ## needed for perses
   - openmmtools
   - openmmforcefields
+  - openmoltools
+  - cloudpathlib
+  - dask
+  - distributed
+  - openeye-toolkits
 
   - pip:
     - git+https://github.com/OpenFreeEnergy/gufe
     - git+https://github.com/OpenFreeEnergy/openfe
     - git+https://github.com/OpenFreeEnergy/openfe-benchmarks
+    - git+https://github.com/mikemhenry/openff-models.git@support_nested_models
+    - git+https://github.com/choderalab/perses@protocol-neqcyc
