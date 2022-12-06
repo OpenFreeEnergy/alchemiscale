@@ -1,6 +1,6 @@
 FROM mambaorg/micromamba:1.1.0
 
-LABEL org.opencontainers.image.source=https://github.com/mikemhenry/fah-alchemy/
+LABEL org.opencontainers.image.source=https://github.com/openforcefield/fah-alchemy
 LABEL org.opencontainers.image.description="An alchemical free energy platform for exascale computing on Folding@Home."
 LABEL org.opencontainers.image.licenses=MIT
 
