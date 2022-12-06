@@ -11,6 +11,7 @@ from time import sleep
 from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
 from pytest import fixture
+from moto import mock_s3
 
 from py2neo import ServiceProfile, Graph
 from py2neo.client import Connector
@@ -20,7 +21,8 @@ from gufe.tests.test_protocol import DummyProtocol
 from openfe_benchmarks import tyk2
 
 from fah_alchemy.models import Scope
-from fah_alchemy.storage import Neo4jStore
+from fah_alchemy.settings import Neo4jStoreSettings, S3ObjectStoreSettings
+from fah_alchemy.storage import Neo4jStore, S3ObjectStore, get_s3os
 from fah_alchemy.protocols import FAHOpenmmNonEquilibriumCyclingProtocol
 
 
@@ -164,6 +166,27 @@ def n4js_fresh(graph):
     n4js.initialize()
 
     return n4js
+
+
+@fixture(scope="module")
+def s3objectstore_settings():
+    return S3ObjectStoreSettings(
+        AWS_ACCESS_KEY_ID='test-key-id',
+        AWS_SECRET_ACCESS_KEY='test-key',
+        AWS_SESSION_TOKEN='test-session-token',
+        AWS_S3_BUCKET='test-bucket',
+        AWS_S3_PREFIX='test-prefix',
+        AWS_DEFAULT_REGION='us-east-1',
+        )
+
+
+@fixture
+def s3os(s3objectstore_settings):
+    with mock_s3():
+        s3os = get_s3os(s3objectstore_settings)
+        s3os.initialize()
+
+        yield s3os
 
 
 # test alchemical networks

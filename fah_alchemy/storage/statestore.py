@@ -8,14 +8,14 @@ import weakref
 
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ProtocolDAGResult
-from gufe.tokenization import GufeTokenizable, GufeKey
+from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 from gufe.storage.metadatastore import MetadataStore
 from py2neo import Graph, Node, Relationship, Subgraph
 from py2neo.database import Transaction
 from py2neo.matching import NodeMatcher
 from py2neo.errors import ClientError
 
-from .models import ComputeKey, Task, TaskQueue, TaskArchive, TaskStatusEnum
+from .models import ComputeKey, Task, TaskQueue, TaskArchive, TaskStatusEnum, ObjectStoreRef
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
 
@@ -190,7 +190,7 @@ class Neo4jStore(FahAlchemyStateStore):
                             | subgraph_
                         )
                 else:
-                    node[key] = json.dumps(value)
+                    node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
                     node["_json_props"].append(key)
             elif isinstance(value, list):
                 # lists can only be made of a single, primitive data type
@@ -228,7 +228,7 @@ class Neo4jStore(FahAlchemyStateStore):
                             | subgraph_
                         )
                 else:
-                    node[key] = json.dumps(value)
+                    node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
                     node["_json_props"].append(key)
             elif isinstance(value, tuple):
                 # lists can only be made of a single, primitive data type
@@ -237,7 +237,7 @@ class Neo4jStore(FahAlchemyStateStore):
                     isinstance(value[0], (int, float, str))
                     and all([isinstance(x, type(value[0])) for x in value])
                 ):
-                    node[key] = json.dumps(value)
+                    node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
                     node["_json_props"].append(key)
             elif isinstance(value, GufeTokenizable):
                 node_ = subgraph_ = self.gufe_nodes.get(
@@ -312,7 +312,7 @@ class Neo4jStore(FahAlchemyStateStore):
         for key, value in dict(node).items():
             # deserialize json-serialized attributes
             if key in dct["_json_props"]:
-                dct[key] = json.loads(value)
+                dct[key] = json.loads(value, cls=JSON_HANDLER.decoder)
 
             # inject dependencies
             dep_edges = g.edges(node)
@@ -1054,27 +1054,33 @@ class Neo4jStore(FahAlchemyStateStore):
         transformation = self.get_gufe(
             ScopedKey.from_str(transformations[0]["_scoped_key"])
         )
-        protocol_dag_result = (
+        protocoldagresult = (
             self.get_gufe(ScopedKey.from_str(results[0]["_scoped_key"]))
             if results[0] is not None
             else None
         )
 
-        return transformation, protocol_dag_result
+        return transformation, protocoldagresult
 
     def set_task_result(
-        self, task: ScopedKey, protocol_dag_result: ProtocolDAGResult
+        self, 
+        task: ScopedKey, 
+        protocoldagresult: ObjectStoreRef
     ) -> ScopedKey:
+        """Set an `ObjectStoreReference` for the given `Task`.
+
+        Does not store the `ProtocolDAGResult` for the task, but instead gives
+        it an `ObjectStoreReference`.
+
+        """
 
         scope = task.scope
         task_node = self._get_node(task)
 
-        # create a new task for the supplied transformation
-        # use a PERFORMS relationship
         subgraph, protocoldagresult_node, scoped_key = self._gufe_to_subgraph(
-            protocol_dag_result.to_shallow_dict(),
-            labels=["GufeTokenizable", protocol_dag_result.__class__.__name__],
-            gufe_key=protocol_dag_result.key,
+            protocoldagresult.to_shallow_dict(),
+            labels=["GufeTokenizable", protocoldagresult.__class__.__name__],
+            gufe_key=protocoldagresult.key,
             scope=scope,
         )
 
@@ -1087,7 +1093,7 @@ class Neo4jStore(FahAlchemyStateStore):
         )
 
         with self.transaction() as tx:
-            tx.merge(subgraph)
+            tx.merge(subgraph, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 

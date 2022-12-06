@@ -1,14 +1,15 @@
 import random
-
-import pytest
 from time import sleep
 from typing import List, Dict
+from pathlib import Path
 
+import pytest
 from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
+from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from fah_alchemy.storage import Neo4jStore
-from fah_alchemy.storage.models import Task, TaskQueue
+from fah_alchemy.storage.models import Task, TaskQueue, ObjectStoreRef
 from fah_alchemy.models import Scope, ScopedKey
 from fah_alchemy.security.models import (
     CredentialedUserIdentity,
@@ -335,10 +336,37 @@ class TestNeo4jStore(TestStateStore):
         )
         assert claimed6 == [None] * 2
 
-    def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test):
+    def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test, tmpdir):
         # need to understand why ProtocolDAGResult fails to be represented as
         # subgraph
-        ...
+
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create a task; compute its result, and attempt to submit it
+        task_sk = n4js.create_task(transformation_sk)
+
+        transformation, protocoldag_prev = n4js.get_task_transformation(task_sk)
+        protocoldag = transformation.protocol.create(
+                        stateA=transformation.stateA,
+                        stateB=transformation.stateB,
+                        mapping=transformation.mapping,
+                        extend_from=protocoldag_prev,
+                        name=str(task_sk))
+
+        # execute the task
+        with tmpdir.as_cwd():
+            protocoldagresult = execute_DAG(protocoldag, shared=Path('.').absolute())
+
+        osr = ObjectStoreRef(location='protocoldagresult/{protocoldagresult.key}')
+
+        # try to push the result
+        n4js.set_task_result(task_sk, osr)
+
 
     ### authentication
 
