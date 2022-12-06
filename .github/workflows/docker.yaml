@@ -45,6 +45,7 @@ jobs:
             type=ref,event=branch,enable=true,priority=600
             type=ref,event=tag,enable=true,priority=600
             type=ref,event=pr,prefix=pr-,enable=true,priority=600
+            type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{version}}
 
       - name: Build and push Docker image
