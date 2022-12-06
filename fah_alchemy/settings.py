@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Optional
 
 from pydantic import BaseSettings
 
@@ -18,6 +19,24 @@ class Neo4jStoreSettings(FrozenSettings):
     NEO4J_DBNAME: str = "neo4j"
     NEO4J_USER: str
     NEO4J_PASS: str
+
+
+class S3ObjectStoreSettings(FrozenSettings):
+    """Automatically populates settings from environment variables where they
+    match; case-insensitive.
+
+    If deploying APIs that use the S3ObjectStore on an EC2 host or other
+    role-based resource (e.g. an ECS container), then don't set these.
+    Instead rely on the IAM role of that resource for granting access to S3.
+
+    """
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_SESSION_TOKEN: Optional[str] = None
+    AWS_S3_BUCKET: str
+    AWS_S3_PREFIX: str
+    AWS_DEFAULT_REGION: str
+
 
 
 class JWTSettings(FrozenSettings):
@@ -56,6 +75,11 @@ class ComputeAPISettings(Neo4jStoreSettings, JWTSettings):
 @lru_cache()
 def get_neo4jstore_settings():
     return Neo4jStoreSettings()
+
+
+@lru_cache()
+def get_s3objectstore_settings():
+    return S3ObjectStoreSettings()
 
 
 @lru_cache()

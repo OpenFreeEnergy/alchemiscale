@@ -19,6 +19,8 @@ from ..base.api import (
 )
 from ..settings import ComputeAPISettings, get_compute_api_settings, get_jwt_settings
 from ..storage.statestore import Neo4jStore, get_n4js
+from ..storage.objectstore import S3ObjectStore, get_s3os
+from ..storage.models import ObjectStoreRef
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedComputeIdentity
@@ -118,12 +120,17 @@ def set_task_result(
     *,
     protocoldagresult: dict = Body(...),
     n4js: Neo4jStore = Depends(get_n4js),
+    s3os : S3ObjectStore = Depends(get_s3os),
 ):
     pdrj = json.dumps(protocoldagresult)
     pdr = json.loads(pdrj, cls=JSON_HANDLER.decoder)
     pdr = GufeTokenizable.from_dict(pdr)
 
-    return n4js.set_task_result(task=ScopedKey.from_str(task), protocol_dag_result=pdr)
+    # push the ProtocolDAGResult to the object store
+    objectstoreref: ObjectStoreRef = s3os.push_protocoldagresult(pdr)
+
+    sk: ScopedKey = n4js.set_task_result(task=ScopedKey.from_str(task), 
+                                         protocoldagresult=objectstoreref)
 
 
 @router.get("/chemicalsystems")
