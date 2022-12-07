@@ -352,21 +352,21 @@ class TestNeo4jStore(TestStateStore):
 
         transformation, protocoldag_prev = n4js.get_task_transformation(task_sk)
         protocoldag = transformation.protocol.create(
-                        stateA=transformation.stateA,
-                        stateB=transformation.stateB,
-                        mapping=transformation.mapping,
-                        extend_from=protocoldag_prev,
-                        name=str(task_sk))
+            stateA=transformation.stateA,
+            stateB=transformation.stateB,
+            mapping=transformation.mapping,
+            extend_from=protocoldag_prev,
+            name=str(task_sk),
+        )
 
         # execute the task
         with tmpdir.as_cwd():
-            protocoldagresult = execute_DAG(protocoldag, shared=Path('.').absolute())
+            protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
 
-        osr = ObjectStoreRef(location='protocoldagresult/{protocoldagresult.key}')
+        osr = ObjectStoreRef(location="protocoldagresult/{protocoldagresult.key}")
 
         # try to push the result
         n4js.set_task_result(task_sk, osr)
-
 
     ### authentication
 

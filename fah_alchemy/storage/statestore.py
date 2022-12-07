@@ -15,7 +15,14 @@ from py2neo.database import Transaction
 from py2neo.matching import NodeMatcher
 from py2neo.errors import ClientError
 
-from .models import ComputeKey, Task, TaskQueue, TaskArchive, TaskStatusEnum, ObjectStoreRef
+from .models import (
+    ComputeKey,
+    Task,
+    TaskQueue,
+    TaskArchive,
+    TaskStatusEnum,
+    ObjectStoreRef,
+)
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
 
@@ -1063,9 +1070,7 @@ class Neo4jStore(FahAlchemyStateStore):
         return transformation, protocoldagresult
 
     def set_task_result(
-        self, 
-        task: ScopedKey, 
-        protocoldagresult: ObjectStoreRef
+        self, task: ScopedKey, protocoldagresult: ObjectStoreRef
     ) -> ScopedKey:
         """Set an `ObjectStoreReference` for the given `Task`.
 
