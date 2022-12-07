@@ -30,13 +30,13 @@ class S3ObjectStoreSettings(FrozenSettings):
     Instead rely on the IAM role of that resource for granting access to S3.
 
     """
+
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
     AWS_SESSION_TOKEN: Optional[str] = None
     AWS_S3_BUCKET: str
     AWS_S3_PREFIX: str
     AWS_DEFAULT_REGION: str
-
 
 
 class JWTSettings(FrozenSettings):

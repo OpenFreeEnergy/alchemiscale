@@ -20,12 +20,12 @@ def get_s3os(settings: S3ObjectStoreSettings):
         aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
         aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
         aws_session_token=settings.AWS_SESSION_TOKEN,
-        region_name=settings.AWS_DEFAULT_REGION
+        region_name=settings.AWS_DEFAULT_REGION,
     )
 
-    return S3ObjectStore(session=session,
-                         bucket=settings.AWS_S3_BUCKET, 
-                         prefix=settings.AWS_S3_PREFIX)
+    return S3ObjectStore(
+        session=session, bucket=settings.AWS_S3_BUCKET, prefix=settings.AWS_S3_PREFIX
+    )
 
 
 class S3ObjectStoreError(Exception):
@@ -54,9 +54,7 @@ class S3ObjectStore:
         bucket.wait_until_exists()
 
     def check(self):
-        """Check consistency of object store.
-
-        """
+        """Check consistency of object store."""
         raise NotImplementedError
 
     def reset(self):
@@ -95,7 +93,7 @@ class S3ObjectStore:
 
         response = self.resource.Object(self.bucket, key).put(Body=byte_data)
 
-        if not response['ResponseMetadata']['HTTPStatusCode'] == 200:
+        if not response["ResponseMetadata"]["HTTPStatusCode"] == 200:
             raise S3ObjectStoreError(f"Could not store given object at key {key}")
 
         return response
@@ -103,7 +101,7 @@ class S3ObjectStore:
     def _get_bytes(self, location):
         key = os.path.join(self.prefix, location)
 
-        return self.resource.Object(self.bucket, key).get()['Body'].read()
+        return self.resource.Object(self.bucket, key).get()["Body"].read()
 
     def _store_path(self, location, path):
         """
@@ -176,10 +174,10 @@ class S3ObjectStore:
         # build `location` based on gufe key
         location = os.path.join("protocoldagresult", protocoldagresult.key)
 
-        pdr_jb = json.dumps(protocoldagresult.to_dict(),
-                            cls=JSON_HANDLER.encoder).encode('utf-8')
+        pdr_jb = json.dumps(
+            protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
+        ).encode("utf-8")
         response = self._store_bytes(location, pdr_jb)
-
 
         return ObjectStoreRef(location=location)
 
@@ -187,9 +185,10 @@ class S3ObjectStore:
 
         location = objectstoreref.location
 
-        pdr_j = self._get_bytes(location).decode('utf-8')
+        pdr_j = self._get_bytes(location).decode("utf-8")
 
         protocoldagresult = GufeTokenizable.from_dict(
-                json.loads(pdr_j, cls=JSON_HANDLER.decoder))
+            json.loads(pdr_j, cls=JSON_HANDLER.decoder)
+        )
 
         return protocoldagresult

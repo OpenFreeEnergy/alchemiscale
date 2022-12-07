@@ -123,7 +123,9 @@ class TaskQueue(GufeTokenizable):
         self.weight = weight
 
     def _gufe_tokenize(self):
-        return hashlib.md5(str(self.network).encode(), usedforsecurity=False).hexdigest()
+        return hashlib.md5(
+            str(self.network).encode(), usedforsecurity=False
+        ).hexdigest()
 
     def _to_dict(self):
         return {
