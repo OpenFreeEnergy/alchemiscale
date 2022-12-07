@@ -120,7 +120,7 @@ def set_task_result(
     *,
     protocoldagresult: dict = Body(...),
     n4js: Neo4jStore = Depends(get_n4js),
-    s3os : S3ObjectStore = Depends(get_s3os),
+    s3os: S3ObjectStore = Depends(get_s3os),
 ):
     pdrj = json.dumps(protocoldagresult)
     pdr = json.loads(pdrj, cls=JSON_HANDLER.decoder)
@@ -129,8 +129,9 @@ def set_task_result(
     # push the ProtocolDAGResult to the object store
     objectstoreref: ObjectStoreRef = s3os.push_protocoldagresult(pdr)
 
-    sk: ScopedKey = n4js.set_task_result(task=ScopedKey.from_str(task), 
-                                         protocoldagresult=objectstoreref)
+    sk: ScopedKey = n4js.set_task_result(
+        task=ScopedKey.from_str(task), protocoldagresult=objectstoreref
+    )
 
 
 @router.get("/chemicalsystems")
