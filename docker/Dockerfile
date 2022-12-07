@@ -6,7 +6,7 @@ LABEL org.opencontainers.image.licenses=MIT
 
 ENV PYTHONUNBUFFERED=1
 
-COPY --chown=$MAMBA_USER:$MAMBA_USER devtools/conda-envs/test.yml /tmp/env.yaml
+COPY --chown=$MAMBA_USER:$MAMBA_USER devtools/conda-envs/docker.yml /tmp/env.yaml
 COPY --chown=$MAMBA_USER:$MAMBA_USER fah_alchemy /tmp/fah_alchemy
 COPY --chown=$MAMBA_USER:$MAMBA_USER LICENSE MANIFEST.in README.md setup.cfg setup.py versioneer.py /tmp/
 RUN micromamba install -y -n base git -f /tmp/env.yaml && \
