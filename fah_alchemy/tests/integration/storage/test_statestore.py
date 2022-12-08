@@ -375,7 +375,7 @@ class TestNeo4jStore(TestStateStore):
                 """
         ).to_subgraph()
 
-        assert n['location'] == osr.location
+        assert n["location"] == osr.location
 
     ### authentication
 
