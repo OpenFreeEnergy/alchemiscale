@@ -7,11 +7,11 @@ from fastapi.testclient import TestClient
 from gufe import AlchemicalNetwork
 
 from fah_alchemy.settings import get_jwt_settings
-from fah_alchemy.storage import Neo4jStore, get_n4js
+from fah_alchemy.storage import Neo4jStore
 from fah_alchemy.compute import api, client
 from fah_alchemy.security.models import CredentialedComputeIdentity, TokenData
 from fah_alchemy.security.auth import hash_key
-from fah_alchemy.base.api import get_token_data_depends
+from fah_alchemy.base.api import get_token_data_depends, get_n4js_depends, get_s3os_depends
 
 from fah_alchemy.tests.integration.compute.utils import get_compute_settings_override
 
@@ -77,13 +77,17 @@ def get_token_data_depends_override():
 
 
 @pytest.fixture
-def compute_api_no_auth(n4js):
+def compute_api_no_auth(n4js, s3os):
     def get_n4js_override():
         return n4js
 
+    def get_s3os_override():
+        return s3os
+
     overrides = copy(api.app.dependency_overrides)
 
-    api.app.dependency_overrides[get_n4js] = get_n4js_override
+    api.app.dependency_overrides[get_n4js_depends] = get_n4js_override
+    api.app.dependency_overrides[get_s3os_depends] = get_s3os_override
     api.app.dependency_overrides[get_jwt_settings] = get_compute_settings_override
     api.app.dependency_overrides[
         get_token_data_depends

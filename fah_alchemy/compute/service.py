@@ -149,7 +149,7 @@ class SynchronousComputeService:
 
         # TODO: add check that this protocoldagresult actually corresponds to
         # the given task
-        sk = self.client.set_task_result(task, protocoldagresult)
+        sk: ScopedKey = self.client.set_task_result(task, protocoldagresult)
 
         # TODO: remove claim on task, set to complete; remove from queues
 

@@ -10,15 +10,6 @@ from fah_alchemy.tests.integration.interface.utils import get_user_settings_over
 
 
 class TestClient:
-    def test_create_network(
-        self,
-        scope_test,
-        n4js_preloaded,
-        user_client: client.FahAlchemyClient,
-        uvicorn_server,
-    ):
-        ...
-
     def test_wrong_credential(
         self,
         scope_test,
@@ -51,3 +42,13 @@ class TestClient:
         sleep(settings.JWT_EXPIRE_SECONDS + 2)
         user_client.get_info()
         assert token != user_client._jwtoken
+
+    def test_create_network(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.FahAlchemyClient,
+        uvicorn_server,
+    ):
+        ...
+

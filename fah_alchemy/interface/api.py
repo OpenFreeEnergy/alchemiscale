@@ -14,11 +14,14 @@ from ..base.api import (
     PermissiveJSONResponse,
     scope_params,
     get_token_data_depends,
+    get_n4js_depends,
+    get_s3os_depends,
     base_router,
     get_cred_entity,
 )
 from ..settings import ComputeAPISettings, get_api_settings, get_jwt_settings
-from ..storage.statestore import Neo4jStore, get_n4js
+from ..storage.statestore import Neo4jStore
+from ..storage.objectstore import S3ObjectStore
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedUserIdentity
@@ -56,7 +59,7 @@ async def query_networks(
     name: str = None,
     return_gufe: bool = False,
     scope: Scope = Depends(scope_params),
-    n4js: Neo4jStore = Depends(get_n4js),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
 
     networks = n4js.query_networks(name=name, scope=scope, return_gufe=return_gufe)
@@ -71,7 +74,7 @@ async def query_networks(
 def get_network(
     network,
     *,
-    n4js: Neo4jStore = Depends(get_n4js),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     network = n4js.get_gufe(scoped_key=network)
     return network.to_dict()
@@ -82,7 +85,7 @@ def create_network(
     *,
     network: Dict = Body(...),
     scope: Scope,
-    n4js: Neo4jStore = Depends(get_n4js),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     an = AlchemicalNetwork.from_dict(network)
     return n4js.create_network(network=an, scope=scope)
