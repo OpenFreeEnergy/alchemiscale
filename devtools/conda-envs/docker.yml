@@ -1,4 +1,4 @@
-name: fah-alchemy-test
+name: base
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
@@ -22,7 +22,7 @@ dependencies:
   - neo4j-python-driver
   - py2neo
   - monotonic    # needed by py2neo, but not pulled in
-  - docker-py    # for grolt
+  #- docker-py    # for grolt
 
   ## object store
   - boto3        # aws s3
@@ -42,11 +42,11 @@ dependencies:
   - click
 
   # testing
-  - pytest
-  - pytest-xdist
-  - pytest-cov
-  - coverage
-  - moto
+  #- pytest
+  #- pytest-xdist
+  #- pytest-cov
+  #- coverage
+  #- moto
 
   # needed for openfe-benchmark tests
   - lomap2>=2.1.0
@@ -54,7 +54,7 @@ dependencies:
   - openmmforcefields
 
   - pip:
-    - git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment
+    #- git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment
     - git+https://github.com/OpenFreeEnergy/gufe@result-handling-improvements
     - git+https://github.com/OpenFreeEnergy/openfe
     - git+https://github.com/OpenFreeEnergy/openfe-benchmarks

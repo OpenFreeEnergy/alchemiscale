@@ -41,7 +41,7 @@ jobs:
             python-version: ${{ matrix.python-version }}
             miniforge-variant: Mambaforge
             environment-file: devtools/conda-envs/test.yml
-            activate-environment: base
+            activate-environment: fah-alchemy-test
 
       - name: Decrypt OpenEye license
         if: ${{ !github.event.pull_request.head.repo.fork }}
