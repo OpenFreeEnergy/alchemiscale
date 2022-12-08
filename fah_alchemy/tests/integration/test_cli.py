@@ -5,7 +5,11 @@ import contextlib
 import os
 import traceback
 
-from fah_alchemy.cli import get_settings_from_options, cli
+import requests
+from fastapi import FastAPI
+from fah_alchemy.tests.integration.utils import running_service
+
+from fah_alchemy.cli import get_settings_from_options, cli, ApiApplication
 from fah_alchemy.settings import Neo4jStoreSettings
 from fah_alchemy.storage.statestore import Neo4JStoreError
 
@@ -28,6 +32,69 @@ def set_env_vars(env):
     finally:
         os.environ.clear()
         os.environ.update(old_env)
+
+
+toyapp = FastAPI()
+
+
+@toyapp.get("/ping")
+def read_root():
+    return {"Hello": "World"}
+
+
+def test_api_application():
+    # this checks that the gunicorn BaseApplication subclass works correctly
+    # with a FastAPI app
+    workers = 1
+    host = "127.0.0.1"
+    port = 50100
+    app = ApiApplication.from_parameters(toyapp, workers, host, port)
+
+    expected_ping = {"Hello": "World"}
+    with running_service(app.run, port, args=tuple()):
+        response = requests.get(f"http://{host}:{port}/ping")
+
+    assert response.status_code == 200
+    assert response.json() == expected_ping
+
+
+def test_api():
+    workers = 1
+    host = "127.0.0.1"
+    port = 50100
+    invocation = ["api", "--workers", workers, "--host", host, "--port", port]
+    expected_ping = {"api": "FahAlchemyAPI"}
+
+    runner = CliRunner()
+    with running_service(runner.invoke, port, (cli, invocation)):
+        response = requests.get(f"http://{host}:{port}/ping")
+
+    assert response.status_code == 200
+    assert response.json() == expected_ping
+
+
+def test_compute_api():
+    workers = 2
+    host = "127.0.0.1"
+    port = 50100
+    invocation = [
+        "compute",
+        "api",
+        "--workers",
+        workers,
+        "--host",
+        host,
+        "--port",
+        port,
+    ]
+    expected_ping = {"api": "FahAlchemyComputeAPI"}
+
+    runner = CliRunner()
+    with running_service(runner.invoke, port, (cli, invocation)):
+        response = requests.get(f"http://{host}:{port}/ping")
+
+    assert response.status_code == 200
+    assert response.json() == expected_ping
 
 
 @pytest.mark.parametrize(
