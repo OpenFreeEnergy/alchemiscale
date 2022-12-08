@@ -2,6 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Union, Dict, Optional
 from uuid import uuid4
+import hashlib
 
 
 from pydantic import BaseModel, Field
@@ -74,7 +75,7 @@ class Task(GufeTokenizable):
 
     def _gufe_tokenize(self):
         # tokenize with uuid
-        return uuid4()
+        return uuid4().hex
 
     def _to_dict(self):
         return {
@@ -87,7 +88,8 @@ class Task(GufeTokenizable):
     def _from_dict(cls, d):
         return cls(**d)
 
-    def _defaults(self):
+    @classmethod
+    def _defaults(cls):
         return super()._defaults()
 
 
@@ -115,29 +117,28 @@ class TaskQueue(GufeTokenizable):
     network: str
     weight: float
 
-    def __init__(self, network: ScopedKey, weight: int = 0.5, _key: str = None):
-        if _key is not None:
-            self._key = GufeKey(_key)
+    def __init__(self, network: ScopedKey, weight: int = 0.5):
 
         self.network = network
         self.weight = weight
 
     def _gufe_tokenize(self):
-        # tokenize with uuid
-        return self.network
+        return hashlib.md5(
+            str(self.network).encode(), usedforsecurity=False
+        ).hexdigest()
 
     def _to_dict(self):
         return {
             "network": self.network,
             "weight": self.weight,
-            "_key": str(self.key),
         }
 
     @classmethod
     def _from_dict(cls, d):
         return cls(**d)
 
-    def _defaults(self):
+    @classmethod
+    def _defaults(cls):
         return super()._defaults()
 
 
@@ -151,5 +152,30 @@ class TaskArchive(GufeTokenizable):
     def _from_dict(cls, d):
         return cls(**d)
 
-    def _defaults(self):
+    @classmethod
+    def _defaults(cls):
         return super()._defaults()
+
+
+class ObjectStoreRef(GufeTokenizable):
+    location: str
+
+    def __init__(self, location: str):
+        self.location = location
+
+    def _to_dict(self):
+        return {
+            "location": self.location,
+        }
+
+    @classmethod
+    def _from_dict(cls, d):
+        return cls(**d)
+
+    @classmethod
+    def _defaults(cls):
+        return super()._defaults()
+
+
+class TaskArchive(GufeTokenizable):
+    ...

@@ -1,22 +1,69 @@
-from gufe.storage.externalresource.base import ExternalStorage
+import os
+import io
+import json
+from boto3.session import Session
+from functools import lru_cache
 
-from gufe.storage.errors import (
-    MissingExternalResourceError,
-    ChangedExternalResourceError,
-)
+from gufe.protocols import ProtocolDAGResult
+from gufe.tokenization import JSON_HANDLER, GufeTokenizable
+
+from .models import ObjectStoreRef
+from ..settings import S3ObjectStoreSettings, get_s3objectstore_settings
 
 
-class S3Storage(ExternalStorage):
-    """File storage backend for AWS S3."""
+@lru_cache()
+def get_s3os(settings: S3ObjectStoreSettings):
+    """Convenience function for getting an S3ObjectStore directly from settings."""
 
-    def __init__(self, session: "boto3.Sessin", bucket: str, prefix: str):
+    # create a boto3 Session and parameterize with keys
+    session = Session(
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        aws_session_token=settings.AWS_SESSION_TOKEN,
+        region_name=settings.AWS_DEFAULT_REGION,
+    )
+
+    return S3ObjectStore(
+        session=session, bucket=settings.AWS_S3_BUCKET, prefix=settings.AWS_S3_PREFIX
+    )
+
+
+class S3ObjectStoreError(Exception):
+    ...
+
+
+class S3ObjectStore:
+    """Object storage for use with AWS S3."""
+
+    def __init__(self, session: "boto3.Session", bucket: str, prefix: str):
         """ """
         self.session = session
-
         self.resource = self.session.resource("s3")
-        self.bucket = self.resource.Bucket(bucket)
 
+        self.bucket = bucket
         self.prefix = prefix
+
+    def initialize(self):
+        """Initialize object store.
+
+        Creates bucket if it does not exist.
+
+        """
+        bucket = self.resource.Bucket(self.bucket)
+        bucket.create()
+        bucket.wait_until_exists()
+
+    def check(self):
+        """Check consistency of object store."""
+        raise NotImplementedError
+
+    def reset(self):
+        """Remove all data from object store.
+
+        Deletes all objects, including the bucket itself.
+
+        """
+        raise NotImplementedError
 
     def iter_contents(self, prefix=""):
         """Iterate over the labels in this storage.
@@ -32,16 +79,29 @@ class S3Storage(ExternalStorage):
             Contents of this storage, which may include items without
             metadata.
         """
-        raise NotImplementedError()
+
+        filter_prefix = os.path.join(self.prefix, prefix)
+
+        return self.resource.Bucket(self.bucket).objects.filter(Prefix=filter_prefix)
 
     def _store_bytes(self, location, byte_data):
         """
         For implementers: This should be blocking, even if the storage
         backend allows asynchronous storage.
         """
-        key = self.prefix + location
+        key = os.path.join(self.prefix, location)
 
-        self.bucket.put_object(Key=key, Body=byte_data)
+        response = self.resource.Object(self.bucket, key).put(Body=byte_data)
+
+        if not response["ResponseMetadata"]["HTTPStatusCode"] == 200:
+            raise S3ObjectStoreError(f"Could not store given object at key {key}")
+
+        return response
+
+    def _get_bytes(self, location):
+        key = os.path.join(self.prefix, location)
+
+        return self.resource.Object(self.bucket, key).get()["Body"].read()
 
     def _store_path(self, location, path):
         """
@@ -52,36 +112,36 @@ class S3Storage(ExternalStorage):
         For implementers: This should be blocking, even if the storage
         backend allows asynchronous storage.
         """
-        key = self.prefix + location
+        key = os.path.join(self.prefix, location)
 
         with open(path, "rb") as f:
-            self.bucket.upload_fileobj(f, key)
+            self.resource.Bucket(self.bucket).upload_fileobj(f, key)
 
     def _exists(self, location) -> bool:
         from botocore.exceptions import ClientError
 
-        key = self.prefix + location
+        key = os.path.join(self.prefix, location)
 
         # we do a metadata load as our existence check
         # appears to be most recommended approach
         try:
-            self.bucket.Object(key).load()
+            self.resource.Object(self.bucket, key).load()
             return True
         except ClientError:
             return False
 
     def _delete(self, location):
-        key = self.prefix + location
+        key = os.path.join(self.prefix, location)
 
         if self._exists(location):
-            self.bucket.Object(key).delete()
+            self.resouce.Object(self.bucket, key).delete()
         else:
-            raise MissingExternalResourceError(
+            raise S3ObjectStoreError(
                 f"Unable to delete '{str(key)}': Object does not exist"
             )
 
     def _get_filename(self, location):
-        key = self.prefix + location
+        key = os.path.join(self.prefix, location)
 
         object = self.bucket.Object(key)
 
@@ -96,10 +156,39 @@ class S3Storage(ExternalStorage):
 
         return url
 
-    def _load_stream(self, location):
-        key = self.prefix + location
+    def push_protocoldagresult(self, protocoldagresult: ProtocolDAGResult):
+        """Push given `ProtocolDAGResult` to this `ObjectStore`.
 
-        try:
-            return self.bucket.Object(key).get()["Body"]
-        except self.resource.meta.client.exceptions.NoSuchKey as e:
-            raise MissingExternalResourceError(str(e))
+        Parameters
+        ----------
+        protocoldagresult
+            ProtocolDAGResult to store.
+
+        Returns
+        -------
+        ObjectStoreRef
+            Reference to the serialized `ProtocolDAGResult` in the object store.
+
+        """
+
+        # build `location` based on gufe key
+        location = os.path.join("protocoldagresult", protocoldagresult.key)
+
+        pdr_jb = json.dumps(
+            protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
+        ).encode("utf-8")
+        response = self._store_bytes(location, pdr_jb)
+
+        return ObjectStoreRef(location=location)
+
+    def pull_protocoldagresult(self, objectstoreref: ObjectStoreRef):
+
+        location = objectstoreref.location
+
+        pdr_j = self._get_bytes(location).decode("utf-8")
+
+        protocoldagresult = GufeTokenizable.from_dict(
+            json.loads(pdr_j, cls=JSON_HANDLER.decoder)
+        )
+
+        return protocoldagresult

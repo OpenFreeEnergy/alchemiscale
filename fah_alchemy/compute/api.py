@@ -8,7 +8,7 @@ import os
 import json
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
-from gufe.tokenization import GufeTokenizable
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from ..base.api import (
     PermissiveJSONResponse,
@@ -19,6 +19,8 @@ from ..base.api import (
 )
 from ..settings import ComputeAPISettings, get_compute_api_settings, get_jwt_settings
 from ..storage.statestore import Neo4jStore, get_n4js
+from ..storage.objectstore import S3ObjectStore, get_s3os
+from ..storage.models import ObjectStoreRef
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedComputeIdentity
@@ -116,11 +118,20 @@ async def get_task_transformation(
 def set_task_result(
     task,
     *,
-    protocoldagresult: Dict = Body(...),
+    protocoldagresult: dict = Body(...),
     n4js: Neo4jStore = Depends(get_n4js),
+    s3os: S3ObjectStore = Depends(get_s3os),
 ):
-    pdr = GufeTokenizable.from_dict(protocoldagresult)
-    return n4js.set_task_result(task - task, protocoldagresult=pdr)
+    pdrj = json.dumps(protocoldagresult)
+    pdr = json.loads(pdrj, cls=JSON_HANDLER.decoder)
+    pdr = GufeTokenizable.from_dict(pdr)
+
+    # push the ProtocolDAGResult to the object store
+    objectstoreref: ObjectStoreRef = s3os.push_protocoldagresult(pdr)
+
+    sk: ScopedKey = n4js.set_task_result(
+        task=ScopedKey.from_str(task), protocoldagresult=objectstoreref
+    )
 
 
 @router.get("/chemicalsystems")
