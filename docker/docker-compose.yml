@@ -1,0 +1,77 @@
+version: '3.8'
+
+# Custom top-level network
+networks:
+  neo4j-internal:
+
+services:
+  neo4j:
+    image: ${NEO4J_DOCKER_IMAGE}
+    hostname: neo4j
+    # Service-level network, which specifies the networks, from the list of the top-level networks (in this case only neo4j-internal), that the server will connect to.
+    # Adds a network alias (used in neo4j.conf when configuring the discovery members)
+    networks:
+      neo4j-internal:
+        aliases:
+          - neo4j-network
+
+    # The ports that will be accessible from outside the container - HTTP (7474) and Bolt (7687).
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+
+    # Uncomment the volumes to be mounted to make them accessible from outside the container.
+    volumes:
+      - ./neo4j.conf:/conf/neo4j.conf # This is the main configuration file.
+      - ./data/neo4j:/var/lib/neo4j/data
+      - ./logs/neo4j:/var/lib/neo4j/logs
+      - ./conf/neo4j:/var/lib/neo4j/conf
+      - ./import/neo4j:/var/lib/neo4j/import
+      #- ./metrics/neo4j:/var/lib/neo4j/metrics
+      #- ./licenses/neo4j:/var/lib/neo4j/licenses
+      #- ./ssl/neo4j:/var/lib/neo4j/ssl
+
+    # Passes the following environment variables to the container
+    environment:
+      - NEO4J_AUTH=${NEO4J_PASS:?err}
+      - NEO4J_EDITION=docker_compose
+
+    # Simple check testing whether the port 7474 is opened.
+    # If so, the instance running inside the container is considered as "healthy".
+    # This status can be checked using the "docker ps" command.
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
+
+    # Set up the user
+    user: ${USER_ID}:${GROUP_ID}:
+  fah-alchemy-client-API:
+    image: ghcr.io/mikemhenry/fah-alchemy:latest
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?err}
+      - JWT_EXPIRE_SECONDS=${JWT_EXPIRE_SECONDS:-1800}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:?err}
+      - AWS_S3_PREFIX=${AWS_S3_PREFIX:?err}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:?err}
+    depends_on: 
+      - neo4j
+      - fah-alchemy-compute-API
+    commands: api --host 127.0.0.1 --port 8080 --workers 2
+  fah-alchemy-compute-API:
+    image: ghcr.io/mikemhenry/fah-alchemy:latest
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?err}
+      - JWT_EXPIRE_SECONDS=${JWT_EXPIRE_SECONDS:-1800}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:?err}
+      - AWS_S3_PREFIX=${AWS_S3_PREFIX:?err}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:?err}
+    depends_on: 
+      - neo4j
+    commands: compute api --host 127.0.0.1 --port 8080 --workers 2
