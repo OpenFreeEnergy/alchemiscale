@@ -38,6 +38,7 @@ dependencies:
   - starlette
   - httpx
   - cryptography
+  - requests
 
   ## cli
   - click
