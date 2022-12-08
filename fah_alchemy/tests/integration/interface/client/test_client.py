@@ -51,4 +51,3 @@ class TestClient:
         uvicorn_server,
     ):
         ...
-

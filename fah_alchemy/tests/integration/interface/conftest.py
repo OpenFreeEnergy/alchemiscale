@@ -9,7 +9,11 @@ from fah_alchemy.settings import get_jwt_settings
 from fah_alchemy.interface import api
 from fah_alchemy.security.models import CredentialedUserIdentity, TokenData
 from fah_alchemy.security.auth import hash_key
-from fah_alchemy.base.api import get_token_data_depends, get_n4js_depends, get_s3os_depends
+from fah_alchemy.base.api import (
+    get_token_data_depends,
+    get_n4js_depends,
+    get_s3os_depends,
+)
 
 
 from fah_alchemy.tests.integration.interface.utils import get_user_settings_override

@@ -15,12 +15,12 @@ from py2neo import Graph
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 
 from ..settings import (
-        JWTSettings, 
-        Neo4jStoreSettings, 
-        S3ObjectStoreSettings,
-        get_jwt_settings,
-        get_neo4jstore_settings,
-        get_s3objectstore_settings
+    JWTSettings,
+    Neo4jStoreSettings,
+    S3ObjectStoreSettings,
+    get_jwt_settings,
+    get_neo4jstore_settings,
+    get_s3objectstore_settings,
 )
 from ..storage.statestore import Neo4jStore, get_n4js
 from ..storage.objectstore import S3ObjectStore, get_s3os

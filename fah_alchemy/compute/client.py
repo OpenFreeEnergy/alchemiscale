@@ -66,8 +66,11 @@ class FahAlchemyComputeClient(FahAlchemyBaseClient):
     def set_task_result(
         self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
     ) -> ScopedKey:
-        data = dict(protocoldagresult=json.dumps(protocoldagresult.to_dict(), 
-                                                 cls=JSON_HANDLER.encoder))
+        data = dict(
+            protocoldagresult=json.dumps(
+                protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
+            )
+        )
 
         pdr_sk = self._post_resource(f"tasks/{task}/result", data)
 

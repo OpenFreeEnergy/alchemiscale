@@ -32,7 +32,7 @@ class TestComputeAPI:
         assert len(tq_dict) == 2
         assert all([i.weight == 0.5 for i in tq_dict.values()])
 
-    #def test_task_result(self, n4js_preloaded, test_client, protocoldagresult):
+    # def test_task_result(self, n4js_preloaded, test_client, protocoldagresult):
 
     #    json.dumps(protocoldagresult.to_dict()
 

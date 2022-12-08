@@ -64,7 +64,7 @@ class S3ObjectStore:
 
         """
         bucket = self.resource.Bucket(self.bucket)
-        
+
         # delete all objects, then the bucket
         bucket.objects.delete()
         bucket.delete()
