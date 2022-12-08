@@ -7,6 +7,7 @@
 
 from os import getenv
 from time import sleep
+from pathlib import Path
 
 from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
@@ -17,6 +18,7 @@ from py2neo import ServiceProfile, Graph
 from py2neo.client import Connector
 
 from gufe import ChemicalSystem, Transformation, AlchemicalNetwork
+from gufe.protocols.protocoldag import execute_DAG
 from gufe.tests.test_protocol import DummyProtocol
 from openfe_benchmarks import tyk2
 
@@ -180,7 +182,7 @@ def s3objectstore_settings():
     )
 
 
-@fixture
+@fixture(scope="module")
 def s3os(s3objectstore_settings):
     with mock_s3():
         s3os = get_s3os(s3objectstore_settings)
@@ -243,3 +245,19 @@ def network_tyk2():
 @fixture(scope="session")
 def scope_test():
     return Scope(org="test_org", campaign="test_campaign", project="test_project")
+
+
+@fixture(scope="session")
+def transformation(network_tyk2):
+    return list(network_tyk2.edges)[0]
+
+
+@fixture(scope="session")
+def protocoldagresult(tmpdir, transformation):
+    protocoldag = transformation.create()
+
+    # execute the task
+    with tmpdir.as_cwd():
+        protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
+
+    return protocoldagresult

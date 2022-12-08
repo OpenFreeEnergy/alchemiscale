@@ -368,6 +368,15 @@ class TestNeo4jStore(TestStateStore):
         # try to push the result
         n4js.set_task_result(task_sk, osr)
 
+        n = n4js.graph.run(
+            f"""
+                match (n:ObjectStoreRef)<-[:RESULTS_IN]-(t:Task)
+                return n
+                """
+        ).to_subgraph()
+
+        assert n['location'] == osr.location
+
     ### authentication
 
     def test_create_credentialed_entity(self, n4js: Neo4jStore):
