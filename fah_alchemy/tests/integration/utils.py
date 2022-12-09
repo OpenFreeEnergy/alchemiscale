@@ -6,6 +6,7 @@ import multiprocessing
 
 @contextlib.contextmanager
 def running_service(target, port, args):
+    multiprocessing.set_start_method("fork", force=True)
     proc = multiprocessing.Process(target=target, args=args, daemon=True)
     proc.start()
 
