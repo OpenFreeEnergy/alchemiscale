@@ -252,7 +252,7 @@ def transformation(network_tyk2):
     return list(network_tyk2.edges)[0]
 
 
-@fixture(scope="session")
+@fixture(scope="function")
 def protocoldagresult(tmpdir, transformation):
     protocoldag = transformation.create()
 
