@@ -10,7 +10,7 @@ from functools import wraps
 import requests
 from requests.auth import HTTPBasicAuth
 
-from gufe.tokenization import GufeTokenizable
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 
@@ -66,7 +66,12 @@ class FahAlchemyComputeClient(FahAlchemyBaseClient):
     def set_task_result(
         self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
     ) -> ScopedKey:
-        data = dict(protocoldagresult=protocoldagresult.to_dict())
+        data = dict(
+            protocoldagresult=json.dumps(
+                protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
+            )
+        )
+
         pdr_sk = self._post_resource(f"tasks/{task}/result", data)
 
-        return ScopedKey.from_str(pdr_sk)
+        return ScopedKey.from_dict(pdr_sk)

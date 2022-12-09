@@ -3,6 +3,7 @@
 """
 
 
+from functools import lru_cache
 from typing import Any, Dict, List
 import os
 import json
@@ -13,8 +14,16 @@ from fastapi.security import OAuth2PasswordRequestForm
 from py2neo import Graph
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 
-from ..settings import JWTSettings, get_jwt_settings
+from ..settings import (
+    JWTSettings,
+    Neo4jStoreSettings,
+    S3ObjectStoreSettings,
+    get_jwt_settings,
+    get_neo4jstore_settings,
+    get_s3objectstore_settings,
+)
 from ..storage.statestore import Neo4jStore, get_n4js
+from ..storage.objectstore import S3ObjectStore, get_s3os
 from ..models import Scope, ScopedKey
 from ..security.auth import (
     authenticate,
@@ -53,6 +62,20 @@ async def get_token_data_depends(
     )
 
 
+@lru_cache()
+async def get_n4js_depends(
+    settings: Neo4jStoreSettings = Depends(get_neo4jstore_settings),
+) -> Neo4jStore:
+    return get_n4js(settings)
+
+
+@lru_cache()
+async def get_s3os_depends(
+    settings: S3ObjectStoreSettings = Depends(get_s3objectstore_settings),
+) -> S3ObjectStore:
+    return get_s3os(settings)
+
+
 async def get_cred_entity():
     return CredentialedEntity
 
@@ -64,7 +87,7 @@ base_router = APIRouter()
 async def get_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     settings: JWTSettings = Depends(get_jwt_settings),
-    n4js: Neo4jStore = Depends(get_n4js),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
     cred_cls: CredentialedEntity = Depends(get_cred_entity),
 ):
 
