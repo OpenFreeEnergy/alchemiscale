@@ -19,7 +19,8 @@ from ..base.api import (
     base_router,
     get_cred_entity,
 )
-from ..settings import ComputeAPISettings, get_api_settings, get_jwt_settings
+from ..settings import get_api_settings
+from ..settings import get_base_api_settings, get_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
 from ..models import Scope, ScopedKey
@@ -28,7 +29,7 @@ from ..security.models import Token, TokenData, CredentialedUserIdentity
 
 
 app = FastAPI(title="FahAlchemyAPI")
-app.dependency_overrides[get_jwt_settings] = get_api_settings
+app.dependency_overrides[get_base_api_settings] = get_api_settings
 app.include_router(base_router)
 
 
