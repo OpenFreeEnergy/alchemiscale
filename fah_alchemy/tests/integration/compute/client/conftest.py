@@ -1,16 +1,14 @@
 import pytest
 from copy import copy
 from time import sleep
+from multiprocessing import Process
 
 import uvicorn
 import requests
 
-from fah_alchemy.settings import ComputeAPISettings, get_jwt_settings
-from fah_alchemy.storage import Neo4jStore, get_n4js
+from fah_alchemy.settings import get_base_api_settings
+from fah_alchemy.base.api import get_n4js_depends, get_s3os_depends
 from fah_alchemy.compute import api, client
-from fah_alchemy.security.models import CredentialedComputeIdentity, TokenData
-from fah_alchemy.security.auth import hash_key
-from fah_alchemy.base.api import get_token_data_depends
 
 from fah_alchemy.tests.integration.compute.utils import get_compute_settings_override
 from fah_alchemy.tests.integration.utils import running_service
@@ -20,14 +18,14 @@ from fah_alchemy.tests.integration.utils import running_service
 
 
 @pytest.fixture(scope="module")
-def compute_api(n4js):
-    def get_n4js_override():
-        return n4js
+def compute_api(s3os):
+    def get_s3os_override():
+        return s3os
 
     overrides = copy(api.app.dependency_overrides)
 
-    api.app.dependency_overrides[get_n4js] = get_n4js_override
-    api.app.dependency_overrides[get_jwt_settings] = get_compute_settings_override
+    api.app.dependency_overrides[get_base_api_settings] = get_compute_settings_override
+    api.app.dependency_overrides[get_s3os_depends] = get_s3os_override
     yield api.app
     api.app.dependency_overrides = overrides
 

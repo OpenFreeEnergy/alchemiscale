@@ -63,7 +63,12 @@ class S3ObjectStore:
         Deletes all objects, including the bucket itself.
 
         """
-        raise NotImplementedError
+        bucket = self.resource.Bucket(self.bucket)
+
+        # delete all objects, then the bucket
+        bucket.objects.delete()
+        bucket.delete()
+        bucket.wait_until_not_exists()
 
     def iter_contents(self, prefix=""):
         """Iterate over the labels in this storage.
