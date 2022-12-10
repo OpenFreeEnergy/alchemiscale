@@ -98,10 +98,12 @@ class FahAlchemyBaseClient:
         if not 200 <= resp.status_code < 300:
             raise self._exception(f"Status Code {resp.status_code} : {resp.reason}")
 
+        content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
+
         if return_gufe:
-            return GufeTokenizable.from_dict(resp.json())
+            return GufeTokenizable.from_dict(content)
         else:
-            return resp.json()
+            return content
 
     @_use_token
     def _post_resource(self, resource, data):

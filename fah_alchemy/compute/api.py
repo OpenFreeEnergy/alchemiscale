@@ -11,7 +11,7 @@ from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from ..base.api import (
-    PermissiveJSONResponse,
+    GufeJSONResponse,
     scope_params,
     get_token_data_depends,
     get_n4js_depends,
@@ -101,7 +101,7 @@ async def claim_taskqueue_tasks(
     return [str(t) if t is not None else None for t in tasks]
 
 
-@router.get("/tasks/{task}/transformation", response_class=PermissiveJSONResponse)
+@router.get("/tasks/{task}/transformation", response_class=GufeJSONResponse)
 async def get_task_transformation(
     task,
     *,
@@ -141,5 +141,8 @@ def set_task_result(
 async def chemicalsystems():
     return {"message": "nothing yet"}
 
+
+
+### add router
 
 app.include_router(router)

@@ -186,14 +186,35 @@ class S3ObjectStore:
 
         return ObjectStoreRef(location=location)
 
-    def pull_protocoldagresult(self, objectstoreref: ObjectStoreRef):
+    def pull_protocoldagresult(self, objectstoreref: ObjectStoreRef, return_as='gufe'):
+        """Pull the `ProtocolDAGResult` corresponding to the given `ObjectStoreRef`.
+
+        Parameters
+        ----------
+        objectstoreref
+            Reference to the serialized `ProtocolDAGResult` in the object store.
+        return_as : ['gufe', 'dict', 'json']
+            Form in which to return result; this is provided to avoid
+            unnecessary deserializations where desired.
+
+        Returns
+        -------
+        ProtocolDAGResult
+            The `ProtocolDAGResult` corresponding to the given `ObjectStoreRef`.
+
+        """
 
         location = objectstoreref.location
 
         pdr_j = self._get_bytes(location).decode("utf-8")
 
-        protocoldagresult = GufeTokenizable.from_dict(
-            json.loads(pdr_j, cls=JSON_HANDLER.decoder)
-        )
+        if return_as == 'gufe':
+            protocoldagresult = GufeTokenizable.from_dict(
+                json.loads(pdr_j, cls=JSON_HANDLER.decoder)
+            )
+        elif return_as == 'dict':
+            protocoldagresult = json.loads(pdr_j, cls=JSON_HANDLER.decoder)
+        elif return_as == 'json':
+            protocoldagresult = pdr_j
 
         return protocoldagresult

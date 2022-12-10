@@ -597,6 +597,10 @@ class Neo4jStore(FahAlchemyStateStore):
     def get_transformation_results(self):
         ...
 
+        # get all tasks directly connected to given transformation
+        # for each, grab chain of extensions if present
+        # return list of lists of ObjectStoreRef
+
     ## compute
 
     def set_strategy(
@@ -1072,10 +1076,10 @@ class Neo4jStore(FahAlchemyStateStore):
     def set_task_result(
         self, task: ScopedKey, protocoldagresult: ObjectStoreRef
     ) -> ScopedKey:
-        """Set an `ObjectStoreReference` for the given `Task`.
+        """Set an `ObjectStoreRef` for the given `Task`.
 
         Does not store the `ProtocolDAGResult` for the task, but instead gives
-        it an `ObjectStoreReference`.
+        it an `ObjectStoreRef`.
 
         """
 
