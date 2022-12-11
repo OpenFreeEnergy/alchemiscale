@@ -197,7 +197,7 @@ def api(
 ):
     from fah_alchemy.interface.api import app
     from .settings import (
-        APISettings, get_jwt_settings,
+        APISettings, get_base_api_settings,
         S3ObjectStoreSettings,
     )
     from .security.auth import generate_secret_key
@@ -222,10 +222,7 @@ def api(
         return get_settings_from_options(api_dict | jwt_dict | db_dict,
                                          APISettings)
 
-    app.dependency_overrides[get_jwt_settings] = get_settings_override
-    # overrides for db and s3os; see tests/integration/compute/conftest.py
-
-    # add s3os settings for API
+    app.dependency_overrides[get_base_api_settings] = get_settings_override
 
     start_api(app, workers, host, port)
 
@@ -246,8 +243,21 @@ def api(
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  #JWT
 ):
     from fah_alchemy.compute.api import app
-    from .settings import ComputeAPISettings
+    from .settings import ComputeAPISettings, get_base_api_settings
+    from .security.auth import generate_secret_key
 
+    # CONSIDER GENERATING A JWT_SECRET_KEY if none provided with
+    # key = generate_secret_key()
+    # CONVENIENT FOR THE SINGLE-SERVER CASE HERE
+
+    def get_settings_override():
+        # settings overrides for test suite
+        return ComputeAPISettings(
+            ## INJECT ANY SETTINGS GIVEN BY CLI OPTIONS HERE
+            ## OTHERWISE WILL COME FROM ENV VARIABLES
+        )
+
+    app.dependency_overrides[get_base_api_settings] = get_settings_override
     start_api(app, workers, host["FA_COMPUTE_API_HOST"],
               port["FA_COMPUTE_API_PORT"])
 

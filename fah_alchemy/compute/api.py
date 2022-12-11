@@ -19,7 +19,7 @@ from ..base.api import (
     base_router,
     get_cred_entity,
 )
-from ..settings import ComputeAPISettings, get_compute_api_settings, get_jwt_settings
+from ..settings import get_base_api_settings, get_compute_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
 from ..storage.models import ObjectStoreRef
@@ -34,13 +34,12 @@ from ..security.models import Token, TokenData, CredentialedComputeIdentity
 # - on startup,
 
 app = FastAPI(title="FahAlchemyComputeAPI")
-app.dependency_overrides[get_jwt_settings] = get_compute_api_settings
+app.dependency_overrides[get_base_api_settings] = get_compute_api_settings
 app.include_router(base_router)
 
 
 def get_cred_compute():
     return CredentialedComputeIdentity
-
 
 app.dependency_overrides[get_cred_entity] = get_cred_compute
 
