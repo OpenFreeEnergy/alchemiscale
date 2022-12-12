@@ -24,6 +24,17 @@ class Scope(BaseModel):
         """Return True if this Scope overlaps with another"""
         return NotImplementedError
 
+    def __repr__(self):  # pragma: no cover
+        return f"<Scope('{str(self)}')>"
+
+    def __str__(self):
+        return "-".join([self.org, self.campaign, self.project])
+
+    @classmethod
+    def from_str(cls, string):
+        org, campaign, project = string.split("-")
+        return cls(org=org, campaign=campaign, project=project)
+
 
 class ScopedKey(BaseModel):
     """Unique identifier for GufeTokenizables in state store."""

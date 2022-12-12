@@ -40,6 +40,22 @@ def get_cred_user():
     return CredentialedUserIdentity
 
 
+def validate_scopes(scope: Scope, token: TokenData):
+    """Verify that token data has specified scopes encoded"""
+    scope = str(scope)
+    # Check if scope among scopes accessible
+    if scope not in token.scopes:
+        raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=(
+                        f'Targeted scope of "{scope}" not allowed in current user\'s Token of scopes'
+                        f'{token.scopes}. This is no way confers existence of scope "{scope}", only that '
+                        f'this user does not have permission to access the space.'
+                    ),
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+
 app.dependency_overrides[get_cred_entity] = get_cred_user
 
 router = APIRouter(
@@ -66,9 +82,52 @@ async def query_networks(
     return_gufe: bool = False,
     scope: Scope = Depends(scope_params),
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends)
 ):
+    # Use token as the basis for the querry if there are no scopes, otherwise return the user scopes
+    # What to do if someone broadly states a query?
+    #   Grab top down heiarchy, walking through each scope in their token
+    #   Search ONLY through their scopes
+    #   0 discoverability
 
-    networks = n4js.query_networks(name=name, scope=scope, return_gufe=return_gufe)
+    # Cast token to list of Scope strs
+    accessible_scopes = token.scopes
+    #
+    try:
+        # Check the scope can be processed as a scope
+        if scope:
+            Scope.from_str(scope)
+        else:
+            scope = "*-*-*"
+    except (AttributeError, ValueError):
+        # Could not be cast as a string
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f'Value of "scope" was "{scope}" which cannot be processed as a 3-object tuple of form'
+                f'"X-Y-Z" and cast to string. Alpha numerical values (a-z A-Z 0-9) and "*" are accepted for '
+                f'parameter "scope"'
+            ),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    query_scopes = []
+    # Note: "OCP" = "Org, Campaign, Project. "q" = query
+    query_org_camp_proj = scope.split("-")
+    for accessible_scope in accessible_scopes:
+        # Iterate through org, camp, and proj query against all accessible scopes
+        add_it_in = True  # Assume we're adding it
+        for (query, target) in zip(query_org_camp_proj, accessible_scope.split("-")):
+            if not (query == target or query == "*"):
+                # If not matched, dont add
+                add_it_in = False
+                continue
+        if add_it_in:
+            query_scopes.append(accessible_scope)
+
+    networks = {}
+    networks = {**networks,  # Add existing networks
+                **n4js.query_networks(name=name, scope=scope, return_gufe=return_gufe)  # Add new networks
+                }
 
     if return_gufe:
         return {str(sk): tq.to_dict() for sk, tq in networks.items()}
@@ -76,13 +135,20 @@ async def query_networks(
         return [str(sk) for sk in networks]
 
 
-@router.get("/networks/{network}", response_class=GufeJSONResponse)
+@router.get("/networks/{network_scoped_key}", response_class=GufeJSONResponse)
 def get_network(
-    network,
+    network_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends)
 ):
-    network = n4js.get_gufe(scoped_key=network)
+    # Get scope from scoped key provided by user, uniquely identifying the network
+    sk = ScopedKey.from_str(network_scoped_key)
+    scope = sk.scope
+    validate_scopes(scope, token)
+
+    # Fetch Network
+    network = n4js.get_gufe(scoped_key=sk)
     return network.to_dict()
 
 
@@ -92,7 +158,10 @@ def create_network(
     network: Dict = Body(...),
     scope: Scope,
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends)
 ):
+
+    validate_scopes(scope, token)
     an = AlchemicalNetwork.from_dict(network)
     return n4js.create_network(network=an, scope=scope)
 

@@ -1,6 +1,7 @@
 import pytest
 from copy import copy
 from time import sleep
+import multiprocessing as mp
 from multiprocessing import Process
 
 import uvicorn
@@ -41,6 +42,8 @@ def run_server(fastapi_app, settings):
 @pytest.fixture(scope="module")
 def uvicorn_server(user_api):
     settings = get_user_settings_override()
+    # Fixes multiprocess pickling for testing on OSX (which is not fork by default)
+    mp.set_start_method("fork", force=True)
     proc = Process(target=run_server, args=(user_api, settings), daemon=True)
     proc.start()
 
