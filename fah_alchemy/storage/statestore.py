@@ -563,15 +563,22 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         return network
 
-    def query_networks(self, *,
-                       name=None,
-                       key=None,
-                       scope: Optional[Scope] = Scope(),
-                       return_gufe: bool = False):
+    def query_networks(
+        self,
+        *,
+        name=None,
+        key=None,
+        scope: Optional[Scope] = Scope(),
+        return_gufe: bool = False,
+    ):
         """Query for `AlchemicalNetwork`s matching given attributes."""
         additional = {"name": name}
         return self._query(
-            qualname="AlchemicalNetwork", additional=additional, key=key, scope=scope, return_gufe=return_gufe
+            qualname="AlchemicalNetwork",
+            additional=additional,
+            key=key,
+            scope=scope,
+            return_gufe=return_gufe,
         )
 
     def query_transformations(

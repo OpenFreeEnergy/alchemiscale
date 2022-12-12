@@ -186,7 +186,7 @@ class S3ObjectStore:
 
         return ObjectStoreRef(location=location)
 
-    def pull_protocoldagresult(self, objectstoreref: ObjectStoreRef, return_as='gufe'):
+    def pull_protocoldagresult(self, objectstoreref: ObjectStoreRef, return_as="gufe"):
         """Pull the `ProtocolDAGResult` corresponding to the given `ObjectStoreRef`.
 
         Parameters
@@ -208,13 +208,13 @@ class S3ObjectStore:
 
         pdr_j = self._get_bytes(location).decode("utf-8")
 
-        if return_as == 'gufe':
+        if return_as == "gufe":
             protocoldagresult = GufeTokenizable.from_dict(
                 json.loads(pdr_j, cls=JSON_HANDLER.decoder)
             )
-        elif return_as == 'dict':
+        elif return_as == "dict":
             protocoldagresult = json.loads(pdr_j, cls=JSON_HANDLER.decoder)
-        elif return_as == 'json':
+        elif return_as == "json":
             protocoldagresult = pdr_j
 
         return protocoldagresult

@@ -19,7 +19,6 @@ class Scope(BaseModel):
         org, campaign, project = string.split("-")
         return cls(org=org, campaign=campaign, project=project)
 
-
     def overlap(self, other):
         """Return True if this Scope overlaps with another"""
         return NotImplementedError

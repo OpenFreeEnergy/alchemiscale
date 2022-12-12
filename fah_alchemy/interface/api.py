@@ -46,14 +46,14 @@ def validate_scopes(scope: Scope, token: TokenData):
     # Check if scope among scopes accessible
     if scope not in token.scopes:
         raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail=(
-                        f'Targeted scope of "{scope}" not allowed in current user\'s Token of scopes'
-                        f'{token.scopes}. This is no way confers existence of scope "{scope}", only that '
-                        f'this user does not have permission to access the space.'
-                    ),
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=(
+                f'Targeted scope of "{scope}" not allowed in current user\'s Token of scopes'
+                f'{token.scopes}. This is no way confers existence of scope "{scope}", only that '
+                f"this user does not have permission to access the space."
+            ),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 app.dependency_overrides[get_cred_entity] = get_cred_user
@@ -75,6 +75,7 @@ async def info():
 
 ### inputs
 
+
 @router.get("/networks", response_class=GufeJSONResponse)
 async def query_networks(
     *,
@@ -82,7 +83,7 @@ async def query_networks(
     return_gufe: bool = False,
     scope: Scope = Depends(scope_params),
     n4js: Neo4jStore = Depends(get_n4js_depends),
-    token: TokenData = Depends(get_token_data_depends)
+    token: TokenData = Depends(get_token_data_depends),
 ):
     # Use token as the basis for the querry if there are no scopes, otherwise return the user scopes
     # What to do if someone broadly states a query?
@@ -125,9 +126,12 @@ async def query_networks(
             query_scopes.append(accessible_scope)
 
     networks = {}
-    networks = {**networks,  # Add existing networks
-                **n4js.query_networks(name=name, scope=scope, return_gufe=return_gufe)  # Add new networks
-                }
+    networks = {
+        **networks,  # Add existing networks
+        **n4js.query_networks(
+            name=name, scope=scope, return_gufe=return_gufe
+        ),  # Add new networks
+    }
 
     if return_gufe:
         return {str(sk): tq.to_dict() for sk, tq in networks.items()}
@@ -140,7 +144,7 @@ def get_network(
     network_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
-    token: TokenData = Depends(get_token_data_depends)
+    token: TokenData = Depends(get_token_data_depends),
 ):
     # Get scope from scoped key provided by user, uniquely identifying the network
     sk = ScopedKey.from_str(network_scoped_key)
@@ -158,7 +162,7 @@ def create_network(
     network: Dict = Body(...),
     scope: Scope,
     n4js: Neo4jStore = Depends(get_n4js_depends),
-    token: TokenData = Depends(get_token_data_depends)
+    token: TokenData = Depends(get_token_data_depends),
 ):
 
     validate_scopes(scope, token)
@@ -198,12 +202,14 @@ async def get_chemicalsystem(
 
 ### compute
 
+
 @router.put("/networks/{scoped_key}/strategy")
 def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
     ...
 
 
 ### results
+
 
 @router.get("/transformations/{transformation}/result", response_class=GufeJSONResponse)
 def get_transformation_result(
@@ -221,12 +227,12 @@ def get_transformation_result(
     # walk through the nested list, getting the actual ProtocolDAGResult object
     # for each ObjectStoreRef, starting from `skip` and up to `limit`
     pdrs: List[List[str]] = []
-    for reflist in refs[skip:skip+limit]:
+    for reflist in refs[skip : skip + limit]:
         pdrs_i = []
         for ref in reflist:
             # we leave each ProtocolDAGResult in string form to avoid
             # deserializing/reserializing here; just passing through to clinet
-            pdr: str = s3os.pull_protocoldagresult(ref, return_as='json')
+            pdr: str = s3os.pull_protocoldagresult(ref, return_as="json")
             pdrs_i.append(pdr)
         pdrs.append(pdrs_i)
 

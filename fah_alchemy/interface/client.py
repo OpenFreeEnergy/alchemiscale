@@ -24,7 +24,6 @@ class FahAlchemyClient(FahAlchemyBaseClient):
 
     _exception = FahAlchemyClientError
 
-
     ### inputs
 
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
@@ -40,25 +39,30 @@ class FahAlchemyClient(FahAlchemyBaseClient):
     def get_network(self, network: Union[ScopedKey, str]) -> AlchemicalNetwork:
         return self._get_resource(f"/networks/{network}", {}, return_gufe=True)
 
-    def get_transformation(self, transformation: Union[ScopedKey, str]) -> Transformation:
-        return self._get_resource(f"/transformations/{transformation}", {}, return_gufe=True)
+    def get_transformation(
+        self, transformation: Union[ScopedKey, str]
+    ) -> Transformation:
+        return self._get_resource(
+            f"/transformations/{transformation}", {}, return_gufe=True
+        )
 
-    def get_chemicalsystem(self, chemicalsystem: Union[ScopedKey, str]) -> ChemicalSystem:
-        return self._get_resource(f"/chemicalsystems/{chemicalsystem}", {}, return_gufe=True)
-
+    def get_chemicalsystem(
+        self, chemicalsystem: Union[ScopedKey, str]
+    ) -> ChemicalSystem:
+        return self._get_resource(
+            f"/chemicalsystems/{chemicalsystem}", {}, return_gufe=True
+        )
 
     ### compute
 
     def set_strategy(self, network: ScopedKey, strategy: Strategy):
         ...
 
-
     ### results
 
-    def get_transformation_result(self, 
-                                  transformation: ScopedKey,
-                                  return_protocoldagresults: bool = False
-                                  ) -> Union[ProtocolResult, List[List[ProtocolDAGResult]]]:
+    def get_transformation_result(
+        self, transformation: ScopedKey, return_protocoldagresults: bool = False
+    ) -> Union[ProtocolResult, List[List[ProtocolDAGResult]]]:
         """Get `ProtocolResult` for the given `Transformation`.
 
         Parameters
@@ -81,10 +85,12 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         while True:
 
             # iterate through all results with paginated API calls
-            params = {'limit': limit, 'skip': skip}
-            pdrs_i = self._get_resource(f"/transformations/{transformation}/result",
-                               params=params,
-                               return_gufe=False)
+            params = {"limit": limit, "skip": skip}
+            pdrs_i = self._get_resource(
+                f"/transformations/{transformation}/result",
+                params=params,
+                return_gufe=False,
+            )
 
             # we break if we get nothing back; means we're at the end of the line
             if len(pdrs_i) == 0:

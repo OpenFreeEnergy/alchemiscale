@@ -244,7 +244,7 @@ def network_tyk2():
 
 @fixture(scope="session")
 def scope_test():
-    """Primary scope for testing for individual """
+    """Primary scope for testing for individual"""
     return Scope(org="test_org", campaign="test_campaign", project="test_project")
 
 
@@ -252,11 +252,15 @@ def scope_test():
 def multiple_scopes(scope_test):
     scopes = [scope_test]  # Append initial test
     # Augment
-    scopes.extend([
-        Scope(org=f"test_org_{x}",
-              campaign=f"test_campaign_{x}",
-              project=f"test_project_{x}")
-        for x in range(1, 3)]
+    scopes.extend(
+        [
+            Scope(
+                org=f"test_org_{x}",
+                campaign=f"test_campaign_{x}",
+                project=f"test_project_{x}",
+            )
+            for x in range(1, 3)
+        ]
     )
     return scopes
 

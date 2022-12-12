@@ -28,9 +28,10 @@ def user_identity():
 
 @pytest.fixture(scope="module")
 def user_identity_prepped(user_identity):
-    return {"identifier": user_identity["identifier"],
-            "hashed_key": hash_key(user_identity["key"])
-            }
+    return {
+        "identifier": user_identity["identifier"],
+        "hashed_key": hash_key(user_identity["key"]),
+    }
 
 
 @pytest.fixture(scope="module")
@@ -41,27 +42,27 @@ def scopeless_credentialed_user(user_identity_prepped):
 
 @pytest.fixture(scope="module")
 def single_scoped_credentialed_user(user_identity_prepped, scope_test):
-    user = CredentialedUserIdentity(**user_identity_prepped,
-                                    scopes=[scope_test]  # Ensure list
-                                    )
+    user = CredentialedUserIdentity(
+        **user_identity_prepped, scopes=[scope_test]  # Ensure list
+    )
     return user
 
 
 @pytest.fixture(scope="module")
 def fully_scoped_credentialed_user(user_identity_prepped, multiple_scopes):
-    user = CredentialedUserIdentity(**user_identity_prepped,
-                                    scopes=multiple_scopes
-                                    )
+    user = CredentialedUserIdentity(**user_identity_prepped, scopes=multiple_scopes)
     return user
 
 
 @pytest.fixture
-def n4js_preloaded(n4js_fresh,
-                   network_tyk2,
-                   multiple_scopes,
-                   scopeless_credentialed_user,
-                   single_scoped_credentialed_user,
-                   fully_scoped_credentialed_user):
+def n4js_preloaded(
+    n4js_fresh,
+    network_tyk2,
+    multiple_scopes,
+    scopeless_credentialed_user,
+    single_scoped_credentialed_user,
+    fully_scoped_credentialed_user,
+):
     n4js = n4js_fresh
 
     # Spin up a secondary alchemical network
@@ -79,7 +80,11 @@ def n4js_preloaded(n4js_fresh,
         n4js.create_taskqueue(sk2)
 
     # Create users on the network
-    for user in [scopeless_credentialed_user, single_scoped_credentialed_user, fully_scoped_credentialed_user]:
+    for user in [
+        scopeless_credentialed_user,
+        single_scoped_credentialed_user,
+        fully_scoped_credentialed_user,
+    ]:
         n4js.create_credentialed_entity(user)
 
     return n4js
@@ -88,15 +93,16 @@ def n4js_preloaded(n4js_fresh,
 @pytest.fixture(scope="module")
 def scope_consistent_token_data_depends_override(scope_test):
     """Make a consistent helper to provide an override to the api.app while still accessing fixtures"""
+
     def get_token_data_depends_override():
         token_data = TokenData(entity="karen", scopes=[str(scope_test)])
         return token_data
+
     return get_token_data_depends_override
 
 
 @pytest.fixture(scope="module")
 def user_api_no_auth(s3os, scope_consistent_token_data_depends_override):
-
     def get_s3os_override():
         return s3os
 
