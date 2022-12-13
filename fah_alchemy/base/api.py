@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from py2neo import Graph
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
+from gufe.tokenization import JSON_HANDLER
 
 from ..settings import (
     JWTSettings,
@@ -32,16 +33,13 @@ from ..security.auth import (
 from ..security.models import Token, TokenData, CredentialedEntity
 
 
-class PermissiveJSONResponse(JSONResponse):
+class GufeJSONResponse(JSONResponse):
     media_type = "application/json"
 
     def render(self, content: Any) -> bytes:
         return json.dumps(
             content,
-            ensure_ascii=False,
-            allow_nan=True,
-            indent=None,
-            separators=(",", ":"),
+            cls=JSON_HANDLER.encoder
         ).encode("utf-8")
 
 
