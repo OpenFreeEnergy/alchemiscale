@@ -93,15 +93,20 @@ def db_params(func):
     return url(user(password(dbname(func))))
 
 
+def generate_secret_key(ctx, param, value):
+    from fah_alchemy.security.auth import generate_secret_key
+
+    return {param.envvar: generate_secret_key()}
+
+
 def jwt_params(func):
     secret = click.option(
         "--jwt-secret",
         type=str,
         help="JSON web token secret",
         envvar="JWT_SECRET_KEY",
-        # TODO: instead of the callback in SETTINGS_OPTION_KWARGS, do a
-        # variant that also automatically creates a key if it is not set
-        **SETTINGS_OPTION_KWARGS,
+        callback=generate_secret_key,
+        show_envvar=True,
     )
     expire_seconds = click.option(
         "--jwt-expire-seconds",
@@ -299,8 +304,7 @@ def database():
 
 @database.command()
 @db_params
-@jwt_params
-def init(url, user, password, dbname, jwt_secret, jwt_expire_seconds, jwt_algorithm):
+def init(url, user, password, dbname):
     """Initialize the Neo4j database.
 
     Note that options here can be set by environment variables, as shown on
@@ -318,8 +322,7 @@ def init(url, user, password, dbname, jwt_secret, jwt_expire_seconds, jwt_algori
 
 @database.command()
 @db_params
-@jwt_params
-def check(url, user, password, dbname, jwt_secret, jwt_expire_seconds, jwt_algorithm):
+def check(url, user, password, dbname):
     """Check consistency of database.
 
     Note that options here can be set by environment variables, as shown on
@@ -329,9 +332,8 @@ def check(url, user, password, dbname, jwt_secret, jwt_expire_seconds, jwt_algor
     from .settings import Neo4jStoreSettings
 
     db_dict = url | user | password | dbname
-    jwt_dict = jwt_secret | jwt_expire_seconds | jwt_algorithm
 
-    settings = get_settings_from_options(db_dict | jwt_dict, Neo4jStoreSettings)
+    settings = get_settings_from_options(db_dict, Neo4jStoreSettings)
 
     n4js = get_n4js(settings)
     if n4js.check() is None:

@@ -59,6 +59,7 @@ async def info():
 
 ### inputs
 
+
 @router.get("/networks", response_class=GufeJSONResponse)
 async def query_networks(
     *,
@@ -129,12 +130,14 @@ async def get_chemicalsystem(
 
 ### compute
 
+
 @router.put("/networks/{scoped_key}/strategy")
 def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
     ...
 
 
 ### results
+
 
 @router.get("/transformations/{transformation}/result", response_class=GufeJSONResponse)
 def get_transformation_result(
@@ -152,12 +155,12 @@ def get_transformation_result(
     # walk through the nested list, getting the actual ProtocolDAGResult object
     # for each ObjectStoreRef, starting from `skip` and up to `limit`
     pdrs: List[List[str]] = []
-    for reflist in refs[skip:skip+limit]:
+    for reflist in refs[skip : skip + limit]:
         pdrs_i = []
         for ref in reflist:
             # we leave each ProtocolDAGResult in string form to avoid
             # deserializing/reserializing here; just passing through to clinet
-            pdr: str = s3os.pull_protocoldagresult(ref, return_as='json')
+            pdr: str = s3os.pull_protocoldagresult(ref, return_as="json")
             pdrs_i.append(pdr)
         pdrs.append(pdrs_i)
 

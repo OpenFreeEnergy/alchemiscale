@@ -19,7 +19,7 @@ from ..settings import (
     JWTSettings,
     Neo4jStoreSettings,
     S3ObjectStoreSettings,
-    get_base_api_settings
+    get_base_api_settings,
 )
 from ..storage.statestore import Neo4jStore, get_n4js
 from ..storage.objectstore import S3ObjectStore, get_s3os
@@ -37,10 +37,7 @@ class GufeJSONResponse(JSONResponse):
     media_type = "application/json"
 
     def render(self, content: Any) -> bytes:
-        return json.dumps(
-            content,
-            cls=JSON_HANDLER.encoder
-        ).encode("utf-8")
+        return json.dumps(content, cls=JSON_HANDLER.encoder).encode("utf-8")
 
 
 def scope_params(org: str = None, campaign: str = None, project: str = None):
