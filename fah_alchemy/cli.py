@@ -31,16 +31,31 @@ def get_settings_from_options(kwargs, settings_cls):
 
 def api_starting_params(envvar_host, envvar_port, envvar_loglevel):
     def inner(func):
-        workers = click.option("--workers", type=int, help="number of workers",
-                               default=1)
-        host = click.option("--host", type=str, help="IP address of host",
-                            envvar=envvar_host, **SETTINGS_OPTION_KWARGS)
-        port = click.option("--port", type=int, help="port",
-                            envvar=envvar_port, **SETTINGS_OPTION_KWARGS)
-        loglevel = click.option("--loglevel", type=str, default="info",
-                                help="logging level",
-                                envvar=envvar_loglevel,
-                                **SETTINGS_OPTION_KWARGS)
+        workers = click.option(
+            "--workers", type=int, help="number of workers", default=1
+        )
+        host = click.option(
+            "--host",
+            type=str,
+            help="IP address of host",
+            envvar=envvar_host,
+            **SETTINGS_OPTION_KWARGS,
+        )
+        port = click.option(
+            "--port",
+            type=int,
+            help="port",
+            envvar=envvar_port,
+            **SETTINGS_OPTION_KWARGS,
+        )
+        loglevel = click.option(
+            "--loglevel",
+            type=str,
+            default="info",
+            help="logging level",
+            envvar=envvar_loglevel,
+            **SETTINGS_OPTION_KWARGS,
+        )
         return workers(host(port(loglevel(func))))
 
     return inner
@@ -48,8 +63,11 @@ def api_starting_params(envvar_host, envvar_port, envvar_loglevel):
 
 def db_params(func):
     url = click.option(
-        "--url", help="database URI", type=str, envvar="NEO4J_URL",
-        **SETTINGS_OPTION_KWARGS
+        "--url",
+        help="database URI",
+        type=str,
+        envvar="NEO4J_URL",
+        **SETTINGS_OPTION_KWARGS,
     )
     user = click.option(
         "--user",
@@ -90,62 +108,54 @@ def jwt_params(func):
         type=int,
         default=1800,
         envvar="JWT_EXPIRE_SECONDS",
-        **SETTINGS_OPTION_KWARGS
+        **SETTINGS_OPTION_KWARGS,
     )
     algo = click.option(
         "--jwt-algorithm",
         type=str,
-        default= "HS256",
+        default="HS256",
         envvar="JWT_ALGORITHM",
-        **SETTINGS_OPTION_KWARGS
+        **SETTINGS_OPTION_KWARGS,
     )
     return secret(expire_seconds(algo(func)))
 
 
 def s3os_params(func):
     access_key_id = click.option(
-        '--access-key-id',
+        "--access-key-id",
         type=str,
         default=None,
         envvar="AWS_ACCESS_KEY_ID",
-        **SETTINGS_OPTION_KWARGS
+        **SETTINGS_OPTION_KWARGS,
     )
     secret_access_key = click.option(
         "--secret-access-key",
         type=str,
         default=None,
         envvar="AWS_SECRET_ACCESS_KEY",
-        **SETTINGS_OPTION_KWARGS
+        **SETTINGS_OPTION_KWARGS,
     )
     session_token = click.option(
         "--session-token",
         type=str,
         default=None,
         envvar="AWS_SESSION_TOKEN",
-        **SETTINGS_OPTION_KWARGS
+        **SETTINGS_OPTION_KWARGS,
     )
     s3_bucket = click.option(
-        "--s3-bucket",
-        type=str,
-        envvar="AWS_S3_BUCKET",
-        **SETTINGS_OPTION_KWARGS
+        "--s3-bucket", type=str, envvar="AWS_S3_BUCKET", **SETTINGS_OPTION_KWARGS
     )
     s3_prefix = click.option(
-        "--s3-prefix",
-        type=str,
-        envvar="AWS_S3_PREFIX",
-        **SETTINGS_OPTION_KWARGS
+        "--s3-prefix", type=str, envvar="AWS_S3_PREFIX", **SETTINGS_OPTION_KWARGS
     )
     default_region = click.option(
         "--default-region",
         type=str,
         envvar="AWS_DEFAULT_REGION",
-        **SETTINGS_OPTION_KWARGS
+        **SETTINGS_OPTION_KWARGS,
     )
-    return (
-        access_key_id(secret_access_key(session_token(
-            s3_bucket(s3_prefix(default_region(func)))
-        )))
+    return access_key_id(
+        secret_access_key(session_token(s3_bucket(s3_prefix(default_region(func)))))
     )
 
 
@@ -181,6 +191,7 @@ def cli():
 
 # reusable parameters to ensure consistent naming and help strings
 
+
 @cli.command(
     name="api",
     help="Start the user-facing API service",
@@ -211,14 +222,21 @@ def api(
         api_dict = host | port | loglevel
         jwt_dict = jwt_secret | jwt_expire_seconds | jwt_algorithm
         db_dict = url | user | password | dbname
-        s3_dict = (access_key_id | secret_access_key | session_token | s3_bucket | s3_prefix
-                   | default_region)
-        return get_settings_from_options(api_dict | jwt_dict | db_dict | s3_dict,
-                                         APISettings)
+        s3_dict = (
+            access_key_id
+            | secret_access_key
+            | session_token
+            | s3_bucket
+            | s3_prefix
+            | default_region
+        )
+        return get_settings_from_options(
+            api_dict | jwt_dict | db_dict | s3_dict, APISettings
+        )
 
     app.dependency_overrides[get_base_api_settings] = get_settings_override
 
-    start_api(app, workers, host['FA_API_HOST'], port['FA_API_PORT'])
+    start_api(app, workers, host["FA_API_HOST"], port["FA_API_PORT"])
 
 
 @cli.group(help="Subcommands for the compute service")
@@ -227,8 +245,9 @@ def compute():
 
 
 @compute.command(help="Start the compute API service.")
-@api_starting_params("FA_COMPUTE_API_HOST", "FA_COMPUTE_API_PORT",
-                     "FA_COMPUTE_API_LOGLEVEL")
+@api_starting_params(
+    "FA_COMPUTE_API_HOST", "FA_COMPUTE_API_PORT", "FA_COMPUTE_API_LOGLEVEL"
+)
 @db_params
 @s3os_params
 @jwt_params
@@ -251,10 +270,17 @@ def api(
         api_dict = host | port | loglevel
         jwt_dict = jwt_secret | jwt_expire_seconds | jwt_algorithm
         db_dict = url | user | password | dbname
-        s3_dict = (access_key_id | secret_access_key | session_token | s3_bucket | s3_prefix
-                   | default_region)
-        return get_settings_from_options(api_dict | jwt_dict | db_dict | s3_dict,
-                                         ComputeAPISettings)
+        s3_dict = (
+            access_key_id
+            | secret_access_key
+            | session_token
+            | s3_bucket
+            | s3_prefix
+            | default_region
+        )
+        return get_settings_from_options(
+            api_dict | jwt_dict | db_dict | s3_dict, ComputeAPISettings
+        )
 
     app.dependency_overrides[get_base_api_settings] = get_settings_override
 
@@ -274,10 +300,7 @@ def database():
 @database.command()
 @db_params
 @jwt_params
-def init(
-    url, user, password, dbname,
-    jwt_secret, jwt_expire_seconds, jwt_algorithm
-):
+def init(url, user, password, dbname, jwt_secret, jwt_expire_seconds, jwt_algorithm):
     """Initialize the Neo4j database.
 
     Note that options here can be set by environment variables, as shown on
@@ -296,10 +319,7 @@ def init(
 @database.command()
 @db_params
 @jwt_params
-def check(
-    url, user, password, dbname,
-    jwt_secret, jwt_expire_seconds, jwt_algorithm
-):
+def check(url, user, password, dbname, jwt_secret, jwt_expire_seconds, jwt_algorithm):
     """Check consistency of database.
 
     Note that options here can be set by environment variables, as shown on
