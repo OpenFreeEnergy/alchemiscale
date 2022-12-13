@@ -58,7 +58,7 @@ def db_params(func):
         envvar="NEO4J_USER",
         **SETTINGS_OPTION_KWARGS,
     )
-    passwd = click.option(
+    password = click.option(
         "--password",
         help="database password",
         type=str,
@@ -72,7 +72,7 @@ def db_params(func):
         envvar="NEO4J_DBNAME",
         **SETTINGS_OPTION_KWARGS,
     )
-    return url(user(passwd(dbname(func))))
+    return url(user(password(dbname(func))))
 
 
 def jwt_params(func):
@@ -185,21 +185,18 @@ def cli():
     name="api",
     help="Start the user-facing API service",
 )
-@api_starting_params("FA_AI_HOST", "FA_API_PORT", "FA_API_LOGLEVEL")
+@api_starting_params("FA_API_HOST", "FA_API_PORT", "FA_API_LOGLEVEL")
 @db_params
 @s3os_params
 @jwt_params
 def api(
     workers, host, port, loglevel,  # API
-    url, user, passwd, dbname,  # DB
+    url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  # JWT
-    access_key_id, session_token, s3_bucket, s3_prefix, default_region  # AWS
-):
+    access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
+):  # fmt: skip
     from fah_alchemy.interface.api import app
-    from .settings import (
-        APISettings, get_base_api_settings,
-        S3ObjectStoreSettings,
-    )
+    from .settings import APISettings, get_base_api_settings
     from .security.auth import generate_secret_key
 
     # CONSIDER GENERATING A JWT_SECRET_KEY if none provided with
@@ -209,22 +206,19 @@ def api(
     # do this. See comment there. Use that instead of the callback in
     # SETTINGS_OPTION_KWARGS
 
-    def get_s3os_override():
-        s3_dict = (access_key_id | session_token | s3_bucket | s3_prefix
-                   | default_region)
-        return get_settings_from_options(s3_dict, S3ObjectStoreSettings)
-
     def get_settings_override():
         # inject settings from CLI arguments
         api_dict = host | port | loglevel
         jwt_dict = jwt_secret | jwt_expire_seconds | jwt_algorithm
-        db_dict = url | user | passwd | dbname
-        return get_settings_from_options(api_dict | jwt_dict | db_dict,
+        db_dict = url | user | password | dbname
+        s3_dict = (access_key_id | secret_access_key | session_token | s3_bucket | s3_prefix
+                   | default_region)
+        return get_settings_from_options(api_dict | jwt_dict | db_dict | s3_dict,
                                          APISettings)
 
     app.dependency_overrides[get_base_api_settings] = get_settings_override
 
-    start_api(app, workers, host, port)
+    start_api(app, workers, host['FA_API_HOST'], port['FA_API_PORT'])
 
 
 @cli.group(help="Subcommands for the compute service")
@@ -236,12 +230,14 @@ def compute():
 @api_starting_params("FA_COMPUTE_API_HOST", "FA_COMPUTE_API_PORT",
                      "FA_COMPUTE_API_LOGLEVEL")
 @db_params
+@s3os_params
 @jwt_params
 def api(
     workers, host, port, loglevel,  # API
-    url, user, passwd, dbname,  # DB
+    url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  #JWT
-):
+    access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
+):  # fmt: skip
     from fah_alchemy.compute.api import app
     from .settings import ComputeAPISettings, get_base_api_settings
     from .security.auth import generate_secret_key
@@ -251,15 +247,18 @@ def api(
     # CONVENIENT FOR THE SINGLE-SERVER CASE HERE
 
     def get_settings_override():
-        # settings overrides for test suite
-        return ComputeAPISettings(
-            ## INJECT ANY SETTINGS GIVEN BY CLI OPTIONS HERE
-            ## OTHERWISE WILL COME FROM ENV VARIABLES
-        )
+        # inject settings from CLI arguments
+        api_dict = host | port | loglevel
+        jwt_dict = jwt_secret | jwt_expire_seconds | jwt_algorithm
+        db_dict = url | user | password | dbname
+        s3_dict = (access_key_id | secret_access_key | session_token | s3_bucket | s3_prefix
+                   | default_region)
+        return get_settings_from_options(api_dict | jwt_dict | db_dict | s3_dict,
+                                         ComputeAPISettings)
 
     app.dependency_overrides[get_base_api_settings] = get_settings_override
-    start_api(app, workers, host["FA_COMPUTE_API_HOST"],
-              port["FA_COMPUTE_API_PORT"])
+
+    start_api(app, workers, host["FA_COMPUTE_API_HOST"], port["FA_COMPUTE_API_PORT"])
 
 
 @compute.command(help="Start the synchronous compute service.")
