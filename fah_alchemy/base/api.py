@@ -13,14 +13,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from py2neo import Graph
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
+from gufe.tokenization import JSON_HANDLER
 
 from ..settings import (
     JWTSettings,
     Neo4jStoreSettings,
     S3ObjectStoreSettings,
-    get_jwt_settings,
-    get_neo4jstore_settings,
-    get_s3objectstore_settings,
+    get_base_api_settings,
 )
 from ..storage.statestore import Neo4jStore, get_n4js
 from ..storage.objectstore import S3ObjectStore, get_s3os
@@ -34,17 +33,11 @@ from ..security.auth import (
 from ..security.models import Token, TokenData, CredentialedEntity
 
 
-class PermissiveJSONResponse(JSONResponse):
+class GufeJSONResponse(JSONResponse):
     media_type = "application/json"
 
     def render(self, content: Any) -> bytes:
-        return json.dumps(
-            content,
-            ensure_ascii=False,
-            allow_nan=True,
-            indent=None,
-            separators=(",", ":"),
-        ).encode("utf-8")
+        return json.dumps(content, cls=JSON_HANDLER.encoder).encode("utf-8")
 
 
 def scope_params(org: str = None, campaign: str = None, project: str = None):
@@ -53,7 +46,7 @@ def scope_params(org: str = None, campaign: str = None, project: str = None):
 
 async def get_token_data_depends(
     token: str = Depends(oauth2_scheme),
-    settings: JWTSettings = Depends(get_jwt_settings),
+    settings: JWTSettings = Depends(get_base_api_settings),
 ) -> TokenData:
     return get_token_data(
         secret_key=settings.JWT_SECRET_KEY,
@@ -62,16 +55,16 @@ async def get_token_data_depends(
     )
 
 
-@lru_cache()
-async def get_n4js_depends(
-    settings: Neo4jStoreSettings = Depends(get_neo4jstore_settings),
+@lru_cache
+def get_n4js_depends(
+    settings: Neo4jStoreSettings = Depends(get_base_api_settings),
 ) -> Neo4jStore:
     return get_n4js(settings)
 
 
-@lru_cache()
-async def get_s3os_depends(
-    settings: S3ObjectStoreSettings = Depends(get_s3objectstore_settings),
+@lru_cache
+def get_s3os_depends(
+    settings: S3ObjectStoreSettings = Depends(get_base_api_settings),
 ) -> S3ObjectStore:
     return get_s3os(settings)
 
@@ -86,7 +79,7 @@ base_router = APIRouter()
 @base_router.post("/token", response_model=Token)
 async def get_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    settings: JWTSettings = Depends(get_jwt_settings),
+    settings: JWTSettings = Depends(get_base_api_settings),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     cred_cls: CredentialedEntity = Depends(get_cred_entity),
 ):

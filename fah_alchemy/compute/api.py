@@ -11,7 +11,7 @@ from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from ..base.api import (
-    PermissiveJSONResponse,
+    GufeJSONResponse,
     scope_params,
     get_token_data_depends,
     get_n4js_depends,
@@ -19,7 +19,7 @@ from ..base.api import (
     base_router,
     get_cred_entity,
 )
-from ..settings import ComputeAPISettings, get_compute_api_settings, get_jwt_settings
+from ..settings import get_base_api_settings, get_compute_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
 from ..storage.models import ObjectStoreRef
@@ -34,7 +34,7 @@ from ..security.models import Token, TokenData, CredentialedComputeIdentity
 # - on startup,
 
 app = FastAPI(title="FahAlchemyComputeAPI")
-app.dependency_overrides[get_jwt_settings] = get_compute_api_settings
+app.dependency_overrides[get_base_api_settings] = get_compute_api_settings
 app.include_router(base_router)
 
 
@@ -102,7 +102,7 @@ async def claim_taskqueue_tasks(
     return [str(t) if t is not None else None for t in tasks]
 
 
-@router.get("/tasks/{task}/transformation", response_class=PermissiveJSONResponse)
+@router.get("/tasks/{task}/transformation", response_class=GufeJSONResponse)
 async def get_task_transformation(
     task,
     *,
@@ -142,5 +142,7 @@ def set_task_result(
 async def chemicalsystems():
     return {"message": "nothing yet"}
 
+
+### add router
 
 app.include_router(router)

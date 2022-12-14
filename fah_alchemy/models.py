@@ -11,6 +11,14 @@ class Scope(BaseModel):
     class Config:
         frozen = True
 
+    def __str__(self):
+        return "-".join([self.org, self.campaign, self.project])
+
+    @classmethod
+    def from_str(cls, string):
+        org, campaign, project = string.split("-")
+        return cls(org=org, campaign=campaign, project=project)
+
     def overlap(self, other):
         """Return True if this Scope overlaps with another"""
         return NotImplementedError

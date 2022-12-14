@@ -50,7 +50,11 @@ class JWTSettings(FrozenSettings):
     JWT_ALGORITHM: str = "HS256"
 
 
-class APISettings(Neo4jStoreSettings, JWTSettings):
+class BaseAPISettings(Neo4jStoreSettings, S3ObjectStoreSettings, JWTSettings):
+    ...
+
+
+class APISettings(BaseAPISettings):
     """Automatically populates settings from environment variables where they
     match; case-insensitive.
 
@@ -61,7 +65,7 @@ class APISettings(Neo4jStoreSettings, JWTSettings):
     FA_API_LOGLEVEL: str = "info"
 
 
-class ComputeAPISettings(Neo4jStoreSettings, JWTSettings):
+class ComputeAPISettings(BaseAPISettings):
     """Automatically populates settings from environment variables where they
     match; case-insensitive.
 
@@ -85,6 +89,11 @@ def get_s3objectstore_settings():
 @lru_cache()
 def get_jwt_settings():
     return JWTSettings()
+
+
+@lru_cache()
+def get_base_api_settings():
+    return BaseAPISettings()
 
 
 @lru_cache()

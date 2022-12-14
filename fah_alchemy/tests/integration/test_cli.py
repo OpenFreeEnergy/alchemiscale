@@ -58,39 +58,84 @@ def test_api_application():
     assert response.json() == expected_ping
 
 
-def test_api():
-    workers = 1
+def test_api(n4js, s3os):
+    workers = 2
     host = "127.0.0.1"
     port = 50100
-    invocation = ["api", "--workers", workers, "--host", host, "--port", port]
+    command = ["api"]
+    api_opts = ["--workers", workers, "--host", host, "--port", port]
+    db_opts = [
+        "--url",
+        "bolt://localhost:7687",
+        "--user",
+        "neo4j",
+        "--password",
+        "password",
+    ]
+    s3_opts = [
+        "--access-key-id",
+        "test-key-id",
+        "--secret-access-key",
+        "test-key",
+        "--session-token",
+        "test-session-token",
+        "--s3-bucket",
+        "test-bucket",
+        "--s3-prefix",
+        "test-prefix",
+        "--default-region",
+        "us-east-1",
+    ]
+    jwt_opts = []  # leaving empty, we have default behavior for these
+
     expected_ping = {"api": "FahAlchemyAPI"}
 
     runner = CliRunner()
-    with running_service(runner.invoke, port, (cli, invocation)):
+    with running_service(
+        runner.invoke, port, (cli, command + api_opts + db_opts + s3_opts + jwt_opts)
+    ):
         response = requests.get(f"http://{host}:{port}/ping")
 
     assert response.status_code == 200
     assert response.json() == expected_ping
 
 
-def test_compute_api():
+def test_compute_api(n4js, s3os):
     workers = 2
     host = "127.0.0.1"
     port = 50100
-    invocation = [
-        "compute",
-        "api",
-        "--workers",
-        workers,
-        "--host",
-        host,
-        "--port",
-        port,
+    command = ["compute", "api"]
+    api_opts = ["--workers", workers, "--host", host, "--port", port]
+    db_opts = [
+        "--url",
+        "bolt://localhost:7687",
+        "--user",
+        "neo4j",
+        "--password",
+        "password",
     ]
+    s3_opts = [
+        "--access-key-id",
+        "test-key-id",
+        "--secret-access-key",
+        "test-key",
+        "--session-token",
+        "test-session-token",
+        "--s3-bucket",
+        "test-bucket",
+        "--s3-prefix",
+        "test-prefix",
+        "--default-region",
+        "us-east-1",
+    ]
+    jwt_opts = []  # leaving empty, we have default behavior for these
+
     expected_ping = {"api": "FahAlchemyComputeAPI"}
 
     runner = CliRunner()
-    with running_service(runner.invoke, port, (cli, invocation)):
+    with running_service(
+        runner.invoke, port, (cli, command + api_opts + db_opts + s3_opts + jwt_opts)
+    ):
         response = requests.get(f"http://{host}:{port}/ping")
 
     assert response.status_code == 200

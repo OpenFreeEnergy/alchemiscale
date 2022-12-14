@@ -6,7 +6,7 @@ from multiprocessing import Process
 import uvicorn
 import requests
 
-from fah_alchemy.settings import get_jwt_settings
+from fah_alchemy.settings import get_base_api_settings
 from fah_alchemy.base.api import get_n4js_depends, get_s3os_depends
 from fah_alchemy.interface import api, client
 
@@ -18,18 +18,14 @@ from fah_alchemy.tests.integration.utils import running_service
 
 
 @pytest.fixture(scope="module")
-def user_api(n4js, s3os):
-    def get_n4js_override():
-        return n4js
-
+def user_api(s3os):
     def get_s3os_override():
         return s3os
 
     overrides = copy(api.app.dependency_overrides)
 
-    api.app.dependency_overrides[get_n4js_depends] = get_n4js_override
+    api.app.dependency_overrides[get_base_api_settings] = get_user_settings_override
     api.app.dependency_overrides[get_s3os_depends] = get_s3os_override
-    api.app.dependency_overrides[get_jwt_settings] = get_user_settings_override
     yield api.app
     api.app.dependency_overrides = overrides
 
