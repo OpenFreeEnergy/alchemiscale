@@ -12,6 +12,7 @@ from fah_alchemy.base.api import get_n4js_depends, get_s3os_depends
 from fah_alchemy.compute import api, client
 
 from fah_alchemy.tests.integration.compute.utils import get_compute_settings_override
+from fah_alchemy.tests.integration.utils import running_service
 
 
 ## compute client
@@ -42,27 +43,10 @@ def run_server(fastapi_app, settings):
 @pytest.fixture(scope="module")
 def uvicorn_server(compute_api):
     settings = get_compute_settings_override()
-    # Fixes multiprocess pickling for testing on OSX (which is not fork by default)
-    mp.set_start_method("fork", force=True)
-    proc = Process(target=run_server, args=(compute_api, settings), daemon=True)
-    proc.start()
-
-    timeout = True
-    for _ in range(40):
-        try:
-            ping = requests.get(f"http://127.0.0.1:8000/ping")
-            ping.raise_for_status()
-        except IOError:
-            sleep(0.25)
-            continue
-        timeout = False
-        break
-    if timeout:
-        raise RuntimeError("The test server could not be reached.")
-
-    yield
-
-    proc.kill()  # Cleanup after test
+    with running_service(
+        run_server, port=settings.FA_COMPUTE_API_PORT, args=(compute_api, settings)
+    ):
+        yield
 
 
 @pytest.fixture(scope="module")

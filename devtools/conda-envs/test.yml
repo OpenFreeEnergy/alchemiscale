@@ -30,6 +30,7 @@ dependencies:
   ## api(s)
   - fastapi
   - uvicorn
+  - gunicorn
   - python-jose
   - passlib
   - bcrypt
