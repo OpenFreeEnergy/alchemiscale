@@ -29,11 +29,20 @@ class FahAlchemyComputeClient(FahAlchemyBaseClient):
     _exception = FahAlchemyComputeClientError
 
     def query_taskqueues(
-        self, scope: Scope, return_gufe=False, limit=None, skip=None
+        self, scopes: List[Scope], return_gufe=False, limit=None, skip=None
     ) -> List[TaskQueue]:
         """Return all `TaskQueue`s corresponding to given `Scope`."""
-        params = dict(return_gufe=return_gufe, limit=limit, skip=skip, **scope.dict())
-        taskqueues = self._query_resource("/taskqueues", params=params)
+        if return_gufe:
+            taskqueues = {}
+        else:
+            taskqueues = []
+
+        for scope in scopes:
+            params = dict(return_gufe=return_gufe, limit=limit, skip=skip, **scope.dict())
+            if return_gufe:
+                taskqueues.update(self._query_resource("/taskqueues", params=params))
+            else:
+                taskqueues.extend(self._query_resource("/taskqueues", params=params))
 
         return taskqueues
 

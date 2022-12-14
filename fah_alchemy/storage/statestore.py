@@ -605,7 +605,7 @@ class Neo4jStore(FahAlchemyStateStore):
     def get_networks_for_transformation(self):
         ...
 
-    def get_transformation_results(self):
+    def get_transformation_results(self, transformation: ScopedKey):
         ...
 
         # get all tasks directly connected to given transformation

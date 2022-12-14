@@ -20,6 +20,7 @@ from ..base.api import (
     get_s3os_depends,
     base_router,
     get_cred_entity,
+    validate_scopes
 )
 from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
@@ -38,22 +39,6 @@ app.include_router(base_router)
 
 def get_cred_user():
     return CredentialedUserIdentity
-
-
-def validate_scopes(scope: Scope, token: TokenData):
-    """Verify that token data has specified scopes encoded"""
-    scope = str(scope)
-    # Check if scope among scopes accessible
-    if scope not in token.scopes:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=(
-                f'Targeted scope of "{scope}" not allowed in current user\'s Token of scopes'
-                f'{token.scopes}. This is no way confers existence of scope "{scope}", only that '
-                f"this user does not have permission to access the space."
-            ),
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
 
 app.dependency_overrides[get_cred_entity] = get_cred_user
@@ -85,7 +70,7 @@ async def query_networks(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    # Use token as the basis for the querry if there are no scopes, otherwise return the user scopes
+    # Use token as the basis for the query if there are no scopes, otherwise return the user scopes
     # What to do if someone broadly states a query?
     #   Grab top down heiarchy, walking through each scope in their token
     #   Search ONLY through their scopes
@@ -93,7 +78,7 @@ async def query_networks(
 
     # Cast token to list of Scope strs
     accessible_scopes = token.scopes
-    #
+ 
     try:
         # Check the scope can be processed as a scope
         if scope:
@@ -148,10 +133,8 @@ def get_network(
 ):
     # Get scope from scoped key provided by user, uniquely identifying the network
     sk = ScopedKey.from_str(network_scoped_key)
-    scope = sk.scope
-    validate_scopes(scope, token)
+    validate_scopes(sk.scope, token)
 
-    # Fetch Network
     network = n4js.get_gufe(scoped_key=sk)
     return network.to_dict()
 
@@ -164,8 +147,8 @@ def create_network(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-
     validate_scopes(scope, token)
+
     an = AlchemicalNetwork.from_dict(network)
     return n4js.create_network(network=an, scope=scope)
 
@@ -175,13 +158,17 @@ async def query_transformations():
     return {"message": "nothing yet"}
 
 
-@router.get("/transformations/{transformation}", response_class=GufeJSONResponse)
+@router.get("/transformations/{transformation_scoped_key}", response_class=GufeJSONResponse)
 async def get_transformation(
-    transformation,
+    transformation_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
 ):
-    transformation = n4js.get_gufe(scoped_key=transformation)
+    sk = ScopedKey.from_str(transformation_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    transformation = n4js.get_gufe(scoped_key=sk)
     return transformation.to_dict()
 
 
@@ -190,13 +177,17 @@ async def query_chemicalsystems():
     return {"message": "nothing yet"}
 
 
-@router.get("/chemicalsystems/{chemicalsystem}", response_class=GufeJSONResponse)
+@router.get("/chemicalsystems/{chemicalsystem_scoped_key}", response_class=GufeJSONResponse)
 async def get_chemicalsystem(
-    chemicalsystem,
+    chemicalsystem_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
 ):
-    chemicalsystem = n4js.get_gufe(scoped_key=chemicalsystem)
+    sk = ScopedKey.from_str(chemicalsystem_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    chemicalsystem = n4js.get_gufe(scoped_key=sk)
     return chemicalsystem.to_dict()
 
 
@@ -211,18 +202,22 @@ def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
 ### results
 
 
-@router.get("/transformations/{transformation}/result", response_class=GufeJSONResponse)
+@router.get("/transformations/{transformation_scoped_key}/result", response_class=GufeJSONResponse)
 def get_transformation_result(
-    transformation,
+    transformation_scoped_key,
     *,
     limit: int = 10,
     skip: int = 0,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
 ):
+    sk = ScopedKey.from_str(transformation_scoped_key)
+    validate_scopes(sk.scope, token)
+
     # get all ObjectStoreRefs for the given transformation's results in a nested list
     # each list corresponds to a single chain of extension results
-    refs: List[List[ObjectStoreRef]] = n4js.get_transformation_results(transformation)
+    refs: List[List[ObjectStoreRef]] = n4js.get_transformation_results(sk)
 
     # walk through the nested list, getting the actual ProtocolDAGResult object
     # for each ObjectStoreRef, starting from `skip` and up to `limit`

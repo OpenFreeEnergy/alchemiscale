@@ -73,7 +73,7 @@ class SynchronousComputeService:
         shared_path: Path,
         sleep_interval: int = 30,
         heartbeat_frequency: int = 30,
-        scope: Optional[Scope] = None,
+        scopes: Optional[List[Scope]] = None,
         limit: int = 1,
     ):
         """
@@ -92,8 +92,8 @@ class SynchronousComputeService:
 
         self.client = FahAlchemyComputeClient(api_url, identifier, key)
 
-        if scope is None:
-            self.scope = Scope()
+        if scopes is None:
+            self.scopes = [Scope()]
 
         self.shared = shared_path
         self.scheduler = sched.scheduler(time.monotonic, time.sleep)
@@ -111,7 +111,7 @@ class SynchronousComputeService:
 
         """
         taskqueues: Dict[ScopedKey, TaskQueue] = self.client.query_taskqueues(
-            scope=self.scope, return_gufe=True
+            scopes=self.scopes, return_gufe=True
         )
 
         # based on weights, choose taskqueue to draw from

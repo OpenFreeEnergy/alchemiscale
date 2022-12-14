@@ -2,6 +2,7 @@ import pytest
 import json
 
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
+from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
 from fah_alchemy.models import ScopedKey
 
@@ -64,24 +65,36 @@ class TestAPI:
         self, test_client, network_tyk2, scope_test, multiple_scopes
     ):
         an = network_tyk2
+
+        # test_client doesn't have this scope in its token
         bad_scope = multiple_scopes[1]
 
         an2, headers, jsondata = pre_load_payload(an, bad_scope)
 
+        # so we expect to be denied here
         response = test_client.post("/networks", data=jsondata, headers=headers)
         assert response.status_code == 401
         details = response.json()
+
         # Check our error is expected
         assert "detail" in details
         details = details["detail"]
+
         # Check our error details are expected
         assert str(bad_scope) in details
         assert str(scope_test) in details
 
     def test_get_network(self, prepared_network, test_client):
-        _, scoped_key = prepared_network
+        network, scoped_key = prepared_network
         response = test_client.get(f"/networks/{scoped_key}")
+
         assert response.status_code == 200
+
+        content = json.loads(response.text, cls=JSON_HANDLER.decoder)
+        network_ = GufeTokenizable.from_dict(content)
+
+        assert network_.key == network.key
+        assert network_ is network
 
     def test_get_network_bad_scope(
         self, n4js_preloaded, network_tyk2, test_client, multiple_scopes
@@ -96,9 +109,11 @@ class TestAPI:
         response = test_client.get(f"/networks/{sk_unauthenticated}")
         assert response.status_code == 401
         details = response.json()
+
         # Check our error is expected
         assert "detail" in details
         details = details["detail"]
+
         # Check our error details are expected
         assert str(sk_unauthenticated.scope) in details
         assert str(auth_scope) in details

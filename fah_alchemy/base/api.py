@@ -33,6 +33,26 @@ from ..security.auth import (
 from ..security.models import Token, TokenData, CredentialedEntity
 
 
+def validate_scopes(scope: Scope, token: TokenData):
+    """Verify that token data has specified scopes encoded"""
+    scope = str(scope)
+    # Check if scope among scopes accessible
+    if scope not in token.scopes:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=(
+                f'Targeted scope of "{scope}" not allowed in current user\'s Token of scopes'
+                f'{token.scopes}. This is no way confers existence of scope "{scope}", only that '
+                f"this user does not have permission to access the space."
+            ),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def validate_scopes_query(scope: Scope, token: TokenData):
+    ...
+
+
 class GufeJSONResponse(JSONResponse):
     media_type = "application/json"
 

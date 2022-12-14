@@ -244,7 +244,7 @@ def network_tyk2():
 
 @fixture(scope="session")
 def scope_test():
-    """Primary scope for testing for individual"""
+    """Primary scope for individual tests"""
     return Scope(org="test_org", campaign="test_campaign", project="test_project")
 
 
@@ -270,7 +270,7 @@ def transformation(network_tyk2):
     return list(network_tyk2.edges)[0]
 
 
-@fixture(scope="function")
+@fixture(scope="session")
 def protocoldagresult(tmpdir_factory, transformation):
     # Use tempdir_factory instead of tempdir to handle session level scope correctly
     protocoldag = transformation.create()

@@ -12,11 +12,12 @@ class Scope(BaseModel):
         frozen = True
 
     def __str__(self):
-        return "-".join([self.org, self.campaign, self.project])
+        triple = (i if i is not None else '*' for i in (self.org, self.campaign, self.project))
+        return "-".join(triple)
 
     @classmethod
     def from_str(cls, string):
-        org, campaign, project = string.split("-")
+        org, campaign, project = (i if i is not '*' else None for i in string.split("-"))
         return cls(org=org, campaign=campaign, project=project)
 
     def overlap(self, other):
@@ -25,14 +26,6 @@ class Scope(BaseModel):
 
     def __repr__(self):  # pragma: no cover
         return f"<Scope('{str(self)}')>"
-
-    def __str__(self):
-        return "-".join([self.org, self.campaign, self.project])
-
-    @classmethod
-    def from_str(cls, string):
-        org, campaign, project = string.split("-")
-        return cls(org=org, campaign=campaign, project=project)
 
 
 class ScopedKey(BaseModel):
