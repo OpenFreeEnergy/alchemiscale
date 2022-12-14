@@ -43,18 +43,16 @@ def scopeless_credentialed_user(user_identity_prepped):
 @pytest.fixture(scope="module")
 def single_scoped_credentialed_user(user_identity_prepped, scope_test):
     identity = copy(user_identity_prepped)
-    identity['identifier'] = identity['identifier'] + '-a'
+    identity["identifier"] = identity["identifier"] + "-a"
 
-    user = CredentialedUserIdentity(
-        **identity, scopes=[scope_test]  # Ensure list
-    )
+    user = CredentialedUserIdentity(**identity, scopes=[scope_test])  # Ensure list
     return user
 
 
 @pytest.fixture(scope="module")
 def fully_scoped_credentialed_user(user_identity_prepped, multiple_scopes):
     identity = copy(user_identity_prepped)
-    identity['identifier'] = identity['identifier'] + '-b'
+    identity["identifier"] = identity["identifier"] + "-b"
 
     user = CredentialedUserIdentity(**identity, scopes=multiple_scopes)
     return user

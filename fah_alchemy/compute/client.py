@@ -38,7 +38,9 @@ class FahAlchemyComputeClient(FahAlchemyBaseClient):
             taskqueues = []
 
         for scope in scopes:
-            params = dict(return_gufe=return_gufe, limit=limit, skip=skip, **scope.dict())
+            params = dict(
+                return_gufe=return_gufe, limit=limit, skip=skip, **scope.dict()
+            )
             if return_gufe:
                 taskqueues.update(self._query_resource("/taskqueues", params=params))
             else:

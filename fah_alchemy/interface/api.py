@@ -20,7 +20,7 @@ from ..base.api import (
     get_s3os_depends,
     base_router,
     get_cred_entity,
-    validate_scopes
+    validate_scopes,
 )
 from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
@@ -78,7 +78,7 @@ async def query_networks(
 
     # Cast token to list of Scope strs
     accessible_scopes = token.scopes
- 
+
     try:
         # Check the scope can be processed as a scope
         if scope:
@@ -158,7 +158,9 @@ async def query_transformations():
     return {"message": "nothing yet"}
 
 
-@router.get("/transformations/{transformation_scoped_key}", response_class=GufeJSONResponse)
+@router.get(
+    "/transformations/{transformation_scoped_key}", response_class=GufeJSONResponse
+)
 async def get_transformation(
     transformation_scoped_key,
     *,
@@ -177,7 +179,9 @@ async def query_chemicalsystems():
     return {"message": "nothing yet"}
 
 
-@router.get("/chemicalsystems/{chemicalsystem_scoped_key}", response_class=GufeJSONResponse)
+@router.get(
+    "/chemicalsystems/{chemicalsystem_scoped_key}", response_class=GufeJSONResponse
+)
 async def get_chemicalsystem(
     chemicalsystem_scoped_key,
     *,
@@ -202,7 +206,10 @@ def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
 ### results
 
 
-@router.get("/transformations/{transformation_scoped_key}/result", response_class=GufeJSONResponse)
+@router.get(
+    "/transformations/{transformation_scoped_key}/result",
+    response_class=GufeJSONResponse,
+)
 def get_transformation_result(
     transformation_scoped_key,
     *,
