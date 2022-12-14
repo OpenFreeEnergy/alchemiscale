@@ -5,7 +5,11 @@ import contextlib
 import os
 import traceback
 
-from fah_alchemy.cli import get_settings_from_options, cli
+import requests
+from fastapi import FastAPI
+from fah_alchemy.tests.integration.utils import running_service
+
+from fah_alchemy.cli import get_settings_from_options, cli, ApiApplication
 from fah_alchemy.settings import Neo4jStoreSettings
 from fah_alchemy.storage.statestore import Neo4JStoreError
 
@@ -28,6 +32,114 @@ def set_env_vars(env):
     finally:
         os.environ.clear()
         os.environ.update(old_env)
+
+
+toyapp = FastAPI()
+
+
+@toyapp.get("/ping")
+def read_root():
+    return {"Hello": "World"}
+
+
+def test_api_application():
+    # this checks that the gunicorn BaseApplication subclass works correctly
+    # with a FastAPI app
+    workers = 1
+    host = "127.0.0.1"
+    port = 50100
+    app = ApiApplication.from_parameters(toyapp, workers, host, port)
+
+    expected_ping = {"Hello": "World"}
+    with running_service(app.run, port, args=tuple()):
+        response = requests.get(f"http://{host}:{port}/ping")
+
+    assert response.status_code == 200
+    assert response.json() == expected_ping
+
+
+def test_api(n4js, s3os):
+    workers = 2
+    host = "127.0.0.1"
+    port = 50100
+    command = ["api"]
+    api_opts = ["--workers", workers, "--host", host, "--port", port]
+    db_opts = [
+        "--url",
+        "bolt://localhost:7687",
+        "--user",
+        "neo4j",
+        "--password",
+        "password",
+    ]
+    s3_opts = [
+        "--access-key-id",
+        "test-key-id",
+        "--secret-access-key",
+        "test-key",
+        "--session-token",
+        "test-session-token",
+        "--s3-bucket",
+        "test-bucket",
+        "--s3-prefix",
+        "test-prefix",
+        "--default-region",
+        "us-east-1",
+    ]
+    jwt_opts = []  # leaving empty, we have default behavior for these
+
+    expected_ping = {"api": "FahAlchemyAPI"}
+
+    runner = CliRunner()
+    with running_service(
+        runner.invoke, port, (cli, command + api_opts + db_opts + s3_opts + jwt_opts)
+    ):
+        response = requests.get(f"http://{host}:{port}/ping")
+
+    assert response.status_code == 200
+    assert response.json() == expected_ping
+
+
+def test_compute_api(n4js, s3os):
+    workers = 2
+    host = "127.0.0.1"
+    port = 50100
+    command = ["compute", "api"]
+    api_opts = ["--workers", workers, "--host", host, "--port", port]
+    db_opts = [
+        "--url",
+        "bolt://localhost:7687",
+        "--user",
+        "neo4j",
+        "--password",
+        "password",
+    ]
+    s3_opts = [
+        "--access-key-id",
+        "test-key-id",
+        "--secret-access-key",
+        "test-key",
+        "--session-token",
+        "test-session-token",
+        "--s3-bucket",
+        "test-bucket",
+        "--s3-prefix",
+        "test-prefix",
+        "--default-region",
+        "us-east-1",
+    ]
+    jwt_opts = []  # leaving empty, we have default behavior for these
+
+    expected_ping = {"api": "FahAlchemyComputeAPI"}
+
+    runner = CliRunner()
+    with running_service(
+        runner.invoke, port, (cli, command + api_opts + db_opts + s3_opts + jwt_opts)
+    ):
+        response = requests.get(f"http://{host}:{port}/ping")
+
+    assert response.status_code == 200
+    assert response.json() == expected_ping
 
 
 @pytest.mark.parametrize(
