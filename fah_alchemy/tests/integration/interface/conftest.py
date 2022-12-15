@@ -99,7 +99,7 @@ def scope_consistent_token_data_depends_override(scope_test):
     """Make a consistent helper to provide an override to the api.app while still accessing fixtures"""
 
     def get_token_data_depends_override():
-        token_data = TokenData(entity="karen", scopes=[str(scope_test)])
+        token_data = TokenData(entity="karen-interface", scopes=[str(scope_test)])
         return token_data
 
     return get_token_data_depends_override

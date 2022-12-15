@@ -48,11 +48,15 @@ def uvicorn_server(compute_api):
 
 
 @pytest.fixture(scope="module")
-def compute_client(uvicorn_server, compute_identity):
+def compute_client(
+    uvicorn_server, compute_identity, single_scoped_credentialed_compute
+):
 
     return client.FahAlchemyComputeClient(
         api_url="http://127.0.0.1:8000/",
-        identifier=compute_identity["identifier"],
+        # Use the identifier for the single-scoped user who should have access to somethings.
+        identifier=single_scoped_credentialed_compute.identifier,
+        # All the test users are based on compute_identity who use the same password
         key=compute_identity["key"],
     )
 

@@ -14,6 +14,7 @@ from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from ..base.api import (
     GufeJSONResponse,
+    QueryGUFEHandler,
     scope_params,
     get_token_data_depends,
     get_n4js_depends,
@@ -21,6 +22,7 @@ from ..base.api import (
     base_router,
     get_cred_entity,
     validate_scopes,
+    validate_scopes_query,
 )
 from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
@@ -70,58 +72,20 @@ async def query_networks(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    # Use token as the basis for the query if there are no scopes, otherwise return the user scopes
-    # What to do if someone broadly states a query?
-    #   Grab top down heiarchy, walking through each scope in their token
-    #   Search ONLY through their scopes
-    #   0 discoverability
 
-    # Cast token to list of Scope strs
-    accessible_scopes = token.scopes
+    # Intersect query scopes with accessible scopes in the token
+    query_scopes = validate_scopes_query(scope, token)
+    networks_handler = QueryGUFEHandler(return_gufe)
+    # Query each scope. Loop might be more removable in the future with a Union like operator on scopes
+    for single_query_scope in query_scopes:
+        # Add new networks
+        networks_handler.update_results(
+            n4js.query_networks(
+                name=name, scope=single_query_scope, return_gufe=return_gufe
+            )
+        )  # Add new networks
 
-    try:
-        # Check the scope can be processed as a scope
-        if scope:
-            Scope.from_str(scope)
-        else:
-            scope = "*-*-*"
-    except (AttributeError, ValueError):
-        # Could not be cast as a string
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f'Value of "scope" was "{scope}" which cannot be processed as a 3-object tuple of form'
-                f'"X-Y-Z" and cast to string. Alpha numerical values (a-z A-Z 0-9) and "*" are accepted for '
-                f'parameter "scope"'
-            ),
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    query_scopes = []
-    # Note: "OCP" = "Org, Campaign, Project. "q" = query
-    query_org_camp_proj = scope.split("-")
-    for accessible_scope in accessible_scopes:
-        # Iterate through org, camp, and proj query against all accessible scopes
-        add_it_in = True  # Assume we're adding it
-        for (query, target) in zip(query_org_camp_proj, accessible_scope.split("-")):
-            if not (query == target or query == "*"):
-                # If not matched, dont add
-                add_it_in = False
-                continue
-        if add_it_in:
-            query_scopes.append(accessible_scope)
-
-    networks = {}
-    networks = {
-        **networks,  # Add existing networks
-        **n4js.query_networks(
-            name=name, scope=scope, return_gufe=return_gufe
-        ),  # Add new networks
-    }
-
-    if return_gufe:
-        return {str(sk): tq.to_dict() for sk, tq in networks.items()}
-    else:
-        return [str(sk) for sk in networks]
+    return networks_handler.format_return()
 
 
 @router.get("/networks/{network_scoped_key}", response_class=GufeJSONResponse)
