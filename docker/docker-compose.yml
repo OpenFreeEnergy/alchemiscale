@@ -6,7 +6,7 @@ networks:
 
 services:
   neo4j:
-    image: ${NEO4J_DOCKER_IMAGE}
+    image: ${NEO4J_DOCKER_IMAGE:-neo4j:4.4}
     hostname: neo4j
     # Service-level network, which specifies the networks, from the list of the top-level networks (in this case only neo4j-internal), that the server will connect to.
     # Adds a network alias (used in neo4j.conf when configuring the discovery members)
@@ -33,7 +33,7 @@ services:
 
     # Passes the following environment variables to the container
     environment:
-      - NEO4J_AUTH=${NEO4J_PASS:?err}
+      - NEO4J_AUTH=${NEO4J_USER:?err}/${NEO4J_PASS:?err}
       - NEO4J_EDITION=docker_compose
 
     # Simple check testing whether the port 7474 is opened.
