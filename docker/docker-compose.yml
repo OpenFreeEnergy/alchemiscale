@@ -43,7 +43,7 @@ services:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
 
     # Set up the user
-    user: ${USER_ID}:${GROUP_ID}:
+    user: ${USER_ID}:${GROUP_ID}
   fah-alchemy-client-API:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
     environment:
