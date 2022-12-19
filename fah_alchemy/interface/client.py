@@ -61,7 +61,9 @@ class FahAlchemyClient(FahAlchemyBaseClient):
     ### results
 
     def get_transformation_result(
-        self, transformation: ScopedKey, return_protocoldagresults: bool = False
+        self, 
+        transformation: ScopedKey, 
+        return_protocoldagresults: bool = False,
     ) -> Union[ProtocolResult, List[List[ProtocolDAGResult]]]:
         """Get `ProtocolResult` for the given `Transformation`.
 

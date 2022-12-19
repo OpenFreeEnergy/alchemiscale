@@ -191,9 +191,9 @@ def get_transformation_result(
 
     # get all ObjectStoreRefs for the given transformation's results in a nested list
     # each list corresponds to a single chain of extension results
-    refs: List[List[ObjectStoreRef]] = n4js.get_transformation_results(sk)
+    refs: List[ObjectStoreRef] = n4js.get_transformation_results(sk)
 
-    # walk through the nested list, getting the actual ProtocolDAGResult object
+    # walk through the list, getting the actual ProtocolDAGResult object
     # for each ObjectStoreRef, starting from `skip` and up to `limit`
     pdrs: List[List[str]] = []
     for reflist in refs[skip : skip + limit]:
