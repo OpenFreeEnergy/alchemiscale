@@ -8,6 +8,28 @@ class Scope(BaseModel):
     campaign: Optional[str] = None
     project: Optional[str] = None
 
+    def __init__(self, org=None, campaign=None, project=None):
+        # we add this to allow for arg-based creation, not just keyword-based
+        super().__init__(org=org, campaign=campaign, project=project)
+
+    @staticmethod
+    def _validate_component(v, component):
+        if v is not None and '-' in v:
+            raise ValueError(f"'{component}' must not contain dashes ('-')")
+        return v
+
+    @validator("org")
+    def valid_org(cls, v):
+        return cls._validate_component(v, 'org')
+
+    @validator("campaign")
+    def valid_campaign(cls, v):
+        return cls._validate_component(v, 'campaign')
+
+    @validator("project")
+    def valid_project(cls, v):
+        return cls._validate_component(v, 'project')
+
     class Config:
         frozen = True
 
@@ -17,10 +39,13 @@ class Scope(BaseModel):
         )
         return "-".join(triple)
 
+    def to_tuple(self):
+        return (self.org, self.campaign, self.project)
+
     @classmethod
     def from_str(cls, string):
         org, campaign, project = (
-            i if i is not "*" else None for i in string.split("-")
+            i if i != "*" else None for i in string.split("-")
         )
         return cls(org=org, campaign=campaign, project=project)
 

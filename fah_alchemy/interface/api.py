@@ -76,14 +76,17 @@ async def query_networks(
     # Intersect query scopes with accessible scopes in the token
     query_scopes = validate_scopes_query(scope, token)
     networks_handler = QueryGUFEHandler(return_gufe)
-    # Query each scope. Loop might be more removable in the future with a Union like operator on scopes
+
+    # query each scope
+    # loop might be removable in the future with a Union like operator on scopes
     for single_query_scope in query_scopes:
-        # Add new networks
+
+        # add new networks
         networks_handler.update_results(
             n4js.query_networks(
                 name=name, scope=single_query_scope, return_gufe=return_gufe
             )
-        )  # Add new networks
+        )
 
     return networks_handler.format_return()
 
