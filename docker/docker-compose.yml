@@ -54,8 +54,8 @@ services:
     networks:
       - neo4j-internal
       - fah-client
-    expose:
-      - 9292
+    ports:
+      - "9292:9292"
     environment:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?err}
       - JWT_EXPIRE_SECONDS=${JWT_EXPIRE_SECONDS:-1800}
@@ -127,25 +127,25 @@ services:
       neo4j:
         condition: service_healthy
     command: "database init"
-  reverse-proxy:
-    # The official v2 Traefik docker image
-    image: traefik:v2.9
-    networks:
-      - fah-client
-      - fah-compute
-    # Enables the web UI and tells Traefik to listen to docker
-    command: 
-      - "--api.insecure=true" 
-      - "--providers.docker"
-      # Do not expose containers unless explicitly told so
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.fah-alchemy-client-API.address=:9292"
-    ports:
-      # The HTTP port
-      - "80:80"
-      # The Web UI (enabled by --api.insecure=true)
-      - "8080:8080"
-      - "9292:9292"
-    volumes:
-      # So that Traefik can listen to the Docker events
-      - /var/run/docker.sock:/var/run/docker.sock
+      #  reverse-proxy:
+      #    # The official v2 Traefik docker image
+      #    image: traefik:v2.9
+      #    networks:
+      #      - fah-client
+      #      - fah-compute
+      #    # Enables the web UI and tells Traefik to listen to docker
+      #    command: 
+      #      - "--api.insecure=true" 
+      #      - "--providers.docker"
+      #      # Do not expose containers unless explicitly told so
+      #      - "--providers.docker.exposedbydefault=false"
+      #      - "--entrypoints.fah-alchemy-client-API.address=:9292"
+      #    ports:
+      #      # The HTTP port
+      #      - "80:80"
+      #      # The Web UI (enabled by --api.insecure=true)
+      #      - "8080:8080"
+      #      - "9292:9292"
+      #    volumes:
+      #      # So that Traefik can listen to the Docker events
+      #      - /var/run/docker.sock:/var/run/docker.sock
