@@ -4,6 +4,7 @@ version: '3.8'
 networks:
   neo4j-internal:
 
+
 services:
   neo4j:
     image: ${NEO4J_DOCKER_IMAGE:-neo4j:4.4}
@@ -22,11 +23,12 @@ services:
 
     # Uncomment the volumes to be mounted to make them accessible from outside the container.
     volumes:
-      - ./neo4j.conf:/conf/neo4j.conf # This is the main configuration file.
-      - ./data/neo4j:/var/lib/neo4j/data
-      - ./logs/neo4j:/var/lib/neo4j/logs
-      - ./conf/neo4j:/var/lib/neo4j/conf
-      - ./import/neo4j:/var/lib/neo4j/import
+      #- ./neo4j.conf:/conf/neo4j.conf # This is the main configuration file.
+      - ${NEO4J_DATA_STORE:?err}:/var/lib/neo4j/data
+      #- ./data/server:/var/lib/neo4j/data
+      #- ./logs/neo4j:/var/lib/neo4j/logs
+      #- ./conf/neo4j:/var/lib/neo4j/conf
+      #- ./import/neo4j:/var/lib/neo4j/import
       #- ./metrics/neo4j:/var/lib/neo4j/metrics
       #- ./licenses/neo4j:/var/lib/neo4j/licenses
       #- ./ssl/neo4j:/var/lib/neo4j/ssl
@@ -46,6 +48,10 @@ services:
     user: ${USER_ID}:${GROUP_ID}
   fah-alchemy-client-API:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
+    networks:
+      - neo4j-internal
+    ports:
+      - "9292:9292"
     environment:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?err}
       - JWT_EXPIRE_SECONDS=${JWT_EXPIRE_SECONDS:-1800}
@@ -56,12 +62,19 @@ services:
       - AWS_S3_BUCKET=${AWS_S3_BUCKET:?err}
       - AWS_S3_PREFIX=${AWS_S3_PREFIX:?err}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:?err}
+      - NEO4J_URL=${NEO4J_URL:?err}
+      - NEO4J_USER=${NEO4J_USER:?err}
+      - NEO4J_PASS=${NEO4J_PASS:?err}
     depends_on: 
       - neo4j
       - fah-alchemy-compute-API
-    commands: api --host 127.0.0.1 --port 8080 --workers 2
+    command: "api --host 0.0.0.0 --port 9292 --workers 2"
   fah-alchemy-compute-API:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
+    networks:
+      - neo4j-internal
+    ports:
+      - "9291:9291"
     environment:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?err}
       - JWT_EXPIRE_SECONDS=${JWT_EXPIRE_SECONDS:-1800}
@@ -72,6 +85,23 @@ services:
       - AWS_S3_BUCKET=${AWS_S3_BUCKET:?err}
       - AWS_S3_PREFIX=${AWS_S3_PREFIX:?err}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:?err}
+      - NEO4J_URL=${NEO4J_URL:?err}
+      - NEO4J_USER=${NEO4J_USER:?err}
+      - NEO4J_PASS=${NEO4J_PASS:?err}
     depends_on: 
-      - neo4j
-    commands: compute api --host 127.0.0.1 --port 8080 --workers 2
+      neo4j:
+        condition: service_healthy
+    command: "compute api --host 0.0.0.0 --port 9291 --workers 2"
+  reverse-proxy:
+    # The official v2 Traefik docker image
+    image: traefik:v2.9
+    # Enables the web UI and tells Traefik to listen to docker
+    command: --api.insecure=true --providers.docker
+    ports:
+      # The HTTP port
+      - "80:80"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8080:8080"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock
