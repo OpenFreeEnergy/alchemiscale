@@ -1,3 +1,6 @@
+# data files for docker deployment
+docker/data
+
 # custom ignores
 .xxrun
 .idea/
