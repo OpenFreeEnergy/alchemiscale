@@ -117,7 +117,7 @@ def n4js_preloaded(
             tq_sk2,
         )
 
-    # Create compute credentials on the network
+    # Create compute identities
     for compute in [
         scopeless_credentialed_compute,
         single_scoped_credentialed_compute,

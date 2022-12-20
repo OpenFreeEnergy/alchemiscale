@@ -54,9 +54,9 @@ def compute_client(
 
     return client.FahAlchemyComputeClient(
         api_url="http://127.0.0.1:8000/",
-        # Use the identifier for the single-scoped user who should have access to somethings.
+        # use the identifier for the single-scoped user who should have access to some things
         identifier=single_scoped_credentialed_compute.identifier,
-        # All the test users are based on compute_identity who use the same password
+        # all the test users are based on compute_identity who use the same password
         key=compute_identity["key"],
     )
 

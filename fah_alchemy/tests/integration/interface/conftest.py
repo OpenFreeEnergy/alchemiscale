@@ -18,6 +18,7 @@ from fah_alchemy.base.api import (
 
 from fah_alchemy.tests.integration.interface.utils import get_user_settings_override
 
+
 ## user api
 
 
@@ -83,7 +84,7 @@ def n4js_preloaded(
         n4js.create_taskqueue(sk1)
         n4js.create_taskqueue(sk2)
 
-    # Create users on the network
+    # Create user identities
     for user in [
         scopeless_credentialed_user,
         single_scoped_credentialed_user,

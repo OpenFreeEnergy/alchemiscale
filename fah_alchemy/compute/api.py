@@ -113,6 +113,7 @@ async def claim_taskqueue_tasks(
 ):
     sk = ScopedKey.from_str(taskqueue_scoped_key)
     validate_scopes(sk.scope, token)
+
     tasks = n4js.claim_taskqueue_tasks(
         taskqueue=taskqueue_scoped_key, claimant=claimant, count=count
     )
@@ -129,6 +130,7 @@ async def get_task_transformation(
 ):
     sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(sk.scope, token)
+
     transformation, protocoldagresult = n4js.get_task_transformation(
         task=task_scoped_key
     )

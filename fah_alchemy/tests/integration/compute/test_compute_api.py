@@ -1,5 +1,6 @@
 import pytest
 
+from gufe import Transformation
 from gufe.tokenization import GufeTokenizable
 
 from fah_alchemy.models import ScopedKey
@@ -60,6 +61,10 @@ class TestComputeAPI:
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
+
+        transformation = GufeTokenizable.from_dict(data[0])
+
+        assert isinstance(transformation, Transformation)
 
     def test_get_task_transformation_bad_scope(
         self,
