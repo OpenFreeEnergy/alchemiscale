@@ -2,9 +2,9 @@ version: '3.8'
 
 # Custom top-level network
 networks:
-  neo4j-internal:
-  fah-client:
-  fah-compute:
+  internal:
+  db:
+  web:
 
 
 services:
@@ -14,7 +14,7 @@ services:
     # Service-level network, which specifies the networks, from the list of the top-level networks (in this case only neo4j-internal), that the server will connect to.
     # Adds a network alias (used in neo4j.conf when configuring the discovery members)
     networks:
-      neo4j-internal:
+      db:
         aliases:
           - neo4j-network
 
@@ -46,16 +46,17 @@ services:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
 
     # Set up the user
-    user: ${USER_ID}:${GROUP_ID}
+    user: ${USER_ID:?err}:${GROUP_ID:?err}
     labels:
       - "traefik.enable=false"
   fah-alchemy-client-API:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
+    hostname: fahalchemy
     networks:
-      - neo4j-internal
-      - fah-client
-    ports:
-      - "9292:9292"
+      - internal
+      - db
+    expose:
+      - 9292
     environment:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?err}
       - JWT_EXPIRE_SECONDS=${JWT_EXPIRE_SECONDS:-1800}
@@ -76,13 +77,12 @@ services:
     command: "api --host 0.0.0.0 --port 9292 --workers 2"
     labels:
       - "traefik.enable=true"
-      - "traefik.port=9292"
-      - "traefik.http.services.fah-alchemy-client-API.loadbalancer.server.port=9292"
+      - traefik.http.routers.fah-alchemy-client-API.rule=Host(`fahalchemy.localhost`)
   fah-alchemy-compute-API:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
     networks:
-      - neo4j-internal
-      - fah-compute
+      - internal
+      - db
     expose:
       - 9291
     environment:
@@ -105,11 +105,11 @@ services:
         condition: service_completed_successfully
     command: "compute api --host 0.0.0.0 --port 9291 --workers 2"
     labels:
-      - "traefik.enable=false"
+      - "traefik.enable=true"
   fah-alchemy-db-init:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
     networks:
-      - neo4j-internal
+      - db
     environment:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?err}
       - JWT_EXPIRE_SECONDS=${JWT_EXPIRE_SECONDS:-1800}
@@ -127,25 +127,24 @@ services:
       neo4j:
         condition: service_healthy
     command: "database init"
-      #  reverse-proxy:
-      #    # The official v2 Traefik docker image
-      #    image: traefik:v2.9
-      #    networks:
-      #      - fah-client
-      #      - fah-compute
-      #    # Enables the web UI and tells Traefik to listen to docker
-      #    command: 
-      #      - "--api.insecure=true" 
-      #      - "--providers.docker"
-      #      # Do not expose containers unless explicitly told so
-      #      - "--providers.docker.exposedbydefault=false"
-      #      - "--entrypoints.fah-alchemy-client-API.address=:9292"
-      #    ports:
-      #      # The HTTP port
-      #      - "80:80"
-      #      # The Web UI (enabled by --api.insecure=true)
-      #      - "8080:8080"
-      #      - "9292:9292"
-      #    volumes:
-      #      # So that Traefik can listen to the Docker events
-      #      - /var/run/docker.sock:/var/run/docker.sock
+  reverse-proxy:
+    # The official v2 Traefik docker image
+    image: traefik:v2.9
+    networks:
+      - internal
+      - web
+      # Enables the web UI and tells Traefik to listen to docker
+    command: 
+      - "--api.insecure=true" 
+      - "--providers.docker"
+      # Do not expose containers unless explicitly told so
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=internal"
+    ports:
+      # The HTTP port
+      - "80:80"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8080:8080"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock
