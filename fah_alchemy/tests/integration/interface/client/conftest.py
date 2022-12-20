@@ -1,7 +1,6 @@
 import pytest
 from copy import copy
 from time import sleep
-from multiprocessing import Process
 
 import uvicorn
 import requests

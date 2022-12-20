@@ -12,12 +12,15 @@ from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from ..base.api import (
     GufeJSONResponse,
+    QueryGUFEHandler,
     scope_params,
     get_token_data_depends,
     get_n4js_depends,
     get_s3os_depends,
     base_router,
     get_cred_entity,
+    validate_scopes,
+    validate_scopes_query,
 )
 from ..settings import get_base_api_settings, get_compute_api_settings
 from ..storage.statestore import Neo4jStore
@@ -66,13 +69,25 @@ async def query_taskqueues(
     return_gufe: bool = False,
     scope: Scope = Depends(scope_params),
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
 ):
-    taskqueues = n4js.query_taskqueues(scope=scope, return_gufe=return_gufe)
 
-    if return_gufe:
-        return {str(sk): tq.to_dict() for sk, tq in taskqueues.items()}
-    else:
-        return [str(sk) for sk in taskqueues]
+    # intersect query scopes with accessible scopes in the token
+    query_scopes = validate_scopes_query(scope, token)
+    taskqueues_handler = QueryGUFEHandler(return_gufe)
+
+    # query each scope
+    # loop might be more removable in the future with a Union like operator on scopes
+    for single_query_scope in query_scopes:
+
+        # add new task queues
+        taskqueues_handler.update_results(
+            n4js.query_taskqueues(
+                scope=single_query_scope, return_gufe=taskqueues_handler.return_gufe
+            )
+        )
+
+    return taskqueues_handler.format_return()
 
 
 # @app.get("/taskqueues/{scoped_key}")
@@ -87,28 +102,38 @@ async def get_taskqueue_tasks():
     return {"message": "nothing yet"}
 
 
-@router.post("/taskqueues/{taskqueue}/claim")
+@router.post("/taskqueues/{taskqueue_scoped_key}/claim")
 async def claim_taskqueue_tasks(
-    taskqueue,
+    taskqueue_scoped_key,
     *,
     claimant: str = Body(),
     count: int = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
 ):
+    sk = ScopedKey.from_str(taskqueue_scoped_key)
+    validate_scopes(sk.scope, token)
+
     tasks = n4js.claim_taskqueue_tasks(
-        taskqueue=taskqueue, claimant=claimant, count=count
+        taskqueue=taskqueue_scoped_key, claimant=claimant, count=count
     )
 
     return [str(t) if t is not None else None for t in tasks]
 
 
-@router.get("/tasks/{task}/transformation", response_class=GufeJSONResponse)
+@router.get("/tasks/{task_scoped_key}/transformation", response_class=GufeJSONResponse)
 async def get_task_transformation(
-    task,
+    task_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
 ):
-    transformation, protocoldagresult = n4js.get_task_transformation(task=task)
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    transformation, protocoldagresult = n4js.get_task_transformation(
+        task=task_scoped_key
+    )
 
     return (
         transformation.to_dict(),
@@ -116,14 +141,18 @@ async def get_task_transformation(
     )
 
 
-@router.post("/tasks/{task}/result", response_model=ScopedKey)
+@router.post("/tasks/{task_scoped_key}/result", response_model=ScopedKey)
 def set_task_result(
-    task,
+    task_scoped_key,
     *,
     protocoldagresult: str = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
 ):
+    task_sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(task_sk.scope, token)
+
     pdr = json.loads(protocoldagresult, cls=JSON_HANDLER.decoder)
     pdr = GufeTokenizable.from_dict(pdr)
 
@@ -131,11 +160,11 @@ def set_task_result(
     objectstoreref: ObjectStoreRef = s3os.push_protocoldagresult(pdr)
 
     # push the reference to the state store
-    sk: ScopedKey = n4js.set_task_result(
-        task=ScopedKey.from_str(task), protocoldagresult=objectstoreref
+    result_sk: ScopedKey = n4js.set_task_result(
+        task=task_sk, protocoldagresult=objectstoreref
     )
 
-    return sk
+    return result_sk
 
 
 @router.get("/chemicalsystems")
