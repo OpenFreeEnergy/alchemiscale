@@ -14,21 +14,21 @@ class Scope(BaseModel):
 
     @staticmethod
     def _validate_component(v, component):
-        if v is not None and '-' in v:
+        if v is not None and "-" in v:
             raise ValueError(f"'{component}' must not contain dashes ('-')")
         return v
 
     @validator("org")
     def valid_org(cls, v):
-        return cls._validate_component(v, 'org')
+        return cls._validate_component(v, "org")
 
     @validator("campaign")
     def valid_campaign(cls, v):
-        return cls._validate_component(v, 'campaign')
+        return cls._validate_component(v, "campaign")
 
     @validator("project")
     def valid_project(cls, v):
-        return cls._validate_component(v, 'project')
+        return cls._validate_component(v, "project")
 
     class Config:
         frozen = True
@@ -44,9 +44,7 @@ class Scope(BaseModel):
 
     @classmethod
     def from_str(cls, string):
-        org, campaign, project = (
-            i if i != "*" else None for i in string.split("-")
-        )
+        org, campaign, project = (i if i != "*" else None for i in string.split("-"))
         return cls(org=org, campaign=campaign, project=project)
 
     def overlap(self, other):

@@ -72,7 +72,9 @@ def validate_scopes_query(
         acc_scope = Scope.from_str(accessible_scope)
         add_it_in = True
 
-        for (query_field, target_field) in zip(query_scope.to_tuple(), acc_scope.to_tuple()):
+        for (query_field, target_field) in zip(
+            query_scope.to_tuple(), acc_scope.to_tuple()
+        ):
 
             # match (query_org == token_org) then (query_campaign == token_campaign) then (query_proj == token_proj)
             if not (query_field == target_field or query_field is None):
@@ -83,9 +85,7 @@ def validate_scopes_query(
                 break
 
         if add_it_in:
-            scope_intersection.append(
-                acc_scope if not as_str else accessible_scope
-            )
+            scope_intersection.append(acc_scope if not as_str else accessible_scope)
 
     return scope_intersection
 
@@ -93,7 +93,7 @@ def validate_scopes_query(
 class QueryGUFEHandler:
     """
     Helper class to provide a single-dispatch like handling of the query
-    operations since they can return list or dict. 
+    operations since they can return list or dict.
     """
 
     def __init__(self, return_gufe: bool):
@@ -140,7 +140,7 @@ def scope_params(org: str = None, campaign: str = None, project: str = None):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f'Requested Scope cannot be processed as a 3-object tuple of form'
+                f"Requested Scope cannot be processed as a 3-object tuple of form"
                 f'"X-Y-Z" and cast to string. Alpha numerical values (a-z A-Z 0-9) and "*" are accepted for '
                 f'parameter "scope"'
             ),
