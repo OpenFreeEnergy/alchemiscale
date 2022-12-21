@@ -56,7 +56,7 @@ services:
       - internal
       - db
     expose:
-      - 9292
+      - 1840
     environment:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?err}
       - JWT_EXPIRE_SECONDS=${JWT_EXPIRE_SECONDS:-1800}
@@ -74,7 +74,7 @@ services:
       - neo4j
       - fah-alchemy-compute-API
       - fah-alchemy-db-init
-    command: "api --host 0.0.0.0 --port 9292 --workers 2"
+    command: "api --host 0.0.0.0 --port 1840 --workers 2"
     labels:
       - "traefik.enable=true"
       - traefik.http.routers.fah-alchemy-client-API.rule=Host(`fahalchemy.localhost`)
@@ -85,7 +85,7 @@ services:
       - internal
       - db
     expose:
-      - 9291
+      - 1841
     environment:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?err}
       - JWT_EXPIRE_SECONDS=${JWT_EXPIRE_SECONDS:-1800}
@@ -104,7 +104,7 @@ services:
         condition: service_healthy
       fah-alchemy-db-init:
         condition: service_completed_successfully
-    command: "compute api --host 0.0.0.0 --port 9291 --workers 2"
+    command: "compute api --host 0.0.0.0 --port 1841 --workers 2"
     labels:
       - "traefik.enable=true"
       - traefik.http.routers.fah-alchemy-compute-API.rule=Host(`fahalchemy-compute.localhost`)
