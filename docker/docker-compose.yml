@@ -146,6 +146,7 @@ services:
       - "--providers.docker.network=internal"
       # Don't proxy the proxy
       - "traefik.enable=false"
+      - "--ping=true"
     ports:
       # The HTTP port
       - "80:80"
@@ -154,3 +155,9 @@ services:
     volumes:
       # So that Traefik can listen to the Docker events
       - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/ping"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 20s
