@@ -79,6 +79,12 @@ services:
       - "traefik.enable=true"
       - traefik.http.routers.fah-alchemy-client-API.rule=Host(`fahalchemy.localhost`)
       - traefik.docker.network=docker_internal
+    healthcheck:
+      test: ["CMD", "/opt/conda/bin/curl", "-f", "http://localhost:1840/ping"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 20s
   fah-alchemy-compute-API:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
     networks:
@@ -109,6 +115,12 @@ services:
       - "traefik.enable=true"
       - traefik.http.routers.fah-alchemy-compute-API.rule=Host(`fahalchemy-compute.localhost`)
       - traefik.docker.network=docker_internal
+    healthcheck:
+      test: ["CMD", "/opt/conda/bin/curl", "-f", "http://localhost:1841/ping"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 20s
   fah-alchemy-db-init:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
     networks:
@@ -146,7 +158,6 @@ services:
       - "--providers.docker.network=internal"
       # Don't proxy the proxy
       - "traefik.enable=false"
-      - "--ping=true"
     ports:
       # The HTTP port
       - "80:80"
@@ -155,9 +166,3 @@ services:
     volumes:
       # So that Traefik can listen to the Docker events
       - /var/run/docker.sock:/var/run/docker.sock
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/ping"]
-      interval: 1m
-      timeout: 10s
-      retries: 3
-      start_period: 20s
