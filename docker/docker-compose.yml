@@ -78,6 +78,7 @@ services:
     labels:
       - "traefik.enable=true"
       - traefik.http.routers.fah-alchemy-client-API.rule=Host(`fahalchemy.localhost`)
+      - traefik.docker.network=docker_internal
   fah-alchemy-compute-API:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
     networks:
@@ -107,6 +108,7 @@ services:
     labels:
       - "traefik.enable=true"
       - traefik.http.routers.fah-alchemy-compute-API.rule=Host(`fahalchemy-compute.localhost`)
+      - traefik.docker.network=docker_internal
   fah-alchemy-db-init:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
     networks:
@@ -136,6 +138,7 @@ services:
       - web
       # Enables the web UI and tells Traefik to listen to docker
     command: 
+      #- "--log.level=DEBUG"
       - "--api.insecure=true" 
       - "--providers.docker"
       # Do not expose containers unless explicitly told so
