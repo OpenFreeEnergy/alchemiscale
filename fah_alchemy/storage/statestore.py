@@ -605,12 +605,28 @@ class Neo4jStore(FahAlchemyStateStore):
     def get_networks_for_transformation(self):
         ...
 
-    def get_transformation_results(self, transformation: ScopedKey):
+    def get_transformation_results(self, transformation: ScopedKey) -> List[ObjectStoreRef]:
         ...
 
-        # get all tasks directly connected to given transformation
-        # for each, grab chain of extensions if present
-        # return list of lists of ObjectStoreRef
+        # get all task result objectstorerefs corresponding to given transformation
+        # returned in order of creation
+        q = f"""
+        MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
+              (trans)<-[*]-(res:ObjectStoreRef)
+        RETURN res
+        """
+
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+        objectstorerefs = []
+        subgraph = Subgraph()
+        for record in res:
+            objectstorerefs.append(record["res"])
+            subgraph = subgraph | record['res']
+
+        return list(self._subgraph_to_gufe(objectstorerefs, subgraph).values())
+
 
     ## compute
 
@@ -1085,9 +1101,9 @@ class Neo4jStore(FahAlchemyStateStore):
         return transformation, protocoldagresult
 
     def set_task_result(
-        self, task: ScopedKey, protocoldagresult: ObjectStoreRef
+        self, task: ScopedKey, objectstoreref: ObjectStoreRef
     ) -> ScopedKey:
-        """Set an `ObjectStoreRef` for the given `Task`.
+        """Set an `ObjectStoreRef` pointing to a `ProtocolDAGResult` for the given `Task`.
 
         Does not store the `ProtocolDAGResult` for the task, but instead gives
         it an `ObjectStoreRef`.
@@ -1097,16 +1113,16 @@ class Neo4jStore(FahAlchemyStateStore):
         scope = task.scope
         task_node = self._get_node(task)
 
-        subgraph, protocoldagresult_node, scoped_key = self._gufe_to_subgraph(
-            protocoldagresult.to_shallow_dict(),
-            labels=["GufeTokenizable", protocoldagresult.__class__.__name__],
-            gufe_key=protocoldagresult.key,
+        subgraph, objectstoreref_node, scoped_key = self._gufe_to_subgraph(
+            objectstoreref.to_shallow_dict(),
+            labels=["GufeTokenizable", objectstoreref.__class__.__name__],
+            gufe_key=objectstoreref.key,
             scope=scope,
         )
 
         subgraph = subgraph | Relationship.type("RESULTS_IN")(
             task_node,
-            protocoldagresult_node,
+            objectstoreref_node,
             _org=scope.org,
             _campaign=scope.campaign,
             _project=scope.project,

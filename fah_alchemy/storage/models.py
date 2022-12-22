@@ -158,14 +158,17 @@ class TaskArchive(GufeTokenizable):
 
 
 class ObjectStoreRef(GufeTokenizable):
-    location: str
+    location: Optional[str]
+    obj_key: Optional[GufeKey]
 
-    def __init__(self, location: str):
+    def __init__(self, location: str = None, obj_key: GufeKey = None):
         self.location = location
+        self.obj_key = GufeKey(obj_key)
 
     def _to_dict(self):
         return {
             "location": self.location,
+            "obj_key": str(self.obj_key)
         }
 
     @classmethod

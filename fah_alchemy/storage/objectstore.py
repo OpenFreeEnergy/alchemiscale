@@ -7,6 +7,7 @@ from functools import lru_cache
 from gufe.protocols import ProtocolDAGResult
 from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
+from ..models import ScopedKey
 from .models import ObjectStoreRef
 from ..settings import S3ObjectStoreSettings, get_s3objectstore_settings
 
@@ -177,16 +178,17 @@ class S3ObjectStore:
         """
 
         # build `location` based on gufe key
-        location = os.path.join("protocoldagresult", protocoldagresult.key)
+        location = os.path.join("protocoldagresult", protocoldagresult.key, 'obj.json')
 
+        # TODO: add support for compute client-side compressed protocoldagresults
         pdr_jb = json.dumps(
             protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
         ).encode("utf-8")
         response = self._store_bytes(location, pdr_jb)
 
-        return ObjectStoreRef(location=location)
+        return ObjectStoreRef(location=location, obj_key=protocoldagresult.key)
 
-    def pull_protocoldagresult(self, objectstoreref: ObjectStoreRef, return_as="gufe"):
+    def pull_protocoldagresult(self, protocoldagresult: ScopedKey, return_as="gufe"):
         """Pull the `ProtocolDAGResult` corresponding to the given `ObjectStoreRef`.
 
         Parameters
@@ -203,18 +205,19 @@ class S3ObjectStore:
             The `ProtocolDAGResult` corresponding to the given `ObjectStoreRef`.
 
         """
-
-        location = objectstoreref.location
+        # build `location` based on gufe key
+        location = os.path.join("protocoldagresult", protocoldagresult, 'obj.json')
 
         pdr_j = self._get_bytes(location).decode("utf-8")
 
+        # TODO: add support for interface client-side decompression
         if return_as == "gufe":
-            protocoldagresult = GufeTokenizable.from_dict(
+            pdr = GufeTokenizable.from_dict(
                 json.loads(pdr_j, cls=JSON_HANDLER.decoder)
             )
         elif return_as == "dict":
-            protocoldagresult = json.loads(pdr_j, cls=JSON_HANDLER.decoder)
+            pdr = json.loads(pdr_j, cls=JSON_HANDLER.decoder)
         elif return_as == "json":
-            protocoldagresult = pdr_j
+            pdr = pdr_j
 
-        return protocoldagresult
+        return pdr

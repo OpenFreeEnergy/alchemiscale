@@ -172,40 +172,43 @@ def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
 
 ### results
 
-
 @router.get(
-    "/transformations/{transformation_scoped_key}/result",
+    "/transformations/{transformation_scoped_key}/results",
     response_class=GufeJSONResponse,
 )
-def get_transformation_result(
+def get_transformation_results(
     transformation_scoped_key,
     *,
-    limit: int = 10,
-    skip: int = 0,
     n4js: Neo4jStore = Depends(get_n4js_depends),
-    s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    # get all ObjectStoreRefs for the given transformation's results in a nested list
-    # each list corresponds to a single chain of extension results
+    # get all ObjectStoreRefs for the given transformation's results
     refs: List[ObjectStoreRef] = n4js.get_transformation_results(sk)
 
-    # walk through the list, getting the actual ProtocolDAGResult object
-    # for each ObjectStoreRef, starting from `skip` and up to `limit`
-    pdrs: List[List[str]] = []
-    for reflist in refs[skip : skip + limit]:
-        pdrs_i = []
-        for ref in reflist:
-            # we leave each ProtocolDAGResult in string form to avoid
-            # deserializing/reserializing here; just passing through to clinet
-            pdr: str = s3os.pull_protocoldagresult(ref, return_as="json")
-            pdrs_i.append(pdr)
-        pdrs.append(pdrs_i)
+    return [i.to_dict() for i in refs]
 
-    return pdrs
+
+@router.get(
+    "/protocoldagresults/{protocoldagresult_scopked_key}",
+    response_class=GufeJSONResponse,
+)
+def get_protocoldagresult(
+    protocoldagresult_scopked_key,
+    *,
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(protocoldagresult_scopked_key)
+    validate_scopes(sk.scope, token)
+
+    # we leave each ProtocolDAGResult in string form to avoid
+    # deserializing/reserializing here; just passing through to client
+    pdr: str = s3os.pull_protocoldagresult(protocoldagresult_scopked_key, return_as="json")
+
+    return [pdr]
 
 
 ### add router

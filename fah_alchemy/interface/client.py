@@ -64,7 +64,7 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         self, 
         transformation: ScopedKey, 
         return_protocoldagresults: bool = False,
-    ) -> Union[ProtocolResult, List[List[ProtocolDAGResult]]]:
+    ) -> Union[ProtocolResult, List[ProtocolDAGResult]]:
         """Get `ProtocolResult` for the given `Transformation`.
 
         Parameters
@@ -77,43 +77,30 @@ class FahAlchemyClient(FahAlchemyBaseClient):
 
         """
 
-        pdrs_json = []
-        limit = 10
-        skip = 0
-
         # first, get the transformation; also confirms it exists
         tf: Transformation = self.get_transformation(transformation)
 
-        while True:
+        # get all objectstorerefs for the given transformation
+        objectstorerefs = self._get_resource(
+            f"/transformations/{transformation}/results",
+            return_gufe=False,
+        )
 
-            # iterate through all results with paginated API calls
-            params = {"limit": limit, "skip": skip}
-            pdrs_i = self._get_resource(
-                f"/transformations/{transformation}/result",
-                params=params,
-                return_gufe=False,
-            )
-
-            # we break if we get nothing back; means we're at the end of the line
-            if len(pdrs_i) == 0:
-                break
-
-            pdrs_json.extend(pdrs_i)
-            skip += limit
-
-        # walk through data structure, and turn each structure into a `ProtocolDAGResult`
-        # TODO: [OPTIMIZATION] do this as we make our requests above; use async/await
-
+        # get each protocoldagresult; could optimize by parallelizing these
+        # calls to some extent, or at least using async/await
         pdrs = []
-        for pdrlist in pdrs_json:
-            pdrs_i = []
-            for pdr_json in pdrlist:
-                pdr = GufeTokenizable.from_dict(
-                    json.loads(pdr_json, cls=JSON_HANDLER.decoder)
-                )
-                pdrs_i.append(pdr)
+        for objectstoreref in objectstorerefs:
+            pdr_key = objectstoreref['obj_key']
 
-            pdrs.append(pdrs_i)
+            pdr_json = self._get_resource(
+                f"/protocoldagresults/{pdr_key}",
+                return_gufe=False,
+            )[0]
+
+            pdr = GufeTokenizable.from_dict(
+                json.loads(pdr_json, cls=JSON_HANDLER.decoder)
+            )
+            pdrs.append(pdr)
 
         if return_protocoldagresults:
             return pdrs

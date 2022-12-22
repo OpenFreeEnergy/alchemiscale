@@ -141,6 +141,7 @@ async def get_task_transformation(
     )
 
 
+# TODO: support compression performed client-side
 @router.post("/tasks/{task_scoped_key}/result", response_model=ScopedKey)
 def set_task_result(
     task_scoped_key,
@@ -161,7 +162,7 @@ def set_task_result(
 
     # push the reference to the state store
     result_sk: ScopedKey = n4js.set_task_result(
-        task=task_sk, protocoldagresult=objectstoreref
+        task=task_sk, objectstoreref=objectstoreref
     )
 
     return result_sk

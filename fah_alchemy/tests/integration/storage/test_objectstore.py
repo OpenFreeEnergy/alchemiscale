@@ -14,9 +14,7 @@ class TestS3ObjectStore:
         # try to push the result
         objstoreref: ObjectStoreRef = s3os.push_protocoldagresult(protocoldagresult)
 
-        assert objstoreref.location == os.path.join(
-            "protocoldagresult", protocoldagresult.key
-        )
+        assert objstoreref.obj_key == protocoldagresult.key
 
         # examine object metadata
         objs = list(s3os.resource.Bucket(s3os.bucket).objects.all())
@@ -29,7 +27,7 @@ class TestS3ObjectStore:
         objstoreref: ObjectStoreRef = s3os.push_protocoldagresult(protocoldagresult)
 
         # round trip it
-        pdr = s3os.pull_protocoldagresult(objstoreref)
+        pdr = s3os.pull_protocoldagresult(objstoreref.obj_key)
 
         assert pdr.key == protocoldagresult.key
         assert pdr.protocol_unit_results == pdr.protocol_unit_results

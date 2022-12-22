@@ -51,3 +51,9 @@ class TestClient:
         uvicorn_server,
     ):
         ...
+
+
+    def test_get_transformation_result(
+        self,
+        ):
+        ...
