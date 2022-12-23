@@ -2,10 +2,11 @@
 
 """
 
-from typing import Union, List
+from typing import Union, List, Dict, Optional
 import requests
 import json
 
+import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
@@ -26,15 +27,56 @@ class FahAlchemyClient(FahAlchemyBaseClient):
 
     ### inputs
 
+    def get_scoped_key(self, obj: GufeTokenizable, scope: Scope):
+        """Given any gufe object and a fully-specified Scope, return corresponding ScopedKey.
+
+        This method does not check that this ScopedKey is represented in the database.
+        It is only a convenience for properly constructing a ScopedKey from a
+        gufe object and a Scope.
+
+        """
+        if scope.specific():
+            return ScopedKey(gufe_key=obj.key, **scope.dict())
+
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Submit an AlchemicalNetwork along with a compute Strategy."""
         ...
         data = dict(network=network.to_dict(), scope=scope.dict())
         scoped_key = self._post_resource("/networks", data)
-        return ScopedKey.from_str(scoped_key)
+        return ScopedKey.from_dict(scoped_key)
 
-    def query_networks(self) -> List[ScopedKey]:
-        raise NotImplementedError
+    def query_networks(
+            self, 
+            name: Optional[str] = None, 
+            scope: Optional[Scope] = None, 
+            return_gufe=False, 
+            limit=None, 
+            skip=None
+    ) -> Union[List[ScopedKey], Dict[ScopedKey, AlchemicalNetwork]]:
+        """Query for AlchemicalNetworks, optionally by name or Scope.
+
+        Calling this method with no query arguments will return ScopedKeys for
+        all AlchemicalNetworks that are within the Scopes this user has access
+        to.
+
+        """
+        if return_gufe:
+            networks = {}
+        else:
+            networks = []
+
+        if scope is None:
+            scope = Scope()
+
+        params = dict(
+            name=name, return_gufe=return_gufe, limit=limit, skip=skip, **scope.dict()
+        )
+        if return_gufe:
+            networks.update(self._query_resource("/networks", params=params))
+        else:
+            networks.extend(self._query_resource("/networks", params=params))
+
+        return networks
 
     def get_network(self, network: Union[ScopedKey, str]) -> AlchemicalNetwork:
         return self._get_resource(f"/networks/{network}", {}, return_gufe=True)
@@ -56,6 +98,29 @@ class FahAlchemyClient(FahAlchemyBaseClient):
     ### compute
 
     def set_strategy(self, network: ScopedKey, strategy: Strategy):
+        """Set the Strategy for evaluating the given AlchemicalNetwork.
+
+        The Strategy will be applied to create and action tasks for the
+        Transformations in the AlchemicalNetwork without user interaction.
+
+        """
+        raise NotImplementedError
+
+    def create_transformation_task(
+            transformation: ScopedKey,
+            extend_from: ScopedKey):
+        ...
+
+    def get_transformation_tasks() -> nx.DiGraph:
+        """Return a net
+
+        """
+        ...
+
+    def action_transformation_tasks(
+            tasks: List[ScopedKey],
+            network: ScopedKey
+            ):
         ...
 
     ### results

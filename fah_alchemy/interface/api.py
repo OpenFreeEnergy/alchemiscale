@@ -192,21 +192,21 @@ def get_transformation_results(
 
 
 @router.get(
-    "/protocoldagresults/{protocoldagresult_scopked_key}",
+    "/protocoldagresults/{protocoldagresult_scoped_key}",
     response_class=GufeJSONResponse,
 )
 def get_protocoldagresult(
-    protocoldagresult_scopked_key,
+    protocoldagresult_scoped_key,
     *,
     s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    sk = ScopedKey.from_str(protocoldagresult_scopked_key)
+    sk = ScopedKey.from_str(protocoldagresult_scoped_key)
     validate_scopes(sk.scope, token)
 
     # we leave each ProtocolDAGResult in string form to avoid
     # deserializing/reserializing here; just passing through to client
-    pdr: str = s3os.pull_protocoldagresult(protocoldagresult_scopked_key, return_as="json")
+    pdr: str = s3os.pull_protocoldagresult(protocoldagresult_scoped_key, return_as="json")
 
     return [pdr]
 

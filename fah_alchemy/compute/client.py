@@ -2,7 +2,7 @@
 
 """
 
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Union
 import json
 from urllib.parse import urljoin
 from functools import wraps
@@ -30,7 +30,7 @@ class FahAlchemyComputeClient(FahAlchemyBaseClient):
 
     def query_taskqueues(
         self, scopes: List[Scope], return_gufe=False, limit=None, skip=None
-    ) -> List[TaskQueue]:
+    ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskQueue]]:
         """Return all `TaskQueue`s corresponding to given `Scope`."""
         if return_gufe:
             taskqueues = {}

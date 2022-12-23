@@ -15,7 +15,6 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         user_client_wrong_credential: client.FahAlchemyClient,
-        uvicorn_server,
     ):
         with pytest.raises(client.FahAlchemyClientError):
             user_client_wrong_credential.get_info()
@@ -24,7 +23,6 @@ class TestClient:
         self,
         n4js_preloaded,
         user_client: client.FahAlchemyClient,
-        uvicorn_server,
     ):
 
         settings = get_user_settings_override()
@@ -48,12 +46,50 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         user_client: client.FahAlchemyClient,
-        uvicorn_server,
+        network_tyk2
     ):
+        # make a smaller network that overlaps with an existing one in DB
+        an = AlchemicalNetwork(edges=list(network_tyk2.edges)[4:-2], name="smaller")
+        an_sk = user_client.create_network(an, scope_test)
+
+        network_sks = user_client.query_networks()
+        assert an_sk in network_sks
+
+        # TODO: make a network in a scope that doesn't have any components in
+        # common with an existing network
+        #user_client.create_network(
+
+    def test_query_networks():
         ...
 
+    def test_get_network():
+        ...
+
+    def test_get_transformation():
+        ...
+
+    def test_get_chemicalsystem():
+        ...
 
     def test_get_transformation_result(
         self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.FahAlchemyClient,
+        network_tyk2
         ):
-        ...
+
+        # select the transformation we want to compute
+        an = network_tyk2
+        transformation = an.transformations[0]
+
+        # create a tree of tasks for the transformation
+
+        # action the tasks for execution
+
+        # execute the tasks
+
+        # pull transformation results, evaluate
+
+
+
