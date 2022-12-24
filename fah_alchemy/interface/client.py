@@ -13,6 +13,7 @@ from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 from ..base.client import FahAlchemyBaseClient, FahAlchemyBaseClientError
 from ..models import Scope, ScopedKey
+from ..storage.models import Task
 from ..strategies import Strategy
 
 
@@ -39,8 +40,9 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             return ScopedKey(gufe_key=obj.key, **scope.dict())
 
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
-        """Submit an AlchemicalNetwork along with a compute Strategy."""
-        ...
+        """Submit an AlchemicalNetwork.
+
+        """
         data = dict(network=network.to_dict(), scope=scope.dict())
         scoped_key = self._post_resource("/networks", data)
         return ScopedKey.from_dict(scoped_key)
@@ -106,22 +108,67 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         """
         raise NotImplementedError
 
-    def create_transformation_task(
+    def create_tasks(
+            self,
             transformation: ScopedKey,
-            extend_from: ScopedKey):
-        ...
+            extend_from: Optional[ScopedKey] = None,
+            count=1
+            ) -> List[ScopedKey]:
+        """Create Tasks for the given Transformation, 
 
-    def get_transformation_tasks() -> nx.DiGraph:
-        """Return a net
+        """
+        if extend_from:
+            extend_from = extend_from.dict()
+
+        data = dict(extend_from=extend_from, count=count)
+        task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
+        return [ScopedKey.from_str(i) for i in task_sks]
+
+    def get_tasks(
+            self,
+            transformation: ScopedKey,
+            extend_from: ScopedKey
+            ) -> nx.DiGraph:
+        """Return the tree of Tasks associated with the given Transformation.
 
         """
         ...
 
-    def action_transformation_tasks(
+    def action_tasks(
+            self,
             tasks: List[ScopedKey],
             network: ScopedKey
             ):
+        """Action Tasks for execution via the given AlchemicalNetwork's
+        TaskQueue.
+
+        """
         ...
+
+    def cancel_tasks(
+            self,
+            tasks: List[ScopedKey],
+            network: ScopedKey
+            ):
+        """Cancel Tasks for execution via the given AlchemicalNetwork's
+        TaskQueue.
+
+        """
+        ...
+
+    def get_tasks_priority(
+            self,
+            tasks: List[ScopedKey],
+        ):
+        ...
+
+    def set_tasks_priority(
+            self,
+            tasks: List[ScopedKey],
+            priority: int
+        ):
+        ...
+
 
     ### results
 

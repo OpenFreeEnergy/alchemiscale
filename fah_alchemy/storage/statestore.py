@@ -794,7 +794,7 @@ class Neo4jStore(FahAlchemyStateStore):
             
             // get the task we want to add to the queue; check that it connects to same network
             // if it has an EXTENDS relationship, get the task it extends
-            MATCH (tn:Task {{_scoped_key: '{t}'}})-[:PERFORMS*]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
+            MATCH (tn:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
             OPTIONAL MATCH (tn)-[:EXTENDS]->(other_task:Task)
 
             // only proceed for cases where task is not already in queue and only EXTENDS a 'complete' task

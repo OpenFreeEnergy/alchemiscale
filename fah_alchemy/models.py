@@ -20,7 +20,7 @@ class Scope(BaseModel):
             # if we're given an asterisk, cast this to `None` instead for
             # consistency
             v = None
-        elif '*' in v: 
+        elif v is not None and '*' in v: 
             raise ValueError(f"asterisks ('*') for glob-matching components not supported at this time")
         return v
 

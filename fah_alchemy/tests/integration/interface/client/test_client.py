@@ -41,6 +41,8 @@ class TestClient:
         user_client.get_info()
         assert token != user_client._jwtoken
 
+    ### inputs
+
     def test_create_network(
         self,
         scope_test,
@@ -71,10 +73,38 @@ class TestClient:
     def test_get_chemicalsystem():
         ...
 
+    ### compute
+
+    def test_create_tasks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.FahAlchemyClient,
+        network_tyk2
+        ):
+        n4js = n4js_preloaded
+
+        # select the transformation we want to compute
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+        sk = user_client.get_scoped_key(transformation, scope_test)
+
+        task_sks = user_client.create_tasks(sk, count=3)
+
+
+    def test_get_tasks():
+        ...
+
+    def test_action_tasks():
+        ...
+
+    ### results
+
     def test_get_transformation_result(
         self,
         scope_test,
         n4js_preloaded,
+        s3os,
         user_client: client.FahAlchemyClient,
         network_tyk2
         ):
@@ -83,13 +113,10 @@ class TestClient:
         an = network_tyk2
         transformation = an.transformations[0]
 
-        # create a tree of tasks for the transformation
+        # user client : create a tree of tasks for the transformation
 
-        # action the tasks for execution
+        # user client : action the tasks for execution
 
-        # execute the tasks
+        # execute the tasks and push results directly using statestore and object store
 
-        # pull transformation results, evaluate
-
-
-
+        # user client : pull transformation results, evaluate

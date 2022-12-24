@@ -3,7 +3,7 @@
 """
 
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import os
 import json
 
@@ -117,7 +117,12 @@ def create_network(
     validate_scopes(scope, token)
 
     an = AlchemicalNetwork.from_dict(network)
-    return n4js.create_network(network=an, scope=scope)
+    an_sk = n4js.create_network(network=an, scope=scope)
+
+    # create taskqueue for this network
+    n4js.create_taskqueue(an_sk)
+
+    return an_sk
 
 
 @router.get("/transformations")
@@ -165,10 +170,61 @@ async def get_chemicalsystem(
 ### compute
 
 
-@router.put("/networks/{scoped_key}/strategy")
+@router.post("/networks/{scoped_key}/strategy")
 def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
     ...
 
+
+@router.post("/transformations/{transformation_scoped_key}/tasks")
+def create_tasks(
+    transformation_scoped_key, 
+    *,
+    extend_from: Optional[ScopedKey] = None,
+    count: int = Body(...),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+    ):
+    sk = ScopedKey.from_str(transformation_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    task_sks = []
+    for i in range(count):
+        task_sks.append(
+                n4js.create_task(
+                    transformation=sk,
+                    extend_from=extend_from))
+
+    return [str(sk) for sk in task_sks]
+
+
+@router.get("/transformations/{transformation_scoped_key}/tasks")
+def get_tasks(
+    transformation_scoped_key, 
+    *,
+    extend_from: str = Body(...),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+    ):
+    sk = ScopedKey.from_str(transformation_scoped_key)
+    validate_scopes(sk.scope, token)
+
+
+@router.post("/networks/{network_scoped_key}/tasks/action")
+def action_tasks(
+    network_scoped_key,
+    *,
+    tasks: List = Body(...),
+    ):
+    ...
+
+
+@router.post("/networks/{network_scoped_key}/tasks/cancel")
+def cancel_tasks(
+    network_scoped_key, 
+    *,
+    tasks: List = Body(...),
+    ):
+    ...
 
 ### results
 
