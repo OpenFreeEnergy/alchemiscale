@@ -127,8 +127,9 @@ class SynchronousComputeService:
 
         return tasks
 
-    def task_to_protocoldag(self, task: ScopedKey
-                            ) -> Tuple[ProtocolDAG, Transformation, Optional[ProtocolDAGResult]]:
+    def task_to_protocoldag(
+        self, task: ScopedKey
+    ) -> Tuple[ProtocolDAG, Transformation, Optional[ProtocolDAGResult]]:
         """Given a Task, produce a corresponding ProtocolDAG that can be executed."""
         ...
 
@@ -166,10 +167,12 @@ class SynchronousComputeService:
         protocoldag, transformation, extends = self.task_to_protocoldag(task)
 
         # execute the task
-        protocoldagresult = execute_DAG(protocoldag, 
-                                        shared=self.shared,
-                                        transformation=transformation.key,
-                                        extends=extends.key if extends else None)
+        protocoldagresult = execute_DAG(
+            protocoldag,
+            shared=self.shared,
+            transformation=transformation.key,
+            extends=extends.key if extends else None,
+        )
 
         # push the result (or failure) back to the compute API
         result = self.push_result(task, protocoldagresult)

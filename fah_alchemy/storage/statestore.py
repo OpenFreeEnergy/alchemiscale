@@ -605,7 +605,9 @@ class Neo4jStore(FahAlchemyStateStore):
     def get_networks_for_transformation(self):
         ...
 
-    def get_transformation_results(self, transformation: ScopedKey) -> List[ObjectStoreRef]:
+    def get_transformation_results(
+        self, transformation: ScopedKey
+    ) -> List[ObjectStoreRef]:
         ...
 
         # get all task result objectstorerefs corresponding to given transformation
@@ -623,10 +625,9 @@ class Neo4jStore(FahAlchemyStateStore):
         subgraph = Subgraph()
         for record in res:
             objectstorerefs.append(record["res"])
-            subgraph = subgraph | record['res']
+            subgraph = subgraph | record["res"]
 
         return list(self._subgraph_to_gufe(objectstorerefs, subgraph).values())
-
 
     ## compute
 

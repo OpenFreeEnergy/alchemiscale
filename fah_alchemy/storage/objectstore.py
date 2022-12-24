@@ -178,7 +178,7 @@ class S3ObjectStore:
         """
 
         # build `location` based on gufe key
-        location = os.path.join("protocoldagresult", protocoldagresult.key, 'obj.json')
+        location = os.path.join("protocoldagresult", protocoldagresult.key, "obj.json")
 
         # TODO: add support for compute client-side compressed protocoldagresults
         pdr_jb = json.dumps(
@@ -206,15 +206,13 @@ class S3ObjectStore:
 
         """
         # build `location` based on gufe key
-        location = os.path.join("protocoldagresult", protocoldagresult, 'obj.json')
+        location = os.path.join("protocoldagresult", protocoldagresult, "obj.json")
 
         pdr_j = self._get_bytes(location).decode("utf-8")
 
         # TODO: add support for interface client-side decompression
         if return_as == "gufe":
-            pdr = GufeTokenizable.from_dict(
-                json.loads(pdr_j, cls=JSON_HANDLER.decoder)
-            )
+            pdr = GufeTokenizable.from_dict(json.loads(pdr_j, cls=JSON_HANDLER.decoder))
         elif return_as == "dict":
             pdr = json.loads(pdr_j, cls=JSON_HANDLER.decoder)
         elif return_as == "json":

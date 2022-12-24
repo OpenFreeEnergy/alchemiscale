@@ -40,7 +40,9 @@ class TestSynchronousComputeService:
 
         task_sks = n4js.get_taskqueue_tasks(tq_sk)
 
-        protocoldag, transformation, protocoldagresult = service.task_to_protocoldag(task_sks[0])
+        protocoldag, transformation, protocoldagresult = service.task_to_protocoldag(
+            task_sks[0]
+        )
 
         assert len(protocoldag.protocol_units) == 23
 

@@ -48,7 +48,7 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         user_client: client.FahAlchemyClient,
-        network_tyk2
+        network_tyk2,
     ):
         # make a smaller network that overlaps with an existing one in DB
         an = AlchemicalNetwork(edges=list(network_tyk2.edges)[4:-2], name="smaller")
@@ -59,18 +59,18 @@ class TestClient:
 
         # TODO: make a network in a scope that doesn't have any components in
         # common with an existing network
-        #user_client.create_network(
+        # user_client.create_network(
 
-    def test_query_networks():
+    def test_query_networks(self):
         ...
 
-    def test_get_network():
+    def test_get_network(self):
         ...
 
-    def test_get_transformation():
+    def test_get_transformation(self):
         ...
 
-    def test_get_chemicalsystem():
+    def test_get_chemicalsystem(self):
         ...
 
     ### compute
@@ -80,8 +80,8 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         user_client: client.FahAlchemyClient,
-        network_tyk2
-        ):
+        network_tyk2,
+    ):
         n4js = n4js_preloaded
 
         # select the transformation we want to compute
@@ -91,11 +91,10 @@ class TestClient:
 
         task_sks = user_client.create_tasks(sk, count=3)
 
-
-    def test_get_tasks():
+    def test_get_tasks(self):
         ...
 
-    def test_action_tasks():
+    def test_action_tasks(self):
         ...
 
     ### results
@@ -106,12 +105,12 @@ class TestClient:
         n4js_preloaded,
         s3os,
         user_client: client.FahAlchemyClient,
-        network_tyk2
-        ):
+        network_tyk2,
+    ):
 
         # select the transformation we want to compute
         an = network_tyk2
-        transformation = an.transformations[0]
+        transformation = list(an.edges)[0]
 
         # user client : create a tree of tasks for the transformation
 

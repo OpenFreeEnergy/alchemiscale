@@ -16,12 +16,14 @@ class Scope(BaseModel):
     def _validate_component(v, component):
         if v is not None and "-" in v:
             raise ValueError(f"'{component}' must not contain dashes ('-')")
-        if v == '*':
+        if v == "*":
             # if we're given an asterisk, cast this to `None` instead for
             # consistency
             v = None
-        elif v is not None and '*' in v: 
-            raise ValueError(f"asterisks ('*') for glob-matching components not supported at this time")
+        elif v is not None and "*" in v:
+            raise ValueError(
+                f"asterisks ('*') for glob-matching components not supported at this time"
+            )
         return v
 
     @validator("org")

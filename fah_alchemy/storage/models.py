@@ -166,10 +166,7 @@ class ObjectStoreRef(GufeTokenizable):
         self.obj_key = GufeKey(obj_key)
 
     def _to_dict(self):
-        return {
-            "location": self.location,
-            "obj_key": str(self.obj_key)
-        }
+        return {"location": self.location, "obj_key": str(self.obj_key)}
 
     @classmethod
     def _from_dict(cls, d):

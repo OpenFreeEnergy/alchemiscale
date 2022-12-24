@@ -40,20 +40,18 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             return ScopedKey(gufe_key=obj.key, **scope.dict())
 
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
-        """Submit an AlchemicalNetwork.
-
-        """
+        """Submit an AlchemicalNetwork."""
         data = dict(network=network.to_dict(), scope=scope.dict())
         scoped_key = self._post_resource("/networks", data)
         return ScopedKey.from_dict(scoped_key)
 
     def query_networks(
-            self, 
-            name: Optional[str] = None, 
-            scope: Optional[Scope] = None, 
-            return_gufe=False, 
-            limit=None, 
-            skip=None
+        self,
+        name: Optional[str] = None,
+        scope: Optional[Scope] = None,
+        return_gufe=False,
+        limit=None,
+        skip=None,
     ) -> Union[List[ScopedKey], Dict[ScopedKey, AlchemicalNetwork]]:
         """Query for AlchemicalNetworks, optionally by name or Scope.
 
@@ -109,14 +107,12 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         raise NotImplementedError
 
     def create_tasks(
-            self,
-            transformation: ScopedKey,
-            extend_from: Optional[ScopedKey] = None,
-            count=1
-            ) -> List[ScopedKey]:
-        """Create Tasks for the given Transformation, 
-
-        """
+        self,
+        transformation: ScopedKey,
+        extend_from: Optional[ScopedKey] = None,
+        count=1,
+    ) -> List[ScopedKey]:
+        """Create Tasks for the given Transformation,"""
         if extend_from:
             extend_from = extend_from.dict()
 
@@ -125,31 +121,19 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         return [ScopedKey.from_str(i) for i in task_sks]
 
     def get_tasks(
-            self,
-            transformation: ScopedKey,
-            extend_from: ScopedKey
-            ) -> nx.DiGraph:
-        """Return the tree of Tasks associated with the given Transformation.
-
-        """
+        self, transformation: ScopedKey, extend_from: ScopedKey
+    ) -> nx.DiGraph:
+        """Return the tree of Tasks associated with the given Transformation."""
         ...
 
-    def action_tasks(
-            self,
-            tasks: List[ScopedKey],
-            network: ScopedKey
-            ):
+    def action_tasks(self, tasks: List[ScopedKey], network: ScopedKey):
         """Action Tasks for execution via the given AlchemicalNetwork's
         TaskQueue.
 
         """
         ...
 
-    def cancel_tasks(
-            self,
-            tasks: List[ScopedKey],
-            network: ScopedKey
-            ):
+    def cancel_tasks(self, tasks: List[ScopedKey], network: ScopedKey):
         """Cancel Tasks for execution via the given AlchemicalNetwork's
         TaskQueue.
 
@@ -157,24 +141,19 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         ...
 
     def get_tasks_priority(
-            self,
-            tasks: List[ScopedKey],
-        ):
+        self,
+        tasks: List[ScopedKey],
+    ):
         ...
 
-    def set_tasks_priority(
-            self,
-            tasks: List[ScopedKey],
-            priority: int
-        ):
+    def set_tasks_priority(self, tasks: List[ScopedKey], priority: int):
         ...
-
 
     ### results
 
     def get_transformation_result(
-        self, 
-        transformation: ScopedKey, 
+        self,
+        transformation: ScopedKey,
         return_protocoldagresults: bool = False,
     ) -> Union[ProtocolResult, List[ProtocolDAGResult]]:
         """Get `ProtocolResult` for the given `Transformation`.
@@ -202,7 +181,7 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         # calls to some extent, or at least using async/await
         pdrs = []
         for objectstoreref in objectstorerefs:
-            pdr_key = objectstoreref['obj_key']
+            pdr_key = objectstoreref["obj_key"]
 
             pdr_json = self._get_resource(
                 f"/protocoldagresults/{pdr_key}",

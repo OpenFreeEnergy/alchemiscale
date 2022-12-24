@@ -177,34 +177,31 @@ def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
 
 @router.post("/transformations/{transformation_scoped_key}/tasks")
 def create_tasks(
-    transformation_scoped_key, 
+    transformation_scoped_key,
     *,
     extend_from: Optional[ScopedKey] = None,
     count: int = Body(...),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-    ):
+):
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
     task_sks = []
     for i in range(count):
-        task_sks.append(
-                n4js.create_task(
-                    transformation=sk,
-                    extend_from=extend_from))
+        task_sks.append(n4js.create_task(transformation=sk, extend_from=extend_from))
 
     return [str(sk) for sk in task_sks]
 
 
 @router.get("/transformations/{transformation_scoped_key}/tasks")
 def get_tasks(
-    transformation_scoped_key, 
+    transformation_scoped_key,
     *,
     extend_from: str = Body(...),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-    ):
+):
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
@@ -214,19 +211,21 @@ def action_tasks(
     network_scoped_key,
     *,
     tasks: List = Body(...),
-    ):
+):
     ...
 
 
 @router.post("/networks/{network_scoped_key}/tasks/cancel")
 def cancel_tasks(
-    network_scoped_key, 
+    network_scoped_key,
     *,
     tasks: List = Body(...),
-    ):
+):
     ...
 
+
 ### results
+
 
 @router.get(
     "/transformations/{transformation_scoped_key}/results",
@@ -262,7 +261,9 @@ def get_protocoldagresult(
 
     # we leave each ProtocolDAGResult in string form to avoid
     # deserializing/reserializing here; just passing through to client
-    pdr: str = s3os.pull_protocoldagresult(protocoldagresult_scoped_key, return_as="json")
+    pdr: str = s3os.pull_protocoldagresult(
+        protocoldagresult_scoped_key, return_as="json"
+    )
 
     return [pdr]
 
