@@ -1,4 +1,5 @@
 import abc
+from datetime import datetime
 from contextlib import contextmanager
 import json
 from functools import lru_cache
@@ -768,7 +769,7 @@ class Neo4jStore(FahAlchemyStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
-    def queue_taskqueue_tasks(
+    def action_tasks(
         self,
         tasks: List[ScopedKey],
         taskqueue: ScopedKey,
@@ -785,6 +786,7 @@ class Neo4jStore(FahAlchemyStateStore):
         be 'complete' before this Task can be added to *any* TaskQueue.
 
         """
+        actioned_sks = []
         for t in tasks:
             q = f"""
             // get our task queue, as well as tail and tail relationship to last in line
@@ -794,13 +796,15 @@ class Neo4jStore(FahAlchemyStateStore):
                   (tq)-[:PERFORMS]->(an:AlchemicalNetwork)
             
             // get the task we want to add to the queue; check that it connects to same network
-            // if it has an EXTENDS relationship, get the task it extends
+            // only proceed for cases where task is not already in queue
             MATCH (tn:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
+            WHERE NOT (tqt)-[:FOLLOWS* {{taskqueue: '{taskqueue}'}}]->(tn)
+
+            // if it has an EXTENDS relationship, get the task it extends; only proceed if EXTENDS a `complete` task
             OPTIONAL MATCH (tn)-[:EXTENDS]->(other_task:Task)
 
-            // only proceed for cases where task is not already in queue and only EXTENDS a 'complete' task
-            WHERE NOT (tqt)-[:FOLLOWS* {{taskqueue: '{taskqueue}'}}]->(tn)
-              AND other_task.status = 'complete'
+            WITH tqt, tn, last, tqtl, other_task
+            WHERE other_task.status = 'complete' OR other_task IS NULL
 
             // create the connections that add it to the end of the queue, and delete old queue tail connection
             CREATE (tqt)-[:FOLLOWS {{taskqueue: '{taskqueue}'}}] ->
@@ -811,15 +815,11 @@ class Neo4jStore(FahAlchemyStateStore):
             """
             with self.transaction() as tx:
                 task = tx.run(q).to_subgraph()
+                actioned_sks.append(ScopedKey.from_str(task["_scoped_key"]) if task is not None else None)
 
-            if task is None:
-                raise ValueError(
-                    f"Task '{t}' not found in same network as given TaskQueue"
-                )
+        return actioned_sks
 
-        return tasks
-
-    def dequeue_taskqueue_tasks(
+    def cancel_tasks(
         self,
         tasks: List[ScopedKey],
         taskqueue: ScopedKey,
@@ -939,7 +939,8 @@ class Neo4jStore(FahAlchemyStateStore):
     def create_task(
         self,
         transformation: ScopedKey,
-        extend_from: Optional[ScopedKey] = None,
+        extends: Optional[ScopedKey] = None,
+        creator: Optional[str] = None,
     ) -> ScopedKey:
         """Add a compute Task to a Transformation.
 
@@ -951,10 +952,10 @@ class Neo4jStore(FahAlchemyStateStore):
             The Transformation to compute.
         scope
             The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
-        extend_from
+        extends
             The ScopedKey of the Task to use as a starting point for this Task.
             Will use the `ProtocolDAGResult` from the given Task as the
-            `extend_from` input for the Task's eventual call to `Protocol.create`.
+            `extends` input for the Task's eventual call to `Protocol.create`.
 
         """
         scope = transformation.scope
@@ -962,7 +963,11 @@ class Neo4jStore(FahAlchemyStateStore):
 
         # create a new task for the supplied transformation
         # use a PERFORMS relationship
-        task = Task()
+        task = Task(
+                creator=creator,
+                extends=str(extends) if extends is not None else None
+                )
+
         _, task_node, scoped_key = self._gufe_to_subgraph(
             task.to_shallow_dict(),
             labels=["GufeTokenizable", task.__class__.__name__],
@@ -972,8 +977,8 @@ class Neo4jStore(FahAlchemyStateStore):
 
         subgraph = Subgraph()
 
-        if extend_from is not None:
-            previous_task_node = self._get_node(extend_from)
+        if extends is not None:
+            previous_task_node = self._get_node(extends)
             subgraph = subgraph | Relationship.type("EXTENDS")(
                 task_node,
                 previous_task_node,
@@ -998,7 +1003,7 @@ class Neo4jStore(FahAlchemyStateStore):
     def set_tasks(
         self,
         transformation: ScopedKey,
-        extend_from: Optional[Task] = None,
+        extends: Optional[Task] = None,
         count: int = 1,
     ) -> ScopedKey:
         """Set a fixed number of Tasks against the given Transformation if not
@@ -1012,13 +1017,13 @@ class Neo4jStore(FahAlchemyStateStore):
             The Transformation to compute.
         scope
             The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
-        extend_from
+        extends
             The Task to use as a starting point for this Task.
             Will use the `ProtocolDAGResult` from the given Task as the
-            `extend_from` input for the Task's eventual call to `Protocol.create`.
+            `extends` input for the Task's eventual call to `Protocol.create`.
         count
             The total number of tasks that should exist corresponding to the
-            specified `transformation`, `scope`, and `extend_from`.
+            specified `transformation`, `scope`, and `extends`.
         """
         raise NotImplementedError
         # TODO: finish this one out when we have a reasonable approach to locking
@@ -1036,12 +1041,52 @@ class Neo4jStore(FahAlchemyStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
+    def get_tasks(
+        self,
+        transformation: ScopedKey,
+        extends: Optional[ScopedKey] = None,
+        return_as: str = 'list'
+        ) -> Union[List[ScopedKey], Dict[ScopedKey, Optional[str]]]:
+        """Get all Tasks that perform the given Transformation.
+
+        If a Task ScopedKey is given for `extends_from`, then only those Tasks
+        that follow via any number of EXTENDS relationships will be returned.
+
+        """
+        q = f"""
+        MATCH (trans:Transformation {{_scoped_key: '{transformation}'}})<-[:PERFORMS]-(task:Task)
+        """
+
+        if extends:
+            q += f"""
+            MATCH (trans)<-[:PERFORMS]-(extends:Task {{_scoped_key: '{extends}'}})
+            WHERE (task)-[:EXTENDS*]->(extends)
+            RETURN task
+            """
+        else:
+            q += f"""
+            RETURN task
+            """
+
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+        tasks = []
+        for record in res:
+            tasks.append(record['task'])
+
+        if return_as == 'list':
+            return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
+        elif return_as == 'graph':
+            return {ScopedKey.from_str(t["_scoped_key"]): t['extends'] for t in tasks}
+
+
     def query_tasks(
         self,
         scope: Optional[Scope] = None,
         network: Optional[ScopedKey] = None,
         transformation: Optional[ScopedKey] = None,
-        extend_from: Optional[ScopedKey] = None,
+        extends: Optional[ScopedKey] = None,
         status: Optional[List[TaskStatusEnum]] = None,
     ):
         raise NotImplementedError

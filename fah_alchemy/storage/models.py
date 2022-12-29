@@ -54,17 +54,25 @@ class Task(GufeTokenizable):
         Priority of the task; 1 is highest, larger values indicate lower priority.
     claim
         Identifier of the compute service that has a claim on this task.
+    datetime_created
 
     """
 
     status: TaskStatusEnum
     priority: int
     claim: str
+    datetime_created: Optional[datetime]
+    creator: Optional[str]
+    extends: Optional[str]
 
     def __init__(
         self,
+        *,
         status: Union[str, TaskStatusEnum] = TaskStatusEnum.waiting,
         priority: int = 1,
+        datetime_created: Optional[datetime] = None,
+        creator: Optional[str] = None,
+        extends: Optional[str] = None,
         _key: str = None,
     ):
         if _key is not None:
@@ -72,6 +80,11 @@ class Task(GufeTokenizable):
 
         self.status: TaskStatusEnum = TaskStatusEnum(status)
         self.priority = priority
+
+        self.datetime_created = datetime_created if datetime_created is not None else datetime.utcnow()
+
+        self.creator = creator
+        self.extends = extends
 
     def _gufe_tokenize(self):
         # tokenize with uuid
@@ -81,6 +94,9 @@ class Task(GufeTokenizable):
         return {
             "status": self.status.value,
             "priority": self.priority,
+            "datetime_created": self.datetime_created,
+            "creator": self.creator,
+            "extends": self.extends,
             "_key": str(self.key),
         }
 

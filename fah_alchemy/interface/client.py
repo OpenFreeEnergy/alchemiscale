@@ -109,29 +109,107 @@ class FahAlchemyClient(FahAlchemyBaseClient):
     def create_tasks(
         self,
         transformation: ScopedKey,
-        extend_from: Optional[ScopedKey] = None,
-        count=1,
+        extends: Optional[ScopedKey] = None,
+        count: int = 1,
     ) -> List[ScopedKey]:
-        """Create Tasks for the given Transformation,"""
-        if extend_from:
-            extend_from = extend_from.dict()
+        """Create Tasks for the given Transformation.
 
-        data = dict(extend_from=extend_from, count=count)
+        Parameters
+        ----------
+        transformation
+            The ScopedKey of the Transformation to create Tasks for.
+        extends
+            The ScopedKey for the Task to use as a starting point for the Tasks created.
+        count
+            The number of new Tasks to create.
+
+        Returns
+        -------
+        List[ScopedKey]
+            A list giving the ScopedKeys of the new Tasks created.
+
+        """
+        if extends:
+            extends = extends.dict()
+
+        data = dict(extends=extends, count=count)
         task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
         return [ScopedKey.from_str(i) for i in task_sks]
 
     def get_tasks(
-        self, transformation: ScopedKey, extend_from: ScopedKey
-    ) -> nx.DiGraph:
-        """Return the tree of Tasks associated with the given Transformation."""
-        ...
+        self,
+        transformation: ScopedKey,
+        extends: Optional[ScopedKey] = None,
+        return_as: str =  'list'
+    ) -> Union[List[ScopedKey], nx.DiGraph]:
+        """Return the Tasks associated with the given Transformation.
 
-    def action_tasks(self, tasks: List[ScopedKey], network: ScopedKey):
+        Parameters
+        ----------
+        transformation
+            The ScopedKey of the Transformation to get Tasks for.
+        extends
+            If given, only return Tasks that extend from the given Task's ScopedKey.
+            This will also give any Tasks that extend from those Tasks, recursively.
+            Using this keyword argument amounts to choosing the tree of Tasks that
+            extend from the given Task.
+        return_as : ['list', 'graph']
+            If 'list', Tasks will be returned in no particular order.
+            If `graph`, Tasks will be returned in a `networkx.DiGraph`, with a
+            directed edge pointing from a given Task to the Task it extends.
+
+        """
+        if extends:
+            extends = str(extends)
+
+        params = dict(extends=extends, return_as=return_as)
+        task_sks = self._get_resource(f"/transformations/{transformation}/tasks", params, return_gufe=False)
+
+        if return_as == 'list':
+            return [ScopedKey.from_str(i) for i in task_sks]
+        elif return_as == 'graph':
+            g = nx.DiGraph()
+            for task, extends in task_sks.items():
+                g.add_node(ScopedKey.from_str(task))
+                if extends is not None:
+                    g.add_edge(ScopedKey.from_str(task), ScopedKey.from_str(extends))
+
+            return g
+
+
+    def action_tasks(
+            self, 
+            tasks: List[ScopedKey],
+            network: ScopedKey
+        ) -> List[Optional[ScopedKey]]:
         """Action Tasks for execution via the given AlchemicalNetwork's
         TaskQueue.
 
+        A Task cannot be actioned:
+            - to an AlchemicalNetwork in a different Scope.
+            - if it extends another Task that is not complete.
+
+        Parameters
+        ----------
+        tasks
+            Task ScopedKeys to action for execution.
+        network
+            The AlchemicalNetwork ScopedKey to action the Tasks for.
+            The Tasks will be added to the network's associated TaskQueue.
+
+        Returns
+        -------
+        List[Optional[ScopedKey]]
+            ScopedKeys for Tasks actioned, in the same order as given as
+            `tasks` on input. If a Task couldn't be actioned, then `None` will
+            be returned in its place.
+
         """
-        ...
+        data = dict(tasks=[t.dict() for t in tasks])
+        actioned_sks = self._post_resource(f"/networks/{network}/tasks/action", data)
+
+        return [ScopedKey.from_str(i) if i is not None else None for i in actioned_sks]
+
 
     def cancel_tasks(self, tasks: List[ScopedKey], network: ScopedKey):
         """Cancel Tasks for execution via the given AlchemicalNetwork's

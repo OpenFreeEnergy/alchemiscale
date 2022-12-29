@@ -2,6 +2,7 @@ import pytest
 from time import sleep
 
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
+import networkx as nx
 
 from fah_alchemy.models import ScopedKey
 from fah_alchemy.interface import client
@@ -91,11 +92,91 @@ class TestClient:
 
         task_sks = user_client.create_tasks(sk, count=3)
 
-    def test_get_tasks(self):
-        ...
+        assert set(task_sks) == set(n4js.get_tasks(sk))
 
-    def test_action_tasks(self):
-        ...
+        # try creating tasks that extend one of those we just created
+        task_sks_e = user_client.create_tasks(sk, count=4, extends=task_sks[0])
+
+        # check that we now get additional tasks
+        assert set(task_sks + task_sks_e) == set(n4js.get_tasks(sk))
+
+        # check that tasks are structured as we expect
+        assert set(task_sks_e) == set(n4js.get_tasks(sk, extends=task_sks[0]))
+        assert set() == set(n4js.get_tasks(sk, extends=task_sks[1]))
+        
+
+    def test_get_tasks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.FahAlchemyClient,
+        network_tyk2,
+    ):
+        n4js = n4js_preloaded
+
+        # select the transformation we want to compute
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+        sk = user_client.get_scoped_key(transformation, scope_test)
+
+        task_sks = user_client.create_tasks(sk, count=3)
+
+        assert set(task_sks) == set(user_client.get_tasks(sk))
+
+        # try creating tasks that extend one of those we just created
+        task_sks_e = user_client.create_tasks(sk, count=4, extends=task_sks[0])
+
+        # check that we now get additional tasks
+        assert set(task_sks + task_sks_e) == set(user_client.get_tasks(sk))
+
+        # check that tasks are structured as we expect
+        assert set(task_sks_e) == set(user_client.get_tasks(sk, extends=task_sks[0]))
+        assert set() == set(user_client.get_tasks(sk, extends=task_sks[1]))
+
+        # check graph form of output
+        graph: nx.DiGraph = user_client.get_tasks(sk, return_as='graph')
+
+        for task_sk in task_sks:
+            assert len(list(graph.successors(task_sk))) == 0
+
+        for task_sk in task_sks_e:
+            assert graph.has_edge(task_sk, task_sks[0])
+
+    def test_action_tasks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.FahAlchemyClient,
+        network_tyk2,
+    ):
+        n4js = n4js_preloaded
+
+        # select the transformation we want to compute
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        task_sks = user_client.create_tasks(transformation_sk, count=3)
+
+        # action these task for this network, in reverse order
+        actioned_sks = user_client.action_tasks(task_sks[::-1], network_sk)
+
+        # check that the taskqueue looks as we expect
+        taskqueue_sk = n4js.get_taskqueue(network_sk)
+        queued_sks = n4js.get_taskqueue_tasks(taskqueue_sk)
+
+        assert actioned_sks == queued_sks
+        assert actioned_sks == task_sks[::-1]
+
+        # create extending tasks; try to action one of them
+        # this should yield `None` in results, since it shouldn't be possible to action these tasks
+        # if they extend a task that isn't 'complete'
+        task_sks_e = user_client.create_tasks(transformation_sk, count=4, extends=task_sks[0])
+        actioned_sks_e = user_client.action_tasks(task_sks_e, network_sk)
+
+        assert all([i is None for i in actioned_sks_e])
 
     ### results
 

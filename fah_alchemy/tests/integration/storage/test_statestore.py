@@ -247,7 +247,7 @@ class TestNeo4jStore(TestStateStore):
         assert len(tq_dict) == 2
         assert all([isinstance(i, TaskQueue) for i in tq_dict.values()])
 
-    def test_queue_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
+    def test_action_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
         taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
@@ -259,7 +259,7 @@ class TestNeo4jStore(TestStateStore):
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
         # queue the tasks
-        n4js.queue_taskqueue_tasks(task_sks, taskqueue_sk)
+        n4js.action_tasks(task_sks, taskqueue_sk)
 
         # count tasks in queue
         queued_task_sks = n4js.get_taskqueue_tasks(taskqueue_sk)
@@ -276,8 +276,8 @@ class TestNeo4jStore(TestStateStore):
         network_sk2 = n4js.create_network(an2, scope_test)
         taskqueue_sk2: ScopedKey = n4js.create_taskqueue(network_sk2)
 
-        with pytest.raises(ValueError, match="not found in same network"):
-            task_sks_fail = n4js.queue_taskqueue_tasks(task_sks, taskqueue_sk2)
+        task_sks_fail = n4js.action_tasks(task_sks, taskqueue_sk2)
+        assert all([i is None for i in task_sks_fail])
 
     def test_claim_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
@@ -299,7 +299,7 @@ class TestNeo4jStore(TestStateStore):
         assert nothing[0] is None
 
         # queue the tasks
-        n4js.queue_taskqueue_tasks(task_sks, taskqueue_sk)
+        n4js.action_tasks(task_sks, taskqueue_sk)
 
         # claim a single task; we expect this should be the first in the list
         claimed = n4js.claim_taskqueue_tasks(taskqueue_sk, "the best task handler")
@@ -355,7 +355,7 @@ class TestNeo4jStore(TestStateStore):
             stateA=transformation.stateA,
             stateB=transformation.stateB,
             mapping=transformation.mapping,
-            extend_from=protocoldag_prev,
+            extends=protocoldag_prev,
             name=str(task_sk),
         )
 

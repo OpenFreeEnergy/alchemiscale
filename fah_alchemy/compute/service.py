@@ -139,7 +139,7 @@ class SynchronousComputeService:
             stateA=transformation.stateA,
             stateB=transformation.stateB,
             mapping=transformation.mapping,
-            extend_from=protocoldagresult,
+            extends=protocoldagresult,
             name=str(task),
         )
         return protocoldag, transformation, protocoldagresult

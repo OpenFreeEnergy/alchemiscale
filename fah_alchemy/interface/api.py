@@ -179,7 +179,7 @@ def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
 def create_tasks(
     transformation_scoped_key,
     *,
-    extend_from: Optional[ScopedKey] = None,
+    extends: Optional[ScopedKey] = None,
     count: int = Body(...),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
@@ -189,7 +189,9 @@ def create_tasks(
 
     task_sks = []
     for i in range(count):
-        task_sks.append(n4js.create_task(transformation=sk, extend_from=extend_from))
+        task_sks.append(n4js.create_task(transformation=sk, 
+                                         extends=extends,
+                                         creator=token.entity))
 
     return [str(sk) for sk in task_sks]
 
@@ -198,21 +200,40 @@ def create_tasks(
 def get_tasks(
     transformation_scoped_key,
     *,
-    extend_from: str = Body(...),
+    extends: str = None,
+    return_as: str = 'list',
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
+    task_sks = n4js.get_tasks(sk, extends=extends, return_as=return_as)
+
+    if return_as == 'list':
+        return [str(sk) for sk in task_sks]
+    elif return_as == 'graph':
+        return {str(sk): extends for sk, extends in task_sks.items()}
+
 
 @router.post("/networks/{network_scoped_key}/tasks/action")
 def action_tasks(
     network_scoped_key,
     *,
-    tasks: List = Body(...),
+    tasks: List[ScopedKey] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
 ):
-    ...
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    taskqueue_sk = n4js.get_taskqueue(sk)
+    actioned_sks = n4js.action_tasks(
+            tasks,
+            taskqueue_sk)
+
+    return [str(sk) if sk is not None else None for sk in actioned_sks]
+
 
 
 @router.post("/networks/{network_scoped_key}/tasks/cancel")
