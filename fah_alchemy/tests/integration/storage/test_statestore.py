@@ -363,7 +363,7 @@ class TestNeo4jStore(TestStateStore):
         with tmpdir.as_cwd():
             protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
 
-        osr = ObjectStoreRef(location="protocoldagresult/{protocoldagresult.key}")
+        osr = ObjectStoreRef(location="protocoldagresult/{protocoldagresult.key}", scope=task_sk.scope)
 
         # try to push the result
         n4js.set_task_result(task_sk, osr)

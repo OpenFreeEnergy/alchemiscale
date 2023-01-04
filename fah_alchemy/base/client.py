@@ -90,7 +90,10 @@ class FahAlchemyBaseClient:
             return [ScopedKey.from_str(i) for i in resp.json()]
 
     @_use_token
-    def _get_resource(self, resource, params, return_gufe=True):
+    def _get_resource(self, resource, params=None, return_gufe=True):
+
+        if params is None:
+            params = {}
 
         url = urljoin(self.api_url, resource)
         resp = requests.get(url, params=params, headers=self._headers)

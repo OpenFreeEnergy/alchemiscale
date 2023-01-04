@@ -13,6 +13,7 @@ from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
 from pytest import fixture
 from moto import mock_s3
+from moto.server import ThreadedMotoServer
 
 from py2neo import ServiceProfile, Graph
 from py2neo.client import Connector
@@ -170,7 +171,7 @@ def n4js_fresh(graph):
     return n4js
 
 
-@fixture(scope="module")
+@fixture(scope="session")
 def s3objectstore_settings():
     return S3ObjectStoreSettings(
         AWS_ACCESS_KEY_ID="test-key-id",
@@ -181,6 +182,20 @@ def s3objectstore_settings():
         AWS_DEFAULT_REGION="us-east-1",
     )
 
+
+@fixture(scope="module")
+def s3os_server(s3objectstore_settings):
+    server = ThreadedMotoServer()
+    server.start()
+
+    s3os = get_s3os(s3objectstore_settings,
+                    endpoint_url="http://127.0.0.1:5000")
+    s3os.initialize()
+
+    yield s3os
+
+    server.stop()
+    
 
 @fixture(scope="module")
 def s3os(s3objectstore_settings):

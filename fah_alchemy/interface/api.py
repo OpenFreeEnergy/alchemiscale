@@ -240,9 +240,19 @@ def action_tasks(
 def cancel_tasks(
     network_scoped_key,
     *,
-    tasks: List = Body(...),
+    tasks: List[ScopedKey] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
 ):
-    ...
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    taskqueue_sk = n4js.get_taskqueue(sk)
+    canceled_sks = n4js.cancel_tasks(
+            tasks,
+            taskqueue_sk)
+
+    return [str(sk) if sk is not None else None for sk in canceled_sks]
 
 
 ### results
@@ -282,9 +292,7 @@ def get_protocoldagresult(
 
     # we leave each ProtocolDAGResult in string form to avoid
     # deserializing/reserializing here; just passing through to client
-    pdr: str = s3os.pull_protocoldagresult(
-        protocoldagresult_scoped_key, return_as="json"
-    )
+    pdr: str = s3os.pull_protocoldagresult(sk, return_as="json")
 
     return [pdr]
 

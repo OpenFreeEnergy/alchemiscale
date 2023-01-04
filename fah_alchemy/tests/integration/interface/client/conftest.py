@@ -17,9 +17,9 @@ from fah_alchemy.tests.integration.utils import running_service
 
 
 @pytest.fixture(scope="module")
-def user_api(s3os):
+def user_api(s3os_server):
     def get_s3os_override():
-        return s3os
+        return s3os_server
 
     overrides = copy(api.app.dependency_overrides)
 

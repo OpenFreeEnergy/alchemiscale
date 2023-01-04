@@ -2,6 +2,8 @@ import pytest
 from time import sleep
 
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
+from gufe.tokenization import TOKENIZABLE_REGISTRY
+from gufe.protocols.protocoldag import execute_DAG
 import networkx as nx
 
 from fah_alchemy.models import ScopedKey
@@ -103,7 +105,6 @@ class TestClient:
         # check that tasks are structured as we expect
         assert set(task_sks_e) == set(n4js.get_tasks(sk, extends=task_sks[0]))
         assert set() == set(n4js.get_tasks(sk, extends=task_sks[1]))
-        
 
     def test_get_tasks(
         self,
@@ -178,25 +179,118 @@ class TestClient:
 
         assert all([i is None for i in actioned_sks_e])
 
+    def test_cancel_tasks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.FahAlchemyClient,
+        network_tyk2,
+    ):
+        n4js = n4js_preloaded
+
+        # select the transformation we want to compute
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        task_sks = user_client.create_tasks(transformation_sk, count=3)
+
+        # action these task for this network, in reverse order
+        actioned_sks = user_client.action_tasks(task_sks[::-1], network_sk)
+
+        # try canceling one of these tasks
+        canceled_sks = user_client.cancel_tasks(task_sks[1:2], network_sk)
+
+        # check that the taskqueue looks as we expect
+        taskqueue_sk = n4js.get_taskqueue(network_sk)
+        queued_sks = n4js.get_taskqueue_tasks(taskqueue_sk)
+
+        assert [actioned_sks[0], actioned_sks[2]] == queued_sks
+        assert canceled_sks == [actioned_sks[1]]
+
+        # try to cancel a task that's not present in the queue
+        canceled_sks_2 = user_client.cancel_tasks(task_sks[1:2], network_sk)
+
+        assert canceled_sks_2 == [None]
+
+        
     ### results
 
     def test_get_transformation_result(
         self,
         scope_test,
         n4js_preloaded,
-        s3os,
+        s3os_server,
         user_client: client.FahAlchemyClient,
         network_tyk2,
+        tmpdir
     ):
+        n4js = n4js_preloaded
 
         # select the transformation we want to compute
         an = network_tyk2
         transformation = list(an.edges)[0]
 
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
         # user client : create a tree of tasks for the transformation
+        tasks = user_client.create_tasks(transformation_sk, count=3)
+        for task in tasks:
+            tasks_2 = user_client.create_tasks(transformation_sk, extends=task, count=3)
+            for task2 in tasks_2:
+                user_client.create_tasks(transformation_sk, extends=task2, count=3)
 
         # user client : action the tasks for execution
+        all_tasks = user_client.get_tasks(transformation_sk)
+        #all_tasks = reversed(list(nx.topological_sort(all_tasks_g)))
 
-        # execute the tasks and push results directly using statestore and object store
+        actioned_tasks = user_client.action_tasks(all_tasks, network_sk)
+
+        # execute the actioned tasks and push results directly using statestore and object store
+        protocoldagresults = []
+        with tmpdir.as_cwd():
+            for task_sk in actioned_tasks:
+                if task_sk is None:
+                    continue
+
+                # get the transformation and extending protocoldagresult as if we
+                # were a compute service
+                transformation, protocoldagresult = n4js.get_task_transformation(task=task_sk)
+
+                protocoldag = transformation.protocol.create(
+                    stateA=transformation.stateA,
+                    stateB=transformation.stateB,
+                    mapping=transformation.mapping,
+                    extends=protocoldagresult,
+                    name=str(task_sk),
+                )
+
+                protocoldagresult = execute_DAG(
+                    protocoldag,
+                    transformation=transformation.key,
+                    extends=protocoldagresult.key if protocoldagresult else None,
+                )
+                protocoldagresults.append(protocoldagresult)
+
+                objectstoreref = s3os_server.push_protocoldagresult(
+                        protocoldagresult,
+                        scope=task_sk.scope
+                        )
+
+                n4js.set_task_result(
+                        task=task_sk, objectstoreref=objectstoreref
+                    )
+
+        # clear local gufe registry of pdr objects
+        for pdr in protocoldagresults:
+            TOKENIZABLE_REGISTRY.pop(pdr.key, None)
 
         # user client : pull transformation results, evaluate
+        protocolresult = user_client.get_transformation_result(transformation_sk)
+
+        assert protocolresult.get_estimate() == 95500.0
+        assert set(protocolresult.data.keys()) == {'logs', 'key_results'}
+        assert len(protocolresult.data['key_results']) == 3

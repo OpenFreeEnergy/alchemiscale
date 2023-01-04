@@ -8,7 +8,7 @@ import json
 
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 from ..base.client import FahAlchemyBaseClient, FahAlchemyBaseClientError
@@ -215,8 +215,29 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         """Cancel Tasks for execution via the given AlchemicalNetwork's
         TaskQueue.
 
+        A Task cannot be canceled:
+            - if it is not present in the AlchemicalNetwork's TaskQueue.
+
+        Parameters
+        ----------
+        tasks
+            Task ScopedKeys to cancel for execution.
+        network
+            The AlchemicalNetwork ScopedKey to cancel the Tasks for.
+            The Tasks will be removed from the network's associated TaskQueue.
+
+        Returns
+        -------
+        List[Optional[ScopedKey]]
+            ScopedKeys for Tasks canceled, in the same order as given as
+            `tasks` on input. If a Task couldn't be canceled, then `None` will
+            be returned in its place.
+
         """
-        ...
+        data = dict(tasks=[t.dict() for t in tasks])
+        canceled_sks = self._post_resource(f"/networks/{network}/tasks/cancel", data)
+
+        return [ScopedKey.from_str(i) if i is not None else None for i in canceled_sks]
 
     def get_tasks_priority(
         self,
@@ -260,9 +281,12 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         pdrs = []
         for objectstoreref in objectstorerefs:
             pdr_key = objectstoreref["obj_key"]
+            scope = objectstoreref['scope']
+
+            pdr_sk = ScopedKey(gufe_key=GufeKey(pdr_key), **Scope.from_str(scope).dict())
 
             pdr_json = self._get_resource(
-                f"/protocoldagresults/{pdr_key}",
+                f"/protocoldagresults/{pdr_sk}",
                 return_gufe=False,
             )[0]
 
@@ -275,3 +299,6 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             return pdrs
         else:
             return tf.protocol.gather(pdrs)
+
+    def get_task_result(self):
+        ...

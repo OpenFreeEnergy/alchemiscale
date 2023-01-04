@@ -609,13 +609,12 @@ class Neo4jStore(FahAlchemyStateStore):
     def get_transformation_results(
         self, transformation: ScopedKey
     ) -> List[ObjectStoreRef]:
-        ...
 
         # get all task result objectstorerefs corresponding to given transformation
         # returned in order of creation
         q = f"""
         MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
-              (trans)<-[*]-(res:ObjectStoreRef)
+              (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ObjectStoreRef)
         RETURN res
         """
 
@@ -832,6 +831,7 @@ class Neo4jStore(FahAlchemyStateStore):
         queues, or none at all.
 
         """
+        canceled_sks = []
         for t in tasks:
             q = f"""
             // get our task queue, as well as the task we want to remove, and
@@ -847,11 +847,13 @@ class Neo4jStore(FahAlchemyStateStore):
             // delete connections between node to remove and behind, ahead nodes
             DELETE behindf, aheadf
 
+            RETURN task
             """
             with self.transaction() as tx:
-                tx.run(q)
+                task = tx.run(q).to_subgraph()
+                canceled_sks.append(ScopedKey.from_str(task["_scoped_key"]) if task is not None else None)
 
-        return tasks
+        return canceled_sks
 
     def get_taskqueue_tasks(
         self, taskqueue: ScopedKey, return_gufe=False
