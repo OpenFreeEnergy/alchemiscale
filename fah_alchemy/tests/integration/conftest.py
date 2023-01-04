@@ -188,14 +188,13 @@ def s3os_server(s3objectstore_settings):
     server = ThreadedMotoServer()
     server.start()
 
-    s3os = get_s3os(s3objectstore_settings,
-                    endpoint_url="http://127.0.0.1:5000")
+    s3os = get_s3os(s3objectstore_settings, endpoint_url="http://127.0.0.1:5000")
     s3os.initialize()
 
     yield s3os
 
     server.stop()
-    
+
 
 @fixture(scope="module")
 def s3os(s3objectstore_settings):

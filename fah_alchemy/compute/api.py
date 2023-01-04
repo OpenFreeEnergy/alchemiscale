@@ -159,8 +159,8 @@ def set_task_result(
 
     # push the ProtocolDAGResult to the object store
     objectstoreref: ObjectStoreRef = s3os.push_protocoldagresult(
-            pdr,
-            scope=task_sk.scope)
+        pdr, scope=task_sk.scope
+    )
 
     # push the reference to the state store
     result_sk: ScopedKey = n4js.set_task_result(

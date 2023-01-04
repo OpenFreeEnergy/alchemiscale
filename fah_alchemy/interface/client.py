@@ -140,7 +140,7 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         self,
         transformation: ScopedKey,
         extends: Optional[ScopedKey] = None,
-        return_as: str =  'list'
+        return_as: str = "list",
     ) -> Union[List[ScopedKey], nx.DiGraph]:
         """Return the Tasks associated with the given Transformation.
 
@@ -163,11 +163,13 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             extends = str(extends)
 
         params = dict(extends=extends, return_as=return_as)
-        task_sks = self._get_resource(f"/transformations/{transformation}/tasks", params, return_gufe=False)
+        task_sks = self._get_resource(
+            f"/transformations/{transformation}/tasks", params, return_gufe=False
+        )
 
-        if return_as == 'list':
+        if return_as == "list":
             return [ScopedKey.from_str(i) for i in task_sks]
-        elif return_as == 'graph':
+        elif return_as == "graph":
             g = nx.DiGraph()
             for task, extends in task_sks.items():
                 g.add_node(ScopedKey.from_str(task))
@@ -176,12 +178,9 @@ class FahAlchemyClient(FahAlchemyBaseClient):
 
             return g
 
-
     def action_tasks(
-            self, 
-            tasks: List[ScopedKey],
-            network: ScopedKey
-        ) -> List[Optional[ScopedKey]]:
+        self, tasks: List[ScopedKey], network: ScopedKey
+    ) -> List[Optional[ScopedKey]]:
         """Action Tasks for execution via the given AlchemicalNetwork's
         TaskQueue.
 
@@ -209,7 +208,6 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         actioned_sks = self._post_resource(f"/networks/{network}/tasks/action", data)
 
         return [ScopedKey.from_str(i) if i is not None else None for i in actioned_sks]
-
 
     def cancel_tasks(self, tasks: List[ScopedKey], network: ScopedKey):
         """Cancel Tasks for execution via the given AlchemicalNetwork's
@@ -281,9 +279,11 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         pdrs = []
         for objectstoreref in objectstorerefs:
             pdr_key = objectstoreref["obj_key"]
-            scope = objectstoreref['scope']
+            scope = objectstoreref["scope"]
 
-            pdr_sk = ScopedKey(gufe_key=GufeKey(pdr_key), **Scope.from_str(scope).dict())
+            pdr_sk = ScopedKey(
+                gufe_key=GufeKey(pdr_key), **Scope.from_str(scope).dict()
+            )
 
             pdr_json = self._get_resource(
                 f"/protocoldagresults/{pdr_sk}",

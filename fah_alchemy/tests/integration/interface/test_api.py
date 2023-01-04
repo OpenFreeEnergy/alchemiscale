@@ -121,7 +121,9 @@ class TestAPI:
         assert str(sk_unauthenticated.scope) in details
         assert str(auth_scope) in details
 
-    def test_query_transformations(self, n4js_preloaded, network_tyk2, test_client, scope_test):
+    def test_query_transformations(
+        self, n4js_preloaded, network_tyk2, test_client, scope_test
+    ):
         ...
 
     def test_get_transformation(self):
@@ -149,7 +151,6 @@ class TestAPI:
 
     def test_cancel_tasks(self):
         ...
-
 
     ### results
 

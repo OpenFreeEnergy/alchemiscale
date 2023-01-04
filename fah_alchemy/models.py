@@ -63,9 +63,7 @@ class Scope(BaseModel):
         return f"<Scope('{str(self)}')>"
 
     def specific(self):
-        """Return `True` if this Scope has no unspecified elements.
-
-        """
+        """Return `True` if this Scope has no unspecified elements."""
         return all(self.to_tuple())
 
 

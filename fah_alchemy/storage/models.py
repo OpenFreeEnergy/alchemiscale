@@ -82,7 +82,9 @@ class Task(GufeTokenizable):
         self.status: TaskStatusEnum = TaskStatusEnum(status)
         self.priority = priority
 
-        self.datetime_created = datetime_created if datetime_created is not None else datetime.utcnow()
+        self.datetime_created = (
+            datetime_created if datetime_created is not None else datetime.utcnow()
+        )
 
         self.creator = creator
         self.extends = extends
@@ -179,26 +181,23 @@ class ObjectStoreRef(GufeTokenizable):
     obj_key: Optional[GufeKey]
     scope: Scope
 
-    def __init__(
-            self,
-            *,
-            location: str = None,
-            obj_key: GufeKey = None,
-            scope: Scope):
+    def __init__(self, *, location: str = None, obj_key: GufeKey = None, scope: Scope):
 
         self.location = location
         self.obj_key = GufeKey(obj_key) if obj_key is not None else None
         self.scope = scope
 
     def _to_dict(self):
-        return {"location": self.location, 
-                "obj_key": str(self.obj_key),
-                "scope": str(self.scope)}
+        return {
+            "location": self.location,
+            "obj_key": str(self.obj_key),
+            "scope": str(self.scope),
+        }
 
     @classmethod
     def _from_dict(cls, d):
         d_ = copy(d)
-        d_['scope'] = Scope.from_str(d['scope'])
+        d_["scope"] = Scope.from_str(d["scope"])
         return cls(**d_)
 
     @classmethod

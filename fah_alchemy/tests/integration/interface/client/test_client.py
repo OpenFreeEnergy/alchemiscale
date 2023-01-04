@@ -135,7 +135,7 @@ class TestClient:
         assert set() == set(user_client.get_tasks(sk, extends=task_sks[1]))
 
         # check graph form of output
-        graph: nx.DiGraph = user_client.get_tasks(sk, return_as='graph')
+        graph: nx.DiGraph = user_client.get_tasks(sk, return_as="graph")
 
         for task_sk in task_sks:
             assert len(list(graph.successors(task_sk))) == 0
@@ -174,7 +174,9 @@ class TestClient:
         # create extending tasks; try to action one of them
         # this should yield `None` in results, since it shouldn't be possible to action these tasks
         # if they extend a task that isn't 'complete'
-        task_sks_e = user_client.create_tasks(transformation_sk, count=4, extends=task_sks[0])
+        task_sks_e = user_client.create_tasks(
+            transformation_sk, count=4, extends=task_sks[0]
+        )
         actioned_sks_e = user_client.action_tasks(task_sks_e, network_sk)
 
         assert all([i is None for i in actioned_sks_e])
@@ -215,7 +217,6 @@ class TestClient:
 
         assert canceled_sks_2 == [None]
 
-        
     ### results
 
     def test_get_transformation_result(
@@ -225,7 +226,7 @@ class TestClient:
         s3os_server,
         user_client: client.FahAlchemyClient,
         network_tyk2,
-        tmpdir
+        tmpdir,
     ):
         n4js = n4js_preloaded
 
@@ -245,7 +246,7 @@ class TestClient:
 
         # user client : action the tasks for execution
         all_tasks = user_client.get_tasks(transformation_sk)
-        #all_tasks = reversed(list(nx.topological_sort(all_tasks_g)))
+        # all_tasks = reversed(list(nx.topological_sort(all_tasks_g)))
 
         actioned_tasks = user_client.action_tasks(all_tasks, network_sk)
 
@@ -258,7 +259,9 @@ class TestClient:
 
                 # get the transformation and extending protocoldagresult as if we
                 # were a compute service
-                transformation, protocoldagresult = n4js.get_task_transformation(task=task_sk)
+                transformation, protocoldagresult = n4js.get_task_transformation(
+                    task=task_sk
+                )
 
                 protocoldag = transformation.protocol.create(
                     stateA=transformation.stateA,
@@ -276,13 +279,10 @@ class TestClient:
                 protocoldagresults.append(protocoldagresult)
 
                 objectstoreref = s3os_server.push_protocoldagresult(
-                        protocoldagresult,
-                        scope=task_sk.scope
-                        )
+                    protocoldagresult, scope=task_sk.scope
+                )
 
-                n4js.set_task_result(
-                        task=task_sk, objectstoreref=objectstoreref
-                    )
+                n4js.set_task_result(task=task_sk, objectstoreref=objectstoreref)
 
         # clear local gufe registry of pdr objects
         for pdr in protocoldagresults:
@@ -292,5 +292,5 @@ class TestClient:
         protocolresult = user_client.get_transformation_result(transformation_sk)
 
         assert protocolresult.get_estimate() == 95500.0
-        assert set(protocolresult.data.keys()) == {'logs', 'key_results'}
-        assert len(protocolresult.data['key_results']) == 3
+        assert set(protocolresult.data.keys()) == {"logs", "key_results"}
+        assert len(protocolresult.data["key_results"]) == 3

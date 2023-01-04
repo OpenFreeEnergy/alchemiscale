@@ -814,7 +814,11 @@ class Neo4jStore(FahAlchemyStateStore):
             """
             with self.transaction() as tx:
                 task = tx.run(q).to_subgraph()
-                actioned_sks.append(ScopedKey.from_str(task["_scoped_key"]) if task is not None else None)
+                actioned_sks.append(
+                    ScopedKey.from_str(task["_scoped_key"])
+                    if task is not None
+                    else None
+                )
 
         return actioned_sks
 
@@ -851,7 +855,11 @@ class Neo4jStore(FahAlchemyStateStore):
             """
             with self.transaction() as tx:
                 task = tx.run(q).to_subgraph()
-                canceled_sks.append(ScopedKey.from_str(task["_scoped_key"]) if task is not None else None)
+                canceled_sks.append(
+                    ScopedKey.from_str(task["_scoped_key"])
+                    if task is not None
+                    else None
+                )
 
         return canceled_sks
 
@@ -966,9 +974,8 @@ class Neo4jStore(FahAlchemyStateStore):
         # create a new task for the supplied transformation
         # use a PERFORMS relationship
         task = Task(
-                creator=creator,
-                extends=str(extends) if extends is not None else None
-                )
+            creator=creator, extends=str(extends) if extends is not None else None
+        )
 
         _, task_node, scoped_key = self._gufe_to_subgraph(
             task.to_shallow_dict(),
@@ -1047,8 +1054,8 @@ class Neo4jStore(FahAlchemyStateStore):
         self,
         transformation: ScopedKey,
         extends: Optional[ScopedKey] = None,
-        return_as: str = 'list'
-        ) -> Union[List[ScopedKey], Dict[ScopedKey, Optional[str]]]:
+        return_as: str = "list",
+    ) -> Union[List[ScopedKey], Dict[ScopedKey, Optional[str]]]:
         """Get all Tasks that perform the given Transformation.
 
         If a Task ScopedKey is given for `extends_from`, then only those Tasks
@@ -1075,13 +1082,12 @@ class Neo4jStore(FahAlchemyStateStore):
 
         tasks = []
         for record in res:
-            tasks.append(record['task'])
+            tasks.append(record["task"])
 
-        if return_as == 'list':
+        if return_as == "list":
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
-        elif return_as == 'graph':
-            return {ScopedKey.from_str(t["_scoped_key"]): t['extends'] for t in tasks}
-
+        elif return_as == "graph":
+            return {ScopedKey.from_str(t["_scoped_key"]): t["extends"] for t in tasks}
 
     def query_tasks(
         self,

@@ -28,7 +28,7 @@ def get_s3os(settings: S3ObjectStoreSettings, endpoint_url=None):
         session=session,
         bucket=settings.AWS_S3_BUCKET,
         prefix=settings.AWS_S3_PREFIX,
-        endpoint_url=endpoint_url
+        endpoint_url=endpoint_url,
     )
 
 
@@ -39,11 +39,9 @@ class S3ObjectStoreError(Exception):
 class S3ObjectStore:
     """Object storage for use with AWS S3."""
 
-    def __init__(self, 
-                 session: "boto3.Session",
-                 bucket: str,
-                 prefix: str,
-                 endpoint_url=None):
+    def __init__(
+        self, session: "boto3.Session", bucket: str, prefix: str, endpoint_url=None
+    ):
         """ """
         self.session = session
         self.resource = self.session.resource("s3", endpoint_url=endpoint_url)
@@ -142,7 +140,6 @@ class S3ObjectStore:
         print(f"Bucket name: {self.bucket}")
         print(f"Bucket content: {list(b.objects.all())}")
 
-
     def _exists(self, location) -> bool:
         from botocore.exceptions import ClientError
 
@@ -183,10 +180,8 @@ class S3ObjectStore:
         return url
 
     def push_protocoldagresult(
-            self, 
-            protocoldagresult: ProtocolDAGResult,
-            scope: Scope
-            ):
+        self, protocoldagresult: ProtocolDAGResult, scope: Scope
+    ):
         """Push given `ProtocolDAGResult` to this `ObjectStore`.
 
         Parameters
@@ -204,10 +199,9 @@ class S3ObjectStore:
         """
 
         # build `location` based on gufe key
-        location = os.path.join("protocoldagresult", 
-                                *scope.to_tuple(), 
-                                protocoldagresult.key, 
-                                "obj.json")
+        location = os.path.join(
+            "protocoldagresult", *scope.to_tuple(), protocoldagresult.key, "obj.json"
+        )
 
         # TODO: add support for compute client-side compressed protocoldagresults
         pdr_jb = json.dumps(
@@ -216,10 +210,8 @@ class S3ObjectStore:
         response = self._store_bytes(location, pdr_jb)
 
         return ObjectStoreRef(
-                location=location, 
-                obj_key=protocoldagresult.key,
-                scope=scope
-                )
+            location=location, obj_key=protocoldagresult.key, scope=scope
+        )
 
     def pull_protocoldagresult(self, protocoldagresult: ScopedKey, return_as="gufe"):
         """Pull the `ProtocolDAGResult` corresponding to the given `ObjectStoreRef`.
@@ -239,10 +231,12 @@ class S3ObjectStore:
 
         """
         # build `location` based on gufe key
-        location = os.path.join("protocoldagresult",
-                                *protocoldagresult.scope.to_tuple(), 
-                                protocoldagresult.gufe_key,
-                                "obj.json")
+        location = os.path.join(
+            "protocoldagresult",
+            *protocoldagresult.scope.to_tuple(),
+            protocoldagresult.gufe_key,
+            "obj.json",
+        )
 
         pdr_j = self._get_bytes(location).decode("utf-8")
 

@@ -189,9 +189,9 @@ def create_tasks(
 
     task_sks = []
     for i in range(count):
-        task_sks.append(n4js.create_task(transformation=sk, 
-                                         extends=extends,
-                                         creator=token.entity))
+        task_sks.append(
+            n4js.create_task(transformation=sk, extends=extends, creator=token.entity)
+        )
 
     return [str(sk) for sk in task_sks]
 
@@ -201,7 +201,7 @@ def get_tasks(
     transformation_scoped_key,
     *,
     extends: str = None,
-    return_as: str = 'list',
+    return_as: str = "list",
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -210,9 +210,9 @@ def get_tasks(
 
     task_sks = n4js.get_tasks(sk, extends=extends, return_as=return_as)
 
-    if return_as == 'list':
+    if return_as == "list":
         return [str(sk) for sk in task_sks]
-    elif return_as == 'graph':
+    elif return_as == "graph":
         return {str(sk): extends for sk, extends in task_sks.items()}
 
 
@@ -228,12 +228,9 @@ def action_tasks(
     validate_scopes(sk.scope, token)
 
     taskqueue_sk = n4js.get_taskqueue(sk)
-    actioned_sks = n4js.action_tasks(
-            tasks,
-            taskqueue_sk)
+    actioned_sks = n4js.action_tasks(tasks, taskqueue_sk)
 
     return [str(sk) if sk is not None else None for sk in actioned_sks]
-
 
 
 @router.post("/networks/{network_scoped_key}/tasks/cancel")
@@ -248,9 +245,7 @@ def cancel_tasks(
     validate_scopes(sk.scope, token)
 
     taskqueue_sk = n4js.get_taskqueue(sk)
-    canceled_sks = n4js.cancel_tasks(
-            tasks,
-            taskqueue_sk)
+    canceled_sks = n4js.cancel_tasks(tasks, taskqueue_sk)
 
     return [str(sk) if sk is not None else None for sk in canceled_sks]
 
