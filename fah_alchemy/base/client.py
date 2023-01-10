@@ -119,3 +119,11 @@ class FahAlchemyBaseClient:
 
     def get_info(self):
         return self._get_resource("/info", params={}, return_gufe=False)
+    
+    @_use_token
+    def _api_check(self):
+        # Check if the API is up and running and can return a 200 OK code
+        url = urljoin(self.api_url, "/check")
+        resp = requests.get(url, headers=self._headers)
+        if resp.status_code != 200:
+            raise self._exception(f"Status Code {resp.status_code} : {resp.reason}")

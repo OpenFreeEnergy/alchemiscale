@@ -60,6 +60,10 @@ async def info():
     return {"message": "nothing yet"}
 
 
+@router.get("/check")
+async def check():
+    return 200
+
 ### inputs
 
 

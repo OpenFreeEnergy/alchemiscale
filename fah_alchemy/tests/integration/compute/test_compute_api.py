@@ -10,8 +10,11 @@ from fah_alchemy.storage.models import ObjectStoreRef
 
 class TestComputeAPI:
     def test_info(self, test_client):
-
         response = test_client.get("/info")
+        assert response.status_code == 200
+    
+    def test_check(self, test_client):
+        response = test_client.get("/check")
         assert response.status_code == 200
 
     def test_query_taskqueues(self, n4js_preloaded, test_client):

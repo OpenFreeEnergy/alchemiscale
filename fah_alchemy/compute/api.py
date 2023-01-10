@@ -62,6 +62,9 @@ async def ping():
 async def info():
     return {"message": "nothing yet"}
 
+@router.get("/check")
+async def check():
+    return 200
 
 @router.get("/taskqueues")
 async def query_taskqueues(
