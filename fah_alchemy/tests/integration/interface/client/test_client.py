@@ -2,7 +2,7 @@ import pytest
 from time import sleep
 
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
-from gufe.tokenization import TOKENIZABLE_REGISTRY
+from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey
 from gufe.protocols.protocoldag import execute_DAG
 import networkx as nx
 
@@ -259,7 +259,7 @@ class TestClient:
 
                 # get the transformation and extending protocoldagresult as if we
                 # were a compute service
-                transformation, protocoldagresult = n4js.get_task_transformation(
+                transformation, protocoldagresult_ = n4js.get_task_transformation(
                     task=task_sk
                 )
 
@@ -267,15 +267,20 @@ class TestClient:
                     stateA=transformation.stateA,
                     stateB=transformation.stateB,
                     mapping=transformation.mapping,
-                    extends=protocoldagresult,
+                    extends=protocoldagresult_,
                     name=str(task_sk),
                 )
 
                 protocoldagresult = execute_DAG(
                     protocoldag,
                     transformation=transformation.key,
-                    extends=protocoldagresult.key if protocoldagresult else None,
+                    extends=protocoldagresult_.key if protocoldagresult_ else None,
                 )
+
+                assert protocoldagresult._transformation == transformation.key
+                if protocoldagresult_:
+                    assert protocoldagresult._extends == protocoldagresult_.key
+
                 protocoldagresults.append(protocoldagresult)
 
                 objectstoreref = s3os_server.push_protocoldagresult(
@@ -294,3 +299,10 @@ class TestClient:
         assert protocolresult.get_estimate() == 95500.0
         assert set(protocolresult.data.keys()) == {"logs", "key_results"}
         assert len(protocolresult.data["key_results"]) == 3
+
+        # get back protocoldagresults instead
+        protocoldagresults = user_client.get_transformation_result(transformation_sk,
+                                                                   return_protocoldagresults=True)
+        for pdr in protocoldagresults:
+            assert pdr._transformation == transformation.key
+            assert isinstance(pdr._extends, GufeKey) or pdr._extends is None
