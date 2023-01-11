@@ -69,14 +69,11 @@ async def check(
     neo4jreachable = n4js._store_check()
     # check if s3 object store is reachable
     s3reachable = s3os._store_check()
-    if (not neo4jreachable) and (not s3reachable):
-        return 'Neo4j store and S3 store unreachable', 503
-    elif not neo4jreachable:
-        return 'Neo4j store unreachable', 503
-    elif not s3reachable:
-        return 'S3 store unreachable', 503
+    if not neo4jreachable or not s3reachable:
+        code = status.HTTP_503_SERVICE_UNAVAILABLE
     else:
-        return '', 200
+        code = status.HTTP_200_OK
+    return  {'neo4jreachable': neo4jreachable, 's3reachable': s3reachable, 'code': code}
 
 
 ### inputs

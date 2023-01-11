@@ -51,3 +51,10 @@ class TestClient:
         uvicorn_server,
     ):
         ...
+
+    def test_api_check(        self,
+        n4js_preloaded,
+        user_client: client.FahAlchemyClient,
+        uvicorn_server,
+    ):
+        user_client._api_check()

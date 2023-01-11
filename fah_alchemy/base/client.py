@@ -127,3 +127,7 @@ class FahAlchemyBaseClient:
         resp = requests.get(url, headers=self._headers)
         if resp.status_code != 200:
             raise self._exception(f"Status Code {resp.status_code} : {resp.reason}, detail: {resp.text}")
+        details = resp.json()
+        if details["code"] != status.HTTP_200_OK:
+            error = f"Attempt to reach services failed, Neo4j: {details['neo4jreachable']}, S3 reachable: {details['s3reachable']}"
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)

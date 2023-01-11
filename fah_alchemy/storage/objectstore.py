@@ -60,10 +60,10 @@ class S3ObjectStore:
     def _store_check(self):
         """Check that the ObjectStore is in a state that can be used by the API."""
         try:
-            # just return our identity
-            self.resource.meta.client.get_caller_identity()
+            # just list buckets
+            self.resource.meta.client.list_buckets()
         except:
-            return False            
+            return False
         return True 
 
     def reset(self):

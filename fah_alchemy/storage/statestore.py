@@ -139,8 +139,7 @@ class Neo4jStore(FahAlchemyStateStore):
             self.graph.run("SHOW FUNCTIONS YIELD *")
         except:
             return False
-
-        return True 
+        return True
 
     def reset(self):
         """Remove all data from database; undo all components in `initialize`."""
