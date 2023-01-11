@@ -56,7 +56,7 @@ class S3ObjectStore:
     def check(self):
         """Check consistency of object store."""
         raise NotImplementedError
-    
+
     def _store_check(self):
         """Check that the ObjectStore is in a state that can be used by the API."""
         try:
@@ -64,7 +64,7 @@ class S3ObjectStore:
             self.resource.meta.client.list_buckets()
         except:
             return False
-        return True 
+        return True
 
     def reset(self):
         """Remove all data from object store.

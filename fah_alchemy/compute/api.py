@@ -62,6 +62,7 @@ async def ping():
 async def info():
     return {"message": "nothing yet"}
 
+
 @router.get("/check")
 async def check(
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -75,7 +76,8 @@ async def check(
         code = status.HTTP_503_SERVICE_UNAVAILABLE
     else:
         code = status.HTTP_200_OK
-    return  {'neo4jreachable': neo4jreachable, 's3reachable': s3reachable, 'code': code}
+    return {"neo4jreachable": neo4jreachable, "s3reachable": s3reachable, "code": code}
+
 
 @router.get("/taskqueues")
 async def query_taskqueues(
