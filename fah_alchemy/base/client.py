@@ -6,6 +6,7 @@ from typing import List
 import json
 from urllib.parse import urljoin
 from functools import wraps
+from fastapi import status
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -119,15 +120,15 @@ class FahAlchemyBaseClient:
 
     def get_info(self):
         return self._get_resource("/info", params={}, return_gufe=False)
-    
+
     @_use_token
     def _api_check(self):
         # Check if the API is up and running and can reach services
         url = urljoin(self.api_url, "/check")
         resp = requests.get(url, headers=self._headers)
-        if resp.status_code != 200:
-            raise self._exception(f"Status Code {resp.status_code} : {resp.reason}, detail: {resp.text}")
         details = resp.json()
         if details["code"] != status.HTTP_200_OK:
             error = f"Attempt to reach services failed, Neo4j: {details['neo4jreachable']}, S3 reachable: {details['s3reachable']}"
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error
+            )

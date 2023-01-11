@@ -73,7 +73,7 @@ async def check(
         code = status.HTTP_503_SERVICE_UNAVAILABLE
     else:
         code = status.HTTP_200_OK
-    return  {'neo4jreachable': neo4jreachable, 's3reachable': s3reachable, 'code': code}
+    return {"neo4jreachable": neo4jreachable, "s3reachable": s3reachable, "code": code}
 
 
 ### inputs
