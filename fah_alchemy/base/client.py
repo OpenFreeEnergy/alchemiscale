@@ -122,7 +122,7 @@ class FahAlchemyBaseClient:
     
     @_use_token
     def _api_check(self):
-        # Check if the API is up and running and can return a 200 OK code
+        # Check if the API is up and running and can reach services
         url = urljoin(self.api_url, "/check")
         resp = requests.get(url, headers=self._headers)
         if resp.status_code != 200:

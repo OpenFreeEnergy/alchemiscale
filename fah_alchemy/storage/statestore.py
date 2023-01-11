@@ -132,7 +132,7 @@ class Neo4jStore(FahAlchemyStateStore):
         if nope.identity != 0:
             raise Neo4JStoreError("Identity of NOPE node is not exactly 0")
 
-    def _api_check(self):
+    def _store_check(self):
         """Check that the database is in a state that can be used by the API."""
         try:
             # just list available functions to see if database is working

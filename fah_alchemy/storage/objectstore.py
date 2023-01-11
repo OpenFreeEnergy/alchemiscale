@@ -57,7 +57,7 @@ class S3ObjectStore:
         """Check consistency of object store."""
         raise NotImplementedError
     
-    def _api_check(self):
+    def _store_check(self):
         """Check that the ObjectStore is in a state that can be used by the API."""
         try:
             # just return our identity
