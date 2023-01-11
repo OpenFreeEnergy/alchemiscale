@@ -56,6 +56,15 @@ class S3ObjectStore:
     def check(self):
         """Check consistency of object store."""
         raise NotImplementedError
+    
+    def _api_check(self):
+        """Check that the ObjectStore is in a state that can be used by the API."""
+        try:
+            # just return our identity
+            self.resource.meta.client.get_caller_identity()
+        except:
+            return False            
+        return True 
 
     def reset(self):
         """Remove all data from object store.

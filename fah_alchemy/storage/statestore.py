@@ -132,6 +132,16 @@ class Neo4jStore(FahAlchemyStateStore):
         if nope.identity != 0:
             raise Neo4JStoreError("Identity of NOPE node is not exactly 0")
 
+    def _api_check(self):
+        """Check that the database is in a state that can be used by the API."""
+        try:
+            # just list available functions to see if database is working
+            self.graph.run("SHOW FUNCTIONS YIELD *")
+        except:
+            return False
+
+        return True 
+
     def reset(self):
         """Remove all data from database; undo all components in `initialize`."""
         # we'll keep NOPE around to avoid a case where Neo4j doesn't give it id 0

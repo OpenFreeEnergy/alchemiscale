@@ -61,8 +61,19 @@ async def info():
 
 
 @router.get("/check")
-async def check():
-    return 200
+async def check(
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+):
+    # check if neo4j database is reachable
+    neo4jreachable = n4js._api_check()
+    # check if s3 object store is reachable
+    s3reachable = s3os._api_check()
+    if not neo4jreachable or not s3reachable:
+        return 503
+    else:
+        return 200
+
 
 ### inputs
 
