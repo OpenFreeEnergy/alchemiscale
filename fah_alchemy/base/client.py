@@ -126,4 +126,4 @@ class FahAlchemyBaseClient:
         url = urljoin(self.api_url, "/check")
         resp = requests.get(url, headers=self._headers)
         if resp.status_code != 200:
-            raise self._exception(f"Status Code {resp.status_code} : {resp.reason}")
+            raise self._exception(f"Status Code {resp.status_code} : {resp.reason}, detail: {resp.text}")

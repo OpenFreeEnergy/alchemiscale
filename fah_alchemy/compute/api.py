@@ -71,10 +71,14 @@ async def check(
     neo4jreachable = n4js._store_check()
     # check if s3 object store is reachable
     s3reachable = s3os._store_check()
-    if not neo4jreachable or not s3reachable:
-        return 503
+    if (not neo4jreachable) and (not s3reachable):
+        return 'Neo4j store and S3 store unreachable', 503
+    elif not neo4jreachable:
+        return 'Neo4j store unreachable', 503
+    elif not s3reachable:
+        return 'S3 store unreachable', 503
     else:
-        return 200
+        return '', 200
 
 @router.get("/taskqueues")
 async def query_taskqueues(
