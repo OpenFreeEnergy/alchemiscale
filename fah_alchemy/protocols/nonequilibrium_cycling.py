@@ -1,3 +1,10 @@
+"""
+Nonequilibrium Cycling protocol --- :mod:`fah-alchemy.protocols.nonequilibrium_cycling`
+=======================================================================================
+
+"""
+
+
 from typing import Optional, Iterable, List, Dict, Any
 
 from gufe.chemicalsystem import ChemicalSystem

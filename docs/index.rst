@@ -23,7 +23,7 @@ and is built on top of `OpenMM`_, `OpenForceField`_ and `OpenFreeEnergy`_.
 .. _OpenFreeEnergy: https://openfree.energy/
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents:
 
 
