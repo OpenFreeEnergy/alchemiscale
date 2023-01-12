@@ -1,4 +1,7 @@
-"""Client for interacting with compute API.
+"""
+Client for interacting with compute API. --- :mod:`fah-alchemy.compute.client`
+==============================================================================
+
 
 """
 

@@ -1,4 +1,6 @@
-"""FahAlchemyComputeService
+"""
+FahAlchemyComputeService --- :mod:`fah-alchemy.compute.service`
+===============================================================
 
 """
 

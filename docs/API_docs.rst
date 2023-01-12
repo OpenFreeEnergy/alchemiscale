@@ -7,3 +7,4 @@ API Documentation
 
 
    ./documentation_pages/base
+   ./documentation_pages/compute
