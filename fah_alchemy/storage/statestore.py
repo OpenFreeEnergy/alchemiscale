@@ -1,3 +1,9 @@
+"""
+Node4js state storage --- :mod:`fah-alchemy.storage.statestore`
+===============================================================
+
+"""
+
 import abc
 from contextlib import contextmanager
 import json

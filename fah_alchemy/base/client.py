@@ -1,4 +1,6 @@
-"""Base class for API clients.
+"""
+Base class for API clients --- :mod:`fah-alchemy.base.client`
+=============================================================
 
 """
 

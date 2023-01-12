@@ -1,4 +1,7 @@
-"""Client for interacting with user-facing API.
+"""
+Client for interacting with user-facing API. --- :mod:`fah-alchemy.interface.client`
+====================================================================================
+
 
 """
 
@@ -61,8 +64,8 @@ class FahAlchemyClient(FahAlchemyBaseClient):
     ### results
 
     def get_transformation_result(
-        self, 
-        transformation: ScopedKey, 
+        self,
+        transformation: ScopedKey,
         return_protocoldagresults: bool = False,
     ) -> Union[ProtocolResult, List[List[ProtocolDAGResult]]]:
         """Get `ProtocolResult` for the given `Transformation`.

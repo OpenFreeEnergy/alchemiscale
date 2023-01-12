@@ -1,4 +1,6 @@
-"""Security components for APIs.
+"""
+Security components for APIs. --- :mod:`fah-alchemy.security.auth`
+==================================================================
 
 """
 

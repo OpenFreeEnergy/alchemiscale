@@ -1,3 +1,9 @@
+"""
+S3 Object storage --- :mod:`fah-alchemy.storage.objectstore`
+============================================================
+
+"""
+
 import os
 import io
 import json

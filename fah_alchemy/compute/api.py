@@ -1,4 +1,6 @@
-"""FahAlchemyComputeAPI
+"""
+FahAlchemyComputeAPI --- :mod:`fah-alchemy.compute.api`
+=======================================================
 
 """
 

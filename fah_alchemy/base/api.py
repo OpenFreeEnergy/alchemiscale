@@ -1,4 +1,6 @@
-"""Reusable components for API services.
+"""
+Reusable components for API services. --- :mod:`fah-alchemy.base.api`
+=====================================================================
 
 """
 
