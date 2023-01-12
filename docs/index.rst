@@ -27,6 +27,9 @@ and is built on top of `OpenMM`_, `OpenForceField`_ and `OpenFreeEnergy`_.
    :caption: Contents:
 
 
+   ./overview
+   ./API_docs
+
 
 Indices and tables
 ==================
