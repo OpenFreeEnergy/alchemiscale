@@ -6,7 +6,7 @@ from typing import List
 import json
 from urllib.parse import urljoin
 from functools import wraps
-from fastapi import status
+from fastapi import status, HTTPException
 
 import requests
 from requests.auth import HTTPBasicAuth
