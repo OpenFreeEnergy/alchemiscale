@@ -61,8 +61,8 @@ class FahAlchemyClient(FahAlchemyBaseClient):
     ### results
 
     def get_transformation_result(
-        self, 
-        transformation: ScopedKey, 
+        self,
+        transformation: ScopedKey,
         return_protocoldagresults: bool = False,
     ) -> Union[ProtocolResult, List[List[ProtocolDAGResult]]]:
         """Get `ProtocolResult` for the given `Transformation`.
@@ -85,7 +85,6 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         tf: Transformation = self.get_transformation(transformation)
 
         while True:
-
             # iterate through all results with paginated API calls
             params = {"limit": limit, "skip": skip}
             pdrs_i = self._get_resource(
