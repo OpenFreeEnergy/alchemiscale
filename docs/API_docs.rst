@@ -12,3 +12,5 @@ API Documentation
    ./documentation_pages/protocols
    ./documentation_pages/security
    ./documentation_pages/storage
+   ./documentation_pages/strategies
+   ./documentation_pages/strategist
