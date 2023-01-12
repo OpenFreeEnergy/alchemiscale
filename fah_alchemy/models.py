@@ -1,6 +1,6 @@
 """
 Data models --- :mod:`fah-alchemy.models`
-==========================================
+=========================================
 
 """
 from typing import Optional
