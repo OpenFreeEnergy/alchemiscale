@@ -11,3 +11,4 @@ API Documentation
    ./documentation_pages/interface
    ./documentation_pages/protocols
    ./documentation_pages/security
+   ./documentation_pages/storage

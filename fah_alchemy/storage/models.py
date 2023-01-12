@@ -1,3 +1,9 @@
+"""
+Data models for storage components --- :mod:`fah-alchemy.storage.models`
+==========================================================================
+
+"""
+
 from datetime import datetime
 from enum import Enum
 from typing import Union, Dict, Optional
