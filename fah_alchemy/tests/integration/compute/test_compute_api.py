@@ -18,9 +18,9 @@ class TestComputeAPI:
         response = test_client.get("/check")
         assert response.status_code == 200
         details = response.json()
-        assert(details['neo4jreachable'])
-        assert(details['s3reachable'])
-        assert(details['code'] == status.HTTP_200_OK)
+        assert(details["neo4jreachable"])
+        assert(details["s3reachable"])
+        assert(details["code"] == status.HTTP_200_OK)
 
 
     def test_query_taskqueues(self, n4js_preloaded, test_client):
