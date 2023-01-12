@@ -1,4 +1,7 @@
-"""Client for interacting with user-facing API.
+"""
+Client for interacting with user-facing API. --- :mod:`fah-alchemy.interface.client`
+====================================================================================
+
 
 """
 

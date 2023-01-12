@@ -1,4 +1,7 @@
-"""FahAlchemyClientAPI
+"""
+FahAlchemyClientAPI --- :mod:`fah-alchemy.interface.api`
+=========================================================
+
 
 """
 
