@@ -1,3 +1,8 @@
+"""
+Data models --- :mod:`fah-alchemy.models`
+==========================================
+
+"""
 from typing import Optional
 from pydantic import BaseModel, Field, validator
 from gufe.tokenization import GufeKey

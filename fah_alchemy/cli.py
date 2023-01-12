@@ -1,3 +1,9 @@
+"""
+Command line interface --- :mod:`fah-alchemy.cli`
+=================================================
+
+"""
+
 import click
 import gunicorn.app.base
 

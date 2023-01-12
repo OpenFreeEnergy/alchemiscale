@@ -14,3 +14,6 @@ API Documentation
    ./documentation_pages/storage
    ./documentation_pages/strategies
    ./documentation_pages/strategist
+   ./documentation_pages/cli
+   ./documentation_pages/models
+   ./documentation_pages/settings
