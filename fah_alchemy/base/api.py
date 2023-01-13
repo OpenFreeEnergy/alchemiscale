@@ -147,8 +147,9 @@ def scope_params(org: str = None, campaign: str = None, project: str = None):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+
 def _check_store_connectivity(n4js: Neo4jStore, s3os: S3ObjectStore) -> dict:
-    """ Check if neo4j and s3 object store are reachable """
+    """Check if neo4j and s3 object store are reachable"""
     # check if neo4j database is reachable
     neo4jreachable = n4js._store_check()
     # check if s3 object store is reachable
@@ -156,8 +157,11 @@ def _check_store_connectivity(n4js: Neo4jStore, s3os: S3ObjectStore) -> dict:
 
     if not neo4jreachable or not s3reachable:
         detail = f"Attempt to reach services failed, Neo4j reachable: {neo4jreachable}, S3 reachable: {s3reachable}"
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail
+        )
     return status.HTTP_200_OK
+
 
 async def get_token_data_depends(
     token: str = Depends(oauth2_scheme),

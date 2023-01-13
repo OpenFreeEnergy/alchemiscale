@@ -6,6 +6,7 @@ from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
 from fah_alchemy.models import ScopedKey
 
+
 def pre_load_payload(network, scope, name="incomplete 2"):
     """Helper function to spin up networks for testing"""
     new_network = AlchemicalNetwork(

@@ -96,7 +96,9 @@ class FahAlchemyBaseClient:
         resp = requests.get(url, params=params, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise self._exception(f"Status Code {resp.status_code} : {resp.reason} : Details {resp.json()['detail']}")
+            raise self._exception(
+                f"Status Code {resp.status_code} : {resp.reason} : Details {resp.json()['detail']}"
+            )
         content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
 
         if return_gufe:

@@ -23,7 +23,7 @@ from ..base.api import (
     get_cred_entity,
     validate_scopes,
     validate_scopes_query,
-    _check_store_connectivity
+    _check_store_connectivity,
 )
 from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
@@ -68,6 +68,7 @@ async def check(
 ):
     # check connectivity of storage components
     return _check_store_connectivity(n4js, s3os)
+
 
 ### inputs
 
