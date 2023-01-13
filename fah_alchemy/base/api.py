@@ -151,17 +151,13 @@ def _check_store_connectivity(n4js: Neo4jStore, s3os: S3ObjectStore) -> dict:
     """ Check if neo4j and s3 object store are reachable """
     # check if neo4j database is reachable
     neo4jreachable = n4js._store_check()
-
     # check if s3 object store is reachable
     s3reachable = s3os._store_check()
 
     if not neo4jreachable or not s3reachable:
-        code = status.HTTP_503_SERVICE_UNAVAILABLE
-        detail = f"Attempt to reach services failed, Neo4j: {neo4jreachable}, S3 reachable: {s3reachable}"
-        raise HTTPException(status_code=code, detail=detail)
-    else:
-        code = status.HTTP_200_OK 
-    return code
+        detail = f"Attempt to reach services failed, Neo4j reachable: {neo4jreachable}, S3 reachable: {s3reachable}"
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
+    return status.HTTP_200_OK
 
 async def get_token_data_depends(
     token: str = Depends(oauth2_scheme),
