@@ -6,7 +6,6 @@ networks:
   db:
   web:
 
-
 services:
   neo4j:
     image: ${NEO4J_DOCKER_IMAGE:-neo4j:4.4}
@@ -17,11 +16,9 @@ services:
       db:
         aliases:
           - neo4j-network
-
     # The ports that will be accessible from outside the container - HTTP (7474) and Bolt (7687).
     expose:
       - 7687
-
     # Uncomment the volumes to be mounted to make them accessible from outside the container.
     volumes:
       #- ./neo4j.conf:/conf/neo4j.conf # This is the main configuration file.
@@ -33,22 +30,20 @@ services:
       #- ./metrics/neo4j:/var/lib/neo4j/metrics
       #- ./licenses/neo4j:/var/lib/neo4j/licenses
       #- ./ssl/neo4j:/var/lib/neo4j/ssl
-
     # Passes the following environment variables to the container
     environment:
       - NEO4J_AUTH=${NEO4J_USER:?err}/${NEO4J_PASS:?err}
       - NEO4J_EDITION=docker_compose
-
     # Simple check testing whether the port 7474 is opened.
     # If so, the instance running inside the container is considered as "healthy".
     # This status can be checked using the "docker ps" command.
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
-
     # Set up the user
     user: ${USER_ID:?err}:${GROUP_ID:?err}
     labels:
       - "traefik.enable=false"
+
   fah-alchemy-client-API:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
     hostname: fahalchemy
@@ -77,16 +72,17 @@ services:
     command: "api --host 0.0.0.0 --port 1840 --workers 2"
     labels:
       - "traefik.enable=true"
-      - traefik.http.routers.fah-alchemy-client-API.rule=Host(`fahalchemy.${HOST_DOMAIN:?err}`)
+      - "traefik.http.routers.fah-alchemy-client-API.rule=Host(`fahalchemy.${HOST_DOMAIN:?err}`)"
       - "traefik.http.routers.fah-alchemy-client-API.entrypoints=websecure"
       - "traefik.http.routers.fah-alchemy-client-API.tls.certresolver=myresolver"
-      - traefik.docker.network=docker_internal
+      - "traefik.docker.network=docker_internal"
     healthcheck:
       test: ["CMD", "/opt/conda/bin/curl", "-f", "http://localhost:1840/ping"]
       interval: 1m
       timeout: 10s
       retries: 3
       start_period: 20s
+
   fah-alchemy-compute-API:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
     networks:
@@ -115,16 +111,17 @@ services:
     command: "compute api --host 0.0.0.0 --port 1841 --workers 2"
     labels:
       - "traefik.enable=true"
-      - traefik.http.routers.fah-alchemy-compute-API.rule=Host(`fahalchemy-compute.${HOST_DOMAIN:?err}`)
-      - traefik.docker.network=docker_internal
+      - "traefik.http.routers.fah-alchemy-compute-API.rule=Host(`fahalchemy-compute.${HOST_DOMAIN:?err}`)"
+      - "traefik.docker.network=docker_internal"
       - "traefik.http.routers.fah-alchemy-compute-API.entrypoints=websecure"
-      - traefik.http.routers.fah-alchemy-compute-API.tls.certresolver=myresolver
+      - "traefik.http.routers.fah-alchemy-compute-API.tls.certresolver=myresolver"
     healthcheck:
       test: ["CMD", "/opt/conda/bin/curl", "-f", "http://localhost:1841/ping"]
       interval: 1m
       timeout: 10s
       retries: 3
       start_period: 20s
+
   fah-alchemy-db-init:
     image: ghcr.io/mikemhenry/fah-alchemy:latest
     networks:
@@ -146,6 +143,7 @@ services:
       neo4j:
         condition: service_healthy
     command: "database init"
+
   reverse-proxy:
     # The official v2 Traefik docker image
     image: traefik:v2.9
@@ -159,8 +157,6 @@ services:
       # Do not expose containers unless explicitly told so
       - "--providers.docker.exposedbydefault=false"
       - "--providers.docker.network=internal"
-      # Don't proxy the proxy
-      - "traefik.enable=false"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
