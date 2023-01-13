@@ -7,6 +7,7 @@ defaults:
 
 jobs:
   build-and-deploy:
+    name: "Build and deploy docs"
     runs-on: ubuntu-latest
     env:
       OE_LICENSE: ${{ github.workspace }}/oe_license.txt
