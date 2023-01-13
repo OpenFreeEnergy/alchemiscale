@@ -78,6 +78,8 @@ services:
     labels:
       - "traefik.enable=true"
       - traefik.http.routers.fah-alchemy-client-API.rule=Host(`fahalchemy.${HOST_DOMAIN:?err}`)
+      - "traefik.http.routers.fah-alchemy-client-API.entrypoints=websecure"
+      - "traefik.http.routers.fah-alchemy-client-API.tls.certresolver=myresolver"
       - traefik.docker.network=docker_internal
     healthcheck:
       test: ["CMD", "/opt/conda/bin/curl", "-f", "http://localhost:1840/ping"]
@@ -115,7 +117,8 @@ services:
       - "traefik.enable=true"
       - traefik.http.routers.fah-alchemy-compute-API.rule=Host(`fahalchemy-compute.${HOST_DOMAIN:?err}`)
       - traefik.docker.network=docker_internal
-      - traefik.http.routers.whoami.tls.certresolver=myresolver
+      - "traefik.http.routers.fah-alchemy-compute-API.entrypoints=websecure"
+      - traefik.http.routers.fah-alchemy-compute-API.tls.certresolver=myresolver
     healthcheck:
       test: ["CMD", "/opt/conda/bin/curl", "-f", "http://localhost:1841/ping"]
       interval: 1m
@@ -151,8 +154,7 @@ services:
       - web
       # Enables the web UI and tells Traefik to listen to docker
     command: 
-      #- "--log.level=DEBUG"
-      - "--api.insecure=true" 
+      - "--log.level=DEBUG"
       - "--providers.docker"
       # Do not expose containers unless explicitly told so
       - "--providers.docker.exposedbydefault=false"
@@ -165,10 +167,7 @@ services:
       - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
     ports:
-      # The HTTP port
       - "443:443"
-      # The Web UI (enabled by --api.insecure=true)
-      - "8080:8080"
     volumes:
       # So that Traefik can listen to the Docker events
       - /var/run/docker.sock:/var/run/docker.sock
