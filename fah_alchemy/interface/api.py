@@ -23,6 +23,7 @@ from ..base.api import (
     get_cred_entity,
     validate_scopes,
     validate_scopes_query,
+    _check_store_connectivity
 )
 from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
@@ -65,18 +66,8 @@ async def check(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
 ):
-    # check if neo4j database is reachable
-    neo4jreachable = n4js._store_check()
-
-    # check if s3 object store is reachable
-    s3reachable = s3os._store_check()
-
-    if not neo4jreachable or not s3reachable:
-        code = status.HTTP_503_SERVICE_UNAVAILABLE
-    else:
-        code = status.HTTP_200_OK
-    return {"neo4jreachable": neo4jreachable, "s3reachable": s3reachable, "code": code}
-
+    # check connectivity of storage components
+    return _check_store_connectivity(n4js, s3os)
 
 ### inputs
 

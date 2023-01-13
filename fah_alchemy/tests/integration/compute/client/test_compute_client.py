@@ -73,7 +73,7 @@ class TestComputeClient:
     def test_api_check(
         self,
         n4js_preloaded,
-        user_client: client.FahAlchemyComputeClient,
+        compute_client: client.FahAlchemyComputeClient,
         uvicorn_server,
     ):
-        user_client._api_check()
+        compute_client._api_check()

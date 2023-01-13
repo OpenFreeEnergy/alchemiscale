@@ -5,8 +5,6 @@ from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
 from fah_alchemy.models import ScopedKey
-from fastapi import status
-
 
 def pre_load_payload(network, scope, name="incomplete 2"):
     """Helper function to spin up networks for testing"""
@@ -45,10 +43,6 @@ class TestAPI:
     def test_check(self, test_client):
         response = test_client.get("/check")
         assert response.status_code == 200
-        details = response.json()
-        assert details["neo4jreachable"]
-        assert details["s3reachable"]
-        assert details["code"] == status.HTTP_200_OK
 
     def test_create_network(
         self, n4js_preloaded, test_client, network_tyk2, scope_test
