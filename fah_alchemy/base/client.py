@@ -126,11 +126,14 @@ class FahAlchemyBaseClient:
         # Check if the API is up and running and can reach services
         url = urljoin(self.api_url, "/check")
         resp = requests.get(url, headers=self._headers)
+
         if not 200 <= resp.status_code < 300:
             # can't contact the endpoints
             raise self._exception(f"Status Code {resp.status_code} : {resp.reason}")
+
         details = resp.json()
         if details["code"] != status.HTTP_200_OK:
+
             # endpoints cannot connect to services
             error = f"Attempt to reach services failed, Neo4j: {details['neo4jreachable']}, S3 reachable: {details['s3reachable']}"
             raise HTTPException(

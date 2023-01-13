@@ -60,8 +60,12 @@ class S3ObjectStore:
     def _store_check(self):
         """Check that the ObjectStore is in a state that can be used by the API."""
         try:
-            # just list buckets
+            # read check
             self.resource.meta.client.list_buckets()
+
+            # write check
+            self._store_bytes('_check_test', b'test_check')
+            self._delete('_check_test')
         except:
             return False
         return True
@@ -148,7 +152,7 @@ class S3ObjectStore:
         key = os.path.join(self.prefix, location)
 
         if self._exists(location):
-            self.resouce.Object(self.bucket, key).delete()
+            self.resource.Object(self.bucket, key).delete()
         else:
             raise S3ObjectStoreError(
                 f"Unable to delete '{str(key)}': Object does not exist"

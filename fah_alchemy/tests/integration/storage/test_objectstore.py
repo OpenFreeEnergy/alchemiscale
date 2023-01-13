@@ -9,6 +9,12 @@ from fah_alchemy.storage.models import ObjectStoreRef
 
 
 class TestS3ObjectStore:
+
+    def test_delete(self, s3os: S3ObjectStore):
+        # write check
+        s3os._store_bytes('_check_test', b'test_check')
+        s3os._delete('_check_test')
+
     def test_push_protocolresult(self, s3os: S3ObjectStore, protocoldagresult):
 
         # try to push the result
