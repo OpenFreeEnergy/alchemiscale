@@ -64,8 +64,8 @@ class S3ObjectStore:
             self.resource.meta.client.list_buckets()
 
             # write check
-            self._store_bytes('_check_test', b'test_check')
-            self._delete('_check_test')
+            self._store_bytes("_check_test", b"test_check")
+            self._delete("_check_test")
         except:
             return False
         return True
