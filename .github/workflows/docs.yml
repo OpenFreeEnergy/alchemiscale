@@ -1,0 +1,48 @@
+name: "Docs build and deploy"
+on: [push]
+
+defaults:
+  run:
+    shell: bash -l {0}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      OE_LICENSE: ${{ github.workspace }}/oe_license.txt
+
+    steps:
+      - name: checkout
+      - uses: actions/checkout@v3
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+            auto-update-conda: true
+            use-mamba: true
+            python-version: ${{ matrix.python-version }}
+            miniforge-variant: Mambaforge
+            environment-file: devtools/conda-envs/test.yml
+            activate-environment: fah-alchemy-test
+
+      - name: Decrypt OpenEye license
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        env:
+          OE_LICENSE_TEXT: ${{ secrets.OE_LICENSE }}
+        run: |
+          echo "${OE_LICENSE_TEXT}" > ${OE_LICENSE}
+          python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
+
+      - name: "Install"
+        run: python setup.py develop --no-deps
+
+      - name: "Build docs"
+        run: |
+          cd docs
+          make html
+
+      - name: Deploy 🚀
+        if: github.event_name != 'pull_request'
+        uses: JamesIves/github-pages-deploy-action@3.7.1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: gh-pages # The branch the action should deploy to.
+          FOLDER: docs/_build/html # The folder the action should deploy.
