@@ -68,3 +68,12 @@ class TestComputeClient:
 
         ...
         # task = compute_client.claim_taskqueue_task(scope_test)
+
+
+    def test_api_check(
+        self,
+        n4js_preloaded,
+        user_client: client.FahAlchemyComputeClient,
+        uvicorn_server,
+    ):
+        user_client._api_check()
