@@ -160,7 +160,8 @@ def _check_store_connectivity(n4js: Neo4jStore, s3os: S3ObjectStore) -> dict:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail
         )
-    return status.HTTP_200_OK
+    else:
+        return status.HTTP_200_OK
 
 
 async def get_token_data_depends(
