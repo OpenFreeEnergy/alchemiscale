@@ -1,5 +1,6 @@
 # data files for docker deployment
 docker/data
+letsencrypt/
 
 # custom ignores
 .xxrun
