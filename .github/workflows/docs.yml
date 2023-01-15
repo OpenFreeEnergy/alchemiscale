@@ -13,14 +13,8 @@ defaults:
 
 jobs:
   build-and-deploy:
-    name: "Build and deploy docs"
+    name: "Docs - build and deploy"
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ['ubuntu']
-        python-version:
-          - 3.9
     env:
       OE_LICENSE: ${{ github.workspace }}/oe_license.txt
 
@@ -31,9 +25,9 @@ jobs:
         with:
             auto-update-conda: true
             use-mamba: true
-            python-version: ${{ matrix.python-version }}
+            python-version: 3.9
             miniforge-variant: Mambaforge
-            environment-file: devtools/conda-envs/test.yml
+            environment-file: devtools/conda-envs/docs.yml
             activate-environment: fah-alchemy-test
 
       - name: Decrypt OpenEye license
