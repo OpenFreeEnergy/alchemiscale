@@ -6,6 +6,7 @@ import asyncio
 import sched
 import time
 import random
+import threading
 from typing import Union, Optional, List, Dict, Tuple
 from pathlib import Path
 from threading import Thread
@@ -135,10 +136,7 @@ class SynchronousComputeService:
 
         transformation, protocoldagresult = self.client.get_task_transformation(task)
 
-        protocoldag = transformation.protocol.create(
-            stateA=transformation.stateA,
-            stateB=transformation.stateB,
-            mapping=transformation.mapping,
+        protocoldag = transformation.create(
             extends=protocoldagresult,
             name=str(task),
         )
@@ -156,6 +154,7 @@ class SynchronousComputeService:
         sk: ScopedKey = self.client.set_task_result(task, protocoldagresult)
 
         # TODO: remove claim on task, set to complete; remove from queues
+        # TODO: if protocoldagresult.ok is False, need to handle this
 
     def execute(self, task: ScopedKey) -> ScopedKey:
         """Executes given Task.
@@ -170,8 +169,6 @@ class SynchronousComputeService:
         protocoldagresult = execute_DAG(
             protocoldag,
             shared=self.shared,
-            transformation=transformation.key,
-            extends=extends.key if extends else None,
         )
 
         # push the result (or failure) back to the compute API

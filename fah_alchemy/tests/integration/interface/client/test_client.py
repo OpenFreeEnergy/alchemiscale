@@ -263,18 +263,13 @@ class TestClient:
                     task=task_sk
                 )
 
-                protocoldag = transformation.protocol.create(
-                    stateA=transformation.stateA,
-                    stateB=transformation.stateB,
-                    mapping=transformation.mapping,
+                protocoldag = transformation.create(
                     extends=protocoldagresult_,
                     name=str(task_sk),
                 )
 
                 protocoldagresult = execute_DAG(
                     protocoldag,
-                    transformation=transformation.key,
-                    extends=protocoldagresult_.key if protocoldagresult_ else None,
                 )
 
                 assert protocoldagresult._transformation == transformation.key

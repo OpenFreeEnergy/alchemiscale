@@ -158,11 +158,16 @@ def set_task_result(
     pdr = GufeTokenizable.from_dict(pdr)
 
     # push the ProtocolDAGResult to the object store
+    # TODO: should .ok be interrogated here, and should this influence where
+    # this goes in the object store?
     objectstoreref: ObjectStoreRef = s3os.push_protocoldagresult(
         pdr, scope=task_sk.scope
     )
 
     # push the reference to the state store
+    # TODO: should .ok be interrogated here, and should this influence where
+    # what goes into the ObjectStoreRef?
+    # would allow for easy filtering for only failures or only successes
     result_sk: ScopedKey = n4js.set_task_result(
         task=task_sk, objectstoreref=objectstoreref
     )

@@ -351,10 +351,7 @@ class TestNeo4jStore(TestStateStore):
         task_sk = n4js.create_task(transformation_sk)
 
         transformation, protocoldag_prev = n4js.get_task_transformation(task_sk)
-        protocoldag = transformation.protocol.create(
-            stateA=transformation.stateA,
-            stateB=transformation.stateB,
-            mapping=transformation.mapping,
+        protocoldag = transformation.create(
             extends=protocoldag_prev,
             name=str(task_sk),
         )
