@@ -1,4 +1,4 @@
-name: fah-alchemy-test
+name: fah-alchemy-docs
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
