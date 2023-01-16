@@ -250,3 +250,17 @@ def test_database_reset(n4js_fresh, network_tyk2, scope_test):
 
     with pytest.raises(Neo4JStoreError):
         n4js.check()
+
+
+def test_user_add(n4js_fresh):
+    n4js = n4js_fresh
+
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        result = runner.invoke(cli, ["user", "add", "--username", "test_uname", "--user-type", "user"])
+        assert click_success(result)

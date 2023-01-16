@@ -369,10 +369,43 @@ def user():
     ...
 
 
+
 @user.command()
-def add():
+@db_params
+@click.option('--user-type', default='user', help='User type',
+              type=click.Choice(['user', 'compute'], case_sensitive=False))
+@click.option('--identifier', help='identifier')
+@click.option('--key', help='key')
+def add(url, user, password, dbname, user_type, identifier, key):
     """Add a user to the database."""
-    ...
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
+
+    cli_values = url | user | password | dbname
+    
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
+    n4js = get_n4js(settings)
+    if user_type == 'user':
+        n4js.create_credentialed_entity(identifier, key)
+    elif user_type == 'compute':
+        n4js.create_credentialed_entity(identifier, key)
+    else: # should never happen
+        raise RunTimeError(f'Unknown user type {user_type}')
+    
+
+
+
+@user.command()
+@db_params
+def remove(url, user, password, dbname):
+    """Remove a user from the database."""
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
+
+    cli_values = url | user | password | dbname
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
+    n4js = get_n4js(settings)
+    n4js.remove_user(usertype, identifier, key)
 
 
 @user.command()
