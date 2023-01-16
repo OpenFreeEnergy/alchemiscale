@@ -67,7 +67,8 @@ async def check(
     s3os: S3ObjectStore = Depends(get_s3os_depends),
 ):
     # check connectivity of storage components
-    return _check_store_connectivity(n4js, s3os)
+    # if no exception raised, all good
+    _check_store_connectivity(n4js, s3os)
 
 
 ### inputs
