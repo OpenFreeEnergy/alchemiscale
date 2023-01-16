@@ -98,8 +98,9 @@ class FahAlchemyBaseClient:
         resp = requests.get(url, params=params, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise self._exception(f"Status Code {resp.status_code} : {resp.reason}")
-
+            raise self._exception(
+                f"Status Code {resp.status_code} : {resp.reason} : Details {resp.json()['detail']}"
+            )
         content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
 
         if return_gufe:
@@ -121,3 +122,8 @@ class FahAlchemyBaseClient:
 
     def get_info(self):
         return self._get_resource("/info", params={}, return_gufe=False)
+
+    @_use_token
+    def _api_check(self):
+        # Check if the API is up and running and can reach services
+        self._get_resource("/check", params={}, return_gufe=False)

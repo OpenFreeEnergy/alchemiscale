@@ -23,6 +23,7 @@ from ..base.api import (
     get_cred_entity,
     validate_scopes,
     validate_scopes_query,
+    _check_store_connectivity,
 )
 from ..settings import get_base_api_settings, get_compute_api_settings
 from ..storage.statestore import Neo4jStore
@@ -63,6 +64,16 @@ async def ping():
 @router.get("/info")
 async def info():
     return {"message": "nothing yet"}
+
+
+@router.get("/check")
+async def check(
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+):
+    # check connectivity of storage components
+    # if no exception raised, all good
+    _check_store_connectivity(n4js, s3os)
 
 
 @router.get("/taskqueues")

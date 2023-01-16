@@ -41,6 +41,10 @@ class TestAPI:
         response = test_client.get("/info")
         assert response.status_code == 200
 
+    def test_check(self, test_client):
+        response = test_client.get("/check")
+        assert response.status_code == 200
+
     def test_create_network(
         self, n4js_preloaded, test_client, network_tyk2, scope_test
     ):

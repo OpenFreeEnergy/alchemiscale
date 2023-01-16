@@ -88,7 +88,6 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         tf: Transformation = self.get_transformation(transformation)
 
         while True:
-
             # iterate through all results with paginated API calls
             params = {"limit": limit, "skip": skip}
             pdrs_i = self._get_resource(
