@@ -330,5 +330,6 @@ def test_user_remove(n4js_fresh, user_type):
             ],
         )
         assert click_success(result)
-        with pytest.raises(KeyError):
-            n4js.get_credentialed_entity(ident, user_type_cls)
+
+        with pytest.raises(KeyError, match="No such object in database"):
+            cred = n4js.get_credentialed_entity(ident, user_type_cls)

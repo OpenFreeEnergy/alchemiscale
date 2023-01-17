@@ -441,7 +441,7 @@ def remove(url, user, password, dbname, user_type, identifier, key):
     n4js = get_n4js(settings)
     user_type_cls = _user_type_string_to_cls(user_type)
     if authenticate(n4js, user_type_cls, identifier, key):
-        n4js.remove_credentialed_identity(identifier, CredentialedUserIdentity)
+        n4js.remove_credentialed_identity(identifier, user_type_cls)
     else:
         raise AuthenticationError("Authentication with StateStore failed.")
 
