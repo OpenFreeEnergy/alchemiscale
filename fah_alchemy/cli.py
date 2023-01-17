@@ -383,6 +383,18 @@ def _user_type_string_to_cls(user_type: str) -> Type[CredentialedEntity]:
     return user_type_cls
 
 
+def user_params(func):
+    user_type = click.option(
+        "--user-type",
+        default="user",
+        help="User type",
+        type=click.Choice(["user", "compute"], case_sensitive=False),
+    )
+    identity = click.option("--identifier", help="identifier", required=True, type=str)
+    key = click.option("--key", help="key", required=True, type=str)
+    return user_type(identity(key((func))))
+
+
 @cli.group()
 def user():
     ...
@@ -390,14 +402,7 @@ def user():
 
 @user.command()
 @db_params
-@click.option(
-    "--user-type",
-    default="user",
-    help="User type",
-    type=click.Choice(["user", "compute"], case_sensitive=False),
-)
-@click.option("--identifier", help="identifier", required=True, type=str)
-@click.option("--key", help="key", required=True, type=str)
+@user_params
 def add(url, user, password, dbname, user_type, identifier, key):
     """Add a user to the database."""
     from .storage.statestore import get_n4js
@@ -414,14 +419,7 @@ def add(url, user, password, dbname, user_type, identifier, key):
 
 @user.command()
 @db_params
-@click.option(
-    "--user-type",
-    default="user",
-    help="User type",
-    type=click.Choice(["user", "compute"], case_sensitive=False),
-)
-@click.option("--identifier", help="identifier", required=True, type=str)
-@click.option("--key", help="key", required=True, type=str)
+@user_params
 def remove(url, user, password, dbname, user_type, identifier, key):
     """Remove a user from the database."""
     from .storage.statestore import get_n4js
