@@ -8,7 +8,7 @@ import click
 import gunicorn.app.base
 from typing import Type
 
-from .security.auth import hash_key, authenticate
+from .security.auth import hash_key, authenticate, AuthenticationError
 from .security.models import (
     CredentialedEntity,
     CredentialedUserIdentity,

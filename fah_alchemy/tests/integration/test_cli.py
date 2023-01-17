@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fah_alchemy.tests.integration.utils import running_service
 
 from fah_alchemy.cli import get_settings_from_options, cli, ApiApplication
-from fah_alchemy.security.auth import hash_key, authenticate
+from fah_alchemy.security.auth import hash_key, authenticate, AuthenticationError
 from fah_alchemy.security.models import (
     CredentialedUserIdentity,
     CredentialedComputeIdentity,
@@ -333,3 +333,43 @@ def test_user_remove(n4js_fresh, user_type):
 
         with pytest.raises(KeyError, match="No such object in database"):
             cred = n4js.get_credentialed_entity(ident, user_type_cls)
+
+
+@pytest.mark.parametrize(
+    "user_type",
+    [("user", CredentialedUserIdentity), ("compute", CredentialedComputeIdentity)],
+)
+def test_user_remove_bad_cred(n4js_fresh, user_type):
+    n4js = n4js_fresh
+    user_type_str, user_type_cls = user_type
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        ident = "bill"
+        key = "and ted"
+
+        user = user_type_cls(
+            identifier=ident,
+            hashed_key=hash_key(key),
+        )
+
+        n4js.create_credentialed_entity(user)
+
+        result = runner.invoke(
+            cli,
+            [
+                "user",
+                "remove",
+                "--user-type",
+                user_type_str,
+                "--identifier",
+                ident,
+                "--key",
+                "wrong key",
+            ],
+        )
+        assert not click_success(result)

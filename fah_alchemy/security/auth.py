@@ -34,6 +34,10 @@ def authenticate(db, cls, identifier: str, key: str) -> CredentialedEntity:
     return entity
 
 
+class AuthenticationError(Exception):
+    ...
+
+
 def hash_key(key):
     return pwd_context.hash(key)
 
