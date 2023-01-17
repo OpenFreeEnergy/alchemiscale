@@ -12,6 +12,7 @@ from fah_alchemy.storage import Neo4jStore
 from fah_alchemy.storage.models import Task, TaskQueue, ObjectStoreRef
 from fah_alchemy.models import Scope, ScopedKey
 from fah_alchemy.security.models import (
+    CredentialedEntity,
     CredentialedUserIdentity,
     CredentialedComputeIdentity,
 )
@@ -379,18 +380,25 @@ class TestNeo4jStore(TestStateStore):
 
     ### authentication
 
-    def test_create_credentialed_entity(self, n4js: Neo4jStore):
+    @pytest.mark.parametrize(
+        "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
+    )
+    def test_create_credentialed_entity(
+        self, n4js: Neo4jStore, credential_type: CredentialedEntity
+    ):
 
-        user = CredentialedUserIdentity(
+        user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
         )
+
+        cls_name = credential_type.__name__
 
         n4js.create_credentialed_entity(user)
 
         n = n4js.graph.run(
             f"""
-            match (n:CredentialedUserIdentity {{identifier: '{user.identifier}'}})
+            match (n:{cls_name} {{identifier: '{user.identifier}'}})
             return n
             """
         ).to_subgraph()
@@ -398,9 +406,14 @@ class TestNeo4jStore(TestStateStore):
         assert n["identifier"] == user.identifier
         assert n["hashed_key"] == user.hashed_key
 
-    def test_get_credentialed_entity(self, n4js: Neo4jStore):
+    @pytest.mark.parametrize(
+        "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
+    )
+    def test_get_credentialed_entity(
+        self, n4js: Neo4jStore, credential_type: CredentialedEntity
+    ):
 
-        user = CredentialedUserIdentity(
+        user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
         )
@@ -408,17 +421,18 @@ class TestNeo4jStore(TestStateStore):
         n4js.create_credentialed_entity(user)
 
         # get the user back
-        user_g = n4js.get_credentialed_entity(user.identifier, CredentialedUserIdentity)
+        user_g = n4js.get_credentialed_entity(user.identifier, credential_type)
 
         assert user_g == user
 
-        # try to get a compute identity instead
-        with pytest.raises(KeyError):
-            n4js.get_credentialed_entity(user.identifier, CredentialedComputeIdentity)
+    @pytest.mark.parametrize(
+        "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
+    )
+    def test_remove_credentialed_entity(
+        self, n4js: Neo4jStore, credential_type: CredentialedEntity
+    ):
 
-    def test_get_remove_entity(self, n4js: Neo4jStore):
-
-        user = CredentialedUserIdentity(
+        user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
         )
@@ -426,10 +440,10 @@ class TestNeo4jStore(TestStateStore):
         n4js.create_credentialed_entity(user)
 
         # get the user back
-        user_g = n4js.get_credentialed_entity(user.identifier, CredentialedUserIdentity)
+        user_g = n4js.get_credentialed_entity(user.identifier, credential_type)
 
         assert user_g == user
 
-        n4js.remove_credentialed_identity(user.identifier, CredentialedUserIdentity)
+        n4js.remove_credentialed_identity(user.identifier, credential_type)
         with pytest.raises(KeyError):
-            n4js.get_credentialed_entity(user.identifier, CredentialedComputeIdentity)
+            n4js.get_credentialed_entity(user.identifier, credential_type)
