@@ -10,6 +10,11 @@ from fastapi import FastAPI
 from fah_alchemy.tests.integration.utils import running_service
 
 from fah_alchemy.cli import get_settings_from_options, cli, ApiApplication
+from fah_alchemy.security.auth import hash_key
+from fah_alchemy.security.models import (
+    CredentialedUserIdentity,
+    CredentialedComputeIdentity,
+)
 from fah_alchemy.settings import Neo4jStoreSettings
 from fah_alchemy.storage.statestore import Neo4JStoreError
 
@@ -252,9 +257,10 @@ def test_database_reset(n4js_fresh, network_tyk2, scope_test):
         n4js.check()
 
 
-def test_user_add(n4js_fresh):
+@pytest.mark.parametrize('user_type', [('user', CredentialedUserIdentity), ('compute', CredentialedComputeIdentity)])
+def test_user_add(n4js_fresh, user_type):
     n4js = n4js_fresh
-
+    user_type_str, user_type_cls = user_type
     env_vars = {
         "NEO4J_URL": n4js.graph.service.uri,
         "NEO4J_USER": "neo4j",
@@ -262,5 +268,16 @@ def test_user_add(n4js_fresh):
     }
     runner = CliRunner()
     with set_env_vars(env_vars):
-        result = runner.invoke(cli, ["user", "add", "--username", "test_uname", "--user-type", "user"])
+        ident = "bill"
+        key = "and ted"
+        result = runner.invoke(cli, ["user", "add", "--user-type", user_type_str, "--identifier", ident, "--key", key])
         assert click_success(result)
+
+        user = n4js.get_credentialed_entity(ident, user_type_cls)
+        assert user.identifier == ident
+
+        # QUERY can't check the key hashing due to salting, is this a problem?
+
+
+
+

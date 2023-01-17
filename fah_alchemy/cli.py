@@ -6,6 +6,13 @@ Command line interface --- :mod:`fah-alchemy.cli`
 
 import click
 import gunicorn.app.base
+from .security.auth import hash_key
+from .security.models import (
+    UserIdentity,
+    ComputeIdentity,
+    CredentialedUserIdentity,
+    CredentialedComputeIdentity,
+)
 
 
 def envvar_dictify(ctx, param, value):
@@ -369,30 +376,36 @@ def user():
     ...
 
 
-
 @user.command()
 @db_params
-@click.option('--user-type', default='user', help='User type',
-              type=click.Choice(['user', 'compute'], case_sensitive=False))
-@click.option('--identifier', help='identifier')
-@click.option('--key', help='key')
+@click.option(
+    "--user-type",
+    default="user",
+    help="User type",
+    type=click.Choice(["user", "compute"], case_sensitive=False),
+)
+@click.option("--identifier", help="identifier", required=True, type=str)
+@click.option("--key", help="key", required=True, type=str)
 def add(url, user, password, dbname, user_type, identifier, key):
     """Add a user to the database."""
     from .storage.statestore import get_n4js
     from .settings import Neo4jStoreSettings
 
     cli_values = url | user | password | dbname
-    
+
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
-    if user_type == 'user':
-        n4js.create_credentialed_entity(identifier, key)
-    elif user_type == 'compute':
-        n4js.create_credentialed_entity(identifier, key)
-    else: # should never happen
-        raise RunTimeError(f'Unknown user type {user_type}')
-    
 
+    if user_type == "user":
+        # am I meant to be using the hashed_key here?
+        user_model = CredentialedUserIdentity(hashed_key=hash_key(key), identifier=identifier)
+        n4js.create_credentialed_entity(user_model)
+    elif user_type == "compute":
+        # am I meant to be using the hashed_key here?
+        compute_user_model = CredentialedComputeIdentity(hashed_key=hash_key(key), identifier=identifier)
+        n4js.create_credentialed_entity(compute_user_model)
+    else:  # should never happen
+        raise RunTimeError(f"Unknown user type {user_type}")
 
 
 @user.command()
