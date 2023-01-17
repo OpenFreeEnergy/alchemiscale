@@ -407,18 +407,9 @@ def add(url, user, password, dbname, user_type, identifier, key):
 
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
-    if user_type == "user":
-        user_model = CredentialedUserIdentity(
-            hashed_key=hash_key(key), identifier=identifier
-        )
-        n4js.create_credentialed_entity(user_model)
-    elif user_type == "compute":
-        compute_user_model = CredentialedComputeIdentity(
-            hashed_key=hash_key(key), identifier=identifier
-        )
-        n4js.create_credentialed_entity(compute_user_model)
-    else:  # should never happen
-        raise RunTimeError(f"Unknown user type {user_type}")
+    user_type_cls = _user_type_string_to_cls(user_type)
+    user_model = user_type_cls(hashed_key=hash_key(key), identifier=identifier)
+    n4js.create_credentialed_entity(user_model)
 
 
 @user.command()
