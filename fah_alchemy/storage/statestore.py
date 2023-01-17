@@ -1205,3 +1205,15 @@ class Neo4jStore(FahAlchemyStateStore):
             )
 
         return cls(**dict(list(nodes)[0]))
+
+    def remove_credentialed_identity(
+        self, identifier: str, cls: type[CredentialedEntity]
+    ):
+        """Remove a credentialed entity, such as a user or compute service."""
+        q = f"""
+        MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
+        DETACH DELETE n
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)

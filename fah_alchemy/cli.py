@@ -395,14 +395,15 @@ def add(url, user, password, dbname, user_type, identifier, key):
 
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
-
     if user_type == "user":
-        # am I meant to be using the hashed_key here?
-        user_model = CredentialedUserIdentity(hashed_key=hash_key(key), identifier=identifier)
+        user_model = CredentialedUserIdentity(
+            hashed_key=hash_key(key), identifier=identifier
+        )
         n4js.create_credentialed_entity(user_model)
     elif user_type == "compute":
-        # am I meant to be using the hashed_key here?
-        compute_user_model = CredentialedComputeIdentity(hashed_key=hash_key(key), identifier=identifier)
+        compute_user_model = CredentialedComputeIdentity(
+            hashed_key=hash_key(key), identifier=identifier
+        )
         n4js.create_credentialed_entity(compute_user_model)
     else:  # should never happen
         raise RunTimeError(f"Unknown user type {user_type}")
@@ -410,6 +411,14 @@ def add(url, user, password, dbname, user_type, identifier, key):
 
 @user.command()
 @db_params
+@click.option(
+    "--user-type",
+    default="user",
+    help="User type",
+    type=click.Choice(["user", "compute"], case_sensitive=False),
+)
+@click.option("--identifier", help="identifier", required=True, type=str)
+@click.option("--key", help="key", required=True, type=str)
 def remove(url, user, password, dbname):
     """Remove a user from the database."""
     from .storage.statestore import get_n4js
@@ -418,7 +427,11 @@ def remove(url, user, password, dbname):
     cli_values = url | user | password | dbname
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
-    n4js.remove_user(usertype, identifier, key)
+
+    if user_type == "user":
+        n4js.remove_credentialed_identity(identifier, CredentialedUserIdentity)
+    elif user_type == "compute":
+        n4js.remove_credentialed_identity(identifier, CredentialedComputeIdentity)
 
 
 @user.command()

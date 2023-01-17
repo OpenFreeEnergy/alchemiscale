@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fah_alchemy.tests.integration.utils import running_service
 
 from fah_alchemy.cli import get_settings_from_options, cli, ApiApplication
-from fah_alchemy.security.auth import hash_key
+from fah_alchemy.security.auth import hash_key, authenticate
 from fah_alchemy.security.models import (
     CredentialedUserIdentity,
     CredentialedComputeIdentity,
@@ -257,7 +257,10 @@ def test_database_reset(n4js_fresh, network_tyk2, scope_test):
         n4js.check()
 
 
-@pytest.mark.parametrize('user_type', [('user', CredentialedUserIdentity), ('compute', CredentialedComputeIdentity)])
+@pytest.mark.parametrize(
+    "user_type",
+    [("user", CredentialedUserIdentity), ("compute", CredentialedComputeIdentity)],
+)
 def test_user_add(n4js_fresh, user_type):
     n4js = n4js_fresh
     user_type_str, user_type_cls = user_type
@@ -270,14 +273,20 @@ def test_user_add(n4js_fresh, user_type):
     with set_env_vars(env_vars):
         ident = "bill"
         key = "and ted"
-        result = runner.invoke(cli, ["user", "add", "--user-type", user_type_str, "--identifier", ident, "--key", key])
+        result = runner.invoke(
+            cli,
+            [
+                "user",
+                "add",
+                "--user-type",
+                user_type_str,
+                "--identifier",
+                ident,
+                "--key",
+                key,
+            ],
+        )
         assert click_success(result)
 
-        user = n4js.get_credentialed_entity(ident, user_type_cls)
-        assert user.identifier == ident
-
-        # QUERY can't check the key hashing due to salting, is this a problem?
-
-
-
-
+        cred = authenticate(n4js, user_type_cls, ident, key)
+        assert cred

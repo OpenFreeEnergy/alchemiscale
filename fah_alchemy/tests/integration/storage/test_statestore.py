@@ -415,3 +415,21 @@ class TestNeo4jStore(TestStateStore):
         # try to get a compute identity instead
         with pytest.raises(KeyError):
             n4js.get_credentialed_entity(user.identifier, CredentialedComputeIdentity)
+
+    def test_get_remove_entity(self, n4js: Neo4jStore):
+
+        user = CredentialedUserIdentity(
+            identifier="bill",
+            hashed_key=hash_key("and ted"),
+        )
+
+        n4js.create_credentialed_entity(user)
+
+        # get the user back
+        user_g = n4js.get_credentialed_entity(user.identifier, CredentialedUserIdentity)
+
+        assert user_g == user
+
+        n4js.remove_credentialed_identity(user.identifier, CredentialedUserIdentity)
+        with pytest.raises(KeyError):
+            n4js.get_credentialed_entity(user.identifier, CredentialedComputeIdentity)
