@@ -6,10 +6,11 @@ Command line interface --- :mod:`fah-alchemy.cli`
 
 import click
 import gunicorn.app.base
-from .security.auth import hash_key
+from typing import Type
+
+from .security.auth import hash_key, authenticate
 from .security.models import (
-    UserIdentity,
-    ComputeIdentity,
+    CredentialedEntity,
     CredentialedUserIdentity,
     CredentialedComputeIdentity,
 )
@@ -371,6 +372,17 @@ def reset(url, user, password, dbname):
     n4js.reset()
 
 
+def _user_type_string_to_cls(user_type: str) -> Type[CredentialedEntity]:
+    if user_type == "user":
+        user_type_cls = CredentialedUserIdentity
+    elif user_type == "compute":
+        user_type_cls = CredentialedComputeIdentity
+    else:
+        raise RunTimeError(f"Unknown user type {user_type}")
+
+    return user_type_cls
+
+
 @cli.group()
 def user():
     ...
@@ -419,7 +431,7 @@ def add(url, user, password, dbname, user_type, identifier, key):
 )
 @click.option("--identifier", help="identifier", required=True, type=str)
 @click.option("--key", help="key", required=True, type=str)
-def remove(url, user, password, dbname):
+def remove(url, user, password, dbname, user_type, identifier, key):
     """Remove a user from the database."""
     from .storage.statestore import get_n4js
     from .settings import Neo4jStoreSettings
@@ -427,11 +439,11 @@ def remove(url, user, password, dbname):
     cli_values = url | user | password | dbname
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
-
-    if user_type == "user":
+    user_type_cls = _user_type_string_to_cls(user_type)
+    if authenticate(n4js, user_type_cls, identifier, key):
         n4js.remove_credentialed_identity(identifier, CredentialedUserIdentity)
-    elif user_type == "compute":
-        n4js.remove_credentialed_identity(identifier, CredentialedComputeIdentity)
+    else:
+        raise AuthenticationError("Authentication with StateStore failed.")
 
 
 @user.command()

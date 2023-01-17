@@ -290,3 +290,45 @@ def test_user_add(n4js_fresh, user_type):
 
         cred = authenticate(n4js, user_type_cls, ident, key)
         assert cred
+
+
+@pytest.mark.parametrize(
+    "user_type",
+    [("user", CredentialedUserIdentity), ("compute", CredentialedComputeIdentity)],
+)
+def test_user_remove(n4js_fresh, user_type):
+    n4js = n4js_fresh
+    user_type_str, user_type_cls = user_type
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        ident = "bill"
+        key = "and ted"
+
+        user = user_type_cls(
+            identifier=ident,
+            hashed_key=hash_key(key),
+        )
+
+        n4js.create_credentialed_entity(user)
+
+        result = runner.invoke(
+            cli,
+            [
+                "user",
+                "remove",
+                "--user-type",
+                user_type_str,
+                "--identifier",
+                ident,
+                "--key",
+                key,
+            ],
+        )
+        assert click_success(result)
+        with pytest.raises(KeyError):
+            n4js.get_credentialed_entity(ident, user_type_cls)
