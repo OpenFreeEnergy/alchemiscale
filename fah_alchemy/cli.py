@@ -351,7 +351,7 @@ def check(url, user, password, dbname):
 
     n4js = get_n4js(settings)
     if n4js.check() is None:
-        print("No inconsistencies found found in database.")
+        print("No inconsistencies found in database.")
 
 
 @database.command()
@@ -372,39 +372,47 @@ def reset(url, user, password, dbname):
     n4js.reset()
 
 
-def _user_type_string_to_cls(user_type: str) -> Type[CredentialedEntity]:
-    if user_type == "user":
-        user_type_cls = CredentialedUserIdentity
-    elif user_type == "compute":
-        user_type_cls = CredentialedComputeIdentity
+def _identity_type_string_to_cls(identity_type: str) -> Type[CredentialedEntity]:
+    if identity_type == "user":
+        identity_type_cls = CredentialedUserIdentity
+    elif identity_type == "compute":
+        identity_type_cls = CredentialedComputeIdentity
     else:
-        raise RunTimeError(f"Unknown user type {user_type}")
+        raise RuntimeError(f"Unknown identity type {identity_type}")
 
-    return user_type_cls
+    return identity_type_cls
 
 
-def user_params(func):
-    user_type = click.option(
-        "--user-type",
+def identity_type(func):
+    identity_type = click.option(
+        "--identity-type",
+        '-t',
         default="user",
         help="User type",
         type=click.Choice(["user", "compute"], case_sensitive=False),
     )
-    identity = click.option("--identifier", help="identifier", required=True, type=str)
-    key = click.option("--key", help="key", required=True, type=str)
-    return user_type(identity(key((func))))
+    return identity_type(func)
+
+
+def identity_params(func):
+    identity = click.option("--identifier", '-i', help="identifier", required=True, type=str)
+    key = click.option("--key", '-k', help="key", required=True, type=str)
+    return identity(key((func)))
 
 
 @cli.group()
-def user():
+def identity():
     ...
 
 
-@user.command()
+@identity.command()
 @db_params
-@user_params
-def add(url, user, password, dbname, user_type, identifier, key):
-    """Add a user to the database."""
+@identity_type
+@identity_params
+def add(url, user, password, dbname, identity_type, identifier, key):
+    """Add a credentialed identity to the database.
+
+    """
     from .storage.statestore import get_n4js
     from .settings import Neo4jStoreSettings
 
@@ -412,42 +420,67 @@ def add(url, user, password, dbname, user_type, identifier, key):
 
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
-    user_type_cls = _user_type_string_to_cls(user_type)
-    user_model = user_type_cls(hashed_key=hash_key(key), identifier=identifier)
-    n4js.create_credentialed_entity(user_model)
+
+    identity_type_cls = _identity_type_string_to_cls(identity_type)
+    identity_model = identity_type_cls(hashed_key=hash_key(key), identifier=identifier)
+    n4js.create_credentialed_entity(identity_model)
 
 
-@user.command()
+@identity.command()
 @db_params
-@user_params
-def remove(url, user, password, dbname, user_type, identifier, key):
-    """Remove a user from the database."""
+@identity_type
+def list(url, user, password, dbname, identity_type):
+    """List all credentialed entities of the given type.
+
+    """
     from .storage.statestore import get_n4js
     from .settings import Neo4jStoreSettings
 
     cli_values = url | user | password | dbname
+
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
-    user_type_cls = _user_type_string_to_cls(user_type)
-    if authenticate(n4js, user_type_cls, identifier, key):
-        n4js.remove_credentialed_identity(identifier, user_type_cls)
+
+    identity_type_cls = _identity_type_string_to_cls(identity_type)
+    click.echo(n4js.list_credentialed_entities(identity_type_cls))
+
+
+@identity.command()
+@db_params
+@identity_type
+@identity_params
+def remove(url, user, password, dbname, identity_type, identifier, key):
+    """Remove a credentialed identity from the database.
+
+    """
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
+
+    cli_values = url | user | password | dbname
+
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
+    n4js = get_n4js(settings)
+
+    identity_type_cls = _identity_type_string_to_cls(identity_type)
+    if authenticate(n4js, identity_type_cls, identifier, key):
+        n4js.remove_credentialed_identity(identifier, identity_type_cls)
     else:
         raise AuthenticationError("Authentication with StateStore failed.")
 
 
-@user.command()
+@identity.command()
 def list_scope():
-    """List all scopes for the given user."""
+    """List all scopes for the given identity."""
     ...
 
 
-@user.command()
+@identity.command()
 def add_scope():
-    """Add a scope for the given user(s)."""
+    """Add a scope for the given identity(s)."""
     ...
 
 
-@user.command()
+@identity.command()
 def remove_scope():
-    """Remove a scope for the given user(s)."""
+    """Remove a scope for the given identity(s)."""
     ...

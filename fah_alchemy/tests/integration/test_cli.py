@@ -258,12 +258,12 @@ def test_database_reset(n4js_fresh, network_tyk2, scope_test):
 
 
 @pytest.mark.parametrize(
-    "user_type",
+    "identity_type",
     [("user", CredentialedUserIdentity), ("compute", CredentialedComputeIdentity)],
 )
-def test_user_add(n4js_fresh, user_type):
+def test_identity_add(n4js_fresh, identity_type):
     n4js = n4js_fresh
-    user_type_str, user_type_cls = user_type
+    identity_type_str, identity_type_cls = identity_type
     env_vars = {
         "NEO4J_URL": n4js.graph.service.uri,
         "NEO4J_USER": "neo4j",
@@ -276,10 +276,10 @@ def test_user_add(n4js_fresh, user_type):
         result = runner.invoke(
             cli,
             [
-                "user",
+                "identity",
                 "add",
-                "--user-type",
-                user_type_str,
+                "--identity-type",
+                identity_type_str,
                 "--identifier",
                 ident,
                 "--key",
@@ -288,17 +288,17 @@ def test_user_add(n4js_fresh, user_type):
         )
         assert click_success(result)
 
-        cred = authenticate(n4js, user_type_cls, ident, key)
+        cred = authenticate(n4js, identity_type_cls, ident, key)
         assert cred
 
 
 @pytest.mark.parametrize(
-    "user_type",
+    "identity_type",
     [("user", CredentialedUserIdentity), ("compute", CredentialedComputeIdentity)],
 )
-def test_user_remove(n4js_fresh, user_type):
+def test_identity_remove(n4js_fresh, identity_type):
     n4js = n4js_fresh
-    user_type_str, user_type_cls = user_type
+    identity_type_str, identity_type_cls = identity_type
     env_vars = {
         "NEO4J_URL": n4js.graph.service.uri,
         "NEO4J_USER": "neo4j",
@@ -309,20 +309,20 @@ def test_user_remove(n4js_fresh, user_type):
         ident = "bill"
         key = "and ted"
 
-        user = user_type_cls(
+        identity = identity_type_cls(
             identifier=ident,
             hashed_key=hash_key(key),
         )
 
-        n4js.create_credentialed_entity(user)
+        n4js.create_credentialed_entity(identity)
 
         result = runner.invoke(
             cli,
             [
-                "user",
+                "identity",
                 "remove",
-                "--user-type",
-                user_type_str,
+                "--identity-type",
+                identity_type_str,
                 "--identifier",
                 ident,
                 "--key",
@@ -332,16 +332,50 @@ def test_user_remove(n4js_fresh, user_type):
         assert click_success(result)
 
         with pytest.raises(KeyError, match="No such object in database"):
-            cred = n4js.get_credentialed_entity(ident, user_type_cls)
+            cred = n4js.get_credentialed_entity(ident, identity_type_cls)
+
+
+def test_identity_list(n4js_fresh):
+    n4js = n4js_fresh
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        identities = ('bill', 'ted', 'napoleon')
+        for ident in identities:
+            key = "a string for a key"
+
+            identity = CredentialedUserIdentity(
+                identifier=ident,
+                hashed_key=hash_key(key),
+            )
+
+            n4js.create_credentialed_entity(identity)
+
+        result = runner.invoke(
+            cli,
+            [
+                "identity",
+                "list",
+                "--identity-type",
+                'user',
+            ],
+        )
+        assert click_success(result)
+        for ident in identities:
+            assert ident in result.output
 
 
 @pytest.mark.parametrize(
-    "user_type",
+    "identity_type",
     [("user", CredentialedUserIdentity), ("compute", CredentialedComputeIdentity)],
 )
-def test_user_remove_bad_cred(n4js_fresh, user_type):
+def test_identity_remove_bad_cred(n4js_fresh, identity_type):
     n4js = n4js_fresh
-    user_type_str, user_type_cls = user_type
+    identity_type_str, identity_type_cls = identity_type
     env_vars = {
         "NEO4J_URL": n4js.graph.service.uri,
         "NEO4J_USER": "neo4j",
@@ -352,20 +386,20 @@ def test_user_remove_bad_cred(n4js_fresh, user_type):
         ident = "bill"
         key = "and ted"
 
-        user = user_type_cls(
+        identity = identity_type_cls(
             identifier=ident,
             hashed_key=hash_key(key),
         )
 
-        n4js.create_credentialed_entity(user)
+        n4js.create_credentialed_entity(identity)
 
         result = runner.invoke(
             cli,
             [
-                "user",
+                "identity",
                 "remove",
-                "--user-type",
-                user_type_str,
+                "--identity-type",
+                identity_type_str,
                 "--identifier",
                 ident,
                 "--key",
