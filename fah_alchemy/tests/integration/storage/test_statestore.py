@@ -428,6 +428,28 @@ class TestNeo4jStore(TestStateStore):
     @pytest.mark.parametrize(
         "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
     )
+    def test_list_credentialed_entities(
+        self, n4js: Neo4jStore, credential_type: CredentialedEntity
+    ):
+
+        identities = ("bill", "ted", "napoleon")
+
+        for ident in identities:
+            user = credential_type(
+                identifier=ident,
+                hashed_key=hash_key("a string for a key"),
+            )
+
+            n4js.create_credentialed_entity(user)
+
+        # get the user back
+        identities_ = n4js.list_credentialed_entities(credential_type)
+
+        assert set(identities) == set(identities_)
+
+    @pytest.mark.parametrize(
+        "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
+    )
     def test_remove_credentialed_entity(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity
     ):
