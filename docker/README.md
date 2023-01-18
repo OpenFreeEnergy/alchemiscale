@@ -1,3 +1,7 @@
+# Deployment via `docker-compose`
+
+Note: this assumes a running Docker daemon and the `docker-compose` plugin.
+
 To deploy (using bash + EC2 host):
 
 1. Make a copy of `.env.template`
