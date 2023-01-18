@@ -12,6 +12,7 @@ author = '"OpenFE and OpenFF developers"'
 
 import sys
 import os
+import alabaster
 sys.path.insert(0, os.path.abspath('.'))
 
 # -- General configuration ---------------------------------------------------
@@ -29,3 +30,5 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 html_theme = 'alabaster'
 html_static_path = ['_static']
+
+
