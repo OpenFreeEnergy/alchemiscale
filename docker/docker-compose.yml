@@ -67,7 +67,6 @@ services:
       - NEO4J_PASS=${NEO4J_PASS:?err}
     depends_on: 
       - neo4j
-      - fah-alchemy-compute-API
       - fah-alchemy-db-init
     command: "api --host 0.0.0.0 --port 1840 --workers 2"
     labels:
