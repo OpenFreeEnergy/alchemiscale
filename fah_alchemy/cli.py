@@ -6,6 +6,14 @@ Command line interface --- :mod:`fah-alchemy.cli`
 
 import click
 import gunicorn.app.base
+from typing import Type
+
+from .security.auth import hash_key, authenticate, AuthenticationError
+from .security.models import (
+    CredentialedEntity,
+    CredentialedUserIdentity,
+    CredentialedComputeIdentity,
+)
 
 
 def envvar_dictify(ctx, param, value):
@@ -343,7 +351,7 @@ def check(url, user, password, dbname):
 
     n4js = get_n4js(settings)
     if n4js.check() is None:
-        print("No inconsistencies found found in database.")
+        print("No inconsistencies found in database.")
 
 
 @database.command()
@@ -364,30 +372,113 @@ def reset(url, user, password, dbname):
     n4js.reset()
 
 
+def _identity_type_string_to_cls(identity_type: str) -> Type[CredentialedEntity]:
+    if identity_type == "user":
+        identity_type_cls = CredentialedUserIdentity
+    elif identity_type == "compute":
+        identity_type_cls = CredentialedComputeIdentity
+    else:
+        raise RuntimeError(f"Unknown identity type {identity_type}")
+
+    return identity_type_cls
+
+
+def identity_type(func):
+    identity_type = click.option(
+        "--identity-type",
+        "-t",
+        default="user",
+        help="User type",
+        type=click.Choice(["user", "compute"], case_sensitive=False),
+    )
+    return identity_type(func)
+
+
+def identifier(func):
+    identifier = click.option(
+        "--identifier", "-i", help="identifier", required=True, type=str
+    )
+    return identifier((func))
+
+
+def key(func):
+    key = click.option("--key", "-k", help="key", required=True, type=str)
+    return key(func)
+
+
 @cli.group()
-def user():
+def identity():
     ...
 
 
-@user.command()
-def add():
-    """Add a user to the database."""
-    ...
+@identity.command()
+@db_params
+@identity_type
+@identifier
+@key
+def add(url, user, password, dbname, identity_type, identifier, key):
+    """Add a credentialed identity to the database."""
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
+
+    cli_values = url | user | password | dbname
+
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
+    n4js = get_n4js(settings)
+
+    identity_type_cls = _identity_type_string_to_cls(identity_type)
+    identity_model = identity_type_cls(hashed_key=hash_key(key), identifier=identifier)
+    n4js.create_credentialed_entity(identity_model)
 
 
-@user.command()
+@identity.command()
+@db_params
+@identity_type
+def list(url, user, password, dbname, identity_type):
+    """List all credentialed entities of the given type."""
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
+
+    cli_values = url | user | password | dbname
+
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
+    n4js = get_n4js(settings)
+
+    identity_type_cls = _identity_type_string_to_cls(identity_type)
+    click.echo(n4js.list_credentialed_entities(identity_type_cls))
+
+
+@identity.command()
+@db_params
+@identity_type
+@identifier
+def remove(url, user, password, dbname, identity_type, identifier):
+    """Remove a credentialed identity from the database."""
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
+
+    cli_values = url | user | password | dbname
+
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
+    n4js = get_n4js(settings)
+
+    identity_type_cls = _identity_type_string_to_cls(identity_type)
+    n4js.remove_credentialed_identity(identifier, identity_type_cls)
+
+
+@identity.command()
 def list_scope():
-    """List all scopes for the given user."""
+    """List all scopes for the given identity."""
     ...
 
 
-@user.command()
+@identity.command()
 def add_scope():
-    """Add a scope for the given user(s)."""
+    """Add a scope for the given identity(s)."""
     ...
 
 
-@user.command()
+@identity.command()
 def remove_scope():
-    """Remove a scope for the given user(s)."""
+    """Remove a scope for the given identity(s)."""
     ...
