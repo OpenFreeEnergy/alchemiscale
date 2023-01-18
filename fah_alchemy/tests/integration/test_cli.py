@@ -344,7 +344,7 @@ def test_identity_list(n4js_fresh):
     }
     runner = CliRunner()
     with set_env_vars(env_vars):
-        identities = ('bill', 'ted', 'napoleon')
+        identities = ("bill", "ted", "napoleon")
         for ident in identities:
             key = "a string for a key"
 
@@ -361,7 +361,7 @@ def test_identity_list(n4js_fresh):
                 "identity",
                 "list",
                 "--identity-type",
-                'user',
+                "user",
             ],
         )
         assert click_success(result)

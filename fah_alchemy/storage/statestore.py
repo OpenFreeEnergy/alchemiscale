@@ -1179,9 +1179,7 @@ class Neo4jStore(FahAlchemyStateStore):
             )
 
     def get_credentialed_entity(self, identifier: str, cls: type[CredentialedEntity]):
-        """Get an existing credentialed entity, such as a user or compute identity.
-
-        """
+        """Get an existing credentialed entity, such as a user or compute identity."""
         q = f"""
         MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
         RETURN n
@@ -1204,9 +1202,7 @@ class Neo4jStore(FahAlchemyStateStore):
         return cls(**dict(list(nodes)[0]))
 
     def list_credentialed_entities(self, cls: type[CredentialedEntity]):
-        """Get an existing credentialed entity, such as a user or compute identity.
-
-        """
+        """Get an existing credentialed entity, such as a user or compute identity."""
         q = f"""
         MATCH (n:{cls.__name__})
         RETURN n
@@ -1219,14 +1215,12 @@ class Neo4jStore(FahAlchemyStateStore):
         for record in res:
             nodes.add(record["n"])
 
-        return [node['identifier'] for node in nodes]
+        return [node["identifier"] for node in nodes]
 
     def remove_credentialed_identity(
         self, identifier: str, cls: type[CredentialedEntity]
     ):
-        """Remove a credentialed entity, such as a user or compute identity.
-
-        """
+        """Remove a credentialed entity, such as a user or compute identity."""
         q = f"""
         MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
         DETACH DELETE n
