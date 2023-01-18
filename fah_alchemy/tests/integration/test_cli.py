@@ -325,8 +325,6 @@ def test_identity_remove(n4js_fresh, identity_type):
                 identity_type_str,
                 "--identifier",
                 ident,
-                "--key",
-                key,
             ],
         )
         assert click_success(result)

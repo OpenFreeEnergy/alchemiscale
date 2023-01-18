@@ -394,12 +394,16 @@ def identity_type(func):
     return identity_type(func)
 
 
-def identity_params(func):
-    identity = click.option(
+def identifier(func):
+    identifier = click.option(
         "--identifier", "-i", help="identifier", required=True, type=str
     )
+    return identifier((func))
+
+
+def key(func):
     key = click.option("--key", "-k", help="key", required=True, type=str)
-    return identity(key((func)))
+    return key(func)
 
 
 @cli.group()
@@ -410,7 +414,8 @@ def identity():
 @identity.command()
 @db_params
 @identity_type
-@identity_params
+@identifier
+@key
 def add(url, user, password, dbname, identity_type, identifier, key):
     """Add a credentialed identity to the database."""
     from .storage.statestore import get_n4js
@@ -446,8 +451,8 @@ def list(url, user, password, dbname, identity_type):
 @identity.command()
 @db_params
 @identity_type
-@identity_params
-def remove(url, user, password, dbname, identity_type, identifier, key):
+@identifier
+def remove(url, user, password, dbname, identity_type, identifier):
     """Remove a credentialed identity from the database."""
     from .storage.statestore import get_n4js
     from .settings import Neo4jStoreSettings
