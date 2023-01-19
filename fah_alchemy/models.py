@@ -37,15 +37,11 @@ class Scope(BaseModel):
 
     @root_validator
     def check_scope_hierarchy(cls, values):
-        org = values.get("org")
-        campaign = values.get("campaign")
-        project = values.get("project")
-        scope_list = [org, campaign, project]
-        if not _hierarchy_valid(scope_list):
+        if not _hierarchy_valid(values):
             raise InvalidScopeError(
                 f"Invalid scope hierarchy: {values}, cannot specify wildcard ('*')"
                 " in a scope component if a less specific scope component is not"
-                " given, unless all components are wildcards (*-*-*)"
+                " given, unless all components are wildcards (*-*-*)."
             )
         return values
 
@@ -85,6 +81,24 @@ class ScopedKey(BaseModel):
     @validator("gufe_key")
     def cast_gufe_key(cls, v):
         return GufeKey(v)
+
+    @staticmethod
+    def _validate_component(v, component):
+        if v is not None and "-" in v:
+            raise ValueError(f"'{component}' must not contain dashes ('-')")
+        return v
+
+    @validator("org")
+    def valid_org(cls, v):
+        return cls._validate_component(v, "org")
+
+    @validator("campaign")
+    def valid_campaign(cls, v):
+        return cls._validate_component(v, "campaign")
+
+    @validator("project")
+    def valid_project(cls, v):
+        return cls._validate_component(v, "project")
 
     class Config:
         frozen = True
@@ -134,23 +148,23 @@ def _find_wildcard(scope_list: list) -> Union[int, None]:
     for i, scope in enumerate(scope_list):
         if _is_wildcard(scope):
             return i
-    else:
-        return None
+    return None
 
 
-def _hierarchy_valid(scope_list: list[Union[str, None]]):
-    """Checks that the scope hierarchy is valid."""
+def _hierarchy_valid(scope_dict: dict[str : Union[str, None]]) -> bool:
+    """Checks that the scope hierarchy is valid from a dictionary of scope components."""
 
-    if len(scope_list) != 3:
-        raise ValueError("Scope hierarchy must be 3 levels deep")
+    org = scope_dict.get("org")
+    campaign = scope_dict.get("campaign")
+    project = scope_dict.get("project")
+    scope_list = [org, campaign, project]
 
-    wildcard = _find_wildcard(scope_list)
-    # no wildcards, so we're good
-    if wildcard is None:
+    first_wildcard_ix = _find_wildcard(scope_list)
+    if first_wildcard_ix is None:  # no wildcards, so we're good
         return True
 
-    sublevels = scope_list[wildcard:]
-    # check if value specified at lower scope than wildcard
+    sublevels = scope_list[first_wildcard_ix:]
+    # now check if any of the sublevels are not wildcards
     if any([not _is_wildcard(i) for i in sublevels]):
         return False
     return True

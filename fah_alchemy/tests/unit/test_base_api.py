@@ -4,8 +4,18 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from fah_alchemy.base.api import validate_scopes, validate_scopes_query
-from fah_alchemy.models import Scope, InvalidScopeError
+from fah_alchemy.models import Scope, ScopedKey, InvalidScopeError
 from fah_alchemy.security.models import Token, TokenData, CredentialedEntity
+
+
+@pytest.mark.parametrize(
+    "scope", (("a-", "a", "a"), ("a", "a-", "a"), ("a", "a", "a-"))
+)
+@pytest.mark.parametrize("scope_cls", [Scope, ScopedKey])
+def test_create_invalid_scope_with_dash(scope_cls, scope):
+    org, campaign, project = scope
+    with pytest.raises(ValidationError):
+        scope_cls(org=org, campaign=campaign, project=project)
 
 
 @pytest.fixture
