@@ -1,9 +1,10 @@
 import pytest
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from fah_alchemy.base.api import validate_scopes, validate_scopes_query
-from fah_alchemy.models import Scope
+from fah_alchemy.models import Scope, InvalidScopeError
 from fah_alchemy.security.models import Token, TokenData, CredentialedEntity
 
 
@@ -49,3 +50,19 @@ def test_validate_scopes_query(tokendata):
 
     assert len(matches) == 3
     assert matches == tokendata.scopes
+
+
+@pytest.mark.parametrize(
+    "scope_tokens", ["*-*-*", "org1-*-*", "org1-campaignA-*", "org1-campaignA-projectI"]
+)
+def test_wildcard_scopes_valid(scope_tokens):
+    scope = Scope.from_str(scope_tokens)
+
+
+@pytest.mark.parametrize(
+    "scope_tokens",
+    ["*-*-projectI", "*-campaignA-*", "*-campaignA-projectI", "org1-*-projectI"],
+)
+def test_wildcard_scopes_invalid(scope_tokens):
+    with pytest.raises(ValidationError):
+        scope = Scope.from_str(scope_tokens)

@@ -3,8 +3,8 @@ Data models --- :mod:`fah-alchemy.models`
 =========================================
 
 """
-from typing import Optional
-from pydantic import BaseModel, Field, validator
+from typing import Optional, Union
+from pydantic import BaseModel, Field, validator, root_validator, ValidationError
 from gufe.tokenization import GufeKey
 
 
@@ -34,6 +34,16 @@ class Scope(BaseModel):
     @validator("project")
     def valid_project(cls, v):
         return cls._validate_component(v, "project")
+
+    @root_validator
+    def check_scope_hierarchy(cls, values):
+        org = values.get("org")
+        campaign = values.get("campaign")
+        project = values.get("project")
+        scope_list = [org, campaign, project]
+        if not _hierarchy_valid(scope_list):
+            raise InvalidScopeError(f"Invalid scope hierarchy: {values}")
+        return values
 
     class Config:
         frozen = True
@@ -102,3 +112,39 @@ class ScopedKey(BaseModel):
     @classmethod
     def from_dict(cls, d):
         return cls(**d)
+
+
+class InvalidScopeError(ValueError):
+    ...
+
+
+def _is_wildcard(char: Union[str, None]) -> bool:
+    if char is None or char == "*":
+        return True
+
+
+def _find_wildcard(scope_list: list) -> Union[int, None]:
+    """Finds the first wildcard in a scope list."""
+    for i, scope in enumerate(scope_list):
+        if scope == "*" or scope == None:
+            return i
+    else:
+        return None
+
+
+def _hierarchy_valid(scope_list: list):
+    """Checks that the scope hierarchy is valid."""
+
+    if len(scope_list) != 3:
+        raise ValueError("Scope hierarchy must be 3 levels deep")
+
+    wildcard = _find_wildcard(scope_list)
+    # no wildcards, so we're good
+    if wildcard is None:
+        return True
+
+    sublevels = scope_list[wildcard:]
+    # check if value specified at lower scope than wildcard
+    if any([not _is_wildcard(i) for i in sublevels]):
+        return False
+    return True
