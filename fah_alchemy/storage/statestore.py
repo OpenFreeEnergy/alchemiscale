@@ -1,3 +1,9 @@
+"""
+Node4js state storage --- :mod:`fah-alchemy.storage.statestore`
+===============================================================
+
+"""
+
 import abc
 from contextlib import contextmanager
 import json
@@ -131,6 +137,15 @@ class Neo4jStore(FahAlchemyStateStore):
         nope = self.graph.run("MATCH (n:NOPE) RETURN n").to_subgraph()
         if nope.identity != 0:
             raise Neo4JStoreError("Identity of NOPE node is not exactly 0")
+
+    def _store_check(self):
+        """Check that the database is in a state that can be used by the API."""
+        try:
+            # just list available functions to see if database is working
+            self.graph.run("SHOW FUNCTIONS YIELD *")
+        except:
+            return False
+        return True
 
     def reset(self):
         """Remove all data from database; undo all components in `initialize`."""
@@ -563,11 +578,22 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         return network
 
-    def query_networks(self, *, name=None, key=None, scope: Optional[Scope] = Scope()):
+    def query_networks(
+        self,
+        *,
+        name=None,
+        key=None,
+        scope: Optional[Scope] = Scope(),
+        return_gufe: bool = False,
+    ):
         """Query for `AlchemicalNetwork`s matching given attributes."""
         additional = {"name": name}
         return self._query(
-            qualname="AlchemicalNetwork", additional=additional, key=key, scope=scope
+            qualname="AlchemicalNetwork",
+            additional=additional,
+            key=key,
+            scope=scope,
+            return_gufe=return_gufe,
         )
 
     def query_transformations(
@@ -594,7 +620,7 @@ class Neo4jStore(FahAlchemyStateStore):
     def get_networks_for_transformation(self):
         ...
 
-    def get_transformation_results(self):
+    def get_transformation_results(self, transformation: ScopedKey):
         ...
 
         # get all tasks directly connected to given transformation
@@ -1148,7 +1174,7 @@ class Neo4jStore(FahAlchemyStateStore):
     ## authentication
 
     def create_credentialed_entity(self, entity: CredentialedEntity):
-        """Create a new credentialed entity, such as a user or compute service.
+        """Create a new credentialed entity, such as a user or compute identity.
 
         If an entity of this type with the same `identifier` already exists,
         then this will overwrite its properties, including credential.
@@ -1162,12 +1188,7 @@ class Neo4jStore(FahAlchemyStateStore):
             )
 
     def get_credentialed_entity(self, identifier: str, cls: type[CredentialedEntity]):
-        """Create a new credentialed entity, such as a user or compute service.
-
-        If an entity of this type with the same `identifier` already exists,
-        then this will overwrite its properties, including credential.
-
-        """
+        """Get an existing credentialed entity, such as a user or compute identity."""
         q = f"""
         MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
         RETURN n
@@ -1188,3 +1209,31 @@ class Neo4jStore(FahAlchemyStateStore):
             )
 
         return cls(**dict(list(nodes)[0]))
+
+    def list_credentialed_entities(self, cls: type[CredentialedEntity]):
+        """Get an existing credentialed entity, such as a user or compute identity."""
+        q = f"""
+        MATCH (n:{cls.__name__})
+        RETURN n
+        """
+
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+        nodes = set()
+        for record in res:
+            nodes.add(record["n"])
+
+        return [node["identifier"] for node in nodes]
+
+    def remove_credentialed_identity(
+        self, identifier: str, cls: type[CredentialedEntity]
+    ):
+        """Remove a credentialed entity, such as a user or compute identity."""
+        q = f"""
+        MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
+        DETACH DELETE n
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)

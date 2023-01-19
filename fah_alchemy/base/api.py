@@ -1,10 +1,12 @@
-"""Reusable components for API services.
+"""
+Reusable components for API services. --- :mod:`fah-alchemy.base.api`
+=====================================================================
 
 """
 
 
 from functools import lru_cache
-from typing import Any, Dict, List
+from typing import Any, Union, Dict, List
 import os
 import json
 
@@ -33,6 +35,99 @@ from ..security.auth import (
 from ..security.models import Token, TokenData, CredentialedEntity
 
 
+def validate_scopes(scope: Union[Scope, str], token: TokenData) -> None:
+    """Verify that token data has specified scopes encoded"""
+    scope = str(scope)
+    # Check if scope among scopes accessible
+    if scope not in token.scopes:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=(
+                f"Targeted scope '{scope}' not in found among scopes for this identity: {token.scopes}."
+            ),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def validate_scopes_query(
+    query_scope: Scope, token: TokenData, as_str: bool = False
+) -> Union[list[Scope], list[str]]:
+    """
+    Create the intersection of queried scopes and token, where query scopes may include 'all' / wildcard.
+    No scopes outside of those included in token will be included in scopes returned.
+
+    If as_str is True, returns a list of str rather than list of Scopes.
+
+    As of now, does not allow wildcard searches against lower hierarchy scope tiers as no official hierarchy is
+    supported. I.e. Organizational access does not automatically confer all Campaign access, and Campaign access
+    does not confer all Project access.
+    """
+
+    # cast token to list of Scope strs
+    accessible_scopes = token.scopes
+    scope_intersection = []
+
+    # iterate through (org, camp, proj) tuple query intersecting against accessible scopes
+    for accessible_scope in accessible_scopes:
+
+        # assume we're adding it
+        acc_scope = Scope.from_str(accessible_scope)
+        add_it_in = True
+
+        for (query_field, target_field) in zip(
+            query_scope.to_tuple(), acc_scope.to_tuple()
+        ):
+
+            # match (query_org == token_org) then (query_campaign == token_campaign) then (query_proj == token_proj)
+            if not (query_field == target_field or query_field is None):
+
+                # if not matched, don't add
+                # don't need to continue loop, unmatched
+                add_it_in = False
+                break
+
+        if add_it_in:
+            scope_intersection.append(acc_scope if not as_str else accessible_scope)
+
+    return scope_intersection
+
+
+class QueryGUFEHandler:
+    """
+    Helper class to provide a single-dispatch like handling of the query
+    operations since they can return list or dict.
+    """
+
+    def __init__(self, return_gufe: bool):
+        self._return_gufe = return_gufe
+        self._results = self.clear_data()
+
+    def clear_data(self):
+        return {} if self.return_gufe else []
+
+    @property
+    def results(self):
+        return self._results
+
+    @property
+    def return_gufe(self):
+        return self._return_gufe
+
+    def update_results(self, data: Union[list, dict]):
+        if self.return_gufe:
+            # handle dict
+            self._results.update(data)
+        else:
+            # handle list
+            self._results.extend(data)
+
+    def format_return(self):
+        if self.return_gufe:
+            return {str(sk): tq.to_dict() for sk, tq in self._results.items()}
+        else:
+            return [str(sk) for sk in self._results]
+
+
 class GufeJSONResponse(JSONResponse):
     media_type = "application/json"
 
@@ -41,7 +136,34 @@ class GufeJSONResponse(JSONResponse):
 
 
 def scope_params(org: str = None, campaign: str = None, project: str = None):
-    return Scope(org=org, campaign=campaign, project=project)
+    try:
+        return Scope(org=org, campaign=campaign, project=project)
+    except (AttributeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Requested Scope cannot be processed as a 3-object tuple of form"
+                f'"X-Y-Z" and cast to string. Alpha numerical values (a-z A-Z 0-9) and "*" are accepted for '
+                f'parameter "scope"'
+            ),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def _check_store_connectivity(n4js: Neo4jStore, s3os: S3ObjectStore) -> dict:
+    """Check if neo4j and s3 object store are reachable"""
+    # check if neo4j database is reachable
+    neo4jreachable = n4js._store_check()
+    # check if s3 object store is reachable
+    s3reachable = s3os._store_check()
+
+    if not neo4jreachable or not s3reachable:
+        detail = f"Attempt to reach services failed, Neo4j reachable: {neo4jreachable}, S3 reachable: {s3reachable}"
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail
+        )
+    else:
+        return True
 
 
 async def get_token_data_depends(

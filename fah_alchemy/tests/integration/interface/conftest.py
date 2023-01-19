@@ -18,6 +18,7 @@ from fah_alchemy.base.api import (
 
 from fah_alchemy.tests.integration.interface.utils import get_user_settings_override
 
+
 ## user api
 
 
@@ -26,40 +27,91 @@ def user_identity():
     return dict(identifier="test-user-identity", key="strong passphrase lol")
 
 
+@pytest.fixture(scope="module")
+def user_identity_prepped(user_identity):
+    return {
+        "identifier": user_identity["identifier"],
+        "hashed_key": hash_key(user_identity["key"]),
+    }
+
+
+@pytest.fixture(scope="module")
+def scopeless_credentialed_user(user_identity_prepped):
+    user = CredentialedUserIdentity(**user_identity_prepped)
+    return user
+
+
+@pytest.fixture(scope="module")
+def single_scoped_credentialed_user(user_identity_prepped, scope_test):
+    identity = copy(user_identity_prepped)
+    identity["identifier"] = identity["identifier"] + "-a"
+
+    user = CredentialedUserIdentity(**identity, scopes=[scope_test])  # Ensure list
+    return user
+
+
+@pytest.fixture(scope="module")
+def fully_scoped_credentialed_user(user_identity_prepped, multiple_scopes):
+    identity = copy(user_identity_prepped)
+    identity["identifier"] = identity["identifier"] + "-b"
+
+    user = CredentialedUserIdentity(**identity, scopes=multiple_scopes)
+    return user
+
+
 @pytest.fixture
-def n4js_preloaded(n4js_fresh, network_tyk2, scope_test, user_identity):
+def n4js_preloaded(
+    n4js_fresh,
+    network_tyk2,
+    multiple_scopes,
+    scopeless_credentialed_user,
+    single_scoped_credentialed_user,
+    fully_scoped_credentialed_user,
+):
     n4js = n4js_fresh
 
-    # set starting contents for many of the tests in this module
-    sk1 = n4js.create_network(network_tyk2, scope_test)
-
-    # create another alchemical network
+    # Spin up a secondary alchemical network
     an2 = AlchemicalNetwork(edges=list(network_tyk2.edges)[:-2], name="incomplete")
-    sk2 = n4js.create_network(an2, scope_test)
 
-    # add a taskqueue for each network
-    n4js.create_taskqueue(sk1)
-    n4js.create_taskqueue(sk2)
+    # set starting contents for many of the tests in this module
+    for single_scope in multiple_scopes:
+        # Create initial network for this scope
+        sk1 = n4js.create_network(network_tyk2, single_scope)
+        # Create another network for this scope
+        sk2 = n4js.create_network(an2, single_scope)
 
-    n4js.create_credentialed_entity(
-        CredentialedUserIdentity(
-            identifier=user_identity["identifier"],
-            hashed_key=hash_key(user_identity["key"]),
-        )
-    )
+        # add a taskqueue for each network
+        n4js.create_taskqueue(sk1)
+        n4js.create_taskqueue(sk2)
+
+    # Create user identities
+    for user in [
+        scopeless_credentialed_user,
+        single_scoped_credentialed_user,
+        fully_scoped_credentialed_user,
+    ]:
+        n4js.create_credentialed_entity(user)
 
     return n4js
 
 
-def get_token_data_depends_override():
-    token_data = TokenData(entity="karen", scopes=["*-*-*"])
-    return token_data
+@pytest.fixture(scope="module")
+def scope_consistent_token_data_depends_override(scope_test):
+    """Make a consistent helper to provide an override to the api.app while still accessing fixtures"""
+
+    def get_token_data_depends_override():
+        token_data = TokenData(entity="karen-interface", scopes=[str(scope_test)])
+        return token_data
+
+    return get_token_data_depends_override
 
 
 @pytest.fixture(scope="module")
-def user_api_no_auth(s3os):
+def user_api_no_auth(s3os, scope_consistent_token_data_depends_override):
     def get_s3os_override():
         return s3os
+
+    get_token_data_depends_override = scope_consistent_token_data_depends_override
 
     overrides = copy(api.app.dependency_overrides)
 

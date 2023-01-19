@@ -10,6 +10,11 @@ from fastapi import FastAPI
 from fah_alchemy.tests.integration.utils import running_service
 
 from fah_alchemy.cli import get_settings_from_options, cli, ApiApplication
+from fah_alchemy.security.auth import hash_key, authenticate, AuthenticationError
+from fah_alchemy.security.models import (
+    CredentialedUserIdentity,
+    CredentialedComputeIdentity,
+)
 from fah_alchemy.settings import Neo4jStoreSettings
 from fah_alchemy.storage.statestore import Neo4JStoreError
 
@@ -250,3 +255,113 @@ def test_database_reset(n4js_fresh, network_tyk2, scope_test):
 
     with pytest.raises(Neo4JStoreError):
         n4js.check()
+
+
+@pytest.mark.parametrize(
+    "identity_type",
+    [("user", CredentialedUserIdentity), ("compute", CredentialedComputeIdentity)],
+)
+def test_identity_add(n4js_fresh, identity_type):
+    n4js = n4js_fresh
+    identity_type_str, identity_type_cls = identity_type
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        ident = "bill"
+        key = "and ted"
+        result = runner.invoke(
+            cli,
+            [
+                "identity",
+                "add",
+                "--identity-type",
+                identity_type_str,
+                "--identifier",
+                ident,
+                "--key",
+                key,
+            ],
+        )
+        assert click_success(result)
+
+        cred = authenticate(n4js, identity_type_cls, ident, key)
+        assert cred
+
+
+@pytest.mark.parametrize(
+    "identity_type",
+    [("user", CredentialedUserIdentity), ("compute", CredentialedComputeIdentity)],
+)
+def test_identity_remove(n4js_fresh, identity_type):
+    n4js = n4js_fresh
+    identity_type_str, identity_type_cls = identity_type
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        ident = "bill"
+        key = "and ted"
+
+        identity = identity_type_cls(
+            identifier=ident,
+            hashed_key=hash_key(key),
+        )
+
+        n4js.create_credentialed_entity(identity)
+
+        result = runner.invoke(
+            cli,
+            [
+                "identity",
+                "remove",
+                "--identity-type",
+                identity_type_str,
+                "--identifier",
+                ident,
+            ],
+        )
+        assert click_success(result)
+
+        with pytest.raises(KeyError, match="No such object in database"):
+            cred = n4js.get_credentialed_entity(ident, identity_type_cls)
+
+
+def test_identity_list(n4js_fresh):
+    n4js = n4js_fresh
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        identities = ("bill", "ted", "napoleon")
+        for ident in identities:
+            key = "a string for a key"
+
+            identity = CredentialedUserIdentity(
+                identifier=ident,
+                hashed_key=hash_key(key),
+            )
+
+            n4js.create_credentialed_entity(identity)
+
+        result = runner.invoke(
+            cli,
+            [
+                "identity",
+                "list",
+                "--identity-type",
+                "user",
+            ],
+        )
+        assert click_success(result)
+        for ident in identities:
+            assert ident in result.output

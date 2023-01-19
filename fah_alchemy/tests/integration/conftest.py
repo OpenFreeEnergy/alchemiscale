@@ -244,7 +244,25 @@ def network_tyk2():
 
 @fixture(scope="session")
 def scope_test():
+    """Primary scope for individual tests"""
     return Scope(org="test_org", campaign="test_campaign", project="test_project")
+
+
+@fixture(scope="session")
+def multiple_scopes(scope_test):
+    scopes = [scope_test]  # Append initial test
+    # Augment
+    scopes.extend(
+        [
+            Scope(
+                org=f"test_org_{x}",
+                campaign=f"test_campaign_{x}",
+                project=f"test_project_{x}",
+            )
+            for x in range(1, 3)
+        ]
+    )
+    return scopes
 
 
 @fixture(scope="session")
@@ -252,12 +270,13 @@ def transformation(network_tyk2):
     return list(network_tyk2.edges)[0]
 
 
-@fixture(scope="function")
-def protocoldagresult(tmpdir, transformation):
+@fixture(scope="session")
+def protocoldagresult(tmpdir_factory, transformation):
+    # Use tempdir_factory instead of tempdir to handle session level scope correctly
     protocoldag = transformation.create()
 
     # execute the task
-    with tmpdir.as_cwd():
+    with tmpdir_factory.mktemp("protocol_dag").as_cwd():
         protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
 
     return protocoldagresult

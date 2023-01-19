@@ -1,3 +1,8 @@
+"""
+Data models --- :mod:`fah-alchemy.models`
+=========================================
+
+"""
 from typing import Optional
 from pydantic import BaseModel, Field, validator
 from gufe.tokenization import GufeKey
@@ -8,20 +13,51 @@ class Scope(BaseModel):
     campaign: Optional[str] = None
     project: Optional[str] = None
 
+    def __init__(self, org=None, campaign=None, project=None):
+        # we add this to allow for arg-based creation, not just keyword-based
+        super().__init__(org=org, campaign=campaign, project=project)
+
+    @staticmethod
+    def _validate_component(v, component):
+        if v is not None and "-" in v:
+            raise ValueError(f"'{component}' must not contain dashes ('-')")
+        return v
+
+    @validator("org")
+    def valid_org(cls, v):
+        return cls._validate_component(v, "org")
+
+    @validator("campaign")
+    def valid_campaign(cls, v):
+        return cls._validate_component(v, "campaign")
+
+    @validator("project")
+    def valid_project(cls, v):
+        return cls._validate_component(v, "project")
+
     class Config:
         frozen = True
 
     def __str__(self):
-        return "-".join([self.org, self.campaign, self.project])
+        triple = (
+            i if i is not None else "*" for i in (self.org, self.campaign, self.project)
+        )
+        return "-".join(triple)
+
+    def to_tuple(self):
+        return (self.org, self.campaign, self.project)
 
     @classmethod
     def from_str(cls, string):
-        org, campaign, project = string.split("-")
+        org, campaign, project = (i if i != "*" else None for i in string.split("-"))
         return cls(org=org, campaign=campaign, project=project)
 
     def overlap(self, other):
         """Return True if this Scope overlaps with another"""
         return NotImplementedError
+
+    def __repr__(self):  # pragma: no cover
+        return f"<Scope('{str(self)}')>"
 
 
 class ScopedKey(BaseModel):
