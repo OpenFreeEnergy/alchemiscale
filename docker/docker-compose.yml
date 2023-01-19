@@ -17,8 +17,9 @@ services:
         aliases:
           - neo4j-network
     # The ports that will be accessible from outside the container - HTTP (7474) and Bolt (7687).
-    expose:
-      - 7687
+    ports:
+      - 7687:7687
+      - 7474:7474
     # Uncomment the volumes to be mounted to make them accessible from outside the container.
     volumes:
       #- ./neo4j.conf:/conf/neo4j.conf # This is the main configuration file.
