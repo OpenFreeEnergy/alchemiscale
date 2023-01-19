@@ -27,3 +27,28 @@ mkdir -p data/server
 ```bash 
 USER_ID=$(id -u) GROUP_ID=$(id -g) docker-compose up -d
 ```
+
+# AWS EC Setup
+
+```bash
+# Install docker
+sudo amazon-linux-extras install docker
+# Start the docker daemon
+sudo service docker start
+# Add ec2-user to docker group
+sudo usermod -a -G docker ec2-user
+# Add ec2-user to docker group (no login/reboot required)
+newgrp docker
+# Have docker daemon start on reboot
+sudo chkconfig docker on
+# Install handy tools
+sudo yum install -y git tmux
+# Install docker compose
+sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+# Fix permissions
+sudo chmod +x /usr/local/bin/docker-compose
+# check docker compose install
+docker-compose version
+# check docker install
+docker info
+```
