@@ -125,18 +125,20 @@ class InvalidScopeError(ValueError):
 def _is_wildcard(char: Union[str, None]) -> bool:
     if char is None or char == "*":
         return True
+    else:
+        return False
 
 
 def _find_wildcard(scope_list: list) -> Union[int, None]:
     """Finds the first wildcard in a scope list."""
     for i, scope in enumerate(scope_list):
-        if scope == "*" or scope == None:
+        if _is_wildcard(scope):
             return i
     else:
         return None
 
 
-def _hierarchy_valid(scope_list: list):
+def _hierarchy_valid(scope_list: list[Union[str, None]]):
     """Checks that the scope hierarchy is valid."""
 
     if len(scope_list) != 3:
