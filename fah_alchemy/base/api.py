@@ -79,7 +79,9 @@ def validate_scopes_query(
         ):
 
             # match (query_org == token_org) then (query_campaign == token_campaign) then (query_proj == token_proj)
-            if not (query_field == target_field or query_field is None):
+            if not (
+                query_field == target_field or query_field is None or query_field == "*"
+            ):
 
                 # if not matched, don't add
                 # don't need to continue loop, unmatched

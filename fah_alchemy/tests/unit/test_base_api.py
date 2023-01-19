@@ -51,12 +51,29 @@ def test_validate_scopes_query(tokendata):
     assert len(matches) == 2
     assert matches == tokendata.scopes[1:]
 
+    matches = validate_scopes_query(
+        Scope("org1", "campaignB", "*"), tokendata, as_str=True
+    )
+
+    assert len(matches) == 2
+    assert matches == tokendata.scopes[1:]
+
     matches = validate_scopes_query(Scope("org1", None, None), tokendata, as_str=True)
 
     assert len(matches) == 3
     assert matches == tokendata.scopes
 
+    matches = validate_scopes_query(Scope("org1", "*", "*"), tokendata, as_str=True)
+
+    assert len(matches) == 3
+    assert matches == tokendata.scopes
+
     matches = validate_scopes_query(Scope(), tokendata, as_str=True)
+
+    assert len(matches) == 3
+    assert matches == tokendata.scopes
+
+    matches = validate_scopes_query(Scope("*", "*", "*"), tokendata, as_str=True)
 
     assert len(matches) == 3
     assert matches == tokendata.scopes
