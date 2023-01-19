@@ -42,7 +42,11 @@ class Scope(BaseModel):
         project = values.get("project")
         scope_list = [org, campaign, project]
         if not _hierarchy_valid(scope_list):
-            raise InvalidScopeError(f"Invalid scope hierarchy: {values}")
+            raise InvalidScopeError(
+                f"Invalid scope hierarchy: {values}, cannot specify wildcard ('*')"
+                " in a scope component if a less specific scope component is not"
+                " given, unless all components are wildcards (*-*-*)"
+            )
         return values
 
     class Config:
