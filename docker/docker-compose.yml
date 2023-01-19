@@ -45,7 +45,7 @@ services:
       - "traefik.enable=false"
 
   fah-alchemy-client-API:
-    image: mmh42/fah-testing:latest
+    image: ${FAH_DOCKER_IMAGE:?err}
     hostname: fahalchemy
     networks:
       - internal
@@ -83,7 +83,7 @@ services:
       start_period: 20s
 
   fah-alchemy-compute-API:
-    image: mmh42/fah-testing:latest
+    image: ${FAH_DOCKER_IMAGE:?err}
     networks:
       - internal
       - db
@@ -122,7 +122,7 @@ services:
       start_period: 20s
 
   fah-alchemy-db-init:
-    image: mmh42/fah-testing:latest
+    image: ${FAH_DOCKER_IMAGE:?err}
     networks:
       - db
     environment:
