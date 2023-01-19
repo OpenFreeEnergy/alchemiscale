@@ -144,7 +144,7 @@ def _is_wildcard(char: Union[str, None]) -> bool:
 
 
 def _find_wildcard(scope_list: list) -> Union[int, None]:
-    """Finds the first wildcard in a scope list."""
+    """Finds the index of the first wildcard in a scope list."""
     for i, scope in enumerate(scope_list):
         if _is_wildcard(scope):
             return i
