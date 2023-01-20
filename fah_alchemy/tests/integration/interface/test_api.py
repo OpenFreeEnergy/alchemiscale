@@ -42,6 +42,10 @@ class TestAPI:
         response = test_client.get("/info")
         assert response.status_code == 200
 
+    def test_check(self, test_client):
+        response = test_client.get("/check")
+        assert response.status_code == 200
+
     ### inputs
 
     def test_create_network(

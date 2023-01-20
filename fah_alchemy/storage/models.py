@@ -1,3 +1,9 @@
+"""
+Data models for storage components --- :mod:`fah-alchemy.storage.models`
+========================================================================
+
+"""
+
 from copy import copy
 from datetime import datetime
 from enum import Enum
@@ -203,6 +209,31 @@ class ObjectStoreRef(GufeTokenizable):
     @classmethod
     def _defaults(cls):
         return super()._defaults()
+
+
+class ProtocolDAGResultRef(ObjectStoreRef):
+    success: bool
+
+    def __init__(
+            self,
+            *,
+            location: str = None,
+            obj_key: GufeKey = None,
+            scope: Scope,
+            success: bool):
+
+        self.location = location
+        self.obj_key = GufeKey(obj_key) if obj_key is not None else None
+        self.scope = scope
+        self.success = success
+
+    def _to_dict(self):
+        return {
+            "location": self.location,
+            "obj_key": str(self.obj_key),
+            "scope": str(self.scope),
+            "success": self.success
+        }
 
 
 class TaskArchive(GufeTokenizable):

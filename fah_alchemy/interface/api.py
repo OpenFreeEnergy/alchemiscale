@@ -1,4 +1,7 @@
-"""FahAlchemyClientAPI
+"""
+FahAlchemyClientAPI --- :mod:`fah-alchemy.interface.api`
+========================================================
+
 
 """
 
@@ -23,6 +26,7 @@ from ..base.api import (
     get_cred_entity,
     validate_scopes,
     validate_scopes_query,
+    _check_store_connectivity,
 )
 from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
@@ -60,7 +64,29 @@ async def info():
     return {"message": "nothing yet"}
 
 
+@router.get("/check")
+async def check(
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+):
+    # check connectivity of storage components
+    # if no exception raised, all good
+    _check_store_connectivity(n4js, s3os)
+
+
 ### inputs
+
+@router.get("/exists/{scoped_key}", response_class=GufeJSONResponse)
+async def check_existence(
+    scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return n4js.check_existence(scoped_key=sk)
 
 
 @router.get("/networks", response_class=GufeJSONResponse)
@@ -273,23 +299,127 @@ def get_transformation_results(
 
 
 @router.get(
-    "/protocoldagresults/{protocoldagresult_scoped_key}",
+    "/transformations/{transformation_scoped_key}/failures",
+    response_class=GufeJSONResponse,
+)
+def get_transformation_failures(
+    transformation_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(transformation_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    # get all ObjectStoreRefs for the given transformation's results
+    refs: List[ObjectStoreRef] = n4js.get_transformation_failures(sk)
+
+    return [i.to_dict() for i in refs]
+
+
+@router.get(
+    "/transformations/{transformation_scoped_key}/results/{protocoldagresult_scoped_key}",
     response_class=GufeJSONResponse,
 )
 def get_protocoldagresult(
     protocoldagresult_scoped_key,
+    transformation_scoped_key,
     *,
     s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
     sk = ScopedKey.from_str(protocoldagresult_scoped_key)
+    tf_sk = ScopedKey.from_str(transformation_scoped_key)
+
     validate_scopes(sk.scope, token)
+    validate_scopes(tf_sk.scope, token)
 
     # we leave each ProtocolDAGResult in string form to avoid
     # deserializing/reserializing here; just passing through to client
-    pdr: str = s3os.pull_protocoldagresult(sk, return_as="json")
+    pdr: str = s3os.pull_protocoldagresult(sk, tf_sk, return_as="json", success=True)
 
     return [pdr]
+
+
+@router.get(
+    "/transformations/{transformation_scoped_key}/failures/{protocoldagresult_scoped_key}",
+    response_class=GufeJSONResponse,
+)
+def get_protocoldagresult_failure(
+    protocoldagresult_scoped_key,
+    transformation_scoped_key,
+    *,
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(protocoldagresult_scoped_key)
+    tf_sk = ScopedKey.from_str(transformation_scoped_key)
+
+    validate_scopes(sk.scope, token)
+    validate_scopes(tf_sk.scope, token)
+
+    # we leave each ProtocolDAGResult in string form to avoid
+    # deserializing/reserializing here; just passing through to client
+    pdr: str = s3os.pull_protocoldagresult(sk, tf_sk, return_as="json", success=False)
+
+    return [pdr]
+
+
+@router.get("/tasks/{task_scoped_key}/transformation", response_class=GufeJSONResponse)
+async def get_task_transformation(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    transformation: ScopedKey
+
+    transformation, protocoldagresult = n4js.get_task_transformation(
+        task=task_scoped_key,
+        return_gufe=False,
+    )
+
+    return str(transformation)
+
+@router.get(
+    "/tasks/{task_scoped_key}/results",
+    response_class=GufeJSONResponse,
+)
+def get_task_results(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    # get all ObjectStoreRefs for the given transformation's results
+    refs: List[ObjectStoreRef] = n4js.get_task_results(sk)
+
+    return [i.to_dict() for i in refs]
+
+
+@router.get(
+    "/tasks/{task_scoped_key}/failures",
+    response_class=GufeJSONResponse,
+)
+def get_task_failures(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    # get all ObjectStoreRefs for the given transformation's results
+    refs: List[ObjectStoreRef] = n4js.get_task_failures(sk)
+
+    return [i.to_dict() for i in refs]
 
 
 ### add router

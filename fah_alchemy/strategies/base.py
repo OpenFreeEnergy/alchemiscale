@@ -1,4 +1,6 @@
-"""Alchemical strategy base class.
+"""
+Alchemical strategy base class. --- :mod:`fah-alchemy.strategies.base`
+======================================================================
 
 """
 

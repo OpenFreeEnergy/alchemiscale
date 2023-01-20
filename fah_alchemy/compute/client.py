@@ -1,4 +1,7 @@
-"""Client for interacting with compute API.
+"""
+Client for interacting with compute API. --- :mod:`fah-alchemy.compute.client`
+==============================================================================
+
 
 """
 
@@ -83,6 +86,6 @@ class FahAlchemyComputeClient(FahAlchemyBaseClient):
             )
         )
 
-        pdr_sk = self._post_resource(f"tasks/{task}/result", data)
+        pdr_sk = self._post_resource(f"tasks/{task}/results", data)
 
         return ScopedKey.from_dict(pdr_sk)

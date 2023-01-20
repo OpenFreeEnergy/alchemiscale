@@ -1,3 +1,9 @@
+"""
+Node4js state storage --- :mod:`fah-alchemy.storage.statestore`
+===============================================================
+
+"""
+
 import abc
 from datetime import datetime
 from contextlib import contextmanager
@@ -22,7 +28,7 @@ from .models import (
     TaskQueue,
     TaskArchive,
     TaskStatusEnum,
-    ObjectStoreRef,
+    ProtocolDAGResultRef,
 )
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
@@ -132,6 +138,15 @@ class Neo4jStore(FahAlchemyStateStore):
         nope = self.graph.run("MATCH (n:NOPE) RETURN n").to_subgraph()
         if nope.identity != 0:
             raise Neo4JStoreError("Identity of NOPE node is not exactly 0")
+
+    def _store_check(self):
+        """Check that the database is in a state that can be used by the API."""
+        try:
+            # just list available functions to see if database is working
+            self.graph.run("SHOW FUNCTIONS YIELD *")
+        except:
+            return False
+        return True
 
     def reset(self):
         """Remove all data from database; undo all components in `initialize`."""
@@ -608,26 +623,26 @@ class Neo4jStore(FahAlchemyStateStore):
 
     def get_transformation_results(
         self, transformation: ScopedKey
-    ) -> List[ObjectStoreRef]:
+    ) -> List[ProtocolDAGResultRef]:
 
-        # get all task result objectstorerefs corresponding to given transformation
-        # returned in order of creation
+        # get all task result protocoldagresultrefs corresponding to given transformation
+        # returned in no particular order
         q = f"""
         MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
-              (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ObjectStoreRef)
+              (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         RETURN res
         """
 
         with self.transaction() as tx:
             res = tx.run(q)
 
-        objectstorerefs = []
+        protocoldagresultrefs = []
         subgraph = Subgraph()
         for record in res:
-            objectstorerefs.append(record["res"])
+            protocoldagresultrefs.append(record["res"])
             subgraph = subgraph | record["res"]
 
-        return list(self._subgraph_to_gufe(objectstorerefs, subgraph).values())
+        return list(self._subgraph_to_gufe(protocoldagresultrefs, subgraph).values())
 
     ## compute
 
@@ -1116,6 +1131,7 @@ class Neo4jStore(FahAlchemyStateStore):
     def get_task_transformation(
         self,
         task: ScopedKey,
+        return_gufe=True,
     ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
         """Get the `Transformation` and `ProtocolDAGResult` to extend from (if
         present) for the given `Task`.
@@ -1143,40 +1159,38 @@ class Neo4jStore(FahAlchemyStateStore):
                 "More than one such object in database; this should not be possible"
             )
 
-        transformation = self.get_gufe(
-            ScopedKey.from_str(transformations[0]["_scoped_key"])
-        )
+        transformation = ScopedKey.from_str(transformations[0]["_scoped_key"])
+
         protocoldagresult = (
-            self.get_gufe(ScopedKey.from_str(results[0]["_scoped_key"]))
+            ScopedKey.from_str(results[0]["_scoped_key"])
             if results[0] is not None
             else None
         )
 
+        if return_gufe:
+            return self.get_gufe(transformation), self.get_gufe(protocoldagresult)
+
         return transformation, protocoldagresult
 
     def set_task_result(
-        self, task: ScopedKey, objectstoreref: ObjectStoreRef
+        self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
     ) -> ScopedKey:
-        """Set an `ObjectStoreRef` pointing to a `ProtocolDAGResult` for the given `Task`.
-
-        Does not store the `ProtocolDAGResult` for the task, but instead gives
-        it an `ObjectStoreRef`.
+        """Set a `ProtocolDAGResultRef` pointing to a `ProtocolDAGResult` for the given `Task`.
 
         """
-
         scope = task.scope
         task_node = self._get_node(task)
 
-        subgraph, objectstoreref_node, scoped_key = self._gufe_to_subgraph(
-            objectstoreref.to_shallow_dict(),
-            labels=["GufeTokenizable", objectstoreref.__class__.__name__],
-            gufe_key=objectstoreref.key,
+        subgraph, protocoldagresultref_node, scoped_key = self._gufe_to_subgraph(
+            protocoldagresultref.to_shallow_dict(),
+            labels=["GufeTokenizable", protocoldagresultref.__class__.__name__],
+            gufe_key=protocoldagresultref.key,
             scope=scope,
         )
 
         subgraph = subgraph | Relationship.type("RESULTS_IN")(
             task_node,
-            objectstoreref_node,
+            protocoldagresultref_node,
             _org=scope.org,
             _campaign=scope.campaign,
             _project=scope.project,
@@ -1186,6 +1200,10 @@ class Neo4jStore(FahAlchemyStateStore):
             tx.merge(subgraph, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
+
+    def get_task_results(
+        self, task: ScopedKey):
+        ...
 
     def set_task_waiting(
         self,
@@ -1229,7 +1247,7 @@ class Neo4jStore(FahAlchemyStateStore):
     ## authentication
 
     def create_credentialed_entity(self, entity: CredentialedEntity):
-        """Create a new credentialed entity, such as a user or compute service.
+        """Create a new credentialed entity, such as a user or compute identity.
 
         If an entity of this type with the same `identifier` already exists,
         then this will overwrite its properties, including credential.
@@ -1243,12 +1261,7 @@ class Neo4jStore(FahAlchemyStateStore):
             )
 
     def get_credentialed_entity(self, identifier: str, cls: type[CredentialedEntity]):
-        """Create a new credentialed entity, such as a user or compute service.
-
-        If an entity of this type with the same `identifier` already exists,
-        then this will overwrite its properties, including credential.
-
-        """
+        """Get an existing credentialed entity, such as a user or compute identity."""
         q = f"""
         MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
         RETURN n
@@ -1269,3 +1282,31 @@ class Neo4jStore(FahAlchemyStateStore):
             )
 
         return cls(**dict(list(nodes)[0]))
+
+    def list_credentialed_entities(self, cls: type[CredentialedEntity]):
+        """Get an existing credentialed entity, such as a user or compute identity."""
+        q = f"""
+        MATCH (n:{cls.__name__})
+        RETURN n
+        """
+
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+        nodes = set()
+        for record in res:
+            nodes.add(record["n"])
+
+        return [node["identifier"] for node in nodes]
+
+    def remove_credentialed_identity(
+        self, identifier: str, cls: type[CredentialedEntity]
+    ):
+        """Remove a credentialed entity, such as a user or compute identity."""
+        q = f"""
+        MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
+        DETACH DELETE n
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)

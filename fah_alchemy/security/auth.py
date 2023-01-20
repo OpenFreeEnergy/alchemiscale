@@ -1,4 +1,6 @@
-"""Security components for APIs.
+"""
+Security components for APIs. --- :mod:`fah-alchemy.security.auth`
+==================================================================
 
 """
 
@@ -30,6 +32,10 @@ def authenticate(db, cls, identifier: str, key: str) -> CredentialedEntity:
     if not pwd_context.verify(key, entity.hashed_key):
         return False
     return entity
+
+
+class AuthenticationError(Exception):
+    ...
 
 
 def hash_key(key):

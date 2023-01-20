@@ -1,4 +1,7 @@
-"""Client for interacting with user-facing API.
+"""
+Client for interacting with user-facing API. --- :mod:`fah-alchemy.interface.client`
+====================================================================================
+
 
 """
 
@@ -12,7 +15,7 @@ from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 from ..base.client import FahAlchemyBaseClient, FahAlchemyBaseClientError
 from ..models import Scope, ScopedKey
-from ..storage.models import Task
+from ..storage.models import Task, ObjectStoreRef
 from ..strategies import Strategy
 
 
@@ -37,6 +40,11 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         """
         if scope.specific():
             return ScopedKey(gufe_key=obj.key, **scope.dict())
+        else:
+            raise ValueError("Scope for a ScopedKey must be specific; it cannot contain wildcards.")
+
+    def check_exists(self, scoped_key: Scope):
+        return self._get_resource("/exists/{scoped_key}", params={}, return_gufe=False)
 
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Submit an AlchemicalNetwork."""
@@ -177,6 +185,16 @@ class FahAlchemyClient(FahAlchemyBaseClient):
 
             return g
 
+    def get_task_transformation(
+        self, task: ScopedKey
+    ) -> ScopedKey:
+
+        transformation, protocoldagresult = self._get_resource(
+            f"tasks/{task}/transformation", {}, return_gufe=False
+        )
+
+        return ScopedKey.from_str(transformation)
+
     def action_tasks(
         self, tasks: List[ScopedKey], network: ScopedKey
     ) -> List[Optional[ScopedKey]]:
@@ -247,31 +265,17 @@ class FahAlchemyClient(FahAlchemyBaseClient):
 
     ### results
 
-    def get_transformation_result(
-        self,
-        transformation: ScopedKey,
-        return_protocoldagresults: bool = False,
-    ) -> Union[ProtocolResult, List[ProtocolDAGResult]]:
-        """Get `ProtocolResult` for the given `Transformation`.
+    def _get_prototocoldagresults(
+            self,
+            objectstorerefs: List[ObjectStoreRef],
+            transformation: ScopedKey,
+            success: bool
+            ):
 
-        Parameters
-        ----------
-        transformation
-            The `ScopedKey` of the `Transformation` to retrieve results for.
-        return_protocoldagresults
-            If `True`, return the raw `ProtocolDAGResult`s instead of returning
-            a processed `ProtocolResult`.
-
-        """
-
-        # first, get the transformation; also confirms it exists
-        tf: Transformation = self.get_transformation(transformation)
-
-        # get all objectstorerefs for the given transformation
-        objectstorerefs = self._get_resource(
-            f"/transformations/{transformation}/results",
-            return_gufe=False,
-        )
+        if success:
+            route = "results"
+        else:
+            route = "failures"
 
         # get each protocoldagresult; could optimize by parallelizing these
         # calls to some extent, or at least using async/await
@@ -285,7 +289,7 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             )
 
             pdr_json = self._get_resource(
-                f"/protocoldagresults/{pdr_sk}",
+                f"/transformations/{transformation}/{route}/{pdr_sk}",
                 return_gufe=False,
             )[0]
 
@@ -294,10 +298,96 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             )
             pdrs.append(pdr)
 
+        return pdrs
+
+
+    def get_transformation_results(
+        self,
+        transformation: ScopedKey,
+        return_protocoldagresults: bool = False,
+    ) -> Union[ProtocolResult, List[ProtocolDAGResult]]:
+        """Get a `ProtocolResult` for the given `Transformation`.
+
+        Parameters
+        ----------
+        transformation
+            The `ScopedKey` of the `Transformation` to retrieve results for.
+        return_protocoldagresults
+            If `True`, return the raw `ProtocolDAGResult`s instead of returning
+            a processed `ProtocolResult`. Only successful `ProtocolDAGResult`s
+            are returned.
+
+        """
+
+        if not return_protocoldagresults:
+            # get the transformation if we intend to return a ProtocolResult
+            tf: Transformation = self.get_transformation_protocol(transformation)
+
+        # get all objectstorerefs for the given transformation
+        objectstorerefs = self._get_resource(
+            f"/transformations/{transformation}/results",
+            return_gufe=False,
+        )
+
+        pdrs = self._get_prototocoldagresults(objectstorerefs, transformation, success=True)
+
         if return_protocoldagresults:
             return pdrs
         else:
-            return tf.protocol.gather(pdrs)
+            return tf.gather(pdrs)
 
-    def get_task_result(self):
-        ...
+    def get_transformation_failures(
+        self,
+        transformation: ScopedKey,
+    ) -> Union[ProtocolResult, List[ProtocolDAGResult]]:
+        """Get failed `ProtocolDAGResult`s for the given `Transformation`.
+
+        Parameters
+        ----------
+        transformation
+            The `ScopedKey` of the `Transformation` to retrieve failures for.
+
+        """
+        # get all objectstorerefs for the given transformation
+        objectstorerefs = self._get_resource(
+            f"/transformations/{transformation}/failures",
+            return_gufe=False,
+        )
+
+        pdrs = self._get_prototocoldagresults(objectstorerefs, transformation, success=False)
+
+        return pdrs
+
+    def get_task_results(self, task: ScopedKey):
+        """Get successful `ProtocolDAGResult`s for the given `Task`.
+
+        """
+        # first, get the transformation; also confirms it exists
+        transformation: ScopedKey = self.get_task_transformation(task)
+
+        # get all objectstorerefs for the given transformation
+        objectstorerefs = self._get_resource(
+            f"/tasks/{task}/results",
+            return_gufe=False,
+        )
+
+        pdrs = self._get_prototocoldagresults(objectstorerefs, transformation, success=True)
+
+        return pdrs
+
+    def get_task_failures(self, task: ScopedKey):
+        """Get failed `ProtocolDAGResult`s for the given `Task`.
+
+        """
+        # first, get the transformation; also confirms it exists
+        transformation: ScopedKey = self.get_task_transformation(task)
+
+        # get all objectstorerefs for the given transformation
+        objectstorerefs = self._get_resource(
+            f"/tasks/{task}/failures",
+            return_gufe=False,
+        )
+
+        pdrs = self._get_prototocoldagresults(objectstorerefs, transformation, success=False)
+
+        return pdrs

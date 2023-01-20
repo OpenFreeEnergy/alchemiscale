@@ -1,3 +1,9 @@
+"""
+Data models for security components --- :mod:`fah-alchemy.security.models`
+==========================================================================
+
+"""
+
 from datetime import datetime, timedelta
 from typing import List, Union, Optional
 

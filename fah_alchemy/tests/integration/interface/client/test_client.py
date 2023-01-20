@@ -44,6 +44,14 @@ class TestClient:
         user_client.get_info()
         assert token != user_client._jwtoken
 
+    def test_api_check(
+        self,
+        n4js_preloaded,
+        user_client: client.FahAlchemyClient,
+        uvicorn_server,
+    ):
+        user_client._api_check()
+
     ### inputs
 
     def test_create_network(

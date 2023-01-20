@@ -1,4 +1,6 @@
-"""FahAlchemyComputeAPI
+"""
+FahAlchemyComputeAPI --- :mod:`fah-alchemy.compute.api`
+=======================================================
 
 """
 
@@ -21,11 +23,12 @@ from ..base.api import (
     get_cred_entity,
     validate_scopes,
     validate_scopes_query,
+    _check_store_connectivity,
 )
 from ..settings import get_base_api_settings, get_compute_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ObjectStoreRef
+from ..storage.models import ProtocolDAGResultRef
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedComputeIdentity
@@ -61,6 +64,16 @@ async def ping():
 @router.get("/info")
 async def info():
     return {"message": "nothing yet"}
+
+
+@router.get("/check")
+async def check(
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+):
+    # check connectivity of storage components
+    # if no exception raised, all good
+    _check_store_connectivity(n4js, s3os)
 
 
 @router.get("/taskqueues")
@@ -142,7 +155,7 @@ async def get_task_transformation(
 
 
 # TODO: support compression performed client-side
-@router.post("/tasks/{task_scoped_key}/result", response_model=ScopedKey)
+@router.post("/tasks/{task_scoped_key}/results", response_model=ScopedKey)
 def set_task_result(
     task_scoped_key,
     *,
@@ -158,18 +171,15 @@ def set_task_result(
     pdr = GufeTokenizable.from_dict(pdr)
 
     # push the ProtocolDAGResult to the object store
-    # TODO: should .ok be interrogated here, and should this influence where
-    # this goes in the object store?
-    objectstoreref: ObjectStoreRef = s3os.push_protocoldagresult(
-        pdr, scope=task_sk.scope
+    protocoldagresultref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
+        pdr, 
+        scope=task_sk.scope,
+        succcess=pdr.ok(),
     )
 
     # push the reference to the state store
-    # TODO: should .ok be interrogated here, and should this influence where
-    # what goes into the ObjectStoreRef?
-    # would allow for easy filtering for only failures or only successes
     result_sk: ScopedKey = n4js.set_task_result(
-        task=task_sk, objectstoreref=objectstoreref
+        task=task_sk, protocoldagresultref=protocoldagresultref
     )
 
     return result_sk

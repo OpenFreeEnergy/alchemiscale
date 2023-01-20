@@ -1,3 +1,9 @@
+"""
+S3 Object storage --- :mod:`fah-alchemy.storage.objectstore`
+============================================================
+
+"""
+
 import os
 import io
 import json
@@ -8,7 +14,7 @@ from gufe.protocols import ProtocolDAGResult
 from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
 from ..models import ScopedKey, Scope
-from .models import ObjectStoreRef
+from .models import ProtocolDAGResultRef
 from ..settings import S3ObjectStoreSettings, get_s3objectstore_settings
 
 
@@ -62,6 +68,19 @@ class S3ObjectStore:
     def check(self):
         """Check consistency of object store."""
         raise NotImplementedError
+
+    def _store_check(self):
+        """Check that the ObjectStore is in a state that can be used by the API."""
+        try:
+            # read check
+            self.resource.meta.client.list_buckets()
+
+            # write check
+            self._store_bytes("_check_test", b"test_check")
+            self._delete("_check_test")
+        except:
+            return False
+        return True
 
     def reset(self):
         """Remove all data from object store.
@@ -157,7 +176,7 @@ class S3ObjectStore:
         key = os.path.join(self.prefix, location)
 
         if self._exists(location):
-            self.resouce.Object(self.bucket, key).delete()
+            self.resource.Object(self.bucket, key).delete()
         else:
             raise S3ObjectStoreError(
                 f"Unable to delete '{str(key)}': Object does not exist"
@@ -180,7 +199,10 @@ class S3ObjectStore:
         return url
 
     def push_protocoldagresult(
-        self, protocoldagresult: ProtocolDAGResult, scope: Scope
+        self,
+        protocoldagresult: ProtocolDAGResult,
+        scope: Scope,
+        success=True
     ):
         """Push given `ProtocolDAGResult` to this `ObjectStore`.
 
@@ -197,11 +219,16 @@ class S3ObjectStore:
             Reference to the serialized `ProtocolDAGResult` in the object store.
 
         """
+        route = "results" if success else "failures"
 
         # build `location` based on gufe key
-        # TODO : add transformation key to path
         location = os.path.join(
-            "protocoldagresult", *scope.to_tuple(), protocoldagresult.key, "obj.json"
+            "protocoldagresult",
+            *scope.to_tuple(),
+            protocoldagresult.transformation,
+            route,
+            protocoldagresult.key,
+            "obj.json"
         )
 
         # TODO: add support for compute client-side compressed protocoldagresults
@@ -210,11 +237,20 @@ class S3ObjectStore:
         ).encode("utf-8")
         response = self._store_bytes(location, pdr_jb)
 
-        return ObjectStoreRef(
-            location=location, obj_key=protocoldagresult.key, scope=scope
+        return ProtocolDAGResultRef(
+            location=location,
+            obj_key=protocoldagresult.key,
+            scope=scope,
+            success=success
         )
 
-    def pull_protocoldagresult(self, protocoldagresult: ScopedKey, return_as="gufe"):
+    def pull_protocoldagresult(
+            self,
+            protocoldagresult: ScopedKey,
+            transformation: ScopedKey,
+            return_as="gufe",
+            success=True,
+            ):
         """Pull the `ProtocolDAGResult` corresponding to the given `ObjectStoreRef`.
 
         Parameters
@@ -231,14 +267,20 @@ class S3ObjectStore:
             The ProtocolDAGResult corresponding to the given `ObjectStoreRef`.
 
         """
+        route = "results" if success else "failures"
+
         # build `location` based on gufe key
-        # TODO : add transformation key to path
         location = os.path.join(
             "protocoldagresult",
             *protocoldagresult.scope.to_tuple(),
+            transformation.gufe_key,
+            route,
             protocoldagresult.gufe_key,
             "obj.json",
         )
+
+        ## TODO: want organization alongside `obj.json` of `ProtocolUnit` gufe_keys
+        ## for any file objects stored in the same space
 
         pdr_j = self._get_bytes(location).decode("utf-8")
 
