@@ -4,7 +4,7 @@ Data models --- :mod:`fah-alchemy.models`
 
 """
 from typing import Optional, Union
-from pydantic import BaseModel, Field, validator, root_validator, ValidationError
+from pydantic import BaseModel, Field, validator, root_validator
 from gufe.tokenization import GufeKey
 
 
@@ -64,8 +64,8 @@ class Scope(BaseModel):
         org, campaign, project = (i if i != "*" else None for i in string.split("-"))
         return cls(org=org, campaign=campaign, project=project)
 
-    def overlap(self, other):
-        """Return True if this Scope overlaps with another"""
+    def superset(self, other):
+        """Return True if this Scope is a superset of another."""
         return NotImplementedError
 
     def __repr__(self):  # pragma: no cover
