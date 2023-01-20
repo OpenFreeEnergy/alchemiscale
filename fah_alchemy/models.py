@@ -17,10 +17,21 @@ class Scope(BaseModel):
         # we add this to allow for arg-based creation, not just keyword-based
         super().__init__(org=org, campaign=campaign, project=project)
 
+    def __str__(self):
+        triple = (
+            i if i is not None else "*" for i in (self.org, self.campaign, self.project)
+        )
+        return "-".join(triple)
+
+    class Config:
+        frozen = True
+
     @staticmethod
     def _validate_component(v, component):
         if v is not None and "-" in v:
             raise ValueError(f"'{component}' must not contain dashes ('-')")
+        elif v == '*':
+            return None
         return v
 
     @validator("org")
@@ -45,15 +56,6 @@ class Scope(BaseModel):
             )
         return values
 
-    class Config:
-        frozen = True
-
-    def __str__(self):
-        triple = (
-            i if i is not None else "*" for i in (self.org, self.campaign, self.project)
-        )
-        return "-".join(triple)
-
     def to_tuple(self):
         return (self.org, self.campaign, self.project)
 
@@ -69,14 +71,26 @@ class Scope(BaseModel):
     def __repr__(self):  # pragma: no cover
         return f"<Scope('{str(self)}')>"
 
+    def specific(self):
+        """Return `True` if this Scope has no unspecified elements."""
+        return all(self.to_tuple())
+
 
 class ScopedKey(BaseModel):
-    """Unique identifier for GufeTokenizables in state store."""
+    """Unique identifier for GufeTokenizables in state store.
+
+    For this object, `org`, `campaign`, and `project` cannot contain wildcards.
+    In other words, the Scope of a ScopedKey must be *specific*.
+
+    """
 
     gufe_key: GufeKey
     org: str
     campaign: str
     project: str
+
+    class Config:
+        frozen = True
 
     @validator("gufe_key")
     def cast_gufe_key(cls, v):
@@ -87,21 +101,6 @@ class ScopedKey(BaseModel):
         if v is not None and "-" in v:
             raise ValueError(f"'{component}' must not contain dashes ('-')")
         return v
-
-    @validator("org")
-    def valid_org(cls, v):
-        return cls._validate_component(v, "org")
-
-    @validator("campaign")
-    def valid_campaign(cls, v):
-        return cls._validate_component(v, "campaign")
-
-    @validator("project")
-    def valid_project(cls, v):
-        return cls._validate_component(v, "project")
-
-    class Config:
-        frozen = True
 
     def __repr__(self):  # pragma: no cover
         return f"<ScopedKey('{str(self)}')>"
@@ -137,10 +136,7 @@ class InvalidScopeError(ValueError):
 
 
 def _is_wildcard(char: Union[str, None]) -> bool:
-    if char is None or char == "*":
-        return True
-    else:
-        return False
+    return (char is None)
 
 
 def _find_wildcard(scope_list: list) -> Union[int, None]:

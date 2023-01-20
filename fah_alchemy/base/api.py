@@ -35,8 +35,12 @@ from ..security.auth import (
 from ..security.models import Token, TokenData, CredentialedEntity
 
 
-def validate_scopes(scope: Union[Scope, str], token: TokenData) -> None:
-    """Verify that token data has specified scopes encoded"""
+def validate_scopes(scope: Scope, token: TokenData) -> None:
+    """Verify that token data has specified Scope encoded."""
+
+    if not isinstance(scope, Scope):
+        raise ValueError("`scope` must be a `Scope` object to ensure validity")
+
     scope = str(scope)
     # Check if scope among scopes accessible
     if scope not in token.scopes:
@@ -53,7 +57,7 @@ def validate_scopes_query(
     query_scope: Scope, token: TokenData, as_str: bool = False
 ) -> Union[list[Scope], list[str]]:
     """
-    Create the intersection of queried scopes and token, where query scopes may include 'all' / wildcard.
+    Create the intersection of queried scopes and token, where query scopes may include 'all' / wildcard (`None`).
     No scopes outside of those included in token will be included in scopes returned.
 
     If as_str is True, returns a list of str rather than list of Scopes.
