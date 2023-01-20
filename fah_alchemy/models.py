@@ -30,7 +30,7 @@ class Scope(BaseModel):
     def _validate_component(v, component):
         if v is not None and "-" in v:
             raise ValueError(f"'{component}' must not contain dashes ('-')")
-        elif v == '*':
+        elif v == "*":
             return None
         return v
 
@@ -136,7 +136,7 @@ class InvalidScopeError(ValueError):
 
 
 def _is_wildcard(char: Union[str, None]) -> bool:
-    return (char is None)
+    return char is None
 
 
 def _find_wildcard(scope_list: list) -> Union[int, None]:
