@@ -3,7 +3,6 @@
 """
 
 from typing import Union, List, Dict, Optional
-import requests
 import json
 
 import networkx as nx

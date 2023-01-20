@@ -8,7 +8,6 @@ from urllib.parse import urljoin
 from functools import wraps
 
 import requests
-from requests.auth import HTTPBasicAuth
 
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 

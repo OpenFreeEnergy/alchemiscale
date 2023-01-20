@@ -199,6 +199,7 @@ class S3ObjectStore:
         """
 
         # build `location` based on gufe key
+        # TODO : add transformation key to path
         location = os.path.join(
             "protocoldagresult", *scope.to_tuple(), protocoldagresult.key, "obj.json"
         )
@@ -231,6 +232,7 @@ class S3ObjectStore:
 
         """
         # build `location` based on gufe key
+        # TODO : add transformation key to path
         location = os.path.join(
             "protocoldagresult",
             *protocoldagresult.scope.to_tuple(),
