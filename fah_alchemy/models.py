@@ -65,7 +65,8 @@ class Scope(BaseModel):
         return cls(org=org, campaign=campaign, project=project)
 
     def is_superset(self, other) -> bool:
-        """Return True if this Scope is a superset of another."""
+        """Return True if this Scope is a superset of another. Check for a superset
+        not a proper superset so that two equal scopes also return `True`."""
         if self.org is not None and self.org != other.org:
             return False
         if self.campaign is not None and self.campaign != other.campaign:
