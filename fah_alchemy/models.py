@@ -64,9 +64,15 @@ class Scope(BaseModel):
         org, campaign, project = (i if i != "*" else None for i in string.split("-"))
         return cls(org=org, campaign=campaign, project=project)
 
-    def superset(self, other):
+    def is_superset(self, other) -> bool:
         """Return True if this Scope is a superset of another."""
-        return NotImplementedError
+        if self.org is not None and self.org != other.org:
+            return False
+        if self.campaign is not None and self.campaign != other.campaign:
+            return False
+        if self.project is not None and self.project != other.project:
+            return False
+        return True
 
     def __repr__(self):  # pragma: no cover
         return f"<Scope('{str(self)}')>"
