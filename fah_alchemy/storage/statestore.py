@@ -1237,3 +1237,39 @@ class Neo4jStore(FahAlchemyStateStore):
 
         with self.transaction() as tx:
             tx.run(q)
+
+    def list_scopes(self, cls: type[CredentialedEntity]) -> List[Scope]:
+        """List all scopes for which the given entity has access."""
+        q = f"""
+        MATCH (n:{cls.__name__})-[:HAS_ACCESS]->(s:Scope)
+        RETURN s
+        """
+
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+        scopes = set()
+        for record in res:
+            scopes.add(record["s"])
+
+        return [Scope(**dict(scope)) for scope in scopes]
+
+    def add_scope(self, cls: type[CredentialedEntity], scope: Scope):
+        """Add a scope to the given entity."""
+        q = f"""
+        MATCH (n:{cls.__name__})
+        MERGE (n)-[:HAS_ACCESS]->(s:Scope {{org: '{scope.org}', campaign: '{scope.campaign}', project: '{scope.project}'}})
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)
+
+    def remove_scope(self, cls: type[CredentialedEntity], scope: Scope):
+        """Remove a scope from the given entity."""
+        q = f"""
+        MATCH (n:{cls.__name__})-[:HAS_ACCESS]->(s:Scope {{org: '{scope.org}', campaign: '{scope.campaign}', project: '{scope.project}'}})
+        DELETE s
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)
