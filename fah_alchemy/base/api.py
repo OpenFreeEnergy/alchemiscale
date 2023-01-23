@@ -41,9 +41,9 @@ def validate_scopes(scope: Scope, token: TokenData) -> None:
     if not isinstance(scope, Scope):
         raise ValueError("`scope` must be a `Scope` object to ensure validity")
 
-    scope = str(scope)
-    # Check if scope among scopes accessible
-    if scope not in token.scopes:
+    scope_in_token = any([Scope.from_str(ts).is_superset(scope) for ts in token.scopes])
+
+    if not scope_in_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(

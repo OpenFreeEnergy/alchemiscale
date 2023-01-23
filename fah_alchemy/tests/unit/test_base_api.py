@@ -32,13 +32,31 @@ def tokendata():
     )
 
 
-def test_validate_scopes(tokendata):
-    assert validate_scopes(Scope("org1", "campaignB", "projectI"), tokendata) is None
-    assert validate_scopes(Scope("org1", "campaignA", "projectI"), tokendata) is None
-    assert validate_scopes(Scope("org1", "campaignB", "projectII"), tokendata) is None
+@pytest.mark.parametrize(
+    "scope_str",
+    [
+        "org1-campaignA-projectI",
+        "org1-campaignB-projectI",
+        "org1-campaignB-projectII",
+        "org2-campaignB-projectII",
+        "org3-campaignA-projectII",
+    ],
+)
+def test_validate_scopes_valid(tokendata, scope_str):
+    assert validate_scopes(Scope.from_str(scope_str), tokendata) is None
 
+
+@pytest.mark.parametrize(
+    "scope_str",
+    [
+        "org4-campaignB-projectII",
+        "org3-campaignB-projectII",
+        "org1-campaignB-projectIII",
+    ],
+)
+def test_validate_scopes_invalid(tokendata, scope_str):
     with pytest.raises(HTTPException):
-        validate_scopes(Scope("org2", "campaignB", "projectII"), tokendata) is None
+        validate_scopes(Scope.from_str(scope_str), tokendata)
 
 
 def test_validate_scopes_query(tokendata):
