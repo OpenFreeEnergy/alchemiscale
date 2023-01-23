@@ -47,9 +47,17 @@ class Scope(BaseModel):
     def to_tuple(self):
         return (self.org, self.campaign, self.project)
 
+    def to_str_tuple(self):
+        return tuple(str(i) if i is not None else "*" for i in self.to_tuple())
+
     @classmethod
     def from_str(cls, string):
         org, campaign, project = (i if i != "*" else None for i in string.split("-"))
+        return cls(org=org, campaign=campaign, project=project)
+
+    @classmethod
+    def from_str_tuple(cls, string_tuple):
+        org, campaign, project = (i if i != "*" else None for i in string_tuple)
         return cls(org=org, campaign=campaign, project=project)
 
     def overlap(self, other):
