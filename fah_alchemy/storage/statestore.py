@@ -1251,11 +1251,14 @@ class Neo4jStore(FahAlchemyStateStore):
         with self.transaction() as tx:
             res = tx.run(q)
 
-        scopes = set()
+        scopes = []
         for record in res:
-            scopes.add(record["s"])
-
-        return [Scope.from_str(scope) for scope in scopes]
+            scope_rec = record["s"]
+            scope = Scope.from_str_tuple(
+                (scope_rec["org"], scope_rec["campaign"], scope_rec["project"])
+            )
+            scopes.append(scope)
+        return scopes
 
     def add_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
         """Add a scope to the given entity."""
