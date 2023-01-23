@@ -1255,14 +1255,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         for record in res:
             scopes.add(record["s"])
 
-        return [Scope(**dict(scope)) for scope in scopes]
+        return [Scope.from_str(scope) for scope in scopes]
 
     def add_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
         """Add a scope to the given entity."""
-        # this
+        org, campaign, project = scope.to_str_tuple()
         q = f"""
         MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
-        MERGE (n)-[:HAS_SCOPE]->(s:Scope {{org: '{scope.org}', campaign: '{scope.campaign}', project: '{scope.project}'}})
+        MERGE (n)-[:HAS_SCOPE]->(s:Scope {{org: '{org}', campaign: '{campaign}', project: '{project}'}})
         """
 
         with self.transaction() as tx:
