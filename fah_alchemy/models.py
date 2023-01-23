@@ -64,7 +64,7 @@ class Scope(BaseModel):
         org, campaign, project = (i if i != "*" else None for i in string.split("-"))
         return cls(org=org, campaign=campaign, project=project)
 
-    def is_superset(self, other: Scope) -> bool:
+    def is_superset(self, other: "Scope") -> bool:
         """Return `True` if this Scope is a superset of another.
 
         Check for a superset (not a proper superset) so that two equal scopes
