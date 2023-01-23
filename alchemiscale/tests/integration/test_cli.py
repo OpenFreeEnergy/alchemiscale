@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from alchemiscale.tests.integration.utils import running_service
 
 from alchemiscale.cli import get_settings_from_options, cli, ApiApplication
+from alchemiscale.models import Scope
 from alchemiscale.security.auth import hash_key, authenticate, AuthenticationError
 from alchemiscale.security.models import (
     CredentialedUserIdentity,
@@ -367,7 +368,7 @@ def test_identity_list(n4js_fresh):
             assert ident in result.output
 
 
-def test_scope_add_list(n4js_fresh):
+def test_scope_list(n4js_fresh):
     n4js = n4js_fresh
     env_vars = {
         "NEO4J_URL": n4js.graph.service.uri,
@@ -376,26 +377,32 @@ def test_scope_add_list(n4js_fresh):
     }
     runner = CliRunner()
     with set_env_vars(env_vars):
-        identities = ("bill", "ted", "napoleon")
-        for ident in identities:
-            key = "a string for a key"
+        ident = "bill"
+        key = "a string for a key"
 
-            identity = CredentialedUserIdentity(
-                identifier=ident,
-                hashed_key=hash_key(key),
-            )
+        identity = CredentialedUserIdentity(
+            identifier=ident,
+            hashed_key=hash_key(key),
+        )
 
-            n4js.create_credentialed_entity(identity)
-
+        n4js.create_credentialed_entity(identity)
+        n4js.add_scope(
+            "bill", CredentialedUserIdentity, Scope.from_str("org1-campaign2-project3")
+        )
+        n4js.add_scope(
+            "bill", CredentialedUserIdentity, Scope.from_str("org4-campaign5-project6")
+        )
         result = runner.invoke(
             cli,
             [
                 "identity",
-                "list",
+                "list-scope",
                 "--identity-type",
                 "user",
+                "--identifier",
+                ident,
             ],
         )
         assert click_success(result)
-        for ident in identities:
-            assert ident in result.output
+        assert "org1-campaign2-project3" in result.output
+        assert "org4-campaign5-project6" in result.output

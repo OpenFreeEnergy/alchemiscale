@@ -484,9 +484,11 @@ def list_scope(url, user, password, dbname, identity_type, identifier):
 
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
-    scopes = n4js.list_scopes(identifier, identity_type)
+
+    identity_type_cls = _identity_type_string_to_cls(identity_type)
+    scopes = n4js.list_scopes(identifier, identity_type_cls)
     for scope in scopes:
-        click.echo(scope.to_str())
+        click.echo(str(scope))
 
 
 @identity.command()
@@ -503,7 +505,8 @@ def add_scope(url, user, password, dbname, identity_type, identifier, scope):
 
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
-    n4js.add_scope(identifier, identity_type)
+    scope = Scope.from_str(scope)
+    n4js.add_scope(identifier, identity_type, scope)
 
 
 @identity.command()
