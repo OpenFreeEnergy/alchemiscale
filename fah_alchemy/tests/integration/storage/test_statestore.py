@@ -469,3 +469,36 @@ class TestNeo4jStore(TestStateStore):
         n4js.remove_credentialed_identity(user.identifier, credential_type)
         with pytest.raises(KeyError):
             n4js.get_credentialed_entity(user.identifier, credential_type)
+
+
+    @pytest.mark.parametrize(
+        "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
+    )
+    @pytest.mark.parametrize('scope_str', ('*-*-*', 'a-*-*','a-b-*','a-b-c'))
+    def test_add_scope(self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str):
+
+        user = credential_type(
+                identifier="bill",
+                hashed_key=hash_key("and ted"),
+            )
+
+        n4js.create_credentialed_entity(user)
+
+        scope = Scope.from_str(scope_str)
+
+        n4js.add_scope(user.identifier, credential_type,  scope)
+
+        q = f"""
+        MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
+        MERGE (n)-[r:HAS_SCOPE]->(s:Scope)
+        RETURN s
+        """
+
+        s = n4js.graph.run(q).to_subgraph()
+        org = s['org']
+        campaign = s['campaign']
+        project = s['project']
+
+        new_scope = Scope.from_str_tuple((org, campaign, project))
+
+        assert new_scope == scope
