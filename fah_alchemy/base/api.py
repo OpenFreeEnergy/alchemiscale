@@ -62,39 +62,12 @@ def validate_scopes_query(
 
     If as_str is True, returns a list of str rather than list of Scopes.
 
-    As of now, does not allow wildcard searches against lower hierarchy scope tiers as no official hierarchy is
-    supported. I.e. Organizational access does not automatically confer all Campaign access, and Campaign access
-    does not confer all Project access.
     """
 
-    # cast token to list of Scope strs
-    accessible_scopes = token.scopes
-    scope_intersection = []
-
-    # iterate through (org, camp, proj) tuple query intersecting against accessible scopes
-    for accessible_scope in accessible_scopes:
-
-        # assume we're adding it
-        acc_scope = Scope.from_str(accessible_scope)
-        add_it_in = True
-
-        for (query_field, target_field) in zip(
-            query_scope.to_tuple(), acc_scope.to_tuple()
-        ):
-
-            # match (query_org == token_org) then (query_campaign == token_campaign) then (query_proj == token_proj)
-            if not (
-                query_field == target_field or query_field is None or query_field == "*"
-            ):
-
-                # if not matched, don't add
-                # don't need to continue loop, unmatched
-                add_it_in = False
-                break
-
-        if add_it_in:
-            scope_intersection.append(acc_scope if not as_str else accessible_scope)
-
+    token_scopes = [Scope.from_str(ts) for ts in token.scopes]
+    scope_intersection = [ts for ts in token_scopes if query_scope.is_superset(ts)]
+    if as_str:
+        scope_intersection = [str(s) for s in scope_intersection]
     return scope_intersection
 
 

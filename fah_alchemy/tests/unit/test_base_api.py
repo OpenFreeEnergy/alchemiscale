@@ -59,41 +59,43 @@ def test_validate_scopes_invalid(tokendata, scope_str):
         validate_scopes(Scope.from_str(scope_str), tokendata)
 
 
-def test_validate_scopes_query(tokendata):
-    matches = validate_scopes_query(Scope("org1", "campaignB", "projectI"), tokendata)
-
-    assert matches == [Scope.from_str(tokendata.scopes[1])]
-
-    matches = validate_scopes_query(
-        Scope("org1", "campaignB", None), tokendata, as_str=True
+@pytest.mark.parametrize(
+    "scope_str,expected",
+    [
+        ("org1-campaignB-projectI", ["org1-campaignB-projectI"]),
+        ("org1-campaignA-projectI", ["org1-campaignA-projectI"]),
+        ("org1-campaignB-*", ["org1-campaignB-projectI", "org1-campaignB-projectII"]),
+        (
+            "org1-*-*",
+            [
+                "org1-campaignA-projectI",
+                "org1-campaignB-projectI",
+                "org1-campaignB-projectII",
+            ],
+        ),
+        (
+            "*-*-*",
+            [
+                "org1-campaignA-projectI",
+                "org1-campaignB-projectI",
+                "org1-campaignB-projectII",
+                "org2-*-*",
+                "org3-campaignA-*",
+            ],
+        ),
+        ("org2-*-*", ["org2-*-*"]),
+        ("org3-campaignA-*", ["org3-campaignA-*"]),
+        ("org1-campaignB-projectIII", []),
+        ("org2-campaignC-*", []),
+        ("org4-*-*", []),
+    ],
+)
+def test_validate_scopes_query(tokendata, scope_str, expected):
+    expected_scopes = [Scope.from_str(s) for s in expected]
+    assert (
+        validate_scopes_query(Scope.from_str(scope_str), tokendata) == expected_scopes
     )
-
-    assert len(matches) == 2
-    assert matches == tokendata.scopes[1:]
-
-    matches = validate_scopes_query(
-        Scope("org1", "campaignB", "*"), tokendata, as_str=True
+    assert (
+        validate_scopes_query(Scope.from_str(scope_str), tokendata, as_str=True)
+        == expected
     )
-
-    assert len(matches) == 2
-    assert matches == tokendata.scopes[1:]
-
-    matches = validate_scopes_query(Scope("org1", None, None), tokendata, as_str=True)
-
-    assert len(matches) == 3
-    assert matches == tokendata.scopes
-
-    matches = validate_scopes_query(Scope("org1", "*", "*"), tokendata, as_str=True)
-
-    assert len(matches) == 3
-    assert matches == tokendata.scopes
-
-    matches = validate_scopes_query(Scope(), tokendata, as_str=True)
-
-    assert len(matches) == 3
-    assert matches == tokendata.scopes
-
-    matches = validate_scopes_query(Scope("*", "*", "*"), tokendata, as_str=True)
-
-    assert len(matches) == 3
-    assert matches == tokendata.scopes
