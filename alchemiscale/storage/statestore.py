@@ -1254,6 +1254,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         scopes = []
         for record in res:
             scope_rec = record["s"]
+            # use Scope.from_str_tuple to ensure that the scope wildcards are
+            # deserialized properly ie that they are converted from "*" to None
             scope = Scope.from_str_tuple(
                 (scope_rec["org"], scope_rec["campaign"], scope_rec["project"])
             )
@@ -1262,6 +1264,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def add_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
         """Add a scope to the given entity."""
+        # use Scope.to_str_tuple to ensure that the scope wildcards are serialized
+        # properly ie that they are converted from None to "*"
         org, campaign, project = scope.to_str_tuple()
         q = f"""
         MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
@@ -1271,11 +1275,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
-    def remove_scope(self, cls: type[CredentialedEntity], scope: Scope):
+    def remove_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
         """Remove a scope from the given entity."""
         q = f"""
-        MATCH (n:{cls.__name__})->(s:Scope {{org: '{scope.org}', campaign: '{scope.campaign}', project: '{scope.project}'}})
-        DELETE s
+        MATCH (n:{cls.__name__})-[:HAS_SCOPE]->(s:Scope {{org: '{scope.org}', campaign: '{scope.campaign}', project: '{scope.project}'}})
+        DETACH DELETE s
         """
 
         with self.transaction() as tx:
