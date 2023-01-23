@@ -365,3 +365,37 @@ def test_identity_list(n4js_fresh):
         assert click_success(result)
         for ident in identities:
             assert ident in result.output
+
+
+def test_scope_add_list(n4js_fresh):
+    n4js = n4js_fresh
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        identities = ("bill", "ted", "napoleon")
+        for ident in identities:
+            key = "a string for a key"
+
+            identity = CredentialedUserIdentity(
+                identifier=ident,
+                hashed_key=hash_key(key),
+            )
+
+            n4js.create_credentialed_entity(identity)
+
+        result = runner.invoke(
+            cli,
+            [
+                "identity",
+                "list",
+                "--identity-type",
+                "user",
+            ],
+        )
+        assert click_success(result)
+        for ident in identities:
+            assert ident in result.output
