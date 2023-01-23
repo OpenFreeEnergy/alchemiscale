@@ -66,20 +66,21 @@ def validate_scopes_query(
     """
 
     token_scopes = [Scope.from_str(ts) for ts in token.scopes]
-    
+
     # if query_scope is a point in scope space ("specific"), then we want to
     # ensure that it sits within the authorized token scopes and return only it;
     # if it doesn't, then we return an empty list
     if query_scope.specific():
-        scope_space = ([query_scope] 
-                       if any([Scope.from_str(ts).is_superset(query_scope) for ts in token.scopes]) 
-                       else [])
+        scope_space = (
+            [query_scope]
+            if any([Scope.from_str(ts).is_superset(query_scope) for ts in token.scopes])
+            else []
+        )
 
     # if query_scope is not specific, we want to return all (and only)
     # authorized token scopes that fall within it
     else:
         scopes_space = [ts for ts in token_scopes if query_scope.is_superset(ts)]
-
 
     if as_str:
         scope_space = [str(s) for s in scope_space]
