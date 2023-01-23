@@ -36,7 +36,8 @@ from ..security.models import Token, TokenData, CredentialedEntity
 
 
 def validate_scopes(scope: Scope, token: TokenData) -> None:
-    """Verify that token data has specified Scope encoded."""
+    """Verify that token data has specified Scope encoded directly or is accessible via
+    scope hierarchy."""
 
     if not isinstance(scope, Scope):
         raise ValueError("`scope` must be a `Scope` object to ensure validity")
@@ -47,7 +48,7 @@ def validate_scopes(scope: Scope, token: TokenData) -> None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(
-                f"Targeted scope '{scope}' not in found among scopes for this identity: {token.scopes}."
+                f"Targeted scope '{scope}' not accessible via scopes for this identity: {token.scopes}."
             ),
             headers={"WWW-Authenticate": "Bearer"},
         )

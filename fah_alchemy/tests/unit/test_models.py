@@ -43,6 +43,8 @@ def test_scope_superset_true(super_scope_str, sub_scope_str):
 
 
 @pytest.mark.parametrize(
+    # test the inverse of test_scope_superset_true() and also cases where 
+    # the scopes have the same level but not the same value
     "sub_scope_str, super_scope_str",
     [
         ("*-*-*", "org1-*-*"),
@@ -56,6 +58,7 @@ def test_scope_superset_true(super_scope_str, sub_scope_str):
         ("org1-campaignB-projectI", "org1-campaignA-*"),
         ("org1-campaignB-*", "org1-campaignA-*"),
         ("org1-campaignA-*", "org2-*-*"),
+        ("org1-*-*", "org2-*-*"),
         ("org1-campaignA-projectI", "org2-*-*"),
     ],
 )
