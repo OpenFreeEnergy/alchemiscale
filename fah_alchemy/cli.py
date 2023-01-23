@@ -8,6 +8,7 @@ import click
 import gunicorn.app.base
 from typing import Type
 
+from .models import Scope
 from .security.auth import hash_key, authenticate, AuthenticationError
 from .security.models import (
     CredentialedEntity,
@@ -506,7 +507,9 @@ def add_scope(url, user, password, dbname, identity_type, identifier, scope):
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
     scope = Scope.from_str(scope)
-    n4js.add_scope(identifier, identity_type, scope)
+    identity_type_cls = _identity_type_string_to_cls(identity_type)
+
+    n4js.add_scope(identifier, identity_type_cls, scope)
 
 
 @identity.command()
@@ -523,4 +526,6 @@ def remove_scope(url, user, password, dbname, identity_type, identifier, scope):
 
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
-    n4js.remove_scope(identifier, identity_type)
+    identity_type_cls = _identity_type_string_to_cls(identity_type)
+
+    n4js.remove_scope(identifier, identity_type_cls, scope)
