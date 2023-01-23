@@ -64,9 +64,13 @@ class Scope(BaseModel):
         org, campaign, project = (i if i != "*" else None for i in string.split("-"))
         return cls(org=org, campaign=campaign, project=project)
 
-    def is_superset(self, other) -> bool:
-        """Return True if this Scope is a superset of another. Check for a superset
-        not a proper superset so that two equal scopes also return `True`."""
+    def is_superset(self, other: Scope) -> bool:
+        """Return `True` if this Scope is a superset of another.
+
+        Check for a superset (not a proper superset) so that two equal scopes
+        also return `True`.
+
+        """
         if self.org is not None and self.org != other.org:
             return False
         if self.campaign is not None and self.campaign != other.campaign:
@@ -102,12 +106,6 @@ class ScopedKey(BaseModel):
     @validator("gufe_key")
     def cast_gufe_key(cls, v):
         return GufeKey(v)
-
-    @staticmethod
-    def _validate_component(v, component):
-        if v is not None and "-" in v:
-            raise ValueError(f"'{component}' must not contain dashes ('-')")
-        return v
 
     def __repr__(self):  # pragma: no cover
         return f"<ScopedKey('{str(self)}')>"
