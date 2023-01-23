@@ -74,7 +74,7 @@ def validate_scopes_query(
     # we also want to return the query_scope if it is a subset of any of the
     # authorized token scopes
     if any([Scope.from_str(ts).is_superset(query_scope) for ts in token.scopes]):
-        scope_space.add(query_scope) 
+        scope_space.add(query_scope)
 
     scope_space = list(scope_space)
 

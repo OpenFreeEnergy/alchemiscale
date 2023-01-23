@@ -86,16 +86,15 @@ def test_validate_scopes_invalid(tokendata, scope_str):
         ("org2-*-*", ["org2-*-*"]),
         ("org3-campaignA-*", ["org3-campaignA-*"]),
         ("org1-campaignB-projectIII", []),
-        ("org2-campaignC-*", ['org2-campaignC-*']),
+        ("org2-campaignC-*", ["org2-campaignC-*"]),
         ("org4-*-*", []),
     ],
 )
 def test_validate_scopes_query(tokendata, scope_str, expected):
     expected_scopes = [Scope.from_str(s) for s in expected]
-    assert (
-        set(validate_scopes_query(Scope.from_str(scope_str), tokendata)) == set(expected_scopes)
+    assert set(validate_scopes_query(Scope.from_str(scope_str), tokendata)) == set(
+        expected_scopes
     )
-    assert (
-        set(validate_scopes_query(Scope.from_str(scope_str), tokendata, as_str=True))
-        == set(expected)
-    )
+    assert set(
+        validate_scopes_query(Scope.from_str(scope_str), tokendata, as_str=True)
+    ) == set(expected)
