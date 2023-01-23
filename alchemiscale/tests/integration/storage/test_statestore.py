@@ -470,23 +470,47 @@ class TestNeo4jStore(TestStateStore):
         with pytest.raises(KeyError):
             n4js.get_credentialed_entity(user.identifier, credential_type)
 
-
     @pytest.mark.parametrize(
         "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
     )
-    @pytest.mark.parametrize('scope_str', ('*-*-*', 'a-*-*','a-b-*','a-b-c'))
-    def test_add_scope(self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str):
+    @pytest.mark.parametrize("scope_str", ("*-*-*", "a-*-*", "a-b-*", "a-b-c"))
+    def test_list_scope(
+        self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str
+    ):
 
         user = credential_type(
-                identifier="bill",
-                hashed_key=hash_key("and ted"),
-            )
+            identifier="bill",
+            hashed_key=hash_key("and ted"),
+        )
 
         n4js.create_credentialed_entity(user)
 
         scope = Scope.from_str(scope_str)
 
-        n4js.add_scope(user.identifier, credential_type,  scope)
+        n4js.add_scope(user.identifier, credential_type, scope)
+
+        scopes = n4js.list_scopes(user.identifier, credential_type)
+
+        assert scope in scopes
+
+    @pytest.mark.parametrize(
+        "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
+    )
+    @pytest.mark.parametrize("scope_str", ("*-*-*", "a-*-*", "a-b-*", "a-b-c"))
+    def test_add_scope(
+        self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str
+    ):
+
+        user = credential_type(
+            identifier="bill",
+            hashed_key=hash_key("and ted"),
+        )
+
+        n4js.create_credentialed_entity(user)
+
+        scope = Scope.from_str(scope_str)
+
+        n4js.add_scope(user.identifier, credential_type, scope)
 
         q = f"""
         MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
@@ -495,9 +519,9 @@ class TestNeo4jStore(TestStateStore):
         """
 
         s = n4js.graph.run(q).to_subgraph()
-        org = s['org']
-        campaign = s['campaign']
-        project = s['project']
+        org = s["org"]
+        campaign = s["campaign"]
+        project = s["project"]
 
         new_scope = Scope.from_str_tuple((org, campaign, project))
 
