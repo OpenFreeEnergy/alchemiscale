@@ -444,3 +444,47 @@ def test_scope_add(n4js_fresh):
         scopes = n4js.list_scopes("bill", CredentialedUserIdentity)
         assert len(scopes) == 1
         assert scopes[0] == Scope.from_str("org1-campaign2-project3")
+
+
+def test_scope_remove(n4js_fresh):
+    n4js = n4js_fresh
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        ident = "bill"
+        key = "a string for a key"
+
+        identity = CredentialedUserIdentity(
+            identifier=ident,
+            hashed_key=hash_key(key),
+        )
+        n4js.create_credentialed_entity(identity)
+
+        n4js.add_scope(
+            ident, CredentialedUserIdentity, Scope.from_str("org1-campaign2-project3")
+        )
+        n4js.add_scope(
+            ident, CredentialedUserIdentity, Scope.from_str("org4-campaign5-project6")
+        )
+
+        result = runner.invoke(
+            cli,
+            [
+                "identity",
+                "remove-scope",
+                "--identity-type",
+                "user",
+                "--identifier",
+                ident,
+                "--scope",
+                "org1-campaign2-project3",
+            ],
+        )
+        assert click_success(result)
+        scopes = n4js.list_scopes("bill", CredentialedUserIdentity)
+        scope_strs = [str(s) for s in scopes]
+        assert "org1-campaign2-project3" not in scope_strs
