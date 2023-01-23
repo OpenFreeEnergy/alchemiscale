@@ -1238,10 +1238,13 @@ class Neo4jStore(FahAlchemyStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
-    def list_scopes(self, cls: type[CredentialedEntity]) -> List[Scope]:
+    def list_scopes(
+        self, identifier: str, cls: type[CredentialedEntity]
+    ) -> List[Scope]:
         """List all scopes for which the given entity has access."""
         q = f"""
-        MATCH (n:{cls.__name__})-[:HAS_ACCESS]->(s:Scope)
+        MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
+        MERGE (n)-[r:HAS_SCOPE]->(s:Scope)
         RETURN s
         """
 
@@ -1254,11 +1257,12 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return [Scope(**dict(scope)) for scope in scopes]
 
-    def add_scope(self, cls: type[CredentialedEntity], scope: Scope):
+    def add_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
         """Add a scope to the given entity."""
+        # this
         q = f"""
-        MATCH (n:{cls.__name__})
-        MERGE (n)-[:HAS_ACCESS]->(s:Scope {{org: '{scope.org}', campaign: '{scope.campaign}', project: '{scope.project}'}})
+        MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
+        MERGE (n)-[:HAS_SCOPE]->(s:Scope {{org: '{scope.org}', campaign: '{scope.campaign}', project: '{scope.project}'}})
         """
 
         with self.transaction() as tx:
@@ -1267,7 +1271,7 @@ class Neo4jStore(FahAlchemyStateStore):
     def remove_scope(self, cls: type[CredentialedEntity], scope: Scope):
         """Remove a scope from the given entity."""
         q = f"""
-        MATCH (n:{cls.__name__})-[:HAS_ACCESS]->(s:Scope {{org: '{scope.org}', campaign: '{scope.campaign}', project: '{scope.project}'}})
+        MATCH (n:{cls.__name__})->(s:Scope {{org: '{scope.org}', campaign: '{scope.campaign}', project: '{scope.project}'}})
         DELETE s
         """
 
