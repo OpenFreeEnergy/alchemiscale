@@ -56,3 +56,17 @@ docker-compose version
 # check docker install
 docker info
 ```
+
+# AWS EC2 Admin
+
+## Example Admin Tasks
+
+* Adding a new user to the database:
+`docker run --rm -it --network docker_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> ghcr.io/openforcefield/fah-alchemy:feat-add_docker_compose identity add -t user -i testuser -k some-password`
+
+The import bits here are:
+1. `--network docker_db`
+We need to make sure the docker container we are using can talk to the database container
+2. `-e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD>`
+We need to pass in these environmental so that the container can talk to the database. These should match the values set in `.env`
+
