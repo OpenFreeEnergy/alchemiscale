@@ -35,15 +35,20 @@ from ..security.auth import (
 from ..security.models import Token, TokenData, CredentialedEntity
 
 
-def validate_scopes(scope: Union[Scope, str], token: TokenData) -> None:
-    """Verify that token data has specified scopes encoded"""
-    scope = str(scope)
-    # Check if scope among scopes accessible
-    if scope not in token.scopes:
+def validate_scopes(scope: Scope, token: TokenData) -> None:
+    """Verify that token data has specified Scope encoded directly or is accessible via
+    scope hierarchy."""
+
+    if not isinstance(scope, Scope):
+        raise ValueError("`scope` must be a `Scope` object to ensure validity")
+
+    scope_in_token = any([Scope.from_str(ts).is_superset(scope) for ts in token.scopes])
+
+    if not scope_in_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(
-                f"Targeted scope '{scope}' not in found among scopes for this identity: {token.scopes}."
+                f"Targeted scope '{scope}' not accessible via scopes for this identity: {token.scopes}."
             ),
             headers={"WWW-Authenticate": "Bearer"},
         )
@@ -53,43 +58,29 @@ def validate_scopes_query(
     query_scope: Scope, token: TokenData, as_str: bool = False
 ) -> Union[list[Scope], list[str]]:
     """
-    Create the intersection of queried scopes and token, where query scopes may include 'all' / wildcard.
+    Create the intersection of queried scopes and token, where query scopes may include 'all' / wildcard (`None`).
     No scopes outside of those included in token will be included in scopes returned.
 
     If as_str is True, returns a list of str rather than list of Scopes.
 
-    As of now, does not allow wildcard searches against lower hierarchy scope tiers as no official hierarchy is
-    supported. I.e. Organizational access does not automatically confer all Campaign access, and Campaign access
-    does not confer all Project access.
     """
 
-    # cast token to list of Scope strs
-    accessible_scopes = token.scopes
-    scope_intersection = []
+    token_scopes = [Scope.from_str(ts) for ts in token.scopes]
 
-    # iterate through (org, camp, proj) tuple query intersecting against accessible scopes
-    for accessible_scope in accessible_scopes:
+    # we want to return all (and only) authorized token scopes that fall within
+    # the query_scope
+    scope_space = {ts for ts in token_scopes if query_scope.is_superset(ts)}
 
-        # assume we're adding it
-        acc_scope = Scope.from_str(accessible_scope)
-        add_it_in = True
+    # we also want to return the query_scope if it is a subset of any of the
+    # authorized token scopes
+    if any([Scope.from_str(ts).is_superset(query_scope) for ts in token.scopes]):
+        scope_space.add(query_scope)
 
-        for (query_field, target_field) in zip(
-            query_scope.to_tuple(), acc_scope.to_tuple()
-        ):
+    scope_space = list(scope_space)
 
-            # match (query_org == token_org) then (query_campaign == token_campaign) then (query_proj == token_proj)
-            if not (query_field == target_field or query_field is None):
-
-                # if not matched, don't add
-                # don't need to continue loop, unmatched
-                add_it_in = False
-                break
-
-        if add_it_in:
-            scope_intersection.append(acc_scope if not as_str else accessible_scope)
-
-    return scope_intersection
+    if as_str:
+        scope_space = [str(s) for s in scope_space]
+    return scope_space
 
 
 class QueryGUFEHandler:
