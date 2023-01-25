@@ -11,7 +11,8 @@ name: Create and publish a Docker image
 
 on:
   push:
-    branches: ['release', 'feat/add_docker_build']
+    branches: ['release', 'feat/add_docker_compose']
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
