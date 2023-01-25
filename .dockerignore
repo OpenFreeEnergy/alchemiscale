@@ -1,0 +1,12 @@
+# Ignore everything
+*
+
+# Only allow
+!devtools/conda-envs/docker.yml
+!fah_alchemy/*
+!LICENSE 
+!MANIFEST.in 
+!README.md 
+!setup.cfg 
+!setup.py 
+!versioneer.py

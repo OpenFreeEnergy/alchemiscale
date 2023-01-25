@@ -30,6 +30,7 @@ dependencies:
   ## api(s)
   - fastapi
   - uvicorn
+  - gunicorn
   - python-jose
   - passlib
   - bcrypt
@@ -37,6 +38,7 @@ dependencies:
   - starlette
   - httpx
   - cryptography
+  - requests
 
   ## cli
   - click
