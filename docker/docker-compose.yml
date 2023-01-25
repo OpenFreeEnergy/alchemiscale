@@ -47,7 +47,7 @@ services:
 
   alchemiscale-client-API:
     image: ${ALCHEMISCALE_DOCKER_IMAGE:?err}
-    hostname: client
+    hostname: api
     networks:
       - internal
       - db
@@ -72,7 +72,7 @@ services:
     command: "api --host 0.0.0.0 --port 1840 --workers 2"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.alchemiscale-client-API.rule=Host(`client.${HOST_DOMAIN:?err}`)"
+      - "traefik.http.routers.alchemiscale-client-API.rule=Host(`api.${HOST_DOMAIN:?err}`)"
       - "traefik.http.routers.alchemiscale-client-API.entrypoints=websecure"
       - "traefik.http.routers.alchemiscale-client-API.tls.certresolver=myresolver"
       - "traefik.docker.network=docker_internal"
