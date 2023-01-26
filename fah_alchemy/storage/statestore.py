@@ -1279,9 +1279,10 @@ class Neo4jStore(FahAlchemyStateStore):
     ):
         """Remove a scope from the given entity."""
         scope_str = str(scope)
+        # use a list comprehension to remove the scope from the list
         q = f"""
         MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
-        SET n.scopes = filter(scope IN n.scopes WHERE scope <> {scope_str})
+        SET n.scopes = [scope IN n.scopes WHERE scope <> '{scope_str}']
         """
 
         with self.transaction() as tx:
