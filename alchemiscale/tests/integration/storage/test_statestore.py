@@ -514,18 +514,43 @@ class TestNeo4jStore(TestStateStore):
 
         q = f"""
         MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
-        MERGE (n)-[r:HAS_SCOPE]->(s:Scope)
-        RETURN s
+        RETURN n
         """
-
-        s = n4js.graph.run(q).to_subgraph()
-        org = s["org"]
-        campaign = s["campaign"]
-        project = s["project"]
-
-        new_scope = Scope.from_str_tuple((org, campaign, project))
-
+        scopes_qr = n4js.graph.run(q).to_subgraph()
+        scopes = scopes_qr.get("scopes")
+        assert len(scopes) == 1
+        new_scope = Scope.from_str(scopes[0])
         assert new_scope == scope
+
+    @pytest.mark.parametrize(
+        "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
+    )
+    def test_add_scope_duplicate(
+        self, n4js: Neo4jStore, credential_type: CredentialedEntity
+    ):
+
+        user = credential_type(
+            identifier="bill",
+            hashed_key=hash_key("and ted"),
+        )
+
+        n4js.create_credentialed_entity(user)
+
+        scope1 = Scope.from_str("*-*-*")
+        scope2 = Scope.from_str("*-*-*")
+
+        n4js.add_scope(user.identifier, credential_type, scope1)
+        n4js.add_scope(user.identifier, credential_type, scope2)
+
+        q = f"""
+        MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
+        RETURN n
+        """
+        scopes_qr = n4js.graph.run(q).to_subgraph()
+        scopes = scopes_qr.get("scopes")
+        assert len(scopes) == 1
+        new_scope = Scope.from_str(scopes[0])
+        assert new_scope == scope1
 
     @pytest.mark.parametrize(
         "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
