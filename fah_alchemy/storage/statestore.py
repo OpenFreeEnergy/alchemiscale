@@ -1241,11 +1241,11 @@ class Neo4jStore(FahAlchemyStateStore):
     def list_scopes(
         self, identifier: str, cls: type[CredentialedEntity]
     ) -> List[Scope]:
+        # get the scope properties for the given entity
         """List all scopes for which the given entity has access."""
         q = f"""
         MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
-        MERGE (n)-[r:HAS_SCOPE]->(s:Scope)
-        RETURN s
+        RETURN n.scopes as s
         """
 
         with self.transaction() as tx:
@@ -1256,7 +1256,7 @@ class Neo4jStore(FahAlchemyStateStore):
             scope_rec = record["s"]
             # use Scope.from_str_tuple to ensure that the scope wildcards are
             # deserialized properly ie that they are converted from "*" to None
-            scope = Scope.from_str_tuple(
+            scope = Scope.from_str(
                 (scope_rec["org"], scope_rec["campaign"], scope_rec["project"])
             )
             scopes.append(scope)
@@ -1264,22 +1264,27 @@ class Neo4jStore(FahAlchemyStateStore):
 
     def add_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
         """Add a scope to the given entity."""
-        # use Scope.to_str_tuple to ensure that the scope wildcards are serialized
-        # properly ie that they are converted from None to "*"
-        org, campaign, project = scope.to_str_tuple()
+        scope_str = str(scope)
+        # n.scopes is always initialized by the pydantic model so no need to check
+        # for existence, however, we do need to check that the scope is not already
+        # present
         q = f"""
         MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
-        MERGE (n)-[:HAS_SCOPE]->(s:Scope {{org: '{org}', campaign: '{campaign}', project: '{project}'}})
+        WHERE NONE(x IN n.scopes WHERE x = '{scope_str}')
+        SET n.scopes = n.scopes + '{scope_str}'
         """
 
         with self.transaction() as tx:
             tx.run(q)
 
-    def remove_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
+    def remove_scope(
+        self, identifier: str, cls: type[CredentialedEntity], scope: Scope
+    ):
         """Remove a scope from the given entity."""
+        scope_str = str(scope)
         q = f"""
-        MATCH (n:{cls.__name__})-[:HAS_SCOPE]->(s:Scope {{org: '{scope.org}', campaign: '{scope.campaign}', project: '{scope.project}'}})
-        DETACH DELETE s
+        MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
+        SET n.scopes = filter(scope IN n.scopes WHERE scope <> {scope_str})
         """
 
         with self.transaction() as tx:
