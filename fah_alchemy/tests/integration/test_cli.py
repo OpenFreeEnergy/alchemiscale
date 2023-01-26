@@ -488,3 +488,4 @@ def test_scope_remove(n4js_fresh):
         scopes = n4js.list_scopes("bill", CredentialedUserIdentity)
         scope_strs = [str(s) for s in scopes]
         assert "org1-campaign2-project3" not in scope_strs
+        assert "org4-campaign5-project6" in scope_strs
