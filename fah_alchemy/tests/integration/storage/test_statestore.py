@@ -473,9 +473,14 @@ class TestNeo4jStore(TestStateStore):
     @pytest.mark.parametrize(
         "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
     )
-    @pytest.mark.parametrize("scope_str", ("*-*-*", "a-*-*", "a-b-*", "a-b-c"))
+    @pytest.mark.parametrize(
+        "scope_strs", (["*-*-*"], ["a-*-*"], ["a-b-*"], ["a-b-c", "a-b-d"])
+    )
     def test_list_scope(
-        self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str
+        self,
+        n4js: Neo4jStore,
+        credential_type: CredentialedEntity,
+        scope_strs: List[str],
     ):
 
         user = credential_type(
@@ -484,14 +489,14 @@ class TestNeo4jStore(TestStateStore):
         )
 
         n4js.create_credentialed_entity(user)
-
-        scope = Scope.from_str(scope_str)
-
-        n4js.add_scope(user.identifier, credential_type, scope)
+        ref_scopes = []
+        for scope_str in scope_strs:
+            scope = Scope.from_str(scope_str)
+            ref_scopes.append(scope)
+            n4js.add_scope(user.identifier, credential_type, scope)
 
         scopes = n4js.list_scopes(user.identifier, credential_type)
-
-        assert scope in scopes
+        assert set(scopes) == set(ref_scopes)
 
     @pytest.mark.parametrize(
         "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]

@@ -1254,12 +1254,9 @@ class Neo4jStore(FahAlchemyStateStore):
         scopes = []
         for record in res:
             scope_rec = record["s"]
-            # use Scope.from_str_tuple to ensure that the scope wildcards are
-            # deserialized properly ie that they are converted from "*" to None
-            scope = Scope.from_str(
-                (scope_rec["org"], scope_rec["campaign"], scope_rec["project"])
-            )
-            scopes.append(scope)
+            for scope_str in scope_rec:
+                scope = Scope.from_str(scope_str)
+                scopes.append(scope)
         return scopes
 
     def add_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
