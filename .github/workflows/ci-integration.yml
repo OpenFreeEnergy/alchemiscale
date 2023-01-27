@@ -41,7 +41,7 @@ jobs:
             python-version: ${{ matrix.python-version }}
             miniforge-variant: Mambaforge
             environment-file: devtools/conda-envs/test.yml
-            activate-environment: fah-alchemy-test
+            activate-environment: alchemiscale-test
 
       - name: Decrypt OpenEye license
         if: ${{ !github.event.pull_request.head.repo.fork }}
@@ -61,10 +61,10 @@ jobs:
 
       - name: "Run tests"
         run: |
-          pytest -v --cov=fah_alchemy --cov-report=xml fah_alchemy/tests
+          pytest -v --cov=alchemiscale --cov-report=xml alchemiscale/tests
 
       - name: codecov
-        if: ${{ github.repository == 'openforcefield/fah-alchemy'
+        if: ${{ github.repository == 'openforcefield/alchemiscale'
                 && github.event != 'schedule' }}
         uses: codecov/codecov-action@v2
         with:

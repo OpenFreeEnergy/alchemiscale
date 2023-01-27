@@ -108,7 +108,7 @@ def db_params(func):
 
 
 def generate_secret_key(ctx, param, value):
-    from fah_alchemy.security.auth import generate_secret_key
+    from alchemiscale.security.auth import generate_secret_key
 
     return {param.envvar: generate_secret_key()}
 
@@ -225,7 +225,7 @@ def api(
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  # JWT
     access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
 ):  # fmt: skip
-    from fah_alchemy.interface.api import app
+    from alchemiscale.interface.api import app
     from .settings import APISettings, get_base_api_settings
     from .security.auth import generate_secret_key
 
@@ -276,7 +276,7 @@ def api(
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  #JWT
     access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
 ):  # fmt: skip
-    from fah_alchemy.compute.api import app
+    from alchemiscale.compute.api import app
     from .settings import ComputeAPISettings, get_base_api_settings
     from .security.auth import generate_secret_key
 

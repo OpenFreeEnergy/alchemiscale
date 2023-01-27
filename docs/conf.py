@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "fah-alchemy"
+project = "alchemiscale"
 copyright = '2022, "OpenFE and OpenFF developers"'
 author = '"OpenFE and OpenFF developers"'
 

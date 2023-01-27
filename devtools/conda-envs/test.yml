@@ -1,4 +1,4 @@
-name: fah-alchemy-test
+name: alchemiscale-test
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
@@ -17,7 +17,7 @@ dependencies:
   - openeye-toolkits
   - typing-extensions
 
-  # fah-alchemy dependencies
+  # alchemiscale dependencies
   ## state store
   - neo4j-python-driver
   - py2neo
