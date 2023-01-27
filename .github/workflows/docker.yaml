@@ -11,7 +11,7 @@ name: Create and publish a Docker image
 
 on:
   push:
-    branches: ['release', 'feat/add_docker_compose', 'rename_package_internal']
+    branches: ['release', 'feat/add_docker_compose', 'rename_package_internals']
   workflow_dispatch:
 
 env:
