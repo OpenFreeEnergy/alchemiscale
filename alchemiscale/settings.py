@@ -1,5 +1,5 @@
 """
-Settings --- :mod:`fah-alchemy.settings`
+Settings --- :mod:`alchemiscale.settings`
 ========================================
 
 """

@@ -1,5 +1,5 @@
 """
-S3 Object storage --- :mod:`fah-alchemy.storage.objectstore`
+S3 Object storage --- :mod:`alchemiscale.storage.objectstore`
 ============================================================
 
 """

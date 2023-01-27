@@ -1,5 +1,5 @@
 """
-Command line interface --- :mod:`fah-alchemy.cli`
+Command line interface --- :mod:`alchemiscale.cli`
 =================================================
 
 """

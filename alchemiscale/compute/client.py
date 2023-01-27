@@ -1,5 +1,5 @@
 """
-Client for interacting with compute API. --- :mod:`fah-alchemy.compute.client`
+Client for interacting with compute API. --- :mod:`alchemiscale.compute.client`
 ==============================================================================
 
 
@@ -17,19 +17,19 @@ from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 
-from ..base.client import FahAlchemyBaseClient, FahAlchemyBaseClientError
+from ..base.client import AlchemiscaleBaseClient,AlchemiscaleBaseClientError
 from ..models import Scope, ScopedKey
 from ..storage.models import TaskQueue, Task
 
 
-class FahAlchemyComputeClientError(FahAlchemyBaseClientError):
+class AlchemiscaleComputeClientError(AlchemiscaleBaseClientError):
     ...
 
 
-class FahAlchemyComputeClient(FahAlchemyBaseClient):
+class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
     """Client for compute service interaction with compute API service."""
 
-    _exception = FahAlchemyComputeClientError
+    _exception = AlchemiscaleComputeClientError
 
     def query_taskqueues(
         self, scopes: List[Scope], return_gufe=False, limit=None, skip=None

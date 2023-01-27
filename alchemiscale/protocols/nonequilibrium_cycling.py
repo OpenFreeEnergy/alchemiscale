@@ -1,5 +1,5 @@
 """
-Nonequilibrium Cycling protocol --- :mod:`fah-alchemy.protocols.nonequilibrium_cycling`
+Nonequilibrium Cycling protocol --- :mod:`alchemiscale.protocols.nonequilibrium_cycling`
 =======================================================================================
 
 """

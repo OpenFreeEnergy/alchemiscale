@@ -1,5 +1,5 @@
 """
-FahAlchemyComputeAPI --- :mod:`fah-alchemy.compute.api`
+AlchemiscaleComputeAPI --- :mod:`alchemiscale.compute.api`
 =======================================================
 
 """
@@ -39,7 +39,7 @@ from ..security.models import Token, TokenData, CredentialedComputeIdentity
 #   - can be done with an asyncio.sleeping task added to event loop: https://stackoverflow.com/questions/67154839/fastapi-best-way-to-run-continuous-get-requests-in-the-background
 # - on startup,
 
-app = FastAPI(title="FahAlchemyComputeAPI")
+app = FastAPI(title="AlchemiscaleComputeAPI")
 app.dependency_overrides[get_base_api_settings] = get_compute_api_settings
 app.include_router(base_router)
 
@@ -58,7 +58,7 @@ router = APIRouter(
 
 @app.get("/ping")
 async def ping():
-    return {"api": "FahAlchemyComputeAPI"}
+    return {"api": "AlchemiscaleComputeAPI"}
 
 
 @router.get("/info")

@@ -1,5 +1,5 @@
 """
-Base class for API clients --- :mod:`fah-alchemy.base.client`
+Base class for API clients --- :mod:`alchemiscale.base.client`
 =============================================================
 
 """
@@ -18,14 +18,14 @@ from ..models import Scope, ScopedKey
 from ..storage.models import TaskQueue, Task
 
 
-class FahAlchemyBaseClientError(Exception):
+class AlchemiscaleBaseClientError(Exception):
     ...
 
 
-class FahAlchemyBaseClient:
-    """Base class for FahAlchemy API clients."""
+class AlchemiscaleBaseClient:
+    """Base class for Alchemiscale API clients."""
 
-    _exception = FahAlchemyBaseClientError
+    _exception = AlchemiscaleBaseClient
 
     def __init__(self, api_url, identifier, key, max_retries=5):
 

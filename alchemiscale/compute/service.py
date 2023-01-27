@@ -1,5 +1,5 @@
 """
-FahAlchemyComputeService --- :mod:`fah-alchemy.compute.service`
+AlchemiscaleComputeService --- :mod:`alchemiscale.compute.service`
 ===============================================================
 
 """
@@ -16,7 +16,7 @@ import requests
 
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
-from .client import FahAlchemyComputeClient
+from .client import AlchemiscaleComputeClient
 from ..storage.models import Task, TaskQueue
 from ..models import Scope, ScopedKey
 
@@ -92,7 +92,7 @@ class SynchronousComputeService:
         self.heartbeat_frequency = heartbeat_frequency
         self.limit = limit
 
-        self.client = FahAlchemyComputeClient(api_url, identifier, key)
+        self.client =AlchemiscaleComputeClient(api_url, identifier, key)
 
         if scopes is None:
             self.scopes = [Scope()]
@@ -248,7 +248,7 @@ class AsynchronousComputeService(SynchronousComputeService):
         self._stop = True
 
 
-class FahComputeService(AsynchronousComputeService):
+class AlchemiscaleComputeService(AsynchronousComputeService):
     """Folding@Home-based compute service.
 
     This service is designed for production use with Folding@Home.

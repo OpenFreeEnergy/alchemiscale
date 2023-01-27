@@ -1,5 +1,5 @@
 """
-Node4js state storage --- :mod:`fah-alchemy.storage.statestore`
+Node4js state storage --- :mod:`alchemiscale.storage.statestore`
 ===============================================================
 
 """
@@ -51,11 +51,11 @@ class Neo4JStoreError(Exception):
     ...
 
 
-class FahAlchemyStateStore(abc.ABC):
+class AlchemiscaleStateStore(abc.ABC):
     ...
 
 
-class Neo4jStore(FahAlchemyStateStore):
+class Neo4jStore(AlchemiscaleStateStore):
 
     # uniqueness constraints applied to the database; key is node label,
     # 'property' is the property on which uniqueness is guaranteed for nodes
@@ -93,7 +93,7 @@ class Neo4jStore(FahAlchemyStateStore):
         """Initialize database.
 
         Ensures that constraints and any other required structures are in place.
-        Should be used on any Neo4j database prior to use for fah-alchemy.
+        Should be used on any Neo4j database prior to use for Alchemiscale.
 
         """
         for label, values in self.constraints.items():

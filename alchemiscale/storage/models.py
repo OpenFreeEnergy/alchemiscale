@@ -1,5 +1,5 @@
 """
-Data models for storage components --- :mod:`fah-alchemy.storage.models`
+Data models for storage components --- :mod:`alchemiscale.storage.models`
 ========================================================================
 
 """
@@ -18,7 +18,7 @@ from ..models import ScopedKey
 
 
 class ComputeKey(BaseModel):
-    """Unique identifier for FahAlchemyComputeService instances."""
+    """Unique identifier for AlchemiscaleComputeService instances."""
 
     identifier: str
 

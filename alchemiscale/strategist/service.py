@@ -1,5 +1,5 @@
 """
-Strategist service. --- :mod:`fah-alchemy.strategist.service`
+Strategist service. --- :mod:`alchemiscale.strategist.service`
 =============================================================
 
 

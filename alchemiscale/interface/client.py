@@ -1,5 +1,5 @@
 """
-Client for interacting with user-facing API. --- :mod:`fah-alchemy.interface.client`
+Client for interacting with user-facing API. --- :mod:`alchemiscale.interface.client`
 ====================================================================================
 
 
@@ -13,19 +13,19 @@ from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
-from ..base.client import FahAlchemyBaseClient, FahAlchemyBaseClientError
+from ..base.client import AlchemiscaleBaseClient, AlchemiscaleBaseClientError
 from ..models import Scope, ScopedKey
 from ..strategies import Strategy
 
 
-class FahAlchemyClientError(FahAlchemyBaseClientError):
+class AlchemiscaleClientError(AlchemiscaleBaseClientError):
     ...
 
 
-class FahAlchemyClient(FahAlchemyBaseClient):
+class AlchemiscaleClient(AlchemiscaleBaseClient):
     """Client for user interaction with API service."""
 
-    _exception = FahAlchemyClientError
+    _exception = AlchemiscaleClientError
 
     ### inputs
 

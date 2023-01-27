@@ -1,5 +1,5 @@
 """
-Data models --- :mod:`fah-alchemy.models`
+Data models --- :mod:`alchemiscale.models`
 =========================================
 
 """

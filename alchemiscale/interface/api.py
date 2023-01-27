@@ -1,5 +1,5 @@
 """
-FahAlchemyClientAPI --- :mod:`fah-alchemy.interface.api`
+AlchemiscaleClientAPI --- :mod:`alchemiscale.interface.api`
 ========================================================
 
 
@@ -38,7 +38,7 @@ from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedUserIdentity
 
 
-app = FastAPI(title="FahAlchemyAPI")
+app = FastAPI(title="AlchemiscaleAPI")
 app.dependency_overrides[get_base_api_settings] = get_api_settings
 app.include_router(base_router)
 
@@ -56,7 +56,7 @@ router = APIRouter(
 
 @app.get("/ping")
 async def ping():
-    return {"api": "FahAlchemyAPI"}
+    return {"api": "AlchemiscaleAPI"}
 
 
 @router.get("/info")
