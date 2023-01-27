@@ -25,7 +25,7 @@ class AlchemiscaleBaseClientError(Exception):
 class AlchemiscaleBaseClient:
     """Base class for Alchemiscale API clients."""
 
-    _exception = AlchemiscaleBaseClient
+    _exception = AlchemiscaleBaseClientError
 
     def __init__(self, api_url, identifier, key, max_retries=5):
 

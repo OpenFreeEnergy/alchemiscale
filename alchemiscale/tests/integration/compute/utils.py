@@ -1,4 +1,4 @@
-from alchemical.settings import ComputeAPISettings
+from alchemiscale.settings import ComputeAPISettings
 
 
 def get_compute_settings_override():
