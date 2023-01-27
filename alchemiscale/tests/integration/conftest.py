@@ -22,10 +22,10 @@ from gufe.protocols.protocoldag import execute_DAG
 from gufe.tests.test_protocol import DummyProtocol
 from openfe_benchmarks import tyk2
 
-from fah_alchemy.models import Scope
-from fah_alchemy.settings import Neo4jStoreSettings, S3ObjectStoreSettings
-from fah_alchemy.storage import Neo4jStore, S3ObjectStore, get_s3os
-from fah_alchemy.protocols import FAHOpenmmNonEquilibriumCyclingProtocol
+from alchemiscale.models import Scope
+from alchemiscale.settings import Neo4jStoreSettings, S3ObjectStoreSettings
+from alchemiscale.storage import Neo4jStore, S3ObjectStore, get_s3os
+from alchemiscale.protocols import FAHOpenmmNonEquilibriumCyclingProtocol
 
 
 NEO4J_PROCESS = {}
@@ -152,7 +152,7 @@ def graph(uri):
 
 
 ## data
-### below specific to fah-alchemy
+### below specific to alchemiscale
 
 
 @fixture(scope="module")

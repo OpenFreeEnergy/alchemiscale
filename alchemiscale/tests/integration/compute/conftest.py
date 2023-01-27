@@ -6,18 +6,18 @@ from fastapi.testclient import TestClient
 
 from gufe import AlchemicalNetwork
 
-from fah_alchemy.settings import get_base_api_settings
-from fah_alchemy.storage import Neo4jStore
-from fah_alchemy.compute import api, client
-from fah_alchemy.security.models import CredentialedComputeIdentity, TokenData
-from fah_alchemy.security.auth import hash_key
-from fah_alchemy.base.api import (
+from alchemiscale.settings import get_base_api_settings
+from alchemiscale.storage import Neo4jStore
+from alchemiscale.compute import api, client
+from alchemiscale.security.models import CredentialedComputeIdentity, TokenData
+from alchemiscale.security.auth import hash_key
+from alchemiscale.base.api import (
     get_token_data_depends,
     get_n4js_depends,
     get_s3os_depends,
 )
 
-from fah_alchemy.tests.integration.compute.utils import get_compute_settings_override
+from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
 
 
 ## compute api

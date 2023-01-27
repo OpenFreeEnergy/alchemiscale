@@ -1,6 +1,6 @@
 import pytest
 
-from fah_alchemy.security import auth
+from alchemiscale.security import auth
 
 
 @pytest.fixture

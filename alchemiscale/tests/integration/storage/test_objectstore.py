@@ -4,8 +4,8 @@ import os
 import pytest
 from gufe.protocols.protocoldag import execute_DAG
 
-from fah_alchemy.storage import S3ObjectStore
-from fah_alchemy.storage.models import ObjectStoreRef
+from alchemiscale.storage import S3ObjectStore
+from alchemiscale.storage.models import ObjectStoreRef
 
 
 class TestS3ObjectStore:

@@ -8,15 +8,15 @@ from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
-from fah_alchemy.storage import Neo4jStore
-from fah_alchemy.storage.models import Task, TaskQueue, ObjectStoreRef
-from fah_alchemy.models import Scope, ScopedKey
-from fah_alchemy.security.models import (
+from alchemiscale.storage import Neo4jStore
+from alchemiscale.storage.models import Task, TaskQueue, ObjectStoreRef
+from alchemiscale.models import Scope, ScopedKey
+from alchemiscale.security.models import (
     CredentialedEntity,
     CredentialedUserIdentity,
     CredentialedComputeIdentity,
 )
-from fah_alchemy.security.auth import hash_key
+from alchemiscale.security.auth import hash_key
 
 
 class TestStateStore:

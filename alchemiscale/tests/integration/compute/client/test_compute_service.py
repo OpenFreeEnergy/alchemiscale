@@ -4,9 +4,9 @@ import pytest
 
 from pathlib import Path
 
-from fah_alchemy.models import ScopedKey
-from fah_alchemy.storage.statestore import Neo4jStore
-from fah_alchemy.compute.service import SynchronousComputeService
+from alchemiscale.models import ScopedKey
+from alchemiscale.storage.statestore import Neo4jStore
+from alchemiscale.compute.service import SynchronousComputeService
 
 
 class TestSynchronousComputeService:

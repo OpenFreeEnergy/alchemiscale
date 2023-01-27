@@ -1,4 +1,4 @@
-from fah_alchemy.settings import ComputeAPISettings
+from alchemical.settings import ComputeAPISettings
 
 
 def get_compute_settings_override():

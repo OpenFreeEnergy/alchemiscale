@@ -3,9 +3,9 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from fah_alchemy.base.api import validate_scopes, validate_scopes_query
-from fah_alchemy.models import Scope, ScopedKey
-from fah_alchemy.security.models import Token, TokenData, CredentialedEntity
+from alchemiscale.base.api import validate_scopes, validate_scopes_query
+from alchemiscale.models import Scope, ScopedKey
+from alchemiscale.security.models import Token, TokenData, CredentialedEntity
 
 
 @pytest.mark.parametrize(

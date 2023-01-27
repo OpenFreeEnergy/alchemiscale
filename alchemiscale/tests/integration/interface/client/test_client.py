@@ -3,10 +3,10 @@ from time import sleep
 
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 
-from fah_alchemy.models import ScopedKey
-from fah_alchemy.interface import client
+from alchemiscale.models import ScopedKey
+from alchemiscale.interface import client
 
-from fah_alchemy.tests.integration.interface.utils import get_user_settings_override
+from alchemiscale.tests.integration.interface.utils import get_user_settings_override
 
 
 class TestClient:
@@ -14,16 +14,16 @@ class TestClient:
         self,
         scope_test,
         n4js_preloaded,
-        user_client_wrong_credential: client.FahAlchemyClient,
+        user_client_wrong_credential: client.AlchemiscaleClient,
         uvicorn_server,
     ):
-        with pytest.raises(client.FahAlchemyClientError):
+        with pytest.raises(client.AlchemiscaleClientError):
             user_client_wrong_credential.get_info()
 
     def test_refresh_credential(
         self,
         n4js_preloaded,
-        user_client: client.FahAlchemyClient,
+        user_client: client.AlchemiscaleClient,
         uvicorn_server,
     ):
 
@@ -47,7 +47,7 @@ class TestClient:
         self,
         scope_test,
         n4js_preloaded,
-        user_client: client.FahAlchemyClient,
+        user_client: client.AlchemiscaleClient,
         uvicorn_server,
     ):
         ...
@@ -55,7 +55,7 @@ class TestClient:
     def test_api_check(
         self,
         n4js_preloaded,
-        user_client: client.FahAlchemyClient,
+        user_client: client.AlchemiscaleClient,
         uvicorn_server,
     ):
         user_client._api_check()

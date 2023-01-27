@@ -3,9 +3,9 @@ import pytest
 from gufe import Transformation
 from gufe.tokenization import GufeTokenizable
 
-from fah_alchemy.models import ScopedKey
-from fah_alchemy.compute import client
-from fah_alchemy.storage.models import ObjectStoreRef
+from alchemiscale.models import ScopedKey
+from alchemiscale.compute import client
+from alchemiscale.storage.models import ObjectStoreRef
 
 
 class TestComputeAPI:

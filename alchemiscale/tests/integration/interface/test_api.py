@@ -4,7 +4,7 @@ import json
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
-from fah_alchemy.models import ScopedKey
+from alchemiscale.models import ScopedKey
 
 
 def pre_load_payload(network, scope, name="incomplete 2"):

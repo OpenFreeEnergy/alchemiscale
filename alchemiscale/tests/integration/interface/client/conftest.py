@@ -5,12 +5,12 @@ from time import sleep
 import uvicorn
 import requests
 
-from fah_alchemy.settings import get_base_api_settings
-from fah_alchemy.base.api import get_n4js_depends, get_s3os_depends
-from fah_alchemy.interface import api, client
+from alchemiscale.settings import get_base_api_settings
+from alchemiscale.base.api import get_n4js_depends, get_s3os_depends
+from alchemiscale.interface import api, client
 
-from fah_alchemy.tests.integration.interface.utils import get_user_settings_override
-from fah_alchemy.tests.integration.utils import running_service
+from alchemiscale.tests.integration.interface.utils import get_user_settings_override
+from alchemiscale.tests.integration.utils import running_service
 
 
 ## user client
@@ -50,7 +50,7 @@ def uvicorn_server(user_api):
 @pytest.fixture(scope="module")
 def user_client(uvicorn_server, user_identity):
 
-    return client.FahAlchemyClient(
+    return client.AlchemiscaleClient(
         api_url="http://127.0.0.1:8000/",
         identifier=user_identity["identifier"],
         key=user_identity["key"],
@@ -60,7 +60,7 @@ def user_client(uvicorn_server, user_identity):
 @pytest.fixture(scope="module")
 def user_client_wrong_credential(uvicorn_server, user_identity):
 
-    return client.FahAlchemyClient(
+    return client.AlchemiscaleClient(
         api_url="http://127.0.0.1:8000/",
         identifier=user_identity["identifier"],
         key="incorrect credential",

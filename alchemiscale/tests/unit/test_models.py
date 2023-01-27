@@ -2,7 +2,7 @@ import pytest
 
 from pydantic import ValidationError
 
-from fah_alchemy.models import Scope
+from alchemiscale.models import Scope
 
 
 @pytest.mark.parametrize(

@@ -7,16 +7,16 @@ import traceback
 
 import requests
 from fastapi import FastAPI
-from fah_alchemy.tests.integration.utils import running_service
+from alchemiscale.tests.integration.utils import running_service
 
-from fah_alchemy.cli import get_settings_from_options, cli, ApiApplication
-from fah_alchemy.security.auth import hash_key, authenticate, AuthenticationError
-from fah_alchemy.security.models import (
+from alchemiscale.cli import get_settings_from_options, cli, ApiApplication
+from alchemiscale.security.auth import hash_key, authenticate, AuthenticationError
+from alchemiscale.security.models import (
     CredentialedUserIdentity,
     CredentialedComputeIdentity,
 )
-from fah_alchemy.settings import Neo4jStoreSettings
-from fah_alchemy.storage.statestore import Neo4JStoreError
+from alchemiscale.settings import Neo4jStoreSettings
+from alchemiscale.storage.statestore import Neo4JStoreError
 
 
 def click_success(result):
@@ -93,7 +93,7 @@ def test_api(n4js, s3os):
     ]
     jwt_opts = []  # leaving empty, we have default behavior for these
 
-    expected_ping = {"api": "FahAlchemyAPI"}
+    expected_ping = {"api": "AlchemiscaleAPI"}
 
     runner = CliRunner()
     with running_service(
@@ -135,7 +135,7 @@ def test_compute_api(n4js, s3os):
     ]
     jwt_opts = []  # leaving empty, we have default behavior for these
 
-    expected_ping = {"api": "FahAlchemyComputeAPI"}
+    expected_ping = {"api": "AlchemiscaleComputeAPI"}
 
     runner = CliRunner()
     with running_service(

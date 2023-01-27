@@ -5,12 +5,12 @@ from time import sleep
 import uvicorn
 import requests
 
-from fah_alchemy.settings import get_base_api_settings
-from fah_alchemy.base.api import get_n4js_depends, get_s3os_depends
-from fah_alchemy.compute import api, client
+from alchemiscale.settings import get_base_api_settings
+from alchemiscale.base.api import get_n4js_depends, get_s3os_depends
+from alchemiscale.compute import api, client
 
-from fah_alchemy.tests.integration.compute.utils import get_compute_settings_override
-from fah_alchemy.tests.integration.utils import running_service
+from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
+from alchemiscale.tests.integration.utils import running_service
 
 
 ## compute client
@@ -52,7 +52,7 @@ def compute_client(
     uvicorn_server, compute_identity, single_scoped_credentialed_compute
 ):
 
-    return client.FahAlchemyComputeClient(
+    return client.AlchemiscaleComputeClient(
         api_url="http://127.0.0.1:8000/",
         # use the identifier for the single-scoped user who should have access to some things
         identifier=single_scoped_credentialed_compute.identifier,
@@ -64,7 +64,7 @@ def compute_client(
 @pytest.fixture(scope="module")
 def compute_client_wrong_credential(uvicorn_server, compute_identity):
 
-    return client.FahAlchemyComputeClient(
+    return client.AlchemiscaleComputeClient(
         api_url="http://127.0.0.1:8000/",
         identifier=compute_identity["identifier"],
         key="wrong credential",

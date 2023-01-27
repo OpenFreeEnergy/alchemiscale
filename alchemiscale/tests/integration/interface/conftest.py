@@ -5,18 +5,18 @@ from fastapi.testclient import TestClient
 
 from gufe import AlchemicalNetwork
 
-from fah_alchemy.settings import get_base_api_settings
-from fah_alchemy.interface import api
-from fah_alchemy.security.models import CredentialedUserIdentity, TokenData
-from fah_alchemy.security.auth import hash_key
-from fah_alchemy.base.api import (
+from alchemiscale.settings import get_base_api_settings
+from alchemiscale.interface import api
+from alchemiscale.security.models import CredentialedUserIdentity, TokenData
+from alchemiscale.security.auth import hash_key
+from alchemiscale.base.api import (
     get_token_data_depends,
     get_n4js_depends,
     get_s3os_depends,
 )
 
 
-from fah_alchemy.tests.integration.interface.utils import get_user_settings_override
+from alchemiscale.tests.integration.interface.utils import get_user_settings_override
 
 
 ## user api

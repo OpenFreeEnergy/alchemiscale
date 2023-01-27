@@ -3,10 +3,10 @@ from time import sleep
 
 from gufe.tokenization import GufeTokenizable
 
-from fah_alchemy.models import ScopedKey
-from fah_alchemy.compute import client
+from alchemiscale.models import ScopedKey
+from alchemiscale.compute import client
 
-from fah_alchemy.tests.integration.compute.utils import get_compute_settings_override
+from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
 
 
 class TestComputeClient:
@@ -14,16 +14,16 @@ class TestComputeClient:
         self,
         scope_test,
         n4js_preloaded,
-        compute_client_wrong_credential: client.FahAlchemyComputeClient,
+        compute_client_wrong_credential: client.AlchemiscaleComputeClient,
         uvicorn_server,
     ):
-        with pytest.raises(client.FahAlchemyComputeClientError):
+        with pytest.raises(client.AlchemiscaleComputeClientError):
             compute_client_wrong_credential.get_info()
 
     def test_refresh_credential(
         self,
         n4js_preloaded,
-        compute_client: client.FahAlchemyComputeClient,
+        compute_client: client.AlchemiscaleComputeClient,
         uvicorn_server,
     ):
 
@@ -47,7 +47,7 @@ class TestComputeClient:
         self,
         scope_test,
         n4js_preloaded,
-        compute_client: client.FahAlchemyComputeClient,
+        compute_client: client.AlchemiscaleComputeClient,
         uvicorn_server,
     ):
 
@@ -62,7 +62,7 @@ class TestComputeClient:
         self,
         scope_test,
         n4js_preloaded,
-        compute_client: client.FahAlchemyComputeClient,
+        compute_client: client.AlchemiscaleComputeClient,
         uvicorn_server,
     ):
 
@@ -72,7 +72,7 @@ class TestComputeClient:
     def test_api_check(
         self,
         n4js_preloaded,
-        compute_client: client.FahAlchemyComputeClient,
+        compute_client: client.AlchemiscaleComputeClient,
         uvicorn_server,
     ):
         compute_client._api_check()

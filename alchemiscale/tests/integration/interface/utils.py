@@ -1,4 +1,4 @@
-from fah_alchemy.settings import APISettings
+from alchemiscale.settings import APISettings
 
 
 def get_user_settings_override():
