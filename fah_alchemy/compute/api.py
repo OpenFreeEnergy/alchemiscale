@@ -76,8 +76,8 @@ async def check(
     _check_store_connectivity(n4js, s3os)
 
 
-@router.get("/taskqueues")
-async def query_taskqueues(
+@router.get("/taskhubs")
+async def query_taskhubs(
     *,
     return_gufe: bool = False,
     scope: Scope = Depends(scope_params),
@@ -87,48 +87,48 @@ async def query_taskqueues(
 
     # intersect query scopes with accessible scopes in the token
     query_scopes = validate_scopes_query(scope, token)
-    taskqueues_handler = QueryGUFEHandler(return_gufe)
+    taskhubs_handler = QueryGUFEHandler(return_gufe)
 
     # query each scope
     # loop might be more removable in the future with a Union like operator on scopes
     for single_query_scope in query_scopes:
 
         # add new task queues
-        taskqueues_handler.update_results(
-            n4js.query_taskqueues(
-                scope=single_query_scope, return_gufe=taskqueues_handler.return_gufe
+        taskhubs_handler.update_results(
+            n4js.query_taskhubs(
+                scope=single_query_scope, return_gufe=taskhubs_handler.return_gufe
             )
         )
 
-    return taskqueues_handler.format_return()
+    return taskhubs_handler.format_return()
 
 
-# @app.get("/taskqueues/{scoped_key}")
-# async def get_taskqueue(scoped_key: str,
+# @app.get("/taskhubs/{scoped_key}")
+# async def get_taskhub(scoped_key: str,
 #                        *,
 #                        n4js: Neo4jStore = Depends(get_n4js_depends)):
 #    return
 
 
-@router.get("/taskqueues/{taskqueue}/tasks")
-async def get_taskqueue_tasks():
+@router.get("/taskhubs/{taskhub}/tasks")
+async def get_taskhub_tasks():
     return {"message": "nothing yet"}
 
 
-@router.post("/taskqueues/{taskqueue_scoped_key}/claim")
-async def claim_taskqueue_tasks(
-    taskqueue_scoped_key,
+@router.post("/taskhubs/{taskhub_scoped_key}/claim")
+async def claim_taskhub_tasks(
+    taskhub_scoped_key,
     *,
     claimant: str = Body(),
     count: int = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    sk = ScopedKey.from_str(taskqueue_scoped_key)
+    sk = ScopedKey.from_str(taskhub_scoped_key)
     validate_scopes(sk.scope, token)
 
-    tasks = n4js.claim_taskqueue_tasks(
-        taskqueue=taskqueue_scoped_key, claimant=claimant, count=count
+    tasks = n4js.claim_taskhub_tasks(
+        taskhub=taskhub_scoped_key, claimant=claimant, count=count
     )
 
     return [str(t) if t is not None else None for t in tasks]

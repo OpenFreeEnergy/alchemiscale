@@ -24,7 +24,7 @@ from py2neo.errors import ClientError
 from .models import (
     ComputeKey,
     Task,
-    TaskQueue,
+    TaskHub,
     TaskArchive,
     TaskStatusEnum,
     ObjectStoreRef,
@@ -569,7 +569,7 @@ class Neo4jStore(FahAlchemyStateStore):
         return distinct n,m
         """
         # first, delete the network's queue if present
-        self.delete_taskqueue(network)
+        self.delete_taskhub(network)
 
         # then delete the network
         q = f"""
@@ -639,88 +639,88 @@ class Neo4jStore(FahAlchemyStateStore):
 
     ## task queues
 
-    def create_taskqueue(
+    def create_taskhub(
         self,
         network: ScopedKey,
     ) -> ScopedKey:
-        """Create a TaskQueue for the given AlchemicalNetwork.
+        """Create a TaskHub for the given AlchemicalNetwork.
 
-        An AlchemicalNetwork can have only one associated TaskQueue.
-        A TaskQueue is required to queue Tasks for a given AlchemicalNetwork.
+        An AlchemicalNetwork can have only one associated TaskHub.
+        A TaskHub is required to queue Tasks for a given AlchemicalNetwork.
 
-        This method will only creat a TaskQueue for an AlchemicalNetwork if it
-        doesn't already exist; it will return the scoped key for the TaskQueue
+        This method will only create a TaskHub for an AlchemicalNetwork if it
+        doesn't already exist; it will return the scoped key for the TaskHub
         either way.
 
         """
         scope = network.scope
         network_node = self._get_node(network)
 
-        # create a taskqueue for the supplied network
+        # create a taskhub for the supplied network
         # use a PERFORMS relationship
-        taskqueue = TaskQueue(network=str(network))
-        _, taskqueue_node, scoped_key = self._gufe_to_subgraph(
-            taskqueue.to_shallow_dict(),
-            labels=["GufeTokenizable", taskqueue.__class__.__name__],
-            gufe_key=taskqueue.key,
+        taskhub = TaskHub(network=str(network))
+        _, taskhub_node, scoped_key = self._gufe_to_subgraph(
+            taskhub.to_shallow_dict(),
+            labels=["GufeTokenizable", taskhub.__class__.__name__],
+            gufe_key=taskhub.key,
             scope=scope,
         )
 
         subgraph = Relationship.type("PERFORMS")(
-            taskqueue_node,
+            taskhub_node,
             network_node,
             _org=scope.org,
             _campaign=scope.campaign,
             _project=scope.project,
         )
 
-        # create head and tail node, attach to TaskQueue node
+        # create head and tail node, attach to TaskHub node
         # head and tail connected via FOLLOWS relationship
-        head = Node("TaskQueueHead")
-        tail = Node("TaskQueueTail")
+        head = Node("TaskHubHead")
+        tail = Node("TaskHubTail")
 
-        subgraph = subgraph | Relationship.type("TASKQUEUE_HEAD")(taskqueue_node, head)
-        subgraph = subgraph | Relationship.type("TASKQUEUE_TAIL")(taskqueue_node, tail)
+        subgraph = subgraph | Relationship.type("TASKHUB_HEAD")(taskhub_node, head)
+        subgraph = subgraph | Relationship.type("TASKHUB_TAIL")(taskhub_node, tail)
         subgraph = subgraph | Relationship.type("FOLLOWS")(
-            tail, head, taskqueue=str(scoped_key)
+            tail, head, taskhub=str(scoped_key)
         )
 
-        # if the taskqueue already exists, this will rollback transaction
+        # if the TaskHub already exists, this will rollback transaction
         # automatically
         with self.transaction(ignore_exceptions=True) as tx:
             tx.create(subgraph)
 
         return scoped_key
 
-    def query_taskqueues(
+    def query_taskhubs(
         self, scope: Optional[Scope] = Scope(), return_gufe: bool = False
-    ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskQueue]]:
-        """Query for `TaskQueue`s matching the given criteria.
+    ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskHub]]:
+        """Query for `TaskHub`s matching the given criteria.
 
         Parameters
         ----------
         return_gufe
-            If True, return a dict with `ScopedKey`s as keys, `TaskQueue`
+            If True, return a dict with `ScopedKey`s as keys, `TaskHub`
             instances as values. Otherwise, return a list of `ScopedKey`s.
 
         """
-        return self._query(qualname="TaskQueue", scope=scope, return_gufe=return_gufe)
+        return self._query(qualname="TaskHub", scope=scope, return_gufe=return_gufe)
 
-    def get_taskqueue(
+    def get_taskhub(
         self, network: ScopedKey, return_gufe: bool = False
-    ) -> Union[ScopedKey, TaskQueue]:
-        """Get the TaskQueue for the given AlchemicalNetwork.
+    ) -> Union[ScopedKey, TaskHub]:
+        """Get the TaskHub for the given AlchemicalNetwork.
 
         Parameters
         ----------
         return_gufe
-            If True, return a `TaskQueue` instance.
+            If True, return a `TaskHub` instance.
             Otherwise, return a `ScopedKey`.
 
         """
         node = self.graph.run(
             f"""
-                match (n:TaskQueue {{network: "{network}"}})-[:PERFORMS]->(m:AlchemicalNetwork)
+                match (n:TaskHub {{network: "{network}"}})-[:PERFORMS]->(m:AlchemicalNetwork)
                 return n
                 """
         ).to_subgraph()
@@ -730,48 +730,48 @@ class Neo4jStore(FahAlchemyStateStore):
         else:
             return ScopedKey.from_str(node["_scoped_key"])
 
-    def delete_taskqueue(
+    def delete_taskhub(
         self,
         network: ScopedKey,
     ) -> ScopedKey:
-        """Create a TaskQueue for the given AlchemicalNetwork.
+        """Create a TaskHub for the given AlchemicalNetwork.
 
-        An AlchemicalNetwork can have only one associated TaskQueue.
-        A TaskQueue is required to queue Tasks for a given AlchemicalNetwork.
+        An AlchemicalNetwork can have only one associated TaskHub.
+        A TaskHub is required to queue Tasks for a given AlchemicalNetwork.
 
-        This method will only creat a TaskQueue for an AlchemicalNetwork if it
-        doesn't already exist; it will return the scoped key for the TaskQueue
+        This method will only create a TaskHub for an AlchemicalNetwork if it
+        doesn't already exist; it will return the scoped key for the TaskHub
         either way.
 
         """
-        taskqueue = self.get_taskqueue(network)
+        taskhub = self.get_taskhub(network)
 
         q = f"""
-        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue}'}}),
-              (tq)-[:TASKQUEUE_HEAD]->(tqh)<-[tqf:FOLLOWS* {{taskqueue: '{taskqueue}'}}]-(task),
-              (tq)-[:TASKQUEUE_TAIL]->(tqt)
+        MATCH (tq:TaskHub {{_scoped_key: '{taskhub}'}}),
+              (tq)-[:TASKHUB_HEAD]->(tqh)<-[tqf:FOLLOWS* {{taskhub: '{taskhub}'}}]-(task),
+              (tq)-[:TASKHUB_TAIL]->(tqt)
         FOREACH (i in tqf | delete i)
         DETACH DELETE tq,tqh,tqt
         """
         self.graph.run(q)
 
-        return taskqueue
+        return taskhub
 
-    def set_taskqueue_weight(self, network: ScopedKey, weight: float):
+    def set_taskhub_weight(self, network: ScopedKey, weight: float):
         q = f"""
-        MATCH (t:TaskQueue {{network: "{network}"}})
+        MATCH (t:TaskHub {{network: "{network}"}})
         SET t.weight = {weight}
         RETURN t
         """
         with self.transaction() as tx:
             tx.run(q)
 
-    def queue_taskqueue_tasks(
+    def queue_taskhub_tasks(
         self,
         tasks: List[ScopedKey],
-        taskqueue: ScopedKey,
+        taskhub: ScopedKey,
     ) -> List[ScopedKey]:
-        """Add Tasks to the TaskQueue for a given AlchemicalNetwork.
+        """Add Tasks to the TaskHub for a given AlchemicalNetwork.
 
         Note: the Tasks must be within the same scope as the AlchemicalNetwork,
         and must correspond to a Transformation in the AlchemicalNetwork.
@@ -780,14 +780,14 @@ class Neo4jStore(FahAlchemyStateStore):
         AlchemicalNetwork queues, or none at all.
 
         If this Task has an EXTENDS relationship to another Task, that Task must
-        be 'complete' before this Task can be added to *any* TaskQueue.
+        be 'complete' before this Task can be added to *any* TaskHub.
 
         """
         for t in tasks:
             q = f"""
             // get our task queue, as well as tail and tail relationship to last in line
-            MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue}'}})-[:TASKQUEUE_TAIL]->
-                      (tqt)-[tqtl:FOLLOWS {{taskqueue: '{taskqueue}'}}]->
+            MATCH (tq:TaskHub {{_scoped_key: '{taskhub}'}})-[:TASKHUB_TAIL]->
+                      (tqt)-[tqtl:FOLLOWS {{taskhub: '{taskhub}'}}]->
                       (last),
                   (tq)-[:PERFORMS]->(an:AlchemicalNetwork)
             
@@ -797,12 +797,12 @@ class Neo4jStore(FahAlchemyStateStore):
             OPTIONAL MATCH (tn)-[:EXTENDS]->(other_task:Task)
 
             // only proceed for cases where task is not already in queue and only EXTENDS a 'complete' task
-            WHERE NOT (tqt)-[:FOLLOWS* {{taskqueue: '{taskqueue}'}}]->(tn)
+            WHERE NOT (tqt)-[:FOLLOWS* {{taskhub: '{taskhub}'}}]->(tn)
               AND other_task.status = 'complete'
 
             // create the connections that add it to the end of the queue, and delete old queue tail connection
-            CREATE (tqt)-[:FOLLOWS {{taskqueue: '{taskqueue}'}}] ->
-                      (tn)-[:FOLLOWS {{taskqueue: '{taskqueue}'}}]->(last)
+            CREATE (tqt)-[:FOLLOWS {{taskhub: '{taskhub}'}}] ->
+                      (tn)-[:FOLLOWS {{taskhub: '{taskhub}'}}]->(last)
             DELETE tqtl
 
             RETURN tn
@@ -812,17 +812,17 @@ class Neo4jStore(FahAlchemyStateStore):
 
             if task is None:
                 raise ValueError(
-                    f"Task '{t}' not found in same network as given TaskQueue"
+                    f"Task '{t}' not found in same network as given TaskHub"
                 )
 
         return tasks
 
-    def dequeue_taskqueue_tasks(
+    def dequeue_taskhub_tasks(
         self,
         tasks: List[ScopedKey],
-        taskqueue: ScopedKey,
+        taskhub: ScopedKey,
     ) -> List[ScopedKey]:
-        """Remove a compute Task from the TaskQueue for a given AlchemicalNetwork.
+        """Remove a compute Task from the TaskHub for a given AlchemicalNetwork.
 
         Note: the Task must be within the same scope as the AlchemicalNetwork.
 
@@ -835,12 +835,12 @@ class Neo4jStore(FahAlchemyStateStore):
             // get our task queue, as well as the task we want to remove, and
             // the nodes ahead and behind it 
             MATCH (task:Task {{_scoped_key: '{t}'}}),
-                  (behind)-[behindf:FOLLOWS {{taskqueue: '{taskqueue}'}}]->(task),
-                  (task)-[aheadf:FOLLOWS {{taskqueue: '{taskqueue}'}}]->(ahead)
+                  (behind)-[behindf:FOLLOWS {{taskhub: '{taskhub}'}}]->(task),
+                  (task)-[aheadf:FOLLOWS {{taskhub: '{taskhub}'}}]->(ahead)
             WITH behind, behindf, task, aheadf, ahead
 
             // create connection between behind and ahead nodes
-            CREATE (behind)-[newf:FOLLOWS {{taskqueue: '{taskqueue}'}}]->(ahead)
+            CREATE (behind)-[newf:FOLLOWS {{taskhub: '{taskhub}'}}]->(ahead)
 
             // delete connections between node to remove and behind, ahead nodes
             DELETE behindf, aheadf
@@ -851,14 +851,14 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return tasks
 
-    def get_taskqueue_tasks(
-        self, taskqueue: ScopedKey, return_gufe=False
+    def get_taskhub_tasks(
+        self, taskhub: ScopedKey, return_gufe=False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
-        """Get a list of Tasks in the TaskQueue, in queued order."""
+        """Get a list of Tasks in the TaskHub, in queued order."""
         q = f"""
         // get list of all 'waiting' tasks in the queue
-        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue}'}})-->
-              (head:TaskQueueHead)<-[:FOLLOWS* {{taskqueue: '{taskqueue}'}}]-(task:Task)
+        MATCH (tq:TaskHub {{_scoped_key: '{taskhub}'}})-->
+              (head:TaskHubHead)<-[:FOLLOWS* {{taskhub: '{taskhub}'}}]-(task:Task)
         RETURN task
         """
         with self.transaction() as tx:
@@ -878,12 +878,12 @@ class Neo4jStore(FahAlchemyStateStore):
         else:
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
-    def claim_taskqueue_tasks(
-        self, taskqueue: ScopedKey, claimant: str, count: int = 1
+    def claim_taskhub_tasks(
+        self, taskhub: ScopedKey, claimant: str, count: int = 1
     ) -> List[ScopedKey]:
-        """Claim a TaskQueue Task.
+        """Claim a TaskHub Task.
 
-        This method will claim Tasks from a TaskQueue according to the following scheme:
+        This method will claim Tasks from a TaskHub according to the following scheme:
         1. the first Task in the queue if its priority is equal to that of the highest priority Task.
         2. otherwise, the highest priority Task.
 
@@ -897,12 +897,12 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         q = f"""
         // get list of all 'waiting' tasks in the queue
-        MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue}'}})-->
-              (head:TaskQueueHead)<-[:FOLLOWS* {{taskqueue: '{taskqueue}'}}]-(task1:Task)
+        MATCH (tq:TaskHub {{_scoped_key: '{taskhub}'}})-->
+              (head:TaskHubHead)<-[:FOLLOWS* {{taskhub: '{taskhub}'}}]-(task1:Task)
         WHERE task1.status = 'waiting'
 
         // get list of all 'waiting' tasks in the queue, but we'll order by priority
-        MATCH (tq)-->(head)<-[:FOLLOWS* {{taskqueue: '{taskqueue}'}}]-(task2:Task)
+        MATCH (tq)-->(head)<-[:FOLLOWS* {{taskhub: '{taskhub}'}}]-(task2:Task)
         WHERE task2.status = 'waiting'
 
         // build our task lists, order second list by priority
@@ -941,7 +941,7 @@ class Neo4jStore(FahAlchemyStateStore):
     ) -> ScopedKey:
         """Add a compute Task to a Transformation.
 
-        Note: this creates a compute Task, but does not add it to any TaskQueues.
+        Note: this creates a compute Task, but does not add it to any TaskHubs.
 
         Parameters
         ----------
@@ -1002,7 +1002,7 @@ class Neo4jStore(FahAlchemyStateStore):
         """Set a fixed number of Tasks against the given Transformation if not
         already present.
 
-        Note: Tasks created by this method are not added to any TaskQueues.
+        Note: Tasks created by this method are not added to any TaskHubs.
 
         Parameters
         ----------
@@ -1050,7 +1050,7 @@ class Neo4jStore(FahAlchemyStateStore):
     ) -> Task:
         """Remove a compute Task from a Transformation.
 
-        This will also remove the Task from all TaskQueues it is a part of.
+        This will also remove the Task from all TaskHubs it is a part of.
 
         This method is intended for administrator use; generally Tasks should
         instead have their tasks set to 'deleted' and retained.

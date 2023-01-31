@@ -89,13 +89,13 @@ def n4js_preloaded(
         sk1 = n4js.create_network(network_tyk2, single_scope)
         # Create another network for this scope
         sk2 = n4js.create_network(second_network_an2, single_scope)
-        # add a taskqueue for each network
-        n4js.create_taskqueue(sk1)
-        n4js.create_taskqueue(sk2)
+        # add a taskhub for each network
+        n4js.create_taskhub(sk1)
+        n4js.create_taskhub(sk2)
 
-        # add a taskqueue for each network and scope
-        tq_sk1 = n4js.create_taskqueue(sk1)
-        tq_sk2 = n4js.create_taskqueue(sk2)
+        # add a taskhub for each network and scope
+        tq_sk1 = n4js.create_taskhub(sk1)
+        tq_sk2 = n4js.create_taskhub(sk2)
 
         # Spawn tasks
         task_sks = defaultdict(list)
@@ -108,11 +108,11 @@ def n4js_preloaded(
                 task_sks[transformation].append(extend_from)
 
         # add tasks to both task queues
-        n4js.queue_taskqueue_tasks(
+        n4js.queue_taskhub_tasks(
             [task_sks[transformation][0] for transformation in transformations], tq_sk1
         )
 
-        n4js.queue_taskqueue_tasks(
+        n4js.queue_taskhub_tasks(
             [task_sks[transformation][0] for transformation in transformations[::-1]],
             tq_sk2,
         )

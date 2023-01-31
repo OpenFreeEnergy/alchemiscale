@@ -99,23 +99,23 @@ class Task(GufeTokenizable):
         return super()._defaults()
 
 
-class TaskQueue(GufeTokenizable):
+class TaskHub(GufeTokenizable):
     """
 
     Attributes
     ----------
     network : str
-        ScopedKey of the AlchemicalNetwork this TaskQueue corresponds to.
-        Used to ensure that there is only one TaskQueue for a given
+        ScopedKey of the AlchemicalNetwork this TaskHub corresponds to.
+        Used to ensure that there is only one TaskHub for a given
         AlchemicalNetwork using neo4j constraints.
     weight : float
-        Value between 0.0 and 1.0 giving the weight of this TaskQueue. This
-        number is used to allocate attention to this TaskQueue relative to
-        others by a ComputeService. TaskQueues with equal weight will be given
-        equal attention; a TaskQueue with greater weight than another will
+        Value between 0.0 and 1.0 giving the weight of this TaskHub. This
+        number is used to allocate attention to this TaskHub relative to
+        others by a ComputeService. TaskHub with equal weight will be given
+        equal attention; a TaskHub with greater weight than another will
         receive more attention.
 
-        Setting the weight to 0.0 will give the TaskQueue no attention,
+        Setting the weight to 0.0 will give the TaskHub no attention,
         effectively disabling it.
 
     """

@@ -15,7 +15,7 @@ from requests.auth import HTTPBasicAuth
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from ..models import Scope, ScopedKey
-from ..storage.models import TaskQueue, Task
+from ..storage.models import TaskHub, Task
 
 
 class FahAlchemyBaseClientError(Exception):

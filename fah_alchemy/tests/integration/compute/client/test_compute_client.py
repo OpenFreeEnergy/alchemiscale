@@ -43,7 +43,7 @@ class TestComputeClient:
         compute_client.get_info()
         assert token != compute_client._jwtoken
 
-    def test_query_taskqueues(
+    def test_query_taskhubs(
         self,
         scope_test,
         n4js_preloaded,
@@ -51,14 +51,14 @@ class TestComputeClient:
         uvicorn_server,
     ):
 
-        taskqueues = compute_client.query_taskqueues([scope_test])
+        taskhubs = compute_client.query_taskhubs([scope_test])
 
-        assert len(taskqueues) == 2
+        assert len(taskhubs) == 2
 
-        taskqueues = compute_client.query_taskqueues([scope_test], return_gufe=True)
-        assert all([tq.weight == 0.5 for tq in taskqueues.values()])
+        taskhubs = compute_client.query_taskhubs([scope_test], return_gufe=True)
+        assert all([tq.weight == 0.5 for tq in taskhubs.values()])
 
-    def test_claim_taskqueue_task(
+    def test_claim_taskhub_task(
         self,
         scope_test,
         n4js_preloaded,
@@ -67,7 +67,7 @@ class TestComputeClient:
     ):
 
         ...
-        # task = compute_client.claim_taskqueue_task(scope_test)
+        # task = compute_client.claim_taskhub_task(scope_test)
 
     def test_api_check(
         self,

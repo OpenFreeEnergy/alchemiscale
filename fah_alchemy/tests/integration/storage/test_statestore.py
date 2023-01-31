@@ -9,7 +9,7 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from fah_alchemy.storage import Neo4jStore
-from fah_alchemy.storage.models import Task, TaskQueue, ObjectStoreRef
+from fah_alchemy.storage.models import Task, TaskHub, ObjectStoreRef
 from fah_alchemy.models import Scope, ScopedKey
 from fah_alchemy.security.models import (
     CredentialedEntity,
@@ -164,52 +164,52 @@ class TestNeo4jStore(TestStateStore):
 
         assert m["_gufe_key"] == transformation.key
 
-    def test_create_taskqueue(self, n4js, network_tyk2, scope_test):
-        # add alchemical network, then try adding a taskqueue
+    def test_create_taskhub(self, n4js, network_tyk2, scope_test):
+        # add alchemical network, then try adding a taskhub
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
 
-        # create taskqueue
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        # create taskhub
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         # verify creation looks as we expect
         m = n4js.graph.run(
             f"""
-                match (n:TaskQueue {{_gufe_key: '{taskqueue_sk.gufe_key}', 
-                                             _org: '{taskqueue_sk.org}', _campaign: '{taskqueue_sk.campaign}', 
-                                             _project: '{taskqueue_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+                match (n:TaskHub {{_gufe_key: '{taskhub_sk.gufe_key}', 
+                                             _org: '{taskhub_sk.org}', _campaign: '{taskhub_sk.campaign}', 
+                                             _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
                 return m
                 """
         ).to_subgraph()
 
         assert m["_gufe_key"] == an.key
 
-        # try adding the task queue again; this should yield exactly the same node
-        taskqueue_sk2: ScopedKey = n4js.create_taskqueue(network_sk)
+        # try adding the task hub again; this should yield exactly the same node
+        taskhub_sk2: ScopedKey = n4js.create_taskhub(network_sk)
 
-        assert taskqueue_sk2 == taskqueue_sk
+        assert taskhub_sk2 == taskhub_sk
 
         records = n4js.graph.run(
             f"""
-                match (n:TaskQueue {{network: '{network_sk}', 
-                                             _org: '{taskqueue_sk.org}', _campaign: '{taskqueue_sk.campaign}', 
-                                             _project: '{taskqueue_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+                match (n:TaskHub {{network: '{network_sk}', 
+                                             _org: '{taskhub_sk.org}', _campaign: '{taskhub_sk.campaign}', 
+                                             _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
                 return n
                 """
         )
 
         assert len(list(records)) == 1
 
-    def test_create_taskqueue_weight(self, n4js, network_tyk2, scope_test):
+    def test_create_taskhub_weight(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
 
-        # create taskqueue
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        # create taskhub
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         n = n4js.graph.run(
             f"""
-                match (n:TaskQueue)
+                match (n:TaskHub)
                 return n
                 """
         ).to_subgraph()
@@ -217,41 +217,41 @@ class TestNeo4jStore(TestStateStore):
         assert n["weight"] == 0.5
 
         # change the weight
-        n4js.set_taskqueue_weight(network_sk, 0.7)
+        n4js.set_taskhub_weight(network_sk, 0.7)
 
         n = n4js.graph.run(
             f"""
-                match (n:TaskQueue)
+                match (n:TaskHub)
                 return n
                 """
         ).to_subgraph()
 
         assert n["weight"] == 0.7
 
-    def test_query_taskqueues(self, n4js: Neo4jStore, network_tyk2, scope_test):
+    def test_query_taskhubs(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         # add a slightly different network
         an2 = AlchemicalNetwork(
             edges=list(an.edges)[:-1], name="tyk2_relative_benchmark_-1"
         )
         network_sk2 = n4js.create_network(an2, scope_test)
-        taskqueue_sk2: ScopedKey = n4js.create_taskqueue(network_sk2)
+        taskhub_sk2: ScopedKey = n4js.create_taskhub(taskhub_sk2)
 
-        tq_sks: List[ScopedKey] = n4js.query_taskqueues()
+        tq_sks: List[ScopedKey] = n4js.query_taskhubs()
         assert len(tq_sks) == 2
         assert all([isinstance(i, ScopedKey) for i in tq_sks])
 
-        tq_dict: Dict[ScopedKey, TaskQueue] = n4js.query_taskqueues(return_gufe=True)
+        tq_dict: Dict[ScopedKey, TaskHub] = n4js.query_taskhubs(return_gufe=True)
         assert len(tq_dict) == 2
-        assert all([isinstance(i, TaskQueue) for i in tq_dict.values()])
+        assert all([isinstance(i, TaskHub) for i in tq_dict.values()])
 
     def test_queue_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
@@ -260,10 +260,10 @@ class TestNeo4jStore(TestStateStore):
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
         # queue the tasks
-        n4js.queue_taskqueue_tasks(task_sks, taskqueue_sk)
+        n4js.queue_taskhub_tasks(task_sks, taskhub_sk)
 
         # count tasks in queue
-        queued_task_sks = n4js.get_taskqueue_tasks(taskqueue_sk)
+        queued_task_sks = n4js.get_taskhub_tasks(taskhub_sk)
         assert task_sks == queued_task_sks
 
         # add a second network, with the transformation above missing
@@ -275,15 +275,15 @@ class TestNeo4jStore(TestStateStore):
         assert transformation not in an2.edges
 
         network_sk2 = n4js.create_network(an2, scope_test)
-        taskqueue_sk2: ScopedKey = n4js.create_taskqueue(network_sk2)
+        taskhub_sk2: ScopedKey = n4js.create_taskhub(network_sk2)
 
         with pytest.raises(ValueError, match="not found in same network"):
-            task_sks_fail = n4js.queue_taskqueue_tasks(task_sks, taskqueue_sk2)
+            task_sks_fail = n4js.queue_taskhub_tasks(task_sks, taskhub_sk2)
 
     def test_claim_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
@@ -296,14 +296,14 @@ class TestNeo4jStore(TestStateStore):
         random.shuffle(task_sks)
 
         # try to claim from an empty queue
-        nothing = n4js.claim_taskqueue_tasks(taskqueue_sk, "early bird task handler")
+        nothing = n4js.claim_taskhub_tasks(taskhub_sk, "early bird task handler")
         assert nothing[0] is None
 
         # queue the tasks
-        n4js.queue_taskqueue_tasks(task_sks, taskqueue_sk)
+        n4js.queue_taskhub_tasks(task_sks, taskhub_sk)
 
         # claim a single task; we expect this should be the first in the list
-        claimed = n4js.claim_taskqueue_tasks(taskqueue_sk, "the best task handler")
+        claimed = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
         assert claimed[0] == task_sks[0]
 
         # set all tasks to priority 5, fourth task to priority 1; claim should
@@ -312,28 +312,28 @@ class TestNeo4jStore(TestStateStore):
             n4js.set_task_priority(task_sk, 5)
         n4js.set_task_priority(task_sks[3], 1)
 
-        claimed2 = n4js.claim_taskqueue_tasks(taskqueue_sk, "another task handler")
+        claimed2 = n4js.claim_taskhub_tasks(taskhub_sk, "another task handler")
         assert claimed2[0] == task_sks[3]
 
         # next task claimed should be the second task in line
-        claimed3 = n4js.claim_taskqueue_tasks(taskqueue_sk, "yet another task handler")
+        claimed3 = n4js.claim_taskhub_tasks(taskhub_sk, "yet another task handler")
         assert claimed3[0] == task_sks[1]
 
         # try to claim multiple tasks
-        claimed4 = n4js.claim_taskqueue_tasks(
-            taskqueue_sk, "last task handler", count=4
+        claimed4 = n4js.claim_taskhub_tasks(
+            taskhub_sk, "last task handler", count=4
         )
         assert claimed4[0] == task_sks[2]
         assert claimed4[1:] == task_sks[4:7]
 
         # exhaust the queue
-        claimed5 = n4js.claim_taskqueue_tasks(
-            taskqueue_sk, "last task handler", count=3
+        claimed5 = n4js.claim_taskhub_tasks(
+            taskhub_sk, "last task handler", count=3
         )
 
         # try to claim from a queue with no tasks available
-        claimed6 = n4js.claim_taskqueue_tasks(
-            taskqueue_sk, "last task handler", count=2
+        claimed6 = n4js.claim_taskhub_tasks(
+            taskhub_sk, "last task handler", count=2
         )
         assert claimed6 == [None] * 2
 
@@ -343,7 +343,7 @@ class TestNeo4jStore(TestStateStore):
 
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
