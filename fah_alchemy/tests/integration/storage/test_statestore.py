@@ -238,7 +238,7 @@ class TestNeo4jStore(TestStateStore):
             edges=list(an.edges)[:-1], name="tyk2_relative_benchmark_-1"
         )
         network_sk2 = n4js.create_network(an2, scope_test)
-        taskhub_sk2: ScopedKey = n4js.create_taskhub(taskhub_sk2)
+        taskhub_sk2: ScopedKey = n4js.create_taskhub(network_sk2)
 
         tq_sks: List[ScopedKey] = n4js.query_taskhubs()
         assert len(tq_sks) == 2
