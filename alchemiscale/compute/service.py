@@ -92,7 +92,7 @@ class SynchronousComputeService:
         self.heartbeat_frequency = heartbeat_frequency
         self.limit = limit
 
-        self.client =AlchemiscaleComputeClient(api_url, identifier, key)
+        self.client = AlchemiscaleComputeClient(api_url, identifier, key)
 
         if scopes is None:
             self.scopes = [Scope()]

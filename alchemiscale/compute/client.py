@@ -17,7 +17,7 @@ from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 
-from ..base.client import AlchemiscaleBaseClient,AlchemiscaleBaseClientError
+from ..base.client import AlchemiscaleBaseClient, AlchemiscaleBaseClientError
 from ..models import Scope, ScopedKey
 from ..storage.models import TaskQueue, Task
 
