@@ -1,7 +1,7 @@
-.. automodule:: fah_alchemy.security.auth
+.. automodule:: alchemiscale.security.auth
     :members:
     :show-inheritance:
 
-.. automodule:: fah_alchemy.security.models
+.. automodule:: alchemiscale.security.models
     :members:
     :show-inheritance:

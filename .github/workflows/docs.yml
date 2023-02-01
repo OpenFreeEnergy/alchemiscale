@@ -28,7 +28,7 @@ jobs:
             python-version: 3.9
             miniforge-variant: Mambaforge
             environment-file: devtools/conda-envs/docs.yml
-            activate-environment: fah-alchemy-docs
+            activate-environment: alchemiscale-docs
 
       - name: Decrypt OpenEye license
         if: ${{ !github.event.pull_request.head.repo.fork }}

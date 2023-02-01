@@ -1,2 +1,2 @@
 include versioneer.py
-include fah_alchemy/_version.py
+include alchemiscale/_version.py
