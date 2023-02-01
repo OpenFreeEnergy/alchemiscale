@@ -1239,9 +1239,7 @@ class Neo4jStore(FahAlchemyStateStore):
             tx.run(q)
 
     def add_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
-        """Add a scope to the given entity.
-
-        """
+        """Add a scope to the given entity."""
         scope_str = str(scope)
         # n.scopes is always initialized by the pydantic model so no need to check
         # for existence, however, we do need to check that the scope is not already
@@ -1258,9 +1256,7 @@ class Neo4jStore(FahAlchemyStateStore):
     def list_scopes(
         self, identifier: str, cls: type[CredentialedEntity]
     ) -> List[Scope]:
-        """List all scopes for which the given entity has access.
-
-        """
+        """List all scopes for which the given entity has access."""
 
         # get the scope properties for the given entity
         q = f"""
@@ -1282,9 +1278,7 @@ class Neo4jStore(FahAlchemyStateStore):
     def remove_scope(
         self, identifier: str, cls: type[CredentialedEntity], scope: Scope
     ):
-        """Remove a scope from the given entity.
-
-        """
+        """Remove a scope from the given entity."""
         scope_str = str(scope)
         # use a list comprehension to remove the scope from the list
         q = f"""
