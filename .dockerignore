@@ -3,7 +3,7 @@
 
 # Only allow
 !devtools/conda-envs/docker.yml
-!fah_alchemy/*
+!alchemiscale/*
 !LICENSE 
 !MANIFEST.in 
 !README.md 

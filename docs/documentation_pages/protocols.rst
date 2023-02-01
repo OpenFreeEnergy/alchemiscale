@@ -1,3 +1,3 @@
-.. automodule:: fah_alchemy.protocols.nonequilibrium_cycling
+.. automodule:: alchemiscale.protocols.nonequilibrium_cycling
     :members:
     :show-inheritance:

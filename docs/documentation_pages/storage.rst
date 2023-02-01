@@ -1,11 +1,11 @@
-.. automodule:: fah_alchemy.storage.models
+.. automodule:: alchemiscale.storage.models
     :members:
     :show-inheritance:
 
-.. automodule:: fah_alchemy.storage.objectstore
+.. automodule:: alchemiscale.storage.objectstore
     :members:
     :show-inheritance:
 
-.. automodule:: fah_alchemy.storage.statestore
+.. automodule:: alchemiscale.storage.statestore
     :members:
     :show-inheritance:

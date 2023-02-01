@@ -26,4 +26,4 @@ jobs:
           python -m pip install black
 
       - name: "Run the black check"
-        run: black --check fah_alchemy
+        run: black --check alchemiscale

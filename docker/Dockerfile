@@ -1,6 +1,6 @@
 FROM mambaorg/micromamba:1.1.0
 
-LABEL org.opencontainers.image.source=https://github.com/openforcefield/fah-alchemy
+LABEL org.opencontainers.image.source=https://github.com/openforcefield/alchemiscale
 LABEL org.opencontainers.image.description="An alchemical free energy platform for exascale computing on Folding@Home."
 LABEL org.opencontainers.image.licenses=MIT
 
@@ -9,7 +9,7 @@ LABEL org.opencontainers.image.licenses=MIT
 ENV PYTHONUNBUFFERED=1
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER devtools/conda-envs/docker.yml /tmp/env.yaml
-COPY --chown=$MAMBA_USER:$MAMBA_USER fah_alchemy /tmp/fah_alchemy
+COPY --chown=$MAMBA_USER:$MAMBA_USER alchemiscale /tmp/alchemiscale
 COPY --chown=$MAMBA_USER:$MAMBA_USER LICENSE MANIFEST.in README.md setup.cfg setup.py versioneer.py /tmp/
 RUN micromamba install -y -n base git -f /tmp/env.yaml && \
     micromamba clean --all --yes
@@ -18,4 +18,4 @@ RUN micromamba install -y -n base git -f /tmp/env.yaml && \
 # https://github.com/mamba-org/micromamba-docker#running-commands-in-dockerfile-within-the-conda-environment
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 RUN python -m pip install --no-deps -e .
-ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "/opt/conda/bin/fah-alchemy"]
+ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "/opt/conda/bin/alchemiscale"]

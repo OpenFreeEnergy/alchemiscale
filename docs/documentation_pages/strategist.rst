@@ -1,3 +1,3 @@
-.. automodule:: fah_alchemy.strategist.service
+.. automodule:: alchemiscale.strategist.service
     :members:
     :show-inheritance:

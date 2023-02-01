@@ -1,7 +1,7 @@
-.. automodule:: fah_alchemy.base.api
+.. automodule:: alchemiscale.base.api
     :members:
     :show-inheritance:
 
-.. automodule:: fah_alchemy.base.client
+.. automodule:: alchemiscale.base.client
     :members:
     :show-inheritance:

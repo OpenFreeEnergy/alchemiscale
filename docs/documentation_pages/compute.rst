@@ -1,11 +1,11 @@
-.. automodule:: fah_alchemy.compute.api
+.. automodule:: alchemiscale.compute.api
     :members:
     :show-inheritance:
 
-.. automodule:: fah_alchemy.compute.client
+.. automodule:: alchemiscale.compute.client
     :members:
     :show-inheritance:
 
-.. automodule:: fah_alchemy.compute.service
+.. automodule:: alchemiscale.compute.service
     :members:
     :show-inheritance:
