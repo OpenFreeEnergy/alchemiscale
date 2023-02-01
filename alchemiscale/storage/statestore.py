@@ -1238,11 +1238,31 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
+    def add_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
+        """Add a scope to the given entity.
+
+        """
+        scope_str = str(scope)
+        # n.scopes is always initialized by the pydantic model so no need to check
+        # for existence, however, we do need to check that the scope is not already
+        # present
+        q = f"""
+        MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
+        WHERE NONE(x IN n.scopes WHERE x = '{scope_str}')
+        SET n.scopes = n.scopes + '{scope_str}'
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)
+
     def list_scopes(
         self, identifier: str, cls: type[CredentialedEntity]
     ) -> List[Scope]:
+        """List all scopes for which the given entity has access.
+
+        """
+
         # get the scope properties for the given entity
-        """List all scopes for which the given entity has access."""
         q = f"""
         MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
         RETURN n.scopes as s
@@ -1259,25 +1279,12 @@ class Neo4jStore(AlchemiscaleStateStore):
                 scopes.append(scope)
         return scopes
 
-    def add_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
-        """Add a scope to the given entity."""
-        scope_str = str(scope)
-        # n.scopes is always initialized by the pydantic model so no need to check
-        # for existence, however, we do need to check that the scope is not already
-        # present
-        q = f"""
-        MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
-        WHERE NONE(x IN n.scopes WHERE x = '{scope_str}')
-        SET n.scopes = n.scopes + '{scope_str}'
-        """
-
-        with self.transaction() as tx:
-            tx.run(q)
-
     def remove_scope(
         self, identifier: str, cls: type[CredentialedEntity], scope: Scope
     ):
-        """Remove a scope from the given entity."""
+        """Remove a scope from the given entity.
+
+        """
         scope_str = str(scope)
         # use a list comprehension to remove the scope from the list
         q = f"""
