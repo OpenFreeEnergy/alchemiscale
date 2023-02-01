@@ -392,9 +392,7 @@ def test_scope_list(n4js_fresh):
         n4js.add_scope(
             "bill", CredentialedUserIdentity, Scope.from_str("org4-campaign5-project6")
         )
-        n4js.add_scope(
-            "bill", CredentialedUserIdentity, Scope.from_str("org7-*-*")
-        )
+        n4js.add_scope("bill", CredentialedUserIdentity, Scope.from_str("org7-*-*"))
         result = runner.invoke(
             cli,
             [

@@ -578,9 +578,7 @@ class TestNeo4jStore(TestStateStore):
         not_removed = Scope.from_str("scope-not-removed")
 
         n4js.add_scope(user.identifier, credential_type, scope)
-        n4js.add_scope(
-            user.identifier, credential_type, not_removed
-        )
+        n4js.add_scope(user.identifier, credential_type, not_removed)
 
         n4js.remove_scope(user.identifier, credential_type, scope)
 
@@ -607,9 +605,7 @@ class TestNeo4jStore(TestStateStore):
         not_removed = Scope.from_str("scope-not-removed")
 
         n4js.add_scope(user.identifier, credential_type, scope)
-        n4js.add_scope(
-            user.identifier, credential_type, not_removed
-        )
+        n4js.add_scope(user.identifier, credential_type, not_removed)
 
         n4js.remove_scope(user.identifier, credential_type, scope)
         n4js.remove_scope(user.identifier, credential_type, scope)
