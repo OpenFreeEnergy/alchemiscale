@@ -1240,14 +1240,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def add_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
         """Add a scope to the given entity."""
-        scope_str = str(scope)
+
         # n.scopes is always initialized by the pydantic model so no need to check
         # for existence, however, we do need to check that the scope is not already
         # present
         q = f"""
         MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
-        WHERE NONE(x IN n.scopes WHERE x = '{scope_str}')
-        SET n.scopes = n.scopes + '{scope_str}'
+        WHERE NONE(x IN n.scopes WHERE x = '{scope}')
+        SET n.scopes = n.scopes + '{scope}'
         """
 
         with self.transaction() as tx:
@@ -1279,11 +1279,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         self, identifier: str, cls: type[CredentialedEntity], scope: Scope
     ):
         """Remove a scope from the given entity."""
-        scope_str = str(scope)
+
         # use a list comprehension to remove the scope from the list
         q = f"""
         MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
-        SET n.scopes = [scope IN n.scopes WHERE scope <> '{scope_str}']
+        SET n.scopes = [scope IN n.scopes WHERE scope <> '{scope}']
         """
 
         with self.transaction() as tx:
