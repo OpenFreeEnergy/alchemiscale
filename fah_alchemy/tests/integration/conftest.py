@@ -195,6 +195,7 @@ def s3os_server(s3objectstore_settings):
 
     server.stop()
 
+
 @fixture
 def s3os_server_fresh(s3os_server):
     s3os_server.reset()
@@ -262,19 +263,21 @@ def network_tyk2():
         edges=(solvent_network + complex_network), name="tyk2_relative_benchmark"
     )
 
+
 @fixture(scope="session")
 def network_tyk2_failure(network_tyk2):
 
     transformation = list(network_tyk2.edges)[0]
 
     broken_transformation = Transformation(
-            stateA=transformation.stateA,
-            stateB=transformation.stateB,
-            protocol=BrokenProtocol(settings=None))
+        stateA=transformation.stateA,
+        stateB=transformation.stateB,
+        protocol=BrokenProtocol(settings=None),
+    )
 
     return AlchemicalNetwork(
-            edges=[broken_transformation] + list(network_tyk2.edges), name="tyk2_broken"
-            )
+        edges=[broken_transformation] + list(network_tyk2.edges), name="tyk2_broken"
+    )
 
 
 @fixture(scope="session")

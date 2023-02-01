@@ -41,7 +41,9 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         if scope.specific():
             return ScopedKey(gufe_key=obj.key, **scope.dict())
         else:
-            raise ValueError("Scope for a ScopedKey must be specific; it cannot contain wildcards.")
+            raise ValueError(
+                "Scope for a ScopedKey must be specific; it cannot contain wildcards."
+            )
 
     def check_exists(self, scoped_key: Scope):
         return self._get_resource("/exists/{scoped_key}", params={}, return_gufe=False)
@@ -185,9 +187,7 @@ class FahAlchemyClient(FahAlchemyBaseClient):
 
             return g
 
-    def get_task_transformation(
-        self, task: ScopedKey
-    ) -> ScopedKey:
+    def get_task_transformation(self, task: ScopedKey) -> ScopedKey:
 
         transformation = self._get_resource(
             f"tasks/{task}/transformation", {}, return_gufe=False
@@ -266,11 +266,11 @@ class FahAlchemyClient(FahAlchemyBaseClient):
     ### results
 
     def _get_prototocoldagresults(
-            self,
-            objectstorerefs: List[ObjectStoreRef],
-            transformation: ScopedKey,
-            success: bool
-            ):
+        self,
+        objectstorerefs: List[ObjectStoreRef],
+        transformation: ScopedKey,
+        success: bool,
+    ):
 
         if success:
             route = "results"
@@ -328,7 +328,9 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             return_gufe=False,
         )
 
-        pdrs = self._get_prototocoldagresults(objectstorerefs, transformation, success=True)
+        pdrs = self._get_prototocoldagresults(
+            objectstorerefs, transformation, success=True
+        )
 
         if return_protocoldagresults:
             return pdrs
@@ -353,14 +355,14 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             return_gufe=False,
         )
 
-        pdrs = self._get_prototocoldagresults(objectstorerefs, transformation, success=False)
+        pdrs = self._get_prototocoldagresults(
+            objectstorerefs, transformation, success=False
+        )
 
         return pdrs
 
     def get_task_results(self, task: ScopedKey):
-        """Get successful `ProtocolDAGResult`s for the given `Task`.
-
-        """
+        """Get successful `ProtocolDAGResult`s for the given `Task`."""
         # first, get the transformation; also confirms it exists
         transformation: ScopedKey = self.get_task_transformation(task)
 
@@ -370,14 +372,14 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             return_gufe=False,
         )
 
-        pdrs = self._get_prototocoldagresults(objectstorerefs, transformation, success=True)
+        pdrs = self._get_prototocoldagresults(
+            objectstorerefs, transformation, success=True
+        )
 
         return pdrs
 
     def get_task_failures(self, task: ScopedKey):
-        """Get failed `ProtocolDAGResult`s for the given `Task`.
-
-        """
+        """Get failed `ProtocolDAGResult`s for the given `Task`."""
         # first, get the transformation; also confirms it exists
         transformation: ScopedKey = self.get_task_transformation(task)
 
@@ -387,6 +389,8 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             return_gufe=False,
         )
 
-        pdrs = self._get_prototocoldagresults(objectstorerefs, transformation, success=False)
+        pdrs = self._get_prototocoldagresults(
+            objectstorerefs, transformation, success=False
+        )
 
         return pdrs

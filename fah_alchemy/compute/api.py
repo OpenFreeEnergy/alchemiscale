@@ -172,7 +172,7 @@ def set_task_result(
 
     # push the ProtocolDAGResult to the object store
     protocoldagresultref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
-        pdr, 
+        pdr,
         scope=task_sk.scope,
     )
 

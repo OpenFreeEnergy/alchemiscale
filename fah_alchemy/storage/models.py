@@ -215,12 +215,13 @@ class ProtocolDAGResultRef(ObjectStoreRef):
     success: bool
 
     def __init__(
-            self,
-            *,
-            location: str = None,
-            obj_key: GufeKey = None,
-            scope: Scope,
-            success: bool):
+        self,
+        *,
+        location: str = None,
+        obj_key: GufeKey = None,
+        scope: Scope,
+        success: bool,
+    ):
 
         self.location = location
         self.obj_key = GufeKey(obj_key) if obj_key is not None else None
@@ -232,7 +233,7 @@ class ProtocolDAGResultRef(ObjectStoreRef):
             "location": self.location,
             "obj_key": str(self.obj_key),
             "scope": str(self.scope),
-            "success": self.success
+            "success": self.success,
         }
 
 

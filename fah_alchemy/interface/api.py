@@ -76,6 +76,7 @@ async def check(
 
 ### inputs
 
+
 @router.get("/exists/{scoped_key}", response_class=GufeJSONResponse)
 async def check_existence(
     scoped_key,
@@ -383,6 +384,7 @@ async def get_task_transformation(
     )
 
     return str(transformation)
+
 
 @router.get(
     "/tasks/{task_scoped_key}/results",

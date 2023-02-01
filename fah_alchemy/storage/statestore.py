@@ -1185,17 +1185,19 @@ class Neo4jStore(FahAlchemyStateStore):
         )
 
         if return_gufe:
-            return (self.get_gufe(transformation),
-                    self.get_gufe(protocoldagresult) if protocoldagresult is not None else None)
+            return (
+                self.get_gufe(transformation),
+                self.get_gufe(protocoldagresult)
+                if protocoldagresult is not None
+                else None,
+            )
 
         return transformation, protocoldagresult
 
     def set_task_result(
         self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
     ) -> ScopedKey:
-        """Set a `ProtocolDAGResultRef` pointing to a `ProtocolDAGResult` for the given `Task`.
-
-        """
+        """Set a `ProtocolDAGResultRef` pointing to a `ProtocolDAGResult` for the given `Task`."""
         scope = task.scope
         task_node = self._get_node(task)
 
@@ -1219,8 +1221,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return scoped_key
 
-    def get_task_results(
-        self, task: ScopedKey):
+    def get_task_results(self, task: ScopedKey):
         # get all task result protocoldagresultrefs corresponding to given task
         # returned in no particular order
         q = f"""
@@ -1231,9 +1232,7 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         return self._get_protocoldagresultrefs(q)
 
-
-    def get_task_failures(
-        self, task: ScopedKey):
+    def get_task_failures(self, task: ScopedKey):
         # get all task failure protocoldagresultrefs corresponding to given task
         # returned in no particular order
         q = f"""
@@ -1244,12 +1243,7 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         return self._get_protocoldagresultrefs(q)
 
-
-    def set_task_waiting(
-        self,
-        task: ScopedKey,
-        clear_claim=True
-    ):
+    def set_task_waiting(self, task: ScopedKey, clear_claim=True):
         q = f"""
         MATCH (t:Task {{_scoped_key: "{task}"}})
         SET t.status = 'waiting'
@@ -1258,7 +1252,6 @@ class Neo4jStore(FahAlchemyStateStore):
         if clear_claim:
             q += ", t.claimant = null"
 
-
         q += """
         RETURN t
         """
@@ -1266,10 +1259,7 @@ class Neo4jStore(FahAlchemyStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
-    def set_task_running(
-        self,
-        task: ScopedKey,
-        computekey: ComputeKey):
+    def set_task_running(self, task: ScopedKey, computekey: ComputeKey):
         ...
 
     def set_task_complete(

@@ -246,10 +246,7 @@ class TestClient:
                 name=str(task_sk),
             )
 
-            protocoldagresult = execute_DAG(
-                protocoldag,
-                raise_error=False
-            )
+            protocoldagresult = execute_DAG(protocoldag, raise_error=False)
 
             assert protocoldagresult._transformation == transformation.key
             if protocoldagresult_:
@@ -261,7 +258,9 @@ class TestClient:
                 protocoldagresult, scope=task_sk.scope
             )
 
-            n4js.set_task_result(task=task_sk, protocoldagresultref=protocoldagresultref)
+            n4js.set_task_result(
+                task=task_sk, protocoldagresultref=protocoldagresultref
+            )
 
         return protocoldagresults
 
@@ -315,8 +314,9 @@ class TestClient:
         assert len(protocolresult.data["key_results"]) == 3
 
         # get back protocoldagresults instead
-        protocoldagresults_r = user_client.get_transformation_results(transformation_sk,
-                                                                   return_protocoldagresults=True)
+        protocoldagresults_r = user_client.get_transformation_results(
+            transformation_sk, return_protocoldagresults=True
+        )
 
         assert set(protocoldagresults_r) == set(protocoldagresults)
 
@@ -339,7 +339,9 @@ class TestClient:
         # select the transformation we want to compute
         an = network_tyk2_failure
         user_client.create_network(an, scope_test)
-        transformation = [t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)][0]
+        transformation = [
+            t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
+        ][0]
 
         network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
@@ -368,7 +370,9 @@ class TestClient:
         assert len(protocolresult.data) == 0
 
         # user client : instead, pull failures
-        protocoldagresults_r = user_client.get_transformation_failures(transformation_sk)
+        protocoldagresults_r = user_client.get_transformation_failures(
+            transformation_sk
+        )
 
         assert set(protocoldagresults_r) == set(protocoldagresults)
         assert len(protocoldagresults_r) == 2
@@ -377,7 +381,6 @@ class TestClient:
             assert pdr._transformation == transformation.key
             assert isinstance(pdr._extends, GufeKey) or pdr._extends is None
             assert not pdr.ok()
-
 
     def test_get_task_results(
         self,
@@ -425,7 +428,6 @@ class TestClient:
                 assert isinstance(pdr._extends, GufeKey) or pdr._extends is None
                 assert pdr.ok()
 
-
     def test_get_task_failures(
         self,
         scope_test,
@@ -440,7 +442,9 @@ class TestClient:
         # select the transformation we want to compute
         an = network_tyk2_failure
         user_client.create_network(an, scope_test)
-        transformation = [t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)][0]
+        transformation = [
+            t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
+        ][0]
 
         network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)

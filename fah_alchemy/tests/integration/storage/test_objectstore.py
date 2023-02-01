@@ -10,7 +10,6 @@ from fah_alchemy.storage.models import ObjectStoreRef
 
 
 class TestS3ObjectStore:
-
     def test_delete(self, s3os: S3ObjectStore):
         # write check
         s3os._store_bytes("_check_test", b"test_check")
@@ -42,7 +41,9 @@ class TestS3ObjectStore:
 
         # round trip it
         sk = ScopedKey(gufe_key=objstoreref.obj_key, **scope_test.dict())
-        tf_sk = ScopedKey(gufe_key=protocoldagresult.transformation, **scope_test.dict())
+        tf_sk = ScopedKey(
+            gufe_key=protocoldagresult.transformation, **scope_test.dict()
+        )
         pdr = s3os.pull_protocoldagresult(sk, tf_sk)
 
         assert pdr.key == protocoldagresult.key

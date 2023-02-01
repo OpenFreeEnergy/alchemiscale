@@ -155,7 +155,7 @@ class SynchronousComputeService:
 
         # TODO: remove claim on task, set to complete; remove from queues
         # TODO: if protocoldagresult.ok is False, need to handle this
-        #if protocoldagresult.ok():
+        # if protocoldagresult.ok():
         #    self.client.
 
         return sk

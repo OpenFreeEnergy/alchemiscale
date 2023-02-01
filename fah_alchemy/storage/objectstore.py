@@ -228,7 +228,7 @@ class S3ObjectStore:
             protocoldagresult.transformation,
             route,
             protocoldagresult.key,
-            "obj.json"
+            "obj.json",
         )
 
         # TODO: add support for compute client-side compressed protocoldagresults
@@ -241,16 +241,16 @@ class S3ObjectStore:
             location=location,
             obj_key=protocoldagresult.key,
             scope=scope,
-            success=success
+            success=success,
         )
 
     def pull_protocoldagresult(
-            self,
-            protocoldagresult: ScopedKey,
-            transformation: ScopedKey,
-            return_as="gufe",
-            success=True,
-            ):
+        self,
+        protocoldagresult: ScopedKey,
+        transformation: ScopedKey,
+        return_as="gufe",
+        success=True,
+    ):
         """Pull the `ProtocolDAGResult` corresponding to the given `ObjectStoreRef`.
 
         Parameters
@@ -268,7 +268,9 @@ class S3ObjectStore:
 
         """
         if transformation.scope != protocoldagresult.scope:
-            raise ValueError(f"transformation scope '{transformation.scope}' differs from protocoldagresult scope '{protocoldagresult.scope}'")
+            raise ValueError(
+                f"transformation scope '{transformation.scope}' differs from protocoldagresult scope '{protocoldagresult.scope}'"
+            )
 
         route = "results" if success else "failures"
 
