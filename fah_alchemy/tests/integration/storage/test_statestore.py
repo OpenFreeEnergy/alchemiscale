@@ -524,6 +524,7 @@ class TestNeo4jStore(TestStateStore):
         scopes_qr = n4js.graph.run(q).to_subgraph()
         scopes = scopes_qr.get("scopes")
         assert len(scopes) == 1
+
         new_scope = Scope.from_str(scopes[0])
         assert new_scope == scope
 
@@ -554,6 +555,7 @@ class TestNeo4jStore(TestStateStore):
         scopes_qr = n4js.graph.run(q).to_subgraph()
         scopes = scopes_qr.get("scopes")
         assert len(scopes) == 1
+
         new_scope = Scope.from_str(scopes[0])
         assert new_scope == scope1
 
@@ -573,17 +575,18 @@ class TestNeo4jStore(TestStateStore):
         n4js.create_credentialed_entity(user)
 
         scope = Scope.from_str(scope_str)
+        not_removed = Scope.from_str("scope-not-removed")
 
         n4js.add_scope(user.identifier, credential_type, scope)
         n4js.add_scope(
-            user.identifier, credential_type, Scope.from_str("scope-not-removed")
+            user.identifier, credential_type, not_removed
         )
 
         n4js.remove_scope(user.identifier, credential_type, scope)
 
         scopes = n4js.list_scopes(user.identifier, credential_type)
-
         assert scope not in scopes
+        assert not_removed in scopes
 
     @pytest.mark.parametrize(
         "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
@@ -601,10 +604,11 @@ class TestNeo4jStore(TestStateStore):
         n4js.create_credentialed_entity(user)
 
         scope = Scope.from_str(scope_str)
+        not_removed = Scope.from_str("scope-not-removed")
 
         n4js.add_scope(user.identifier, credential_type, scope)
         n4js.add_scope(
-            user.identifier, credential_type, Scope.from_str("scope-not-removed")
+            user.identifier, credential_type, not_removed
         )
 
         n4js.remove_scope(user.identifier, credential_type, scope)
@@ -612,3 +616,4 @@ class TestNeo4jStore(TestStateStore):
 
         scopes = n4js.list_scopes(user.identifier, credential_type)
         assert scope not in scopes
+        assert not_removed in scopes

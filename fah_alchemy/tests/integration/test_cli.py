@@ -392,6 +392,9 @@ def test_scope_list(n4js_fresh):
         n4js.add_scope(
             "bill", CredentialedUserIdentity, Scope.from_str("org4-campaign5-project6")
         )
+        n4js.add_scope(
+            "bill", CredentialedUserIdentity, Scope.from_str("org7-*-*")
+        )
         result = runner.invoke(
             cli,
             [
@@ -406,6 +409,7 @@ def test_scope_list(n4js_fresh):
         assert click_success(result)
         assert "org1-campaign2-project3" in result.output
         assert "org4-campaign5-project6" in result.output
+        assert "org7-*-*" in result.output
 
 
 def test_scope_add(n4js_fresh):
