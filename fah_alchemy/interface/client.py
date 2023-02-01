@@ -321,7 +321,7 @@ class FahAlchemyClient(FahAlchemyBaseClient):
 
         if not return_protocoldagresults:
             # get the transformation if we intend to return a ProtocolResult
-            tf: Transformation = self.get_transformation_protocol(transformation)
+            tf: Transformation = self.get_transformation(transformation)
 
         # get all objectstorerefs for the given transformation
         objectstorerefs = self._get_resource(

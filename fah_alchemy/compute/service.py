@@ -151,8 +151,6 @@ class SynchronousComputeService:
         # TODO: this method should postprocess any paths,
         # leaf nodes in DAG for blob results that should go to object store
 
-        # TODO: add check that this protocoldagresult actually corresponds to
-        # the given task
         sk: ScopedKey = self.client.set_task_result(task, protocoldagresult)
 
         # TODO: remove claim on task, set to complete; remove from queues
@@ -167,7 +165,8 @@ class SynchronousComputeService:
         # obtain a ProtocolDAG from the task
         protocoldag, transformation, extends = self.task_to_protocoldag(task)
 
-        # execute the task
+        # execute the task; this looks the same whether the ProtocolDAG is a
+        # success or failure
         protocoldagresult = execute_DAG(
             protocoldag,
             shared=self.shared,

@@ -42,7 +42,8 @@ class TestS3ObjectStore:
 
         # round trip it
         sk = ScopedKey(gufe_key=objstoreref.obj_key, **scope_test.dict())
-        pdr = s3os.pull_protocoldagresult(sk)
+        tf_sk = ScopedKey(gufe_key=protocoldagresult.transformation, **scope_test.dict())
+        pdr = s3os.pull_protocoldagresult(sk, tf_sk)
 
         assert pdr.key == protocoldagresult.key
         assert pdr.protocol_unit_results == pdr.protocol_unit_results

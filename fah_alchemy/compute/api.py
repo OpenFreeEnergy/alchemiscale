@@ -174,13 +174,16 @@ def set_task_result(
     protocoldagresultref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
         pdr, 
         scope=task_sk.scope,
-        succcess=pdr.ok(),
+        success=pdr.ok(),
     )
 
     # push the reference to the state store
     result_sk: ScopedKey = n4js.set_task_result(
         task=task_sk, protocoldagresultref=protocoldagresultref
     )
+
+    # TODO: if success, set task complete, remove from all queues
+    # otherwise, set as errored, leave in queues
 
     return result_sk
 

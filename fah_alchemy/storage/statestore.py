@@ -621,18 +621,7 @@ class Neo4jStore(FahAlchemyStateStore):
     def get_networks_for_transformation(self):
         ...
 
-    def get_transformation_results(
-        self, transformation: ScopedKey
-    ) -> List[ProtocolDAGResultRef]:
-
-        # get all task result protocoldagresultrefs corresponding to given transformation
-        # returned in no particular order
-        q = f"""
-        MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
-              (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
-        RETURN res
-        """
-
+    def _get_protocoldagresultrefs(self, q):
         with self.transaction() as tx:
             res = tx.run(q)
 
@@ -643,6 +632,34 @@ class Neo4jStore(FahAlchemyStateStore):
             subgraph = subgraph | record["res"]
 
         return list(self._subgraph_to_gufe(protocoldagresultrefs, subgraph).values())
+
+    def get_transformation_results(
+        self, transformation: ScopedKey
+    ) -> List[ProtocolDAGResultRef]:
+
+        # get all task result protocoldagresultrefs corresponding to given transformation
+        # returned in no particular order
+        q = f"""
+        MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
+              (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
+        WHERE res.success = true
+        RETURN res
+        """
+        return self._get_protocoldagresultrefs(q)
+
+    def get_transformation_failures(
+        self, transformation: ScopedKey
+    ) -> List[ProtocolDAGResultRef]:
+
+        # get all task failure protocoldagresultrefs corresponding to given transformation
+        # returned in no particular order
+        q = f"""
+        MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
+              (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
+        WHERE res.success = false
+        RETURN res
+        """
+        return self._get_protocoldagresultrefs(q)
 
     ## compute
 
@@ -842,19 +859,19 @@ class Neo4jStore(FahAlchemyStateStore):
         tasks: List[ScopedKey],
         taskqueue: ScopedKey,
     ) -> List[ScopedKey]:
-        """Remove a compute Task from the TaskQueue for a given AlchemicalNetwork.
+        """Remove Tasks from the TaskQueue for a given AlchemicalNetwork.
 
-        Note: the Task must be within the same scope as the AlchemicalNetwork.
+        Note: Tasks must be within the same scope as the AlchemicalNetwork.
 
-        A given compute task can be represented in many AlchemicalNetwork
-        queues, or none at all.
+        A given Task can be represented in many AlchemicalNetwork queues, or
+        none at all.
 
         """
         canceled_sks = []
         for t in tasks:
             q = f"""
             // get our task queue, as well as the task we want to remove, and
-            // the nodes ahead and behind it 
+            // the nodes ahead and behind it
             MATCH (task:Task {{_scoped_key: '{t}'}}),
                   (behind)-[behindf:FOLLOWS {{taskqueue: '{taskqueue}'}}]->(task),
                   (task)-[aheadf:FOLLOWS {{taskqueue: '{taskqueue}'}}]->(ahead)
@@ -1168,7 +1185,8 @@ class Neo4jStore(FahAlchemyStateStore):
         )
 
         if return_gufe:
-            return self.get_gufe(transformation), self.get_gufe(protocoldagresult)
+            return (self.get_gufe(transformation),
+                    self.get_gufe(protocoldagresult) if protocoldagresult is not None else None)
 
         return transformation, protocoldagresult
 
@@ -1203,44 +1221,89 @@ class Neo4jStore(FahAlchemyStateStore):
 
     def get_task_results(
         self, task: ScopedKey):
-        ...
+        # get all task result protocoldagresultrefs corresponding to given task
+        # returned in no particular order
+        q = f"""
+        MATCH (task:Task {{_scoped_key: "{task}"}}),
+              (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
+        WHERE res.success = true
+        RETURN res
+        """
+        return self._get_protocoldagresultrefs(q)
+
+
+    def get_task_failures(
+        self, task: ScopedKey):
+        # get all task failure protocoldagresultrefs corresponding to given task
+        # returned in no particular order
+        q = f"""
+        MATCH (task:Task {{_scoped_key: "{task}"}}),
+              (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
+        WHERE res.success = false
+        RETURN res
+        """
+        return self._get_protocoldagresultrefs(q)
+
 
     def set_task_waiting(
         self,
-        task: Union[Task, ScopedKey],
+        task: ScopedKey,
+        clear_claim=True
     ):
-        ...
+        q = f"""
+        MATCH (t:Task {{_scoped_key: "{task}"}})
+        SET t.status = 'waiting'
+        """
 
-    def set_task_running(self, task: Union[Task, ScopedKey], computekey: ComputeKey):
+        if clear_claim:
+            q += ", t.claimant = null"
+
+
+        q += """
+        RETURN t
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)
+
+    def set_task_running(
+        self,
+        task: ScopedKey,
+        computekey: ComputeKey):
         ...
 
     def set_task_complete(
         self,
         task: Union[Task, ScopedKey],
+        dequeue=True,
     ):
         ...
 
     def set_task_error(
         self,
         task: Union[Task, ScopedKey],
+        dequeue=True,
     ):
         ...
 
     def set_task_cancelled(
         self,
         task: Union[Task, ScopedKey],
+        dequeue=True,
     ):
         ...
 
     def set_task_invalid(
         self,
         task: Union[Task, ScopedKey],
+        dequeue=True,
     ):
         ...
 
     def set_task_deleted(
         self,
         task: Union[Task, ScopedKey],
+        dequeue=True,
     ):
         ...
 

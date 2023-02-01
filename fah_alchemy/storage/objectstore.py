@@ -267,6 +267,9 @@ class S3ObjectStore:
             The ProtocolDAGResult corresponding to the given `ObjectStoreRef`.
 
         """
+        if transformation.scope != protocoldagresult.scope:
+            raise ValueError(f"transformation scope '{transformation.scope}' differs from protocoldagresult scope '{protocoldagresult.scope}'")
+
         route = "results" if success else "failures"
 
         # build `location` based on gufe key

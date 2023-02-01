@@ -32,7 +32,7 @@ from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ObjectStoreRef
+from ..storage.models import ProtocolDAGResultRef
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedUserIdentity
@@ -292,8 +292,8 @@ def get_transformation_results(
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    # get all ObjectStoreRefs for the given transformation's results
-    refs: List[ObjectStoreRef] = n4js.get_transformation_results(sk)
+    # get all ProtocolDAGResultRefs for the given transformation's results
+    refs: List[ProtocolDAGResultRef] = n4js.get_transformation_results(sk)
 
     return [i.to_dict() for i in refs]
 
@@ -311,8 +311,8 @@ def get_transformation_failures(
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    # get all ObjectStoreRefs for the given transformation's results
-    refs: List[ObjectStoreRef] = n4js.get_transformation_failures(sk)
+    # get all ProtocolDAGResultRefs for the given transformation's results
+    refs: List[ProtocolDAGResultRef] = n4js.get_transformation_failures(sk)
 
     return [i.to_dict() for i in refs]
 
@@ -397,8 +397,8 @@ def get_task_results(
     sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(sk.scope, token)
 
-    # get all ObjectStoreRefs for the given transformation's results
-    refs: List[ObjectStoreRef] = n4js.get_task_results(sk)
+    # get all ProtocolDAGResultRefs for the given transformation's results
+    refs: List[ProtocolDAGResultRef] = n4js.get_task_results(sk)
 
     return [i.to_dict() for i in refs]
 
@@ -416,8 +416,8 @@ def get_task_failures(
     sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(sk.scope, token)
 
-    # get all ObjectStoreRefs for the given transformation's results
-    refs: List[ObjectStoreRef] = n4js.get_task_failures(sk)
+    # get all ProtocolDAGResultRefs for the given transformation's results
+    refs: List[ProtocolDAGResultRef] = n4js.get_task_failures(sk)
 
     return [i.to_dict() for i in refs]
 

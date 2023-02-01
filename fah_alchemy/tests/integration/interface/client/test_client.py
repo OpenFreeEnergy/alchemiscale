@@ -227,7 +227,7 @@ class TestClient:
 
     ### results
 
-    def test_get_transformation_result(
+    def test_get_transformation_results(
         self,
         scope_test,
         n4js_preloaded,
@@ -286,25 +286,25 @@ class TestClient:
 
                 protocoldagresults.append(protocoldagresult)
 
-                objectstoreref = s3os_server.push_protocoldagresult(
+                protocoldagresultref = s3os_server.push_protocoldagresult(
                     protocoldagresult, scope=task_sk.scope
                 )
 
-                n4js.set_task_result(task=task_sk, objectstoreref=objectstoreref)
+                n4js.set_task_result(task=task_sk, protocoldagresultref=protocoldagresultref)
 
         # clear local gufe registry of pdr objects
         for pdr in protocoldagresults:
             TOKENIZABLE_REGISTRY.pop(pdr.key, None)
 
         # user client : pull transformation results, evaluate
-        protocolresult = user_client.get_transformation_result(transformation_sk)
+        protocolresult = user_client.get_transformation_results(transformation_sk)
 
         assert protocolresult.get_estimate() == 95500.0
         assert set(protocolresult.data.keys()) == {"logs", "key_results"}
         assert len(protocolresult.data["key_results"]) == 3
 
         # get back protocoldagresults instead
-        protocoldagresults = user_client.get_transformation_result(transformation_sk,
+        protocoldagresults = user_client.get_transformation_results(transformation_sk,
                                                                    return_protocoldagresults=True)
         for pdr in protocoldagresults:
             assert pdr._transformation == transformation.key
