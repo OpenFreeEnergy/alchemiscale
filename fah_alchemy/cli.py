@@ -8,6 +8,7 @@ import click
 import gunicorn.app.base
 from typing import Type
 
+from .models import Scope
 from .security.auth import hash_key, authenticate, AuthenticationError
 from .security.models import (
     CredentialedEntity,
@@ -406,6 +407,11 @@ def key(func):
     return key(func)
 
 
+def scope(func):
+    scope = click.option("--scope", "-s", help="scope", required=True, type=str)
+    return scope(func)
+
+
 @cli.group()
 def identity():
     ...
@@ -467,18 +473,62 @@ def remove(url, user, password, dbname, identity_type, identifier):
 
 
 @identity.command()
-def list_scope():
+@db_params
+@identity_type
+@identifier
+@scope
+def add_scope(url, user, password, dbname, identity_type, identifier, scope):
+    """Add a scope for the given identity."""
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
+
+    cli_values = url | user | password | dbname
+
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
+    n4js = get_n4js(settings)
+
+    scope = Scope.from_str(scope)
+    identity_type_cls = _identity_type_string_to_cls(identity_type)
+
+    n4js.add_scope(identifier, identity_type_cls, scope)
+
+
+@identity.command()
+@db_params
+@identity_type
+@identifier
+def list_scope(url, user, password, dbname, identity_type, identifier):
     """List all scopes for the given identity."""
-    ...
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
+
+    cli_values = url | user | password | dbname
+
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
+    n4js = get_n4js(settings)
+
+    identity_type_cls = _identity_type_string_to_cls(identity_type)
+    scopes = n4js.list_scopes(identifier, identity_type_cls)
+
+    click.echo([str(scope) for scope in scopes])
 
 
 @identity.command()
-def add_scope():
-    """Add a scope for the given identity(s)."""
-    ...
-
-
-@identity.command()
-def remove_scope():
+@db_params
+@identity_type
+@identifier
+@scope
+def remove_scope(url, user, password, dbname, identity_type, identifier, scope):
     """Remove a scope for the given identity(s)."""
-    ...
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
+
+    cli_values = url | user | password | dbname
+
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
+    n4js = get_n4js(settings)
+
+    scope = Scope.from_str(scope)
+    identity_type_cls = _identity_type_string_to_cls(identity_type)
+
+    n4js.remove_scope(identifier, identity_type_cls, scope)

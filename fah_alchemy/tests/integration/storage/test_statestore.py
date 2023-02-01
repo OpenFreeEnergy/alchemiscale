@@ -469,3 +469,147 @@ class TestNeo4jStore(TestStateStore):
         n4js.remove_credentialed_identity(user.identifier, credential_type)
         with pytest.raises(KeyError):
             n4js.get_credentialed_entity(user.identifier, credential_type)
+
+    @pytest.mark.parametrize(
+        "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
+    )
+    @pytest.mark.parametrize(
+        "scope_strs", (["*-*-*"], ["a-*-*"], ["a-b-*"], ["a-b-c", "a-b-d"])
+    )
+    def test_list_scope(
+        self,
+        n4js: Neo4jStore,
+        credential_type: CredentialedEntity,
+        scope_strs: List[str],
+    ):
+
+        user = credential_type(
+            identifier="bill",
+            hashed_key=hash_key("and ted"),
+        )
+
+        n4js.create_credentialed_entity(user)
+        ref_scopes = []
+        for scope_str in scope_strs:
+            scope = Scope.from_str(scope_str)
+            ref_scopes.append(scope)
+            n4js.add_scope(user.identifier, credential_type, scope)
+
+        scopes = n4js.list_scopes(user.identifier, credential_type)
+        assert set(scopes) == set(ref_scopes)
+
+    @pytest.mark.parametrize(
+        "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
+    )
+    @pytest.mark.parametrize("scope_str", ("*-*-*", "a-*-*", "a-b-*", "a-b-c"))
+    def test_add_scope(
+        self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str
+    ):
+
+        user = credential_type(
+            identifier="bill",
+            hashed_key=hash_key("and ted"),
+        )
+
+        n4js.create_credentialed_entity(user)
+
+        scope = Scope.from_str(scope_str)
+
+        n4js.add_scope(user.identifier, credential_type, scope)
+
+        q = f"""
+        MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
+        RETURN n
+        """
+        scopes_qr = n4js.graph.run(q).to_subgraph()
+        scopes = scopes_qr.get("scopes")
+        assert len(scopes) == 1
+
+        new_scope = Scope.from_str(scopes[0])
+        assert new_scope == scope
+
+    @pytest.mark.parametrize(
+        "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
+    )
+    def test_add_scope_duplicate(
+        self, n4js: Neo4jStore, credential_type: CredentialedEntity
+    ):
+
+        user = credential_type(
+            identifier="bill",
+            hashed_key=hash_key("and ted"),
+        )
+
+        n4js.create_credentialed_entity(user)
+
+        scope1 = Scope.from_str("*-*-*")
+        scope2 = Scope.from_str("*-*-*")
+
+        n4js.add_scope(user.identifier, credential_type, scope1)
+        n4js.add_scope(user.identifier, credential_type, scope2)
+
+        q = f"""
+        MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
+        RETURN n
+        """
+        scopes_qr = n4js.graph.run(q).to_subgraph()
+        scopes = scopes_qr.get("scopes")
+        assert len(scopes) == 1
+
+        new_scope = Scope.from_str(scopes[0])
+        assert new_scope == scope1
+
+    @pytest.mark.parametrize(
+        "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
+    )
+    @pytest.mark.parametrize("scope_str", ("*-*-*", "a-*-*", "a-b-*", "a-b-c"))
+    def test_remove_scope(
+        self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str
+    ):
+
+        user = credential_type(
+            identifier="bill",
+            hashed_key=hash_key("and ted"),
+        )
+
+        n4js.create_credentialed_entity(user)
+
+        scope = Scope.from_str(scope_str)
+        not_removed = Scope.from_str("scope-not-removed")
+
+        n4js.add_scope(user.identifier, credential_type, scope)
+        n4js.add_scope(user.identifier, credential_type, not_removed)
+
+        n4js.remove_scope(user.identifier, credential_type, scope)
+
+        scopes = n4js.list_scopes(user.identifier, credential_type)
+        assert scope not in scopes
+        assert not_removed in scopes
+
+    @pytest.mark.parametrize(
+        "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]
+    )
+    @pytest.mark.parametrize("scope_str", ("*-*-*", "a-*-*", "a-b-*", "a-b-c"))
+    def test_remove_scope_duplicate(
+        self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str
+    ):
+
+        user = credential_type(
+            identifier="bill",
+            hashed_key=hash_key("and ted"),
+        )
+
+        n4js.create_credentialed_entity(user)
+
+        scope = Scope.from_str(scope_str)
+        not_removed = Scope.from_str("scope-not-removed")
+
+        n4js.add_scope(user.identifier, credential_type, scope)
+        n4js.add_scope(user.identifier, credential_type, not_removed)
+
+        n4js.remove_scope(user.identifier, credential_type, scope)
+        n4js.remove_scope(user.identifier, credential_type, scope)
+
+        scopes = n4js.list_scopes(user.identifier, credential_type)
+        assert scope not in scopes
+        assert not_removed in scopes

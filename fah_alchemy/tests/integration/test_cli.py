@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fah_alchemy.tests.integration.utils import running_service
 
 from fah_alchemy.cli import get_settings_from_options, cli, ApiApplication
+from fah_alchemy.models import Scope
 from fah_alchemy.security.auth import hash_key, authenticate, AuthenticationError
 from fah_alchemy.security.models import (
     CredentialedUserIdentity,
@@ -365,3 +366,128 @@ def test_identity_list(n4js_fresh):
         assert click_success(result)
         for ident in identities:
             assert ident in result.output
+
+
+def test_scope_list(n4js_fresh):
+    n4js = n4js_fresh
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        ident = "bill"
+        key = "a string for a key"
+
+        identity = CredentialedUserIdentity(
+            identifier=ident,
+            hashed_key=hash_key(key),
+        )
+
+        n4js.create_credentialed_entity(identity)
+        n4js.add_scope(
+            "bill", CredentialedUserIdentity, Scope.from_str("org1-campaign2-project3")
+        )
+        n4js.add_scope(
+            "bill", CredentialedUserIdentity, Scope.from_str("org4-campaign5-project6")
+        )
+        n4js.add_scope("bill", CredentialedUserIdentity, Scope.from_str("org7-*-*"))
+        result = runner.invoke(
+            cli,
+            [
+                "identity",
+                "list-scope",
+                "--identity-type",
+                "user",
+                "--identifier",
+                ident,
+            ],
+        )
+        assert click_success(result)
+        assert "org1-campaign2-project3" in result.output
+        assert "org4-campaign5-project6" in result.output
+        assert "org7-*-*" in result.output
+
+
+def test_scope_add(n4js_fresh):
+    n4js = n4js_fresh
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        ident = "bill"
+        key = "a string for a key"
+
+        identity = CredentialedUserIdentity(
+            identifier=ident,
+            hashed_key=hash_key(key),
+        )
+
+        n4js.create_credentialed_entity(identity)
+
+        result = runner.invoke(
+            cli,
+            [
+                "identity",
+                "add-scope",
+                "--identity-type",
+                "user",
+                "--identifier",
+                ident,
+                "--scope",
+                "org1-campaign2-project3",
+            ],
+        )
+        assert click_success(result)
+        scopes = n4js.list_scopes("bill", CredentialedUserIdentity)
+        assert len(scopes) == 1
+        assert scopes[0] == Scope.from_str("org1-campaign2-project3")
+
+
+def test_scope_remove(n4js_fresh):
+    n4js = n4js_fresh
+    env_vars = {
+        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASS": "password",
+    }
+    runner = CliRunner()
+    with set_env_vars(env_vars):
+        ident = "bill"
+        key = "a string for a key"
+
+        identity = CredentialedUserIdentity(
+            identifier=ident,
+            hashed_key=hash_key(key),
+        )
+        n4js.create_credentialed_entity(identity)
+
+        n4js.add_scope(
+            ident, CredentialedUserIdentity, Scope.from_str("org1-campaign2-project3")
+        )
+        n4js.add_scope(
+            ident, CredentialedUserIdentity, Scope.from_str("org4-campaign5-project6")
+        )
+
+        result = runner.invoke(
+            cli,
+            [
+                "identity",
+                "remove-scope",
+                "--identity-type",
+                "user",
+                "--identifier",
+                ident,
+                "--scope",
+                "org1-campaign2-project3",
+            ],
+        )
+        assert click_success(result)
+        scopes = n4js.list_scopes("bill", CredentialedUserIdentity)
+        scope_strs = [str(s) for s in scopes]
+        assert "org1-campaign2-project3" not in scope_strs
+        assert "org4-campaign5-project6" in scope_strs

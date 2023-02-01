@@ -1237,3 +1237,54 @@ class Neo4jStore(FahAlchemyStateStore):
 
         with self.transaction() as tx:
             tx.run(q)
+
+    def add_scope(self, identifier: str, cls: type[CredentialedEntity], scope: Scope):
+        """Add a scope to the given entity."""
+
+        # n.scopes is always initialized by the pydantic model so no need to check
+        # for existence, however, we do need to check that the scope is not already
+        # present
+        q = f"""
+        MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
+        WHERE NONE(x IN n.scopes WHERE x = '{scope}')
+        SET n.scopes = n.scopes + '{scope}'
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)
+
+    def list_scopes(
+        self, identifier: str, cls: type[CredentialedEntity]
+    ) -> List[Scope]:
+        """List all scopes for which the given entity has access."""
+
+        # get the scope properties for the given entity
+        q = f"""
+        MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
+        RETURN n.scopes as s
+        """
+
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+        scopes = []
+        for record in res:
+            scope_rec = record["s"]
+            for scope_str in scope_rec:
+                scope = Scope.from_str(scope_str)
+                scopes.append(scope)
+        return scopes
+
+    def remove_scope(
+        self, identifier: str, cls: type[CredentialedEntity], scope: Scope
+    ):
+        """Remove a scope from the given entity."""
+
+        # use a list comprehension to remove the scope from the list
+        q = f"""
+        MATCH (n:{cls.__name__} {{identifier: '{identifier}'}})
+        SET n.scopes = [scope IN n.scopes WHERE scope <> '{scope}']
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)
