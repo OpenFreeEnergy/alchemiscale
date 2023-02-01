@@ -202,7 +202,6 @@ class S3ObjectStore:
         self,
         protocoldagresult: ProtocolDAGResult,
         scope: Scope,
-        success=True
     ):
         """Push given `ProtocolDAGResult` to this `ObjectStore`.
 
@@ -219,6 +218,7 @@ class S3ObjectStore:
             Reference to the serialized `ProtocolDAGResult` in the object store.
 
         """
+        success = protocoldagresult.ok()
         route = "results" if success else "failures"
 
         # build `location` based on gufe key

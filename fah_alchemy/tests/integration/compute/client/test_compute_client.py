@@ -43,6 +43,16 @@ class TestComputeClient:
         compute_client.get_info()
         assert token != compute_client._jwtoken
 
+    def test_api_check(
+        self,
+        n4js_preloaded,
+        compute_client: client.FahAlchemyComputeClient,
+        uvicorn_server,
+    ):
+        compute_client._api_check()
+
+    ### compute
+
     def test_query_taskqueues(
         self,
         scope_test,
@@ -69,10 +79,4 @@ class TestComputeClient:
         ...
         # task = compute_client.claim_taskqueue_task(scope_test)
 
-    def test_api_check(
-        self,
-        n4js_preloaded,
-        compute_client: client.FahAlchemyComputeClient,
-        uvicorn_server,
-    ):
-        compute_client._api_check()
+    ### results

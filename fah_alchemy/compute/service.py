@@ -155,11 +155,15 @@ class SynchronousComputeService:
 
         # TODO: remove claim on task, set to complete; remove from queues
         # TODO: if protocoldagresult.ok is False, need to handle this
+        #if protocoldagresult.ok():
+        #    self.client.
+
+        return sk
 
     def execute(self, task: ScopedKey) -> ScopedKey:
         """Executes given Task.
 
-        Returns ScopedKey of ProtocolDAGResult following push to database.
+        Returns ScopedKey of ProtocolDAGResultRef following push to database.
 
         """
         # obtain a ProtocolDAG from the task
@@ -173,7 +177,9 @@ class SynchronousComputeService:
         )
 
         # push the result (or failure) back to the compute API
-        result = self.push_result(task, protocoldagresult)
+        result_sk = self.push_result(task, protocoldagresult)
+
+        return result_sk
 
     def start(self, task_limit: Optional[int] = None):
         """Start the service.

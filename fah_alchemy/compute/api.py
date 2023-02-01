@@ -174,7 +174,6 @@ def set_task_result(
     protocoldagresultref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
         pdr, 
         scope=task_sk.scope,
-        success=pdr.ok(),
     )
 
     # push the reference to the state store

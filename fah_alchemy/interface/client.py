@@ -189,7 +189,7 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         self, task: ScopedKey
     ) -> ScopedKey:
 
-        transformation, protocoldagresult = self._get_resource(
+        transformation = self._get_resource(
             f"tasks/{task}/transformation", {}, return_gufe=False
         )
 
@@ -299,7 +299,6 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             pdrs.append(pdr)
 
         return pdrs
-
 
     def get_transformation_results(
         self,
