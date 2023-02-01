@@ -734,18 +734,13 @@ class Neo4jStore(FahAlchemyStateStore):
         self,
         network: ScopedKey,
     ) -> ScopedKey:
-        """Create a TaskHub for the given AlchemicalNetwork.
-
-        An AlchemicalNetwork can have only one associated TaskHub.
-        A TaskHub is required to queue Tasks for a given AlchemicalNetwork.
-
-        This method will only create a TaskHub for an AlchemicalNetwork if it
-        doesn't already exist; it will return the scoped key for the TaskHub
-        either way.
+        """Delete a TaskHub for a given AlchemicalNetwork.
 
         """
         taskhub = self.get_taskhub(network)
 
+
+        #TODO CHANGE TO DELETE TASKHUB NODE AND ALL TASKS USING HUB-SPOKE
         q = f"""
         MATCH (tq:TaskHub {{_scoped_key: '{taskhub}'}}),
               (tq)-[:TASKHUB_HEAD]->(tqh)<-[tqf:FOLLOWS* {{taskhub: '{taskhub}'}}]-(task),
@@ -783,6 +778,7 @@ class Neo4jStore(FahAlchemyStateStore):
         be 'complete' before this Task can be added to *any* TaskHub.
 
         """
+        #TODO CHANGE TO ADD TASKS TO TASKHUB NODE AND ALL TASKS USING HUB-SPOKE
         for t in tasks:
             q = f"""
             // get our task queue, as well as tail and tail relationship to last in line
