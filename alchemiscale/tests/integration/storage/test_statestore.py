@@ -341,7 +341,7 @@ class TestNeo4jStore(TestStateStore):
 
         # filter out the claimed task so that we have clean list of remaining
         # tasks
-        remaining_tasks = [sk for sk in task_sks if sk != claimed[0]]
+        remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
         # set all tasks to priority 5, first task to priority 1; claim should
         # yield first task
@@ -351,13 +351,14 @@ class TestNeo4jStore(TestStateStore):
 
         claimed2 = n4js.claim_taskhub_tasks(taskhub_sk, "another task handler")
         assert claimed2[0] == remaining_tasks[0]
-        remaining_tasks = [sk for sk in remaining_tasks if sk != claimed2[0]]
+
+        remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
         # next task claimed should be one of the remaining tasks
         claimed3 = n4js.claim_taskhub_tasks(taskhub_sk, "yet another task handler")
         assert claimed3[0] in remaining_tasks
 
-        remaining_tasks = [sk for sk in remaining_tasks if sk != claimed3[0]]
+        remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
         # try to claim multiple tasks
         claimed4 = n4js.claim_taskhub_tasks(taskhub_sk, "last task handler", count=4)
