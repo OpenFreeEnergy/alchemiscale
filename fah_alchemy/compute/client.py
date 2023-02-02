@@ -68,13 +68,16 @@ class FahAlchemyComputeClient(FahAlchemyBaseClient):
         self, task: ScopedKey
     ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
 
-        transformation, protocoldagresult = self._get_resource(
+        transformation, protocoldagresult_json = self._get_resource(
             f"tasks/{task}/transformation", {}, return_gufe=False
         )
 
         return (
             GufeTokenizable.from_dict(transformation),
-            GufeTokenizable.from_dict(protocoldagresult) if protocoldagresult else None,
+            GufeTokenizable.from_dict(
+                json.loads(protocoldagresult_json, cls=JSON_HANDLER.decoder)
+            )
+             if protocoldagresult_json is not None else None,
         )
 
     def set_task_result(

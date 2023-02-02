@@ -68,6 +68,10 @@ class TestComputeClient:
         taskqueues = compute_client.query_taskqueues([scope_test], return_gufe=True)
         assert all([tq.weight == 0.5 for tq in taskqueues.values()])
 
+    def test_get_taskqueue_tasks():
+        ...
+        # TODO: ADD TEST
+
     def test_claim_taskqueue_task(
         self,
         scope_test,
@@ -75,8 +79,23 @@ class TestComputeClient:
         compute_client: client.FahAlchemyComputeClient,
         uvicorn_server,
     ):
-
         ...
+        # TODO: ADD TEST
         # task = compute_client.claim_taskqueue_task(scope_test)
 
+    def test_get_task_transformation():
+        # TODO: ADD TEST
+        ...
+
     ### results
+
+    def test_set_task_result(
+        self,
+        scope_test,
+        n4js_preloaded,
+        compute_client: client.FahAlchemyComputeClient,
+        uvicorn_server,
+    ):
+        
+        # TODO: ADD TEST
+        ...

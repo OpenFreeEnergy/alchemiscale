@@ -258,10 +258,10 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         self,
         tasks: List[ScopedKey],
     ):
-        ...
+        raise NotImplementedError
 
     def set_tasks_priority(self, tasks: List[ScopedKey], priority: int):
-        ...
+        raise NotImplementedError
 
     ### results
 

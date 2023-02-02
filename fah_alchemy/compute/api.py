@@ -139,19 +139,28 @@ async def get_task_transformation(
     task_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
     sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(sk.scope, token)
 
-    transformation, protocoldagresult = n4js.get_task_transformation(
+    transformation, protocoldagresultref = n4js.get_task_transformation(
         task=task_scoped_key
     )
 
-    return (
-        transformation.to_dict(),
-        protocoldagresult.to_dict() if protocoldagresult is not None else None,
-    )
+    if protocoldagresultref:
+        tf_sk = ScopedKey(gufe_key=transformation.key, **Scope.from_str(sk.scope).dict())
+        pdr_sk = ScopedKey(
+            gufe_key=protocoldagresultref.obj_key, **Scope.from_str(sk.scope).dict()
+        )
+
+        # we keep this as a string to avoid useless deserialization/reserialization here
+        pdr: str = s3os.pull_protocoldagresult(pdr_sk, tf_sk, return_as="json", success=True)
+    else:
+        pdr = None
+
+    return (transformation.to_dict(), pdr)
 
 
 # TODO: support compression performed client-side

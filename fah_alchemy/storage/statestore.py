@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Union, Tuple
 import weakref
 
 import networkx as nx
-from gufe import AlchemicalNetwork, Transformation, ProtocolDAGResult
+from gufe import AlchemicalNetwork, Transformation
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 from gufe.storage.metadatastore import MetadataStore
 from py2neo import Graph, Node, Relationship, Subgraph
@@ -1143,20 +1143,20 @@ class Neo4jStore(FahAlchemyStateStore):
         instead have their tasks set to 'deleted' and retained.
 
         """
-        ...
+        raise NotImplementedError
 
     def get_task_transformation(
         self,
         task: ScopedKey,
         return_gufe=True,
-    ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
-        """Get the `Transformation` and `ProtocolDAGResult` to extend from (if
+    ) -> Tuple[Transformation, Optional[ProtocolDAGResultRef]]:
+        """Get the `Transformation` and `ProtocolDAGResultRef` to extend from (if
         present) for the given `Task`.
 
         """
         q = f"""
         MATCH (task:Task {{_scoped_key: "{task}"}})-[:PERFORMS]->(trans:Transformation)
-        OPTIONAL MATCH (task)-[:EXTENDS]->(prev:Task)-[:RESULTS_IN]->(result:ProtocolDAGResult)
+        OPTIONAL MATCH (task)-[:EXTENDS]->(prev:Task)-[:RESULTS_IN]->(result:ProtocolDAGResultRef)
         RETURN trans, result
         """
 
@@ -1178,7 +1178,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
         transformation = ScopedKey.from_str(transformations[0]["_scoped_key"])
 
-        protocoldagresult = (
+        protocoldagresultref = (
             ScopedKey.from_str(results[0]["_scoped_key"])
             if results[0] is not None
             else None
@@ -1187,12 +1187,12 @@ class Neo4jStore(FahAlchemyStateStore):
         if return_gufe:
             return (
                 self.get_gufe(transformation),
-                self.get_gufe(protocoldagresult)
-                if protocoldagresult is not None
+                self.get_gufe(protocoldagresultref)
+                if protocoldagresultref is not None
                 else None,
             )
 
-        return transformation, protocoldagresult
+        return transformation, protocoldagresultref
 
     def set_task_result(
         self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef

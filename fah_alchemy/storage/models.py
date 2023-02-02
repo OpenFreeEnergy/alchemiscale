@@ -218,13 +218,13 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         self,
         *,
         location: str = None,
-        obj_key: GufeKey = None,
+        obj_key: GufeKey,
         scope: Scope,
         success: bool,
     ):
 
         self.location = location
-        self.obj_key = GufeKey(obj_key) if obj_key is not None else None
+        self.obj_key = GufeKey(obj_key)
         self.scope = scope
         self.success = success
 

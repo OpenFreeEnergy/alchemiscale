@@ -9,7 +9,7 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from fah_alchemy.storage import Neo4jStore
-from fah_alchemy.storage.models import Task, TaskQueue, ObjectStoreRef
+from fah_alchemy.storage.models import Task, TaskQueue, ProtocolDAGResultRef
 from fah_alchemy.models import Scope, ScopedKey
 from fah_alchemy.security.models import (
     CredentialedEntity,
@@ -141,6 +141,14 @@ class TestNeo4jStore(TestStateStore):
     def test_query_chemicalsystems(self):
         ...
 
+    def test_get_transformation_results(self):
+        # TODO: ADD TEST
+        ...
+
+    def test_get_transformation_failures(self):
+        # TODO: ADD TEST
+        ...
+
     ### compute
 
     def test_create_task(self, n4js, network_tyk2, scope_test):
@@ -163,6 +171,10 @@ class TestNeo4jStore(TestStateStore):
         ).to_subgraph()
 
         assert m["_gufe_key"] == transformation.key
+
+    def test_get_tasks(self):
+        # TODO: ADD TEST
+        ...
 
     def test_create_taskqueue(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try adding a taskqueue
@@ -280,7 +292,15 @@ class TestNeo4jStore(TestStateStore):
         task_sks_fail = n4js.action_tasks(task_sks, taskqueue_sk2)
         assert all([i is None for i in task_sks_fail])
 
-    def test_claim_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
+    def test_cancel_task(self):
+        # TODO: ADD TEST
+        ...
+
+    def test_get_taskqueue_tasks(self):
+        # TODO: ADD TEST
+        ...
+
+    def test_claim_taskqueue_tasks(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
         taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
@@ -337,10 +357,55 @@ class TestNeo4jStore(TestStateStore):
         )
         assert claimed6 == [None] * 2
 
-    def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test, tmpdir):
-        # need to understand why ProtocolDAGResult fails to be represented as
-        # subgraph
+    def test_get_task_transformation(
+            self,
+            n4js: Neo4jStore, 
+            network_tyk2, 
+            scope_test, 
+            protocoldagresult,
+            ):
+        # create a network with just the transformation we care about
+        transformation = list(network_tyk2.edges)[0]
+        network_sk = n4js.create_network(AlchemicalNetwork(edges=[transformation]), scope_test)
 
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create a task; use its scoped key to get its transformation
+        # this should be the same one we used to spawn the task
+        task_sk = n4js.create_task(transformation_sk)
+
+        # get transformations back as both gufe objects and scoped keys
+        tf, _ = n4js.get_task_transformation(task_sk)
+        tf_sk, _ = n4js.get_task_transformation(task_sk, return_gufe=False)
+
+        assert tf == transformation
+        assert tf_sk == transformation_sk
+
+        # pretend we completed this one, and we have a protocoldagresult for it
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope,
+            obj_key=protocoldagresult.key,
+            success=True
+        )
+
+        # try to push the result
+        pdr_ref_sk = n4js.set_task_result(task_sk, pdr_ref)
+
+        # create a task that extends the previous one
+        task_sk2 = n4js.create_task(transformation_sk, extends=task_sk)
+
+        # get transformations and protocoldagresultrefs as both gufe objects and scoped keys
+        tf, protocoldagresultref = n4js.get_task_transformation(task_sk2)
+        tf_sk, protocoldagresultref_sk = n4js.get_task_transformation(task_sk2, return_gufe=False)
+
+        assert pdr_ref == protocoldagresultref
+        assert pdr_ref_sk == protocoldagresultref_sk
+
+        assert tf == transformation
+        assert tf_sk == transformation_sk
+
+
+    def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test, tmpdir):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
         taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
@@ -361,21 +426,31 @@ class TestNeo4jStore(TestStateStore):
         with tmpdir.as_cwd():
             protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
 
-        osr = ObjectStoreRef(
-            location="protocoldagresult/{protocoldagresult.key}", scope=task_sk.scope
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope,
+            obj_key=protocoldagresult.key
         )
 
         # try to push the result
-        n4js.set_task_result(task_sk, osr)
+        n4js.set_task_result(task_sk, pdr_ref)
 
         n = n4js.graph.run(
             f"""
-                match (n:ObjectStoreRef)<-[:RESULTS_IN]-(t:Task)
+                match (n:ProtocolDAGResultRef)<-[:RESULTS_IN]-(t:Task)
                 return n
                 """
         ).to_subgraph()
 
-        assert n["location"] == osr.location
+        assert n["location"] == pdr_ref.location
+        assert n["obj_key"] == str(protocoldagresult.key)
+
+    def test_get_task_results():
+        # TODO: ADD TEST
+        ...
+
+    def test_get_task_failures():
+        # TODO: ADD TEST
+        ...
 
     ### authentication
 
