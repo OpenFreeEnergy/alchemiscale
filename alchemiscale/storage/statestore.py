@@ -960,8 +960,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Claim a TaskHub Task.
 
         This method will claim Tasks from a TaskHub according to the following scheme:
-        1. the first Task in the queue if its priority is equal to that of the highest priority Task.
-        2. otherwise, the highest priority Task.
+        1. It will claim the Task with the highest priority.
+        2. If there are tasks of equal priority, tasks will be claimed stochastically based on the `weight` on its ACTIONS relationship.
+        3. Repeat steps 1 and 2. until `count` Tasks have been claimed.
 
         If no Task is available, then `None` is given in its place.
 
@@ -976,26 +977,27 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task1:Task)
         WHERE task1.status = 'waiting'
 
-        // get list of all 'waiting' tasks in the queue, but we'll order by priority
-        MATCH (th)-[:ACTIONS]->(task2:Task)
+        // get the highest priority
+        WITH MAX(task1.priority) as max_priority
+
+        // match where the priority is the highest
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[task2ra:ACTIONS]->(task2:Task)
         WHERE task2.status = 'waiting'
+        AND task2.priority = max_priority
 
-        // build our task lists, order second list by priority
-        WITH COLLECT(task1) as tsk1, task2 ORDER BY task2.priority
-        WITH tsk1, COLLECT(task2) as tsk2
+        // select stochastically based on the weight
 
-        // compare the first member of each list
-        // select first in line if priority same as highest priority
-        // otherwise select highest priority
-        WITH CASE
-         WHEN tsk1[0].priority = tsk2[0].priority THEN tsk1[0]
-         ELSE tsk2[0]
-        END AS chosen
+        // get the total weight of all tasks with the highest priority
+        WITH SUM(task2ra.weight) as total_weight, COLLECT(task2) as tsk2, rand() as rnd,  
+        // get the cumulative weight of each task
+        UNWIND tsk2 as task
+        WITH reduce(s = 0, x IN arr | s + x) AS cumulativeSum
 
-        // finally, make the claim
-        SET chosen.status = 'running', chosen.claim = '{claimant}'
 
-        RETURN chosen
+
+
+        SET task.status = 'running', task.claim = '{claimant}'
+        RETURN task
         """
         tasks = []
         with self.transaction() as tx:
