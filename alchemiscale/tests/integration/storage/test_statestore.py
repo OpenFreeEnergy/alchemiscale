@@ -310,6 +310,26 @@ class TestNeo4jStore(TestStateStore):
         assert set(unclaimed) == set(task_sks) - set(claimed)
         assert len(unclaimed) == 9
 
+    def test_get_set_weights(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        n4js.queue_taskhub_tasks(task_sks, taskhub_sk)
+
+        # weights should all be the default 1.0
+        weights = n4js.get_task_weights(task_sks, taskhub_sk)
+        assert all([w == 1.0 for sk, w in weights.items()])
+        # set weights on the tasks to be all 10
+        n4js.set_task_weights(task_sks, taskhub_sk, weight=10)
+        weights = n4js.get_task_weights(task_sks, taskhub_sk)
+        assert all([w == 10 for sk, w in weights.items()])
+
     def test_claim_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)

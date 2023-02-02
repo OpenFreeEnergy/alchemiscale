@@ -673,17 +673,6 @@ class Neo4jStore(AlchemiscaleStateStore):
             _project=scope.project,
         )
 
-        # # create head and tail node, attach to TaskHub node
-        # # head and tail connected via FOLLOWS relationship
-        # head = Node("TaskHubHead")
-        # tail = Node("TaskHubTail")
-
-        # subgraph = subgraph | Relationship.type("TASKHUB_HEAD")(taskhub_node, head)
-        # subgraph = subgraph | Relationship.type("TASKHUB_TAIL")(taskhub_node, tail)
-        # subgraph = subgraph | Relationship.type("FOLLOWS")(
-        #     tail, head, taskhub=str(scoped_key)
-        # )
-
         # if the TaskHub already exists, this will rollback transaction
         # automatically
         with self.transaction(ignore_exceptions=True) as tx:
@@ -770,7 +759,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         be 'complete' before this Task can be added to *any* TaskHub.
 
         """
-        # TODO CHANGE TO ADD TASKS TO TASKHUB NODE AND ALL TASKS USING HUB-SPOKE
         for t in tasks:
             q = f"""
             // get our TaskHub, 
@@ -786,8 +774,10 @@ class Neo4jStore(AlchemiscaleStateStore):
               AND other_task.status = 'complete'
 
             // create the connections that add it to the end of the queue, and delete old queue tail connection
-            CREATE (th)-[:ACTIONS {{taskhub: '{taskhub}'}}] ->
+            CREATE (th)-[ar:ACTIONS {{taskhub: '{taskhub}'}}] ->
                       (tn)
+            // set the ACTIONS relationship weight to default weight of 1.0
+            SET ar.weight = 1.0
             RETURN tn
             """
             with self.transaction() as tx:
@@ -799,6 +789,91 @@ class Neo4jStore(AlchemiscaleStateStore):
                 )
 
         return tasks
+
+    def set_task_weights(
+        self,
+        tasks: Union[Dict[ScopedKey, float], List[ScopedKey]],
+        taskhub: ScopedKey,
+        weight: Optional[float] = None,
+    ) -> None:
+        """Sets weights for the ACTIONS relationship between a TaskHub and a Task.
+
+        This is used to set the relative probabilistic execution order of a Task in a TaskHub.
+        Note that this concept is orthogonal to priority in that tasks of higher priority will
+        be executed before tasks of lower priority, but tasks of the same priority will be distributed according
+        to their weights.
+
+        The weights can be set by either a list and a scalar, or a dict of {ScopedKey: weight} pairs.
+
+        MUST be called after `queue_taskhub_tasks`. otherwise, the TaskHub will not have an ACTIONS relationship
+        to the Task.
+
+        Parameters
+        ----------
+
+        tasks: Union[Dict[ScopedKey, float], List[ScopedKey]]
+            If a dict, the keys are the ScopedKeys of the Tasks, and the values are the weights.
+            If a list, the weights are set to the scalar value given by the `weight` argument.
+
+        taskhub: ScopedKey
+            The ScopedKey of the TaskHub associated with the Tasks.
+
+        weight: Optional[float]
+            If `tasks` is a list, this is the weight to set for each Task.
+
+        """
+        if isinstance(tasks, dict):
+            if weight is not None:
+                raise ValueError("Cannot set weight to a scalar if tasks is a dict")
+            for t, w in tasks.items():
+                q = f"""
+                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
+                SET ar.weight = {w}
+                """
+                with self.transaction() as tx:
+                    tx.run(q)
+        elif isinstance(tasks, list):
+            if weight is None:
+                raise ValueError("Must set weight to a scalar if tasks is a list")
+            for t in tasks:
+                q = f"""
+                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
+                SET ar.weight = {weight}
+                """
+                with self.transaction() as tx:
+                    tx.run(q)
+
+    def get_task_weights(
+        self, tasks: List[ScopedKey], taskhub: ScopedKey
+    ) -> Dict[ScopedKey, float]:
+        """Gets weights for the ACTIONS relationship between a TaskHub and a Task.
+
+        Parameters
+        ----------
+        tasks: List[ScopedKey]
+            The ScopedKeys of the Tasks to get the weights for.
+        taskhub: ScopedKey
+            The ScopedKey of the TaskHub associated with the Tasks.
+
+        Returns
+        -------
+        weights: Dict[ScopedKey, float]
+            A dict of {ScopedKey: weight} pairs.
+        """
+        weights = {}
+        for t in tasks:
+            q = f"""
+            MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
+            RETURN task, ar.weight
+            """
+            with self.transaction() as tx:
+                result = tx.run(q)
+            for record in result:
+                sk = record.get("task").get("_scoped_key")
+                weight = record.get("ar.weight")
+                weights[ScopedKey.from_str(sk)] = weight
+
+        return weights
 
     def dequeue_taskhub_tasks(
         self,
