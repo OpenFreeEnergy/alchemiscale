@@ -9,7 +9,7 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from alchemiscale.storage import Neo4jStore
-from alchemiscale.storage.models import Task, TaskQueue, ObjectStoreRef
+from alchemiscale.storage.models import Task, TaskHub, ObjectStoreRef
 from alchemiscale.models import Scope, ScopedKey
 from alchemiscale.security.models import (
     CredentialedEntity,
@@ -264,7 +264,7 @@ class TestNeo4jStore(TestStateStore):
 
         # count tasks in queue
         queued_task_sks = n4js.get_taskhub_tasks(taskhub_sk)
-        assert task_sks == queued_task_sks
+        assert set(task_sks) == set(queued_task_sks)
 
         # add a second network, with the transformation above missing
         # try to add a task from that transformation to the new network's queue
@@ -297,44 +297,50 @@ class TestNeo4jStore(TestStateStore):
 
         # try to claim from an empty queue
         nothing = n4js.claim_taskhub_tasks(taskhub_sk, "early bird task handler")
+
         assert nothing[0] is None
 
         # queue the tasks
         n4js.queue_taskhub_tasks(task_sks, taskhub_sk)
 
-        # claim a single task; we expect this should be the first in the list
+        # claim a single task; There is no deterministic ordering of tasks, so
+        # simply test that the claimed task is one of the queued tasks
         claimed = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
-        assert claimed[0] == task_sks[0]
+
+        assert claimed[0] in task_sks
 
         # set all tasks to priority 5, fourth task to priority 1; claim should
         # yield fourth task
-        for task_sk in task_sks[1:]:
+
+        # filter out the claimed task so that we have clean list of remaining
+        # tasks
+        remaining_tasks = [sk for sk in task_sks if sk != claimed[0]]
+
+        for task_sk in remaining_tasks:
             n4js.set_task_priority(task_sk, 5)
-        n4js.set_task_priority(task_sks[3], 1)
+        n4js.set_task_priority(remaining_tasks[0], 1)
 
         claimed2 = n4js.claim_taskhub_tasks(taskhub_sk, "another task handler")
-        assert claimed2[0] == task_sks[3]
+        assert claimed2[0] == remaining_tasks[0]
+        remaining_tasks = [sk for sk in remaining_tasks if sk != claimed2[0]]
 
-        # next task claimed should be the second task in line
+        # next task claimed should be one of the remaining tasks
         claimed3 = n4js.claim_taskhub_tasks(taskhub_sk, "yet another task handler")
-        assert claimed3[0] == task_sks[1]
+        assert claimed3[0] in remaining_tasks
+
+        remaining_tasks = [sk for sk in remaining_tasks if sk != claimed3[0]]
 
         # try to claim multiple tasks
-        claimed4 = n4js.claim_taskhub_tasks(
-            taskhub_sk, "last task handler", count=4
-        )
-        assert claimed4[0] == task_sks[2]
-        assert claimed4[1:] == task_sks[4:7]
+        claimed4 = n4js.claim_taskhub_tasks(taskhub_sk, "last task handler", count=4)
+        assert len(claimed4) == 4
+        for sk in claimed4:
+            assert sk in remaining_tasks
 
         # exhaust the queue
-        claimed5 = n4js.claim_taskhub_tasks(
-            taskhub_sk, "last task handler", count=3
-        )
+        claimed5 = n4js.claim_taskhub_tasks(taskhub_sk, "last task handler", count=3)
 
         # try to claim from a queue with no tasks available
-        claimed6 = n4js.claim_taskhub_tasks(
-            taskhub_sk, "last task handler", count=2
-        )
+        claimed6 = n4js.claim_taskhub_tasks(taskhub_sk, "last task handler", count=2)
         assert claimed6 == [None] * 2
 
     def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test, tmpdir):

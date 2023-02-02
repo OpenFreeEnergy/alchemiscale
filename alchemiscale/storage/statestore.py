@@ -9,7 +9,7 @@ from contextlib import contextmanager
 import json
 from functools import lru_cache
 from time import sleep
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Union, Tuple, Set
 import weakref
 
 import networkx as nx
@@ -674,16 +674,16 @@ class Neo4jStore(AlchemiscaleStateStore):
             _project=scope.project,
         )
 
-        # create head and tail node, attach to TaskHub node
-        # head and tail connected via FOLLOWS relationship
-        head = Node("TaskHubHead")
-        tail = Node("TaskHubTail")
+        # # create head and tail node, attach to TaskHub node
+        # # head and tail connected via FOLLOWS relationship
+        # head = Node("TaskHubHead")
+        # tail = Node("TaskHubTail")
 
-        subgraph = subgraph | Relationship.type("TASKHUB_HEAD")(taskhub_node, head)
-        subgraph = subgraph | Relationship.type("TASKHUB_TAIL")(taskhub_node, tail)
-        subgraph = subgraph | Relationship.type("FOLLOWS")(
-            tail, head, taskhub=str(scoped_key)
-        )
+        # subgraph = subgraph | Relationship.type("TASKHUB_HEAD")(taskhub_node, head)
+        # subgraph = subgraph | Relationship.type("TASKHUB_TAIL")(taskhub_node, tail)
+        # subgraph = subgraph | Relationship.type("FOLLOWS")(
+        #     tail, head, taskhub=str(scoped_key)
+        # )
 
         # if the TaskHub already exists, this will rollback transaction
         # automatically
@@ -720,8 +720,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         node = self.graph.run(
             f"""
-                match (n:TaskHub {{network: "{network}"}})-[:PERFORMS]->(m:AlchemicalNetwork)
-                return n
+                match (th:TaskHub {{network: "{network}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
+                return th
                 """
         ).to_subgraph()
 
@@ -734,19 +734,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         network: ScopedKey,
     ) -> ScopedKey:
-        """Delete a TaskHub for a given AlchemicalNetwork.
-
-        """
+        """Delete a TaskHub for a given AlchemicalNetwork."""
         taskhub = self.get_taskhub(network)
 
-
-        #TODO CHANGE TO DELETE TASKHUB NODE AND ALL TASKS USING HUB-SPOKE
         q = f"""
-        MATCH (tq:TaskHub {{_scoped_key: '{taskhub}'}}),
-              (tq)-[:TASKHUB_HEAD]->(tqh)<-[tqf:FOLLOWS* {{taskhub: '{taskhub}'}}]-(task),
-              (tq)-[:TASKHUB_TAIL]->(tqt)
-        FOREACH (i in tqf | delete i)
-        DETACH DELETE tq,tqh,tqt
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}}),
+        DETACH DELETE th
         """
         self.graph.run(q)
 
@@ -754,9 +747,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def set_taskhub_weight(self, network: ScopedKey, weight: float):
         q = f"""
-        MATCH (t:TaskHub {{network: "{network}"}})
-        SET t.weight = {weight}
-        RETURN t
+        MATCH (th:TaskHub {{network: "{network}"}})
+        SET th.weight = {weight}
+        RETURN th
         """
         with self.transaction() as tx:
             tx.run(q)
@@ -778,14 +771,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         be 'complete' before this Task can be added to *any* TaskHub.
 
         """
-        #TODO CHANGE TO ADD TASKS TO TASKHUB NODE AND ALL TASKS USING HUB-SPOKE
+        # TODO CHANGE TO ADD TASKS TO TASKHUB NODE AND ALL TASKS USING HUB-SPOKE
         for t in tasks:
             q = f"""
-            // get our task queue, as well as tail and tail relationship to last in line
-            MATCH (tq:TaskHub {{_scoped_key: '{taskhub}'}})-[:TASKHUB_TAIL]->
-                      (tqt)-[tqtl:FOLLOWS {{taskhub: '{taskhub}'}}]->
-                      (last),
-                  (tq)-[:PERFORMS]->(an:AlchemicalNetwork)
+            // get our TaskHub, 
+            MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:PERFORMS]->(an:AlchemicalNetwork)
             
             // get the task we want to add to the queue; check that it connects to same network
             // if it has an EXTENDS relationship, get the task it extends
@@ -793,14 +783,12 @@ class Neo4jStore(AlchemiscaleStateStore):
             OPTIONAL MATCH (tn)-[:EXTENDS]->(other_task:Task)
 
             // only proceed for cases where task is not already in queue and only EXTENDS a 'complete' task
-            WHERE NOT (tqt)-[:FOLLOWS* {{taskhub: '{taskhub}'}}]->(tn)
+            WHERE NOT (th)-[:ACTIONS* {{taskhub: '{taskhub}'}}]->(tn)
               AND other_task.status = 'complete'
 
             // create the connections that add it to the end of the queue, and delete old queue tail connection
-            CREATE (tqt)-[:FOLLOWS {{taskhub: '{taskhub}'}}] ->
-                      (tn)-[:FOLLOWS {{taskhub: '{taskhub}'}}]->(last)
-            DELETE tqtl
-
+            CREATE (th)-[:ACTIONS {{taskhub: '{taskhub}'}}] ->
+                      (tn)
             RETURN tn
             """
             with self.transaction() as tx:
@@ -828,19 +816,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         for t in tasks:
             q = f"""
-            // get our task queue, as well as the task we want to remove, and
-            // the nodes ahead and behind it 
-            MATCH (task:Task {{_scoped_key: '{t}'}}),
-                  (behind)-[behindf:FOLLOWS {{taskhub: '{taskhub}'}}]->(task),
-                  (task)-[aheadf:FOLLOWS {{taskhub: '{taskhub}'}}]->(ahead)
-            WITH behind, behindf, task, aheadf, ahead
-
-            // create connection between behind and ahead nodes
-            CREATE (behind)-[newf:FOLLOWS {{taskhub: '{taskhub}'}}]->(ahead)
-
-            // delete connections between node to remove and behind, ahead nodes
-            DELETE behindf, aheadf
-
+            // get our task hub, as well as the task we want to remove
+            MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task {{_scoped_key: '{t}'}}),
+            DETACH DELETE task
             """
             with self.transaction() as tx:
                 tx.run(q)
@@ -850,11 +828,11 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_taskhub_tasks(
         self, taskhub: ScopedKey, return_gufe=False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
-        """Get a list of Tasks in the TaskHub, in queued order."""
+        """Get a list of Tasks in the TaskHub"""
+
         q = f"""
         // get list of all 'waiting' tasks in the queue
-        MATCH (tq:TaskHub {{_scoped_key: '{taskhub}'}})-->
-              (head:TaskHubHead)<-[:FOLLOWS* {{taskhub: '{taskhub}'}}]-(task:Task)
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task)
         RETURN task
         """
         with self.transaction() as tx:
@@ -893,12 +871,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         q = f"""
         // get list of all 'waiting' tasks in the queue
-        MATCH (tq:TaskHub {{_scoped_key: '{taskhub}'}})-->
-              (head:TaskHubHead)<-[:FOLLOWS* {{taskhub: '{taskhub}'}}]-(task1:Task)
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task1:Task)
         WHERE task1.status = 'waiting'
 
         // get list of all 'waiting' tasks in the queue, but we'll order by priority
-        MATCH (tq)-->(head)<-[:FOLLOWS* {{taskhub: '{taskhub}'}}]-(task2:Task)
+        MATCH (th)-[:ACTIONS]->(task2:Task)
         WHERE task2.status = 'waiting'
 
         // build our task lists, order second list by priority
