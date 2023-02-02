@@ -280,6 +280,36 @@ class TestNeo4jStore(TestStateStore):
         with pytest.raises(ValueError, match="not found in same network"):
             task_sks_fail = n4js.queue_taskhub_tasks(task_sks, taskhub_sk2)
 
+    def test_get_unclaimed_tasks(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # shuffle the tasks; want to check that order of claiming is actually
+        # based on order in queue
+        random.shuffle(task_sks)
+
+        # queue the tasks
+        n4js.queue_taskhub_tasks(task_sks, taskhub_sk)
+
+        # claim a single task; There is no deterministic ordering of tasks, so
+        # simply test that the claimed task is one of the queued tasks
+        claimed = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
+
+        assert claimed[0] in task_sks
+
+        # query for unclaimed tasks
+        unclaimed = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
+
+        assert set(unclaimed) == set(task_sks) - set(claimed)
+        assert len(unclaimed) == 9
+
     def test_claim_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
@@ -309,13 +339,12 @@ class TestNeo4jStore(TestStateStore):
 
         assert claimed[0] in task_sks
 
-        # set all tasks to priority 5, fourth task to priority 1; claim should
-        # yield fourth task
-
         # filter out the claimed task so that we have clean list of remaining
         # tasks
         remaining_tasks = [sk for sk in task_sks if sk != claimed[0]]
 
+        # set all tasks to priority 5, first task to priority 1; claim should
+        # yield first task
         for task_sk in remaining_tasks:
             n4js.set_task_priority(task_sk, 5)
         n4js.set_task_priority(remaining_tasks[0], 1)
@@ -392,7 +421,6 @@ class TestNeo4jStore(TestStateStore):
     def test_create_credentialed_entity(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -418,7 +446,6 @@ class TestNeo4jStore(TestStateStore):
     def test_get_credentialed_entity(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -437,7 +464,6 @@ class TestNeo4jStore(TestStateStore):
     def test_list_credentialed_entities(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity
     ):
-
         identities = ("bill", "ted", "napoleon")
 
         for ident in identities:
@@ -459,7 +485,6 @@ class TestNeo4jStore(TestStateStore):
     def test_remove_credentialed_entity(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -488,7 +513,6 @@ class TestNeo4jStore(TestStateStore):
         credential_type: CredentialedEntity,
         scope_strs: List[str],
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -511,7 +535,6 @@ class TestNeo4jStore(TestStateStore):
     def test_add_scope(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -540,7 +563,6 @@ class TestNeo4jStore(TestStateStore):
     def test_add_scope_duplicate(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -572,7 +594,6 @@ class TestNeo4jStore(TestStateStore):
     def test_remove_scope(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -599,7 +620,6 @@ class TestNeo4jStore(TestStateStore):
     def test_remove_scope_duplicate(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),

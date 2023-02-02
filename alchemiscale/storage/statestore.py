@@ -56,7 +56,6 @@ class AlchemiscaleStateStore(abc.ABC):
 
 
 class Neo4jStore(AlchemiscaleStateStore):
-
     # uniqueness constraints applied to the database; key is node label,
     # 'property' is the property on which uniqueness is guaranteed for nodes
     # with that label
@@ -446,7 +445,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             "_project": scope.project,
         }
 
-        for (k, v) in list(properties.items()):
+        for k, v in list(properties.items()):
             if v is None:
                 properties.pop(k)
 
@@ -828,11 +827,39 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_taskhub_tasks(
         self, taskhub: ScopedKey, return_gufe=False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
-        """Get a list of Tasks in the TaskHub"""
+        """Get a list of Tasks on the TaskHub"""
 
         q = f"""
-        // get list of all 'waiting' tasks in the queue
+        // get list of all tasks associated with the taskhub
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task)
+        RETURN task
+        """
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+        tasks = []
+        subgraph = Subgraph()
+        for record in res:
+            tasks.append(record["task"])
+            subgraph = subgraph | record["task"]
+
+        if return_gufe:
+            return {
+                ScopedKey.from_str(k["_scoped_key"]): v
+                for k, v in self._subgraph_to_gufe(tasks, subgraph).items()
+            }
+        else:
+            return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
+
+    def get_taskhub_unclaimed_tasks(
+        self, taskhub: ScopedKey, return_gufe=False
+    ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
+        """Get a list of unclaimed Tasks in the TaskHub"""
+
+        q = f"""
+        // get list of all unclaimed tasks in the queue
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task)
+        WHERE task.claim IS NULL
         RETURN task
         """
         with self.transaction() as tx:
