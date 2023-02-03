@@ -11,6 +11,7 @@ from functools import lru_cache
 from time import sleep
 from typing import Dict, List, Optional, Union, Tuple, Set
 import weakref
+import numpy as np
 
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ProtocolDAGResult
@@ -53,6 +54,70 @@ class Neo4JStoreError(Exception):
 
 class AlchemiscaleStateStore(abc.ABC):
     ...
+
+
+def _select_task_from_taskpool(taskpool: Subgraph) -> ScopedKey:
+    """
+    Select a Task from a pool of tasks in a neo4j subgraph according to the following scheme:
+    PRE: taskpool is a subgraph of Tasks of equal priority with a weight on their ACTIONS relationship.
+    1. Randomly select n Tasks from the TaskPool based on weighting
+    2. Return the ScopedKey of the Tasks.
+    Parameters
+    ----------
+    taskpool: 'subgraph'
+        A subgraph of Tasks of equal priority with a weights on their ACTIONS relationship.
+
+    Returns
+    -------
+    sk: ScopedKey
+        The ScopedKey of the Task selected from the TaskPool.
+    """
+    # get the total weight of the taskpool
+    tasks_and_weights = {}
+    for record in taskpool:
+        task_sk = record.get("parent_task")
+        weight = record.get("weight")
+        tasks_and_weights[task_sk] = weight
+
+    tasks = []
+    weights = []
+    for k, v in tasks_and_weights.items():
+        tasks.append(k)
+        weights.append(v)
+
+    # normalize weights
+    weights = np.array(weights)
+    weights = weights / weights.sum()
+
+    # randomly select n tasks from the taskpool based on weights without replacement
+    # NOTE: if useful could expand this to select multiple tasks
+    chosen_one = np.random.choice(tasks, 1, p=weights, replace=False)
+    return chosen_one[0]
+
+
+def _generate_claim_query(task_sk: ScopedKey, claimant: str) -> str:
+    """
+    Generate a query to claim a single  Task.
+    Parameters
+    ----------
+    task_sk: ScopedKey
+        The ScopedKey of the Task to claim.
+    claimant: str
+        The name of the claimant.
+
+    Returns
+    -------
+    query: str
+        The Cypher query to claim the Task.
+    """
+    query = f"""
+    MATCH (t:Task {{_scoped_key: '{task_sk}'}})
+    // only claim one task at a time, redundant due to scoped_key but safe
+    WITH t LIMIT 1
+    SET t.status = 'running', t.claim = '{claimant}'
+    RETURN t
+    """
+    return query
 
 
 class Neo4jStore(AlchemiscaleStateStore):
@@ -773,11 +838,14 @@ class Neo4jStore(AlchemiscaleStateStore):
             WHERE NOT (th)-[:ACTIONS* {{taskhub: '{taskhub}'}}]->(tn)
               AND other_task.status = 'complete'
 
-            // create the connections that add it to the end of the queue, and delete old queue tail connection
+            // create the connections 
             CREATE (th)-[ar:ACTIONS {{taskhub: '{taskhub}'}}] ->
                       (tn)
             // set the ACTIONS relationship weight to default weight of 1.0
             SET ar.weight = 1.0
+            // set the parent_task property to the scoped key of the Task
+            // this is a convenience for when we have to loop over relationships in python land
+            SET ar.parent_task = tn._scoped_key
             RETURN tn
             """
             with self.transaction() as tx:
@@ -972,31 +1040,33 @@ class Neo4jStore(AlchemiscaleStateStore):
             Claim the given number of Tasks in a single transaction.
 
         """
-        q = f"""
+        taskpool_q = f"""
         // get list of all 'waiting' tasks in the queue
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(waiting_task:Task)
         WHERE waiting_task.status = 'waiting'
 
-        // get the highest priority
-        WITH MAX(waiting_task.priority) as max_priority
+        // get the lowest priority
+        WITH MIN(waiting_task.priority) as min_priority
 
-        // match where the priority is the highest
+        // match where the priority is the lowest (first in line)
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[tasks_actions:ACTIONS]->(tasks:Task)
         WHERE tasks.status = 'waiting'
-        AND tasks.priority = max_priority
+        AND tasks.priority = min_priority
 
         // return the tasks       
-        RETURN tasks
+        RETURN tasks, tasks_actions
         """
+
         tasks = []
         with self.transaction() as tx:
             for i in range(count):
-                tasks.append(tx.run(q).to_subgraph())
-        
-        for task in tasks:
-            print(task)
-            task.get(weight)
-            print(weight)
+                taskpool = tx.run(taskpool_q).to_subgraph()
+                if taskpool is None:
+                    tasks.append(None)
+                else:
+                    chosen_one = _select_task_from_taskpool(taskpool)
+                    claim_query = _generate_claim_query(chosen_one, claimant)
+                    tasks.append(tx.run(claim_query).to_subgraph())
 
         return [
             ScopedKey.from_str(t["_scoped_key"]) if t is not None else None
