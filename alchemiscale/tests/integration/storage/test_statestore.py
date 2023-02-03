@@ -394,6 +394,38 @@ class TestNeo4jStore(TestStateStore):
         claimed6 = n4js.claim_taskhub_tasks(taskhub_sk, "last task handler", count=2)
         assert claimed6 == [None] * 2
 
+    def test_claim_task_byweight(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # shuffle the tasks; want to check that order of claiming is actually
+        # based on order in queue
+        random.shuffle(task_sks)
+
+        # try to claim from an empty queue
+
+        # queue the tasks
+        n4js.queue_taskhub_tasks(task_sks, taskhub_sk)
+
+        # set weights on the tasks to be all 0, disabling them
+        n4js.set_task_weights(task_sks, taskhub_sk, weight=0)
+        # set the weight of the first task to be 10
+        weight_dict = {task_sks[0]: 10}
+        n4js.set_task_weights(weight_dict, taskhub_sk)
+        # check that the claimed task is the first task
+        claimed = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
+        assert claimed[0] == task_sks[0]
+        # claim again; should get None as no other tasks have any weight
+        claimed_again = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
+        assert claimed_again[0] == None
+
     def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test, tmpdir):
         # need to understand why ProtocolDAGResult fails to be represented as
         # subgraph

@@ -56,10 +56,12 @@ class AlchemiscaleStateStore(abc.ABC):
     ...
 
 
-def _select_task_from_taskpool(taskpool: Subgraph) -> ScopedKey:
+def _select_task_from_taskpool(taskpool: Subgraph) -> Union[ScopedKey, None]:
     """
     Select a Task from a pool of tasks in a neo4j subgraph according to the following scheme:
+
     PRE: taskpool is a subgraph of Tasks of equal priority with a weight on their ACTIONS relationship.
+    The records in the subgraph are :ACTIONS relationships with two properties: 'parent_task' and 'weight'.
     1. Randomly select n Tasks from the TaskPool based on weighting
     2. Return the ScopedKey of the Tasks.
     Parameters
@@ -72,7 +74,7 @@ def _select_task_from_taskpool(taskpool: Subgraph) -> ScopedKey:
     sk: ScopedKey
         The ScopedKey of the Task selected from the TaskPool.
     """
-    # get the total weight of the taskpool
+    # get the tasks and weights of the taskpool
     tasks_and_weights = {}
     for record in taskpool:
         task_sk = record.get("parent_task")
@@ -87,9 +89,12 @@ def _select_task_from_taskpool(taskpool: Subgraph) -> ScopedKey:
 
     # normalize weights
     weights = np.array(weights)
+    if all(weights == 0):
+        # no tasks have any weight, so they can't be selected
+        return None
     weights = weights / weights.sum()
 
-    # randomly select n tasks from the taskpool based on weights without replacement
+    # randomly select a task from the taskpool based on weights without replacement
     # NOTE: if useful could expand this to select multiple tasks
     chosen_one = np.random.choice(tasks, 1, p=weights, replace=False)
     return chosen_one[0]
@@ -97,7 +102,7 @@ def _select_task_from_taskpool(taskpool: Subgraph) -> ScopedKey:
 
 def _generate_claim_query(task_sk: ScopedKey, claimant: str) -> str:
     """
-    Generate a query to claim a single  Task.
+    Generate a query to claim a single Task.
     Parameters
     ----------
     task_sk: ScopedKey
