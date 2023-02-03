@@ -136,7 +136,9 @@ class SynchronousComputeService:
         """Given a Task, produce a corresponding ProtocolDAG that can be executed."""
         ...
 
-        transformation, extends_protocoldagresult = self.client.get_task_transformation(task)
+        transformation, extends_protocoldagresult = self.client.get_task_transformation(
+            task
+        )
 
         protocoldag = transformation.create(
             extends=extends_protocoldagresult,

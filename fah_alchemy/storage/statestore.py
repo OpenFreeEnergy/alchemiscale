@@ -1129,9 +1129,12 @@ class Neo4jStore(FahAlchemyStateStore):
         if return_as == "list":
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
         elif return_as == "graph":
-            return {ScopedKey.from_str(t["_scoped_key"]): ScopedKey.from_str(t["extends"]) 
-                        if t["extends"] is not None else None
-                    for t in tasks}
+            return {
+                ScopedKey.from_str(t["_scoped_key"]): ScopedKey.from_str(t["extends"])
+                if t["extends"] is not None
+                else None
+                for t in tasks
+            }
 
     def query_tasks(
         self,

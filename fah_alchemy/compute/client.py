@@ -77,7 +77,8 @@ class FahAlchemyComputeClient(FahAlchemyBaseClient):
             GufeTokenizable.from_dict(
                 json.loads(protocoldagresult_json, cls=JSON_HANDLER.decoder)
             )
-             if protocoldagresult_json is not None else None,
+            if protocoldagresult_json is not None
+            else None,
         )
 
     def set_task_result(

@@ -150,13 +150,17 @@ async def get_task_transformation(
     )
 
     if protocoldagresultref:
-        tf_sk = ScopedKey(gufe_key=transformation.key, **Scope.from_str(sk.scope).dict())
+        tf_sk = ScopedKey(
+            gufe_key=transformation.key, **Scope.from_str(sk.scope).dict()
+        )
         pdr_sk = ScopedKey(
             gufe_key=protocoldagresultref.obj_key, **Scope.from_str(sk.scope).dict()
         )
 
         # we keep this as a string to avoid useless deserialization/reserialization here
-        pdr: str = s3os.pull_protocoldagresult(pdr_sk, tf_sk, return_as="json", success=True)
+        pdr: str = s3os.pull_protocoldagresult(
+            pdr_sk, tf_sk, return_as="json", success=True
+        )
     else:
         pdr = None
 

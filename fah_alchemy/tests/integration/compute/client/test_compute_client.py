@@ -96,6 +96,6 @@ class TestComputeClient:
         compute_client: client.FahAlchemyComputeClient,
         uvicorn_server,
     ):
-        
+
         # TODO: ADD TEST
         ...

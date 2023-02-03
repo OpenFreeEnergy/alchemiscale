@@ -183,8 +183,7 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             for task, extends in task_sks.items():
                 g.add_node(ScopedKey.from_str(task))
                 if extends is not None:
-                    g.add_edge(ScopedKey.from_str(task), 
-                               ScopedKey.from_str(extends))
+                    g.add_edge(ScopedKey.from_str(task), ScopedKey.from_str(extends))
 
             return g
 

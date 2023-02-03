@@ -172,19 +172,14 @@ class TestNeo4jStore(TestStateStore):
 
         assert m["_gufe_key"] == transformation.key
 
-    def test_get_tasks(
-            self,
-            n4js,
-            network_tyk2,
-            scope_test
-        ):
+    def test_get_tasks(self, n4js, network_tyk2, scope_test):
 
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
-        
+
         # create a tree of tasks for a selected transformation
         task_sks = []
         for i in range(3):
@@ -200,7 +195,7 @@ class TestNeo4jStore(TestStateStore):
         # get all tasks for the transformation
         all_task_sks: List[ScopedKey] = n4js.get_tasks(transformation_sk)
 
-        f = lambda x, y: x**y + x**(y-1) + x**(y-2)
+        f = lambda x, y: x**y + x ** (y - 1) + x ** (y - 2)
 
         assert len(all_task_sks) == f(3, 3)
         assert set(task_sks) == set(all_task_sks)
@@ -213,7 +208,7 @@ class TestNeo4jStore(TestStateStore):
 
         # try getting tasks back in the "graph" representation instead
         # this is a mapping of each Task to the Task they extend, if applicable
-        graph = n4js.get_tasks(transformation_sk, return_as='graph')
+        graph = n4js.get_tasks(transformation_sk, return_as="graph")
 
         assert len(graph) == len(task_sks)
         assert set(graph.keys()) == set(task_sks)
@@ -335,12 +330,7 @@ class TestNeo4jStore(TestStateStore):
         task_sks_fail = n4js.action_tasks(task_sks, taskqueue_sk2)
         assert all([i is None for i in task_sks_fail])
 
-    def test_cancel_task(
-            self,
-            n4js,
-            network_tyk2,
-            scope_test
-        ):
+    def test_cancel_task(self, n4js, network_tyk2, scope_test):
 
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
@@ -348,7 +338,7 @@ class TestNeo4jStore(TestStateStore):
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
-        
+
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
@@ -366,20 +356,17 @@ class TestNeo4jStore(TestStateStore):
                 return task
                 """
         )
-        tasks = [record['task'] for record in tasks]
+        tasks = [record["task"] for record in tasks]
 
         assert len(tasks) == 8
-        assert set([ScopedKey.from_str(t['_scoped_key']) for t in tasks]) == set(actioned) - set(canceled)
+        assert set([ScopedKey.from_str(t["_scoped_key"]) for t in tasks]) == set(
+            actioned
+        ) - set(canceled)
 
         # check the order is preserved
-        assert [ScopedKey.from_str(t['_scoped_key']) for t in tasks[1:]] == actioned[3:]
+        assert [ScopedKey.from_str(t["_scoped_key"]) for t in tasks[1:]] == actioned[3:]
 
-    def test_get_taskqueue_tasks(
-            self,
-            n4js,
-            network_tyk2,
-            scope_test
-        ):
+    def test_get_taskqueue_tasks(self, n4js, network_tyk2, scope_test):
 
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
@@ -387,7 +374,7 @@ class TestNeo4jStore(TestStateStore):
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
-        
+
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
@@ -462,15 +449,17 @@ class TestNeo4jStore(TestStateStore):
         assert claimed6 == [None] * 2
 
     def test_get_task_transformation(
-            self,
-            n4js: Neo4jStore, 
-            network_tyk2, 
-            scope_test, 
-            protocoldagresult,
-            ):
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        protocoldagresult,
+    ):
         # create a network with just the transformation we care about
         transformation = list(network_tyk2.edges)[0]
-        network_sk = n4js.create_network(AlchemicalNetwork(edges=[transformation]), scope_test)
+        network_sk = n4js.create_network(
+            AlchemicalNetwork(edges=[transformation]), scope_test
+        )
 
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
@@ -487,9 +476,7 @@ class TestNeo4jStore(TestStateStore):
 
         # pretend we completed this one, and we have a protocoldagresult for it
         pdr_ref = ProtocolDAGResultRef(
-            scope=task_sk.scope,
-            obj_key=protocoldagresult.key,
-            success=True
+            scope=task_sk.scope, obj_key=protocoldagresult.key, success=True
         )
 
         # try to push the result
@@ -500,7 +487,9 @@ class TestNeo4jStore(TestStateStore):
 
         # get transformations and protocoldagresultrefs as both gufe objects and scoped keys
         tf, protocoldagresultref = n4js.get_task_transformation(task_sk2)
-        tf_sk, protocoldagresultref_sk = n4js.get_task_transformation(task_sk2, return_gufe=False)
+        tf_sk, protocoldagresultref_sk = n4js.get_task_transformation(
+            task_sk2, return_gufe=False
+        )
 
         assert pdr_ref == protocoldagresultref
         assert pdr_ref_sk == protocoldagresultref_sk
@@ -530,9 +519,7 @@ class TestNeo4jStore(TestStateStore):
             protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
 
         pdr_ref = ProtocolDAGResultRef(
-            scope=task_sk.scope,
-            obj_key=protocoldagresult.key,
-            success=True
+            scope=task_sk.scope, obj_key=protocoldagresult.key, success=True
         )
 
         # try to push the result
