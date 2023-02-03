@@ -269,6 +269,7 @@ class TestNeo4jStore(TestStateStore):
         # add a second network, with the transformation above missing
         # try to add a task from that transformation to the new network's queue
         # this should fail
+
         an2 = AlchemicalNetwork(
             edges=list(an.edges)[1:], name="tyk2_relative_benchmark_-1"
         )

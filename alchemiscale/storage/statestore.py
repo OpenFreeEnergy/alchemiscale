@@ -974,35 +974,29 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         q = f"""
         // get list of all 'waiting' tasks in the queue
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task1:Task)
-        WHERE task1.status = 'waiting'
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(waiting_task:Task)
+        WHERE waiting_task.status = 'waiting'
 
         // get the highest priority
-        WITH MAX(task1.priority) as max_priority
+        WITH MAX(waiting_task.priority) as max_priority
 
         // match where the priority is the highest
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[task2ra:ACTIONS]->(task2:Task)
-        WHERE task2.status = 'waiting'
-        AND task2.priority = max_priority
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[tasks_actions:ACTIONS]->(tasks:Task)
+        WHERE tasks.status = 'waiting'
+        AND tasks.priority = max_priority
 
-        // select stochastically based on the weight
-
-        // get the total weight of all tasks with the highest priority
-        WITH SUM(task2ra.weight) as total_weight, COLLECT(task2) as tsk2, rand() as rnd,  
-        // get the cumulative weight of each task
-        UNWIND tsk2 as task
-        WITH reduce(s = 0, x IN arr | s + x) AS cumulativeSum
-
-
-
-
-        SET task.status = 'running', task.claim = '{claimant}'
-        RETURN task
+        // return the tasks       
+        RETURN tasks
         """
         tasks = []
         with self.transaction() as tx:
             for i in range(count):
                 tasks.append(tx.run(q).to_subgraph())
+        
+        for task in tasks:
+            print(task)
+            task.get(weight)
+            print(weight)
 
         return [
             ScopedKey.from_str(t["_scoped_key"]) if t is not None else None
