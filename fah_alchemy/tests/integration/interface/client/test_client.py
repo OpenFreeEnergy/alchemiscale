@@ -237,20 +237,20 @@ class TestClient:
 
             # get the transformation and extending protocoldagresult as if we
             # were a compute service
-            transformation, protocoldagresult_ = n4js.get_task_transformation(
+            transformation, extends_protocoldagresult = n4js.get_task_transformation(
                 task=task_sk
             )
 
             protocoldag = transformation.create(
-                extends=protocoldagresult_,
+                extends=extends_protocoldagresult,
                 name=str(task_sk),
             )
 
             protocoldagresult = execute_DAG(protocoldag, raise_error=False)
 
-            assert protocoldagresult._transformation == transformation.key
-            if protocoldagresult_:
-                assert protocoldagresult._extends == protocoldagresult_.key
+            assert protocoldagresult.transformation_key == transformation.key
+            if extends_protocoldagresult:
+                assert protocoldagresult.extends_key == extends_protocoldagresult.key
 
             protocoldagresults.append(protocoldagresult)
 
@@ -321,8 +321,8 @@ class TestClient:
         assert set(protocoldagresults_r) == set(protocoldagresults)
 
         for pdr in protocoldagresults_r:
-            assert pdr._transformation == transformation.key
-            assert isinstance(pdr._extends, GufeKey) or pdr._extends is None
+            assert pdr.transformation_key == transformation.key
+            assert isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
             assert pdr.ok()
 
     def test_get_transformation_failures(
@@ -378,8 +378,8 @@ class TestClient:
         assert len(protocoldagresults_r) == 2
 
         for pdr in protocoldagresults_r:
-            assert pdr._transformation == transformation.key
-            assert isinstance(pdr._extends, GufeKey) or pdr._extends is None
+            assert pdr.transformation_key == transformation.key
+            assert isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
             assert not pdr.ok()
 
     def test_get_task_results(
@@ -424,8 +424,8 @@ class TestClient:
             assert set(protocoldagresults_r).issubset(set(protocoldagresults))
 
             for pdr in protocoldagresults_r:
-                assert pdr._transformation == transformation.key
-                assert isinstance(pdr._extends, GufeKey) or pdr._extends is None
+                assert pdr.transformation_key == transformation.key
+                assert isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
                 assert pdr.ok()
 
     def test_get_task_failures(
@@ -478,8 +478,8 @@ class TestClient:
             assert set(protocoldagresults_r).issubset(set(protocoldagresults))
 
             for pdr in protocoldagresults_r:
-                assert pdr._transformation == transformation.key
-                assert isinstance(pdr._extends, GufeKey) or pdr._extends is None
+                assert pdr.transformation_key == transformation.key
+                assert isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
                 assert not pdr.ok()
 
         # TODO: can we mix in a success in here somewhere?

@@ -131,9 +131,9 @@ class TestNeo4jStore(TestStateStore):
         assert sk2 in networks_sk
         assert len(networks_sk) == 2
 
-        # add in a scope test
+        # TODO: add in a scope test
 
-        # add in a name test
+        # TODO: add in a name test
 
     def test_query_transformations(self):
         ...
@@ -172,9 +172,52 @@ class TestNeo4jStore(TestStateStore):
 
         assert m["_gufe_key"] == transformation.key
 
-    def test_get_tasks(self):
-        # TODO: ADD TEST
-        ...
+    def test_get_tasks(
+            self,
+            n4js,
+            network_tyk2,
+            scope_test
+        ):
+
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+        
+        # create a tree of tasks for a selected transformation
+        task_sks = []
+        for i in range(3):
+            task_i: ScopedKey = n4js.create_task(transformation_sk)
+            task_sks.append(task_i)
+            for j in range(3):
+                task_j = n4js.create_task(transformation_sk, extends=task_i)
+                task_sks.append(task_j)
+                for k in range(3):
+                    task_k = n4js.create_task(transformation_sk, extends=task_j)
+                    task_sks.append(task_k)
+
+        # get all tasks for the transformation
+        all_task_sks: List[ScopedKey] = n4js.get_tasks(transformation_sk)
+
+        f = lambda x, y: x**y + x**(y-1) + x**(y-2)
+
+        assert len(all_task_sks) == f(3, 3)
+        assert set(task_sks) == set(all_task_sks)
+
+        # try getting back only tasks extending from a given one
+        subtree = n4js.get_tasks(transformation_sk, extends=task_sks[0])
+
+        assert len(subtree) == f(3, 2) - 1
+        assert set(subtree) == set(task_sks[1:13])
+
+        # try getting tasks back in the "graph" representation instead
+        # this is a mapping of each Task to the Task they extend, if applicable
+        graph = n4js.get_tasks(transformation_sk, return_as='graph')
+
+        assert len(graph) == len(task_sks)
+        assert set(graph.keys()) == set(task_sks)
+        assert all([graph[t] == task_sks[0] for t in task_sks[1:13:4]])
 
     def test_create_taskqueue(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try adding a taskqueue
@@ -292,13 +335,74 @@ class TestNeo4jStore(TestStateStore):
         task_sks_fail = n4js.action_tasks(task_sks, taskqueue_sk2)
         assert all([i is None for i in task_sks_fail])
 
-    def test_cancel_task(self):
-        # TODO: ADD TEST
-        ...
+    def test_cancel_task(
+            self,
+            n4js,
+            network_tyk2,
+            scope_test
+        ):
 
-    def test_get_taskqueue_tasks(self):
-        # TODO: ADD TEST
-        ...
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+        
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # queue the tasks
+        actioned = n4js.action_tasks(task_sks, taskqueue_sk)
+
+        # cancel the second and third task in the queue
+        canceled = n4js.cancel_tasks(task_sks[1:3], taskqueue_sk)
+
+        # check that the queue has the contents we expect
+        tasks = n4js.graph.run(
+            f"""
+                MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_sk}'}})-->
+                      (head:TaskQueueHead)<-[:FOLLOWS* {{taskqueue: '{taskqueue_sk}'}}]-(task:Task)
+                return task
+                """
+        )
+        tasks = [record['task'] for record in tasks]
+
+        assert len(tasks) == 8
+        assert set([ScopedKey.from_str(t['_scoped_key']) for t in tasks]) == set(actioned) - set(canceled)
+
+        # check the order is preserved
+        assert [ScopedKey.from_str(t['_scoped_key']) for t in tasks[1:]] == actioned[3:]
+
+    def test_get_taskqueue_tasks(
+            self,
+            n4js,
+            network_tyk2,
+            scope_test
+        ):
+
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+        
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # queue the tasks
+        actioned = n4js.action_tasks(task_sks, taskqueue_sk)
+
+        # get the full queue back, in order
+        task_sks = n4js.get_taskqueue_tasks(taskqueue_sk)
+
+        assert actioned == task_sks
+
+        # try getting back as gufe objects instead
+        tasks = n4js.get_taskqueue_tasks(taskqueue_sk, return_gufe=True)
+
+        assert all([t.key == tsk.gufe_key for t, tsk in zip(tasks.values(), task_sks)])
 
     def test_claim_taskqueue_tasks(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
@@ -404,7 +508,6 @@ class TestNeo4jStore(TestStateStore):
         assert tf == transformation
         assert tf_sk == transformation_sk
 
-
     def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test, tmpdir):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
@@ -428,7 +531,8 @@ class TestNeo4jStore(TestStateStore):
 
         pdr_ref = ProtocolDAGResultRef(
             scope=task_sk.scope,
-            obj_key=protocoldagresult.key
+            obj_key=protocoldagresult.key,
+            success=True
         )
 
         # try to push the result
@@ -444,11 +548,11 @@ class TestNeo4jStore(TestStateStore):
         assert n["location"] == pdr_ref.location
         assert n["obj_key"] == str(protocoldagresult.key)
 
-    def test_get_task_results():
+    def test_get_task_results(self):
         # TODO: ADD TEST
         ...
 
-    def test_get_task_failures():
+    def test_get_task_failures(self):
         # TODO: ADD TEST
         ...
 

@@ -136,13 +136,13 @@ class SynchronousComputeService:
         """Given a Task, produce a corresponding ProtocolDAG that can be executed."""
         ...
 
-        transformation, protocoldagresult = self.client.get_task_transformation(task)
+        transformation, extends_protocoldagresult = self.client.get_task_transformation(task)
 
         protocoldag = transformation.create(
-            extends=protocoldagresult,
+            extends=extends_protocoldagresult,
             name=str(task),
         )
-        return protocoldag, transformation, protocoldagresult
+        return protocoldag, transformation, extends_protocoldagresult
 
     def push_result(
         self, task: ScopedKey, protocoldagresult: ProtocolDAGResult

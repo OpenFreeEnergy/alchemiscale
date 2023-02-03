@@ -68,7 +68,7 @@ class TestComputeClient:
         taskqueues = compute_client.query_taskqueues([scope_test], return_gufe=True)
         assert all([tq.weight == 0.5 for tq in taskqueues.values()])
 
-    def test_get_taskqueue_tasks():
+    def test_get_taskqueue_tasks(self):
         ...
         # TODO: ADD TEST
 
@@ -83,7 +83,7 @@ class TestComputeClient:
         # TODO: ADD TEST
         # task = compute_client.claim_taskqueue_task(scope_test)
 
-    def test_get_task_transformation():
+    def test_get_task_transformation(self):
         # TODO: ADD TEST
         ...
 

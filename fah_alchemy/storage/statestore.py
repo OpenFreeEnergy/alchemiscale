@@ -1090,8 +1090,18 @@ class Neo4jStore(FahAlchemyStateStore):
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Optional[str]]]:
         """Get all Tasks that perform the given Transformation.
 
-        If a Task ScopedKey is given for `extends_from`, then only those Tasks
+        If a Task ScopedKey is given for `extends`, then only those Tasks
         that follow via any number of EXTENDS relationships will be returned.
+
+        `return_as` takes either `list` or `graph` as input.
+        `graph` will yield a dict mapping each Task's ScopedKey (as keys) to
+        the Task ScopedKey it extends (as values).
+
+        Parameters
+        ----------
+        transformation
+            ScopedKey of the Transformation to retrieve Tasks for.
+        extends
 
         """
         q = f"""
@@ -1119,7 +1129,9 @@ class Neo4jStore(FahAlchemyStateStore):
         if return_as == "list":
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
         elif return_as == "graph":
-            return {ScopedKey.from_str(t["_scoped_key"]): t["extends"] for t in tasks}
+            return {ScopedKey.from_str(t["_scoped_key"]): ScopedKey.from_str(t["extends"]) 
+                        if t["extends"] is not None else None
+                    for t in tasks}
 
     def query_tasks(
         self,

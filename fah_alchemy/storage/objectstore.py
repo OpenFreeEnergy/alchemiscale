@@ -225,7 +225,7 @@ class S3ObjectStore:
         location = os.path.join(
             "protocoldagresult",
             *scope.to_tuple(),
-            protocoldagresult.transformation,
+            protocoldagresult.transformation_key,
             route,
             protocoldagresult.key,
             "obj.json",

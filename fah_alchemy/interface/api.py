@@ -240,7 +240,8 @@ def get_tasks(
     if return_as == "list":
         return [str(sk) for sk in task_sks]
     elif return_as == "graph":
-        return {str(sk): extends for sk, extends in task_sks.items()}
+        return {str(sk): str(extends) if extends is not None else None
+                for sk, extends in task_sks.items()}
 
 
 @router.post("/networks/{network_scoped_key}/tasks/action")
