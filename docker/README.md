@@ -34,12 +34,13 @@ USER_ID=$(id -u) GROUP_ID=$(id -g) docker-compose up -d
 
 # AWS EC2 Setup
 
-The following series of commands are sufficient for setting up Docker on an AWS
+The following series of commands are sufficient for setting up Docker and Cloudwatch on an AWS
 EC2 instance running Amazon Linux.
+Be sure to attach the fah-alchemy-test-role to the instance before starting.
 
 ```bash
 # Install docker
-sudo amazon-linux-extras install docker
+sudo amazon-linux-extras install docker 
 # Start the docker daemon
 sudo service docker start
 # Add ec2-user to docker group
@@ -49,7 +50,7 @@ newgrp docker
 # Have docker daemon start on reboot
 sudo chkconfig docker on
 # Install handy tools
-sudo yum install -y git tmux
+sudo yum install -y git tmux amazon-cloudwatch-agent
 # Install docker compose
 sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
 # Fix permissions
@@ -58,7 +59,13 @@ sudo chmod +x /usr/local/bin/docker-compose
 docker-compose version
 # check docker install
 docker info
+# Now CloudWatch
+# This will start the daemon and download the config from the Systems Manager Parameter Store
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:alchemiscale-cloudwatch
 ```
+
+# AWS IAM Role
+Attach fah-alchemy-test-role to EC2 instance
 
 # AWS EC2 Admin
 
