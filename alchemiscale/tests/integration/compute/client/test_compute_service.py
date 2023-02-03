@@ -45,7 +45,6 @@ class TestSynchronousComputeService:
         assert len(protocoldag.protocol_units) == 23
 
     def test_execute(self, n4js_preloaded, s3os, service, network_tyk2, scope_test):
-
         # we want to ensure a clean object store
         # not an easy way to do this with module-scoped fixture
         # used in a live API served by a subprocess

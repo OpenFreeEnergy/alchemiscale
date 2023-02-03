@@ -49,7 +49,6 @@ def create_access_token(
     expires_seconds: Optional[int] = 900,
     jwt_algorithm: Optional[str] = "HS256"
 ) -> str:
-
     to_encode = data.copy()
 
     expire = datetime.utcnow() + timedelta(seconds=expires_seconds)

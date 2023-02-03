@@ -48,7 +48,6 @@ class TestAPI:
     def test_create_network(
         self, n4js_preloaded, test_client, network_tyk2, scope_test
     ):
-
         n4js = n4js_preloaded
         an = network_tyk2
 

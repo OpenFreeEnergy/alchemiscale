@@ -51,7 +51,6 @@ def uvicorn_server(compute_api):
 def compute_client(
     uvicorn_server, compute_identity, single_scoped_credentialed_compute
 ):
-
     return client.AlchemiscaleComputeClient(
         api_url="http://127.0.0.1:8000/",
         # use the identifier for the single-scoped user who should have access to some things
@@ -63,7 +62,6 @@ def compute_client(
 
 @pytest.fixture(scope="module")
 def compute_client_wrong_credential(uvicorn_server, compute_identity):
-
     return client.AlchemiscaleComputeClient(
         api_url="http://127.0.0.1:8000/",
         identifier=compute_identity["identifier"],

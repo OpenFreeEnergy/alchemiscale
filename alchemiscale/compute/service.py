@@ -145,7 +145,6 @@ class SynchronousComputeService:
     def push_result(
         self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
     ) -> ScopedKey:
-
         # TODO: this method should postprocess any paths,
         # leaf nodes in DAG for blob results that should go to object store
 
@@ -189,7 +188,6 @@ class SynchronousComputeService:
 
         counter = 0
         while True:
-
             if task_limit is not None:
                 if counter >= task_limit:
                     break
@@ -240,7 +238,6 @@ class AsynchronousComputeService(SynchronousComputeService):
     def start(self):
         """Start the service; will keep going until told to stop."""
         while True:
-
             if self._stop:
                 return
 
@@ -256,7 +253,6 @@ class AlchemiscaleComputeService(AsynchronousComputeService):
     """
 
     def __init__(self, object_store, fah_work_server):
-
         self.scheduler = sched.scheduler(time.time, self.int_sleep)
         self.loop = asyncio.get_event_loop()
 
@@ -268,7 +264,6 @@ class AlchemiscaleComputeService(AsynchronousComputeService):
     def start(self):
         ...
         while True:
-
             if self._stop:
                 return
 

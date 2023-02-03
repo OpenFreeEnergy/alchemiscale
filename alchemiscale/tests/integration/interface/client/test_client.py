@@ -26,7 +26,6 @@ class TestClient:
         user_client: client.AlchemiscaleClient,
         uvicorn_server,
     ):
-
         settings = get_user_settings_override()
         assert user_client._jwtoken == None
         user_client._get_token()
