@@ -536,19 +536,19 @@ class TestNeo4jStore(TestStateStore):
         assert n["obj_key"] == str(protocoldagresult.key)
 
     def test_get_task_results(
-            self, 
-            n4js: Neo4jStore,
-            network_tyk2,
-            scope_test,
-            transformation,
-            protocoldagresult
-        ):
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        transformation,
+        protocoldagresult,
+    ):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create a task; pretend we computed it, submit reference for pre-baked
-        # result 
+        # result
         task_sk = n4js.create_task(transformation_sk)
 
         pdr_ref = ProtocolDAGResultRef(
