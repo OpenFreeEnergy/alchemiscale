@@ -33,7 +33,7 @@ class TestNeo4jStore(TestStateStore):
     def test_server(self, graph):
         graph.service.system_graph.call("dbms.security.listUsers")
 
-    ### gufe otject handling
+    ### gufe object handling
 
     def test_create_network(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -535,13 +535,40 @@ class TestNeo4jStore(TestStateStore):
         assert n["location"] == pdr_ref.location
         assert n["obj_key"] == str(protocoldagresult.key)
 
-    def test_get_task_results(self):
-        # TODO: ADD TEST
-        ...
+    def test_get_task_results(
+            self, 
+            n4js: Neo4jStore,
+            network_tyk2,
+            scope_test,
+            transformation,
+            protocoldagresult
+        ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create a task; pretend we computed it, submit reference for pre-baked
+        # result 
+        task_sk = n4js.create_task(transformation_sk)
+
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope, obj_key=protocoldagresult.key, success=True
+        )
+
+        # push the result
+        n4js.set_task_result(task_sk, pdr_ref)
+
+        # get the result back
+        pdr_refs = n4js.get_task_results(task_sk)
+
+        assert len(pdr_refs) == 1
+        assert pdr_ref in pdr_refs
 
     def test_get_task_failures(self):
         # TODO: ADD TEST
         ...
+
+        # use network_tyk2_failure
 
     ### authentication
 

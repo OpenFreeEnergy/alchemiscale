@@ -15,7 +15,7 @@ from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 from ..base.client import FahAlchemyBaseClient, FahAlchemyBaseClientError
 from ..models import Scope, ScopedKey
-from ..storage.models import Task, ObjectStoreRef
+from ..storage.models import Task, ProtocolDAGResultRef
 from ..strategies import Strategy
 
 
@@ -267,7 +267,7 @@ class FahAlchemyClient(FahAlchemyBaseClient):
 
     def _get_prototocoldagresults(
         self,
-        objectstorerefs: List[ObjectStoreRef],
+        protocoldagresultrefs: List[ProtocolDAGResultRef],
         transformation: ScopedKey,
         success: bool,
     ):
@@ -280,9 +280,9 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         # get each protocoldagresult; could optimize by parallelizing these
         # calls to some extent, or at least using async/await
         pdrs = []
-        for objectstoreref in objectstorerefs:
-            pdr_key = objectstoreref["obj_key"]
-            scope = objectstoreref["scope"]
+        for protocoldagresultref in protocoldagresultrefs:
+            pdr_key = protocoldagresultref["obj_key"]
+            scope = protocoldagresultref["scope"]
 
             pdr_sk = ScopedKey(
                 gufe_key=GufeKey(pdr_key), **Scope.from_str(scope).dict()
@@ -322,14 +322,14 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             # get the transformation if we intend to return a ProtocolResult
             tf: Transformation = self.get_transformation(transformation)
 
-        # get all objectstorerefs for the given transformation
-        objectstorerefs = self._get_resource(
+        # get all protocoldagresultrefs for the given transformation
+        protocoldagresultrefs = self._get_resource(
             f"/transformations/{transformation}/results",
             return_gufe=False,
         )
 
         pdrs = self._get_prototocoldagresults(
-            objectstorerefs, transformation, success=True
+            protocoldagresultrefs, transformation, success=True
         )
 
         if return_protocoldagresults:
@@ -349,14 +349,14 @@ class FahAlchemyClient(FahAlchemyBaseClient):
             The `ScopedKey` of the `Transformation` to retrieve failures for.
 
         """
-        # get all objectstorerefs for the given transformation
-        objectstorerefs = self._get_resource(
+        # get all protocoldagresultrefs for the given transformation
+        protocoldagresultrefs = self._get_resource(
             f"/transformations/{transformation}/failures",
             return_gufe=False,
         )
 
         pdrs = self._get_prototocoldagresults(
-            objectstorerefs, transformation, success=False
+            protocoldagresultrefs, transformation, success=False
         )
 
         return pdrs
@@ -366,14 +366,14 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         # first, get the transformation; also confirms it exists
         transformation: ScopedKey = self.get_task_transformation(task)
 
-        # get all objectstorerefs for the given transformation
-        objectstorerefs = self._get_resource(
+        # get all protocoldagresultrefs for the given transformation
+        protocoldagresultrefs = self._get_resource(
             f"/tasks/{task}/results",
             return_gufe=False,
         )
 
         pdrs = self._get_prototocoldagresults(
-            objectstorerefs, transformation, success=True
+            protocoldagresultrefs, transformation, success=True
         )
 
         return pdrs
@@ -383,14 +383,14 @@ class FahAlchemyClient(FahAlchemyBaseClient):
         # first, get the transformation; also confirms it exists
         transformation: ScopedKey = self.get_task_transformation(task)
 
-        # get all objectstorerefs for the given transformation
-        objectstorerefs = self._get_resource(
+        # get all protocoldagresultrefs for the given transformation
+        protocoldagresultrefs = self._get_resource(
             f"/tasks/{task}/failures",
             return_gufe=False,
         )
 
         pdrs = self._get_prototocoldagresults(
-            objectstorerefs, transformation, success=False
+            protocoldagresultrefs, transformation, success=False
         )
 
         return pdrs

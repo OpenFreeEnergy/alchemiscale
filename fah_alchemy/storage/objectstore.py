@@ -214,7 +214,7 @@ class S3ObjectStore:
 
         Returns
         -------
-        ObjectStoreRef
+        ProtocolDAGResultRef
             Reference to the serialized `ProtocolDAGResult` in the object store.
 
         """
@@ -251,7 +251,7 @@ class S3ObjectStore:
         return_as="gufe",
         success=True,
     ):
-        """Pull the `ProtocolDAGResult` corresponding to the given `ObjectStoreRef`.
+        """Pull the `ProtocolDAGResult` corresponding to the given `ProtocolDAGResultRef`.
 
         Parameters
         ----------
@@ -264,7 +264,7 @@ class S3ObjectStore:
         Returns
         -------
         ProtocolDAGResult
-            The ProtocolDAGResult corresponding to the given `ObjectStoreRef`.
+            The ProtocolDAGResult corresponding to the given `ProtocolDAGResultRef`.
 
         """
         if transformation.scope != protocoldagresult.scope:

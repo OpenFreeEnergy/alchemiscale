@@ -6,7 +6,7 @@ from gufe.protocols.protocoldag import execute_DAG
 
 from fah_alchemy.models import ScopedKey
 from fah_alchemy.storage import S3ObjectStore
-from fah_alchemy.storage.models import ObjectStoreRef
+from fah_alchemy.storage.models import ProtocolDAGResultRef
 
 
 class TestS3ObjectStore:
@@ -19,7 +19,7 @@ class TestS3ObjectStore:
         self, s3os: S3ObjectStore, protocoldagresult, scope_test
     ):
         # try to push the result
-        objstoreref: ObjectStoreRef = s3os.push_protocoldagresult(
+        objstoreref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
             protocoldagresult, scope=scope_test
         )
 
@@ -35,7 +35,7 @@ class TestS3ObjectStore:
         self, s3os: S3ObjectStore, protocoldagresult, scope_test
     ):
 
-        objstoreref: ObjectStoreRef = s3os.push_protocoldagresult(
+        objstoreref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
             protocoldagresult, scope=scope_test
         )
 

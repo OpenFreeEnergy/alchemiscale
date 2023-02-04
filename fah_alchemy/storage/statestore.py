@@ -1236,7 +1236,7 @@ class Neo4jStore(FahAlchemyStateStore):
 
         return scoped_key
 
-    def get_task_results(self, task: ScopedKey):
+    def get_task_results(self, task: ScopedKey) -> List[ProtocolDAGResultRef]:
         # get all task result protocoldagresultrefs corresponding to given task
         # returned in no particular order
         q = f"""
@@ -1247,7 +1247,7 @@ class Neo4jStore(FahAlchemyStateStore):
         """
         return self._get_protocoldagresultrefs(q)
 
-    def get_task_failures(self, task: ScopedKey):
+    def get_task_failures(self, task: ScopedKey) -> List[ProtocolDAGResultRef]:
         # get all task failure protocoldagresultrefs corresponding to given task
         # returned in no particular order
         q = f"""
