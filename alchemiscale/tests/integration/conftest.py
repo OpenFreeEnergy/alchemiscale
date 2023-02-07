@@ -220,7 +220,6 @@ def s3os(s3objectstore_settings):
 
 @fixture(scope="session")
 def network_tyk2():
-
     tyk2s = tyk2.get_system()
 
     solvated = {

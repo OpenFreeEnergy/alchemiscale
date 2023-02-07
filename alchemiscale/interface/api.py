@@ -99,7 +99,6 @@ async def query_networks(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-
     # Intersect query scopes with accessible scopes in the token
     query_scopes = validate_scopes_query(scope, token)
     networks_handler = QueryGUFEHandler(return_gufe)
@@ -107,7 +106,6 @@ async def query_networks(
     # query each scope
     # loop might be removable in the future with a Union like operator on scopes
     for single_query_scope in query_scopes:
-
         # add new networks
         networks_handler.update_results(
             n4js.query_networks(

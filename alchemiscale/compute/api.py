@@ -84,7 +84,6 @@ async def query_taskqueues(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-
     # intersect query scopes with accessible scopes in the token
     query_scopes = validate_scopes_query(scope, token)
     taskqueues_handler = QueryGUFEHandler(return_gufe)
@@ -92,7 +91,6 @@ async def query_taskqueues(
     # query each scope
     # loop might be more removable in the future with a Union like operator on scopes
     for single_query_scope in query_scopes:
-
         # add new task queues
         taskqueues_handler.update_results(
             n4js.query_taskqueues(

@@ -196,7 +196,6 @@ async def get_access_token(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     cred_cls: CredentialedEntity = Depends(get_cred_entity),
 ):
-
     entity = authenticate(n4js, cred_cls, form_data.username, form_data.password)
 
     if entity is None:

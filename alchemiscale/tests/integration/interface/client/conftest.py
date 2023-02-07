@@ -49,7 +49,6 @@ def uvicorn_server(user_api):
 
 @pytest.fixture(scope="module")
 def user_client(uvicorn_server, user_identity):
-
     return client.AlchemiscaleClient(
         api_url="http://127.0.0.1:8000/",
         identifier=user_identity["identifier"],
@@ -59,7 +58,6 @@ def user_client(uvicorn_server, user_identity):
 
 @pytest.fixture(scope="module")
 def user_client_wrong_credential(uvicorn_server, user_identity):
-
     return client.AlchemiscaleClient(
         api_url="http://127.0.0.1:8000/",
         identifier=user_identity["identifier"],
