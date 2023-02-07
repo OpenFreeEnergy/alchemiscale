@@ -127,7 +127,6 @@ class TestComputeClient:
         protocoldagresults,
         uvicorn_server,
     ):
-
         an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.dict())
         tf_sk = ScopedKey(gufe_key=transformation.key, **scope_test.dict())
         taskqueue_sk = n4js_preloaded.get_taskqueue(an_sk)

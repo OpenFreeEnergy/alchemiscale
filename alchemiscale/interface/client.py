@@ -191,7 +191,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             raise ValueError(f"`return_as` takes 'list' or 'graph', not '{return_as}'")
 
     def get_task_transformation(self, task: ScopedKey) -> ScopedKey:
-
         transformation = self._get_resource(
             f"tasks/{task}/transformation", {}, return_gufe=False
         )
@@ -276,7 +275,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         transformation: ScopedKey,
         success: bool,
     ):
-
         if success:
             route = "results"
         else:

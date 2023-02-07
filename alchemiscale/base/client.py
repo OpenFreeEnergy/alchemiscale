@@ -89,7 +89,6 @@ class AlchemiscaleBaseClient:
 
     @_use_token
     def _get_resource(self, resource, params=None, return_gufe=True):
-
         if params is None:
             params = {}
 

@@ -63,7 +63,6 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
     def get_task_transformation(
         self, task: ScopedKey
     ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
-
         transformation, protocoldagresult_json = self._get_resource(
             f"tasks/{task}/transformation", {}, return_gufe=False
         )

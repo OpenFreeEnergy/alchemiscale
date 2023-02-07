@@ -49,7 +49,6 @@ class TestSynchronousComputeService:
     def test_execute(
         self, n4js_preloaded, s3os_server_fresh, service, network_tyk2, scope_test
     ):
-
         n4js: Neo4jStore = n4js_preloaded
         network_sk = n4js.get_scoped_key(network_tyk2, scope_test)
         tq_sk = n4js.get_taskqueue(network_sk)

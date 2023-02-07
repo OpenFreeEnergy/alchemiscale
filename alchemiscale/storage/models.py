@@ -186,7 +186,6 @@ class ObjectStoreRef(GufeTokenizable):
     scope: Scope
 
     def __init__(self, *, location: str = None, obj_key: GufeKey = None, scope: Scope):
-
         self.location = location
         self.obj_key = GufeKey(obj_key) if obj_key is not None else None
         self.scope = scope
@@ -220,7 +219,6 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         scope: Scope,
         success: bool,
     ):
-
         self.location = location
         self.obj_key = GufeKey(obj_key)
         self.scope = scope

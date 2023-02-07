@@ -285,7 +285,6 @@ def protocoldagresults(tmpdir_factory, transformation):
 
 @fixture(scope="session")
 def network_tyk2_failure(network_tyk2):
-
     transformation = list(network_tyk2.edges)[0]
 
     broken_transformation = Transformation(

@@ -287,7 +287,6 @@ class TestNeo4jStore(TestStateStore):
         assert m["_gufe_key"] == transformation.key
 
     def test_get_tasks(self, n4js, network_tyk2, scope_test):
-
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
 
@@ -445,7 +444,6 @@ class TestNeo4jStore(TestStateStore):
         assert all([i is None for i in task_sks_fail])
 
     def test_cancel_task(self, n4js, network_tyk2, scope_test):
-
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
         taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
@@ -481,7 +479,6 @@ class TestNeo4jStore(TestStateStore):
         assert [ScopedKey.from_str(t["_scoped_key"]) for t in tasks[1:]] == actioned[3:]
 
     def test_get_taskqueue_tasks(self, n4js, network_tyk2, scope_test):
-
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
         taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
@@ -712,7 +709,6 @@ class TestNeo4jStore(TestStateStore):
         transformation_failure,
         protocoldagresults_failure,
     ):
-
         an = network_tyk2_failure
         network_sk = n4js.create_network(an, scope_test)
         transformation_sk = n4js.get_scoped_key(transformation_failure, scope_test)

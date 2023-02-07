@@ -34,7 +34,6 @@ class TestS3ObjectStore:
     def test_pull_protocolresult(
         self, s3os: S3ObjectStore, protocoldagresult, scope_test
     ):
-
         objstoreref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
             protocoldagresult, scope=scope_test
         )
