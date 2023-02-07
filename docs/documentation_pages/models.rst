@@ -1,3 +1,3 @@
-.. automodule:: fah_alchemy.models
+.. automodule:: alchemiscale.models
     :members:
     :show-inheritance:

@@ -17,7 +17,7 @@ dependencies:
   - openeye-toolkits
   - typing-extensions
 
-  # fah-alchemy dependencies
+  # alchemiscale dependencies
   ## state store
   - neo4j-python-driver
   - py2neo
@@ -30,6 +30,7 @@ dependencies:
   ## api(s)
   - fastapi
   - uvicorn
+  - gunicorn
   - python-jose
   - passlib
   - bcrypt
@@ -37,6 +38,7 @@ dependencies:
   - starlette
   - httpx
   - cryptography
+  - requests
 
   ## cli
   - click
@@ -55,7 +57,7 @@ dependencies:
 
   - pip:
     #- git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment
-    - git+https://github.com/OpenFreeEnergy/gufe@result-handling-improvements
+    - git+https://github.com/OpenFreeEnergy/gufe
     - git+https://github.com/OpenFreeEnergy/openfe
     - git+https://github.com/OpenFreeEnergy/openfe-benchmarks
     - git+https://github.com/mikemhenry/openff-models.git@support_nested_models

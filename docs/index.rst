@@ -1,13 +1,13 @@
-.. fah-alchemy documentation master file, created by
+.. alchemiscale documentation master file, created by
    sphinx-quickstart on Wed Nov 23 20:51:04 2022.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to fah-alchemy's documentation!
+Welcome to alchemiscale's documentation!
 =======================================
 
 
-**fah-alchemy** is a package for running large scale free energy campaigns
+**alchemiscale** is a package for running large scale free energy campaigns
 on the `Folding at Home`_ (FAH) distributed computing platform. It is designed for 
 maximum interoperability with the `Open Molecular Software Foundation`_ stack,
 and is built on top of `OpenMM`_, `OpenForceField`_ and `OpenFreeEnergy`_. 

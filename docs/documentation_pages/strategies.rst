@@ -1,3 +1,3 @@
-.. automodule:: fah_alchemy.strategies.base
+.. automodule:: alchemiscale.strategies.base
     :members:
     :show-inheritance:
