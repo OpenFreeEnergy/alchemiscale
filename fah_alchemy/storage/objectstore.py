@@ -20,7 +20,7 @@ from ..settings import S3ObjectStoreSettings, get_s3objectstore_settings
 
 
 @lru_cache()
-def get_s3os(settings: S3ObjectStoreSettings, endpoint_url=None):
+def get_s3os(settings: S3ObjectStoreSettings, endpoint_url=None) -> S3ObjectStore:
     """Convenience function for getting an S3ObjectStore directly from settings."""
 
     # create a boto3 Session and parameterize with keys
