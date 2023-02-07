@@ -16,14 +16,14 @@ class TestS3ObjectStore:
         s3os._delete("_check_test")
 
     def test_push_protocolresult(
-        self, s3os: S3ObjectStore, protocoldagresult, scope_test
+        self, s3os: S3ObjectStore, protocoldagresults, scope_test
     ):
         # try to push the result
         objstoreref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
-            protocoldagresult, scope=scope_test
+            protocoldagresults[0], scope=scope_test
         )
 
-        assert objstoreref.obj_key == protocoldagresult.key
+        assert objstoreref.obj_key == protocoldagresults[0].key
 
         # examine object metadata
         objs = list(s3os.resource.Bucket(s3os.bucket).objects.all())
@@ -32,18 +32,18 @@ class TestS3ObjectStore:
         assert objs[0].key == os.path.join(s3os.prefix, objstoreref.location)
 
     def test_pull_protocolresult(
-        self, s3os: S3ObjectStore, protocoldagresult, scope_test
+        self, s3os: S3ObjectStore, protocoldagresults, scope_test
     ):
         objstoreref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
-            protocoldagresult, scope=scope_test
+            protocoldagresults[0], scope=scope_test
         )
 
         # round trip it
         sk = ScopedKey(gufe_key=objstoreref.obj_key, **scope_test.dict())
         tf_sk = ScopedKey(
-            gufe_key=protocoldagresult.transformation_key, **scope_test.dict()
+            gufe_key=protocoldagresults[0].transformation_key, **scope_test.dict()
         )
         pdr = s3os.pull_protocoldagresult(sk, tf_sk)
 
-        assert pdr.key == protocoldagresult.key
+        assert pdr.key == protocoldagresults[0].key
         assert pdr.protocol_unit_results == pdr.protocol_unit_results
