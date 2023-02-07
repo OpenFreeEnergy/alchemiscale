@@ -110,11 +110,6 @@ async def query_taskqueues(
 #    return
 
 
-@router.get("/taskqueues/{taskqueue}/tasks")
-async def get_taskqueue_tasks():
-    return {"message": "nothing yet"}
-
-
 @router.post("/taskqueues/{taskqueue_scoped_key}/claim")
 async def claim_taskqueue_tasks(
     taskqueue_scoped_key,
@@ -151,10 +146,10 @@ async def get_task_transformation(
 
     if protocoldagresultref:
         tf_sk = ScopedKey(
-            gufe_key=transformation.key, **Scope.from_str(sk.scope).dict()
+            gufe_key=transformation.key, **sk.scope.dict()
         )
         pdr_sk = ScopedKey(
-            gufe_key=protocoldagresultref.obj_key, **Scope.from_str(sk.scope).dict()
+            gufe_key=protocoldagresultref.obj_key, **sk.scope.dict()
         )
 
         # we keep this as a string to avoid useless deserialization/reserialization here

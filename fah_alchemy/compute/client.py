@@ -51,10 +51,6 @@ class FahAlchemyComputeClient(FahAlchemyBaseClient):
 
         return taskqueues
 
-    def get_taskqueue_tasks(self, taskqueue: ScopedKey) -> List[Task]:
-        """Get list of `Task`s for the given `TaskQueue`."""
-        self._get_resource(f"taskqueues/{taskqueue}/tasks", {})
-
     def claim_taskqueue_tasks(
         self, taskqueue: ScopedKey, claimant: str, count: int = 1
     ) -> Task:
