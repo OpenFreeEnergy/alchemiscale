@@ -28,7 +28,6 @@ class AlchemiscaleBaseClient:
     _exception = AlchemiscaleBaseClientError
 
     def __init__(self, api_url, identifier, key, max_retries=5):
-
         self.api_url = api_url
         self.identifier = identifier
         self.key = key
@@ -41,7 +40,6 @@ class AlchemiscaleBaseClient:
         return f"{self.__class__.__name__}('{self.api_url}')"
 
     def _get_token(self):
-
         data = {"username": self.identifier, "password": self.key}
 
         url = urljoin(self.api_url, "/token")
@@ -76,7 +74,6 @@ class AlchemiscaleBaseClient:
 
     @_use_token
     def _query_resource(self, resource, params):
-
         url = urljoin(self.api_url, resource)
         resp = requests.get(url, params=params, headers=self._headers)
 
@@ -93,7 +90,6 @@ class AlchemiscaleBaseClient:
 
     @_use_token
     def _get_resource(self, resource, params, return_gufe=True):
-
         url = urljoin(self.api_url, resource)
         resp = requests.get(url, params=params, headers=self._headers)
 

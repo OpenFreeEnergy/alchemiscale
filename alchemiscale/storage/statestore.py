@@ -56,7 +56,6 @@ class AlchemiscaleStateStore(abc.ABC):
 
 
 class Neo4jStore(AlchemiscaleStateStore):
-
     # uniqueness constraints applied to the database; key is node label,
     # 'property' is the property on which uniqueness is guaranteed for nodes
     # with that label
@@ -446,7 +445,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             "_project": scope.project,
         }
 
-        for (k, v) in list(properties.items()):
+        for k, v in list(properties.items()):
             if v is None:
                 properties.pop(k)
 

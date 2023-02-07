@@ -386,7 +386,6 @@ class TestNeo4jStore(TestStateStore):
     def test_create_credentialed_entity(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -412,7 +411,6 @@ class TestNeo4jStore(TestStateStore):
     def test_get_credentialed_entity(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -431,7 +429,6 @@ class TestNeo4jStore(TestStateStore):
     def test_list_credentialed_entities(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity
     ):
-
         identities = ("bill", "ted", "napoleon")
 
         for ident in identities:
@@ -453,7 +450,6 @@ class TestNeo4jStore(TestStateStore):
     def test_remove_credentialed_entity(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -482,7 +478,6 @@ class TestNeo4jStore(TestStateStore):
         credential_type: CredentialedEntity,
         scope_strs: List[str],
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -505,7 +500,6 @@ class TestNeo4jStore(TestStateStore):
     def test_add_scope(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -534,7 +528,6 @@ class TestNeo4jStore(TestStateStore):
     def test_add_scope_duplicate(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -566,7 +559,6 @@ class TestNeo4jStore(TestStateStore):
     def test_remove_scope(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),
@@ -593,7 +585,6 @@ class TestNeo4jStore(TestStateStore):
     def test_remove_scope_duplicate(
         self, n4js: Neo4jStore, credential_type: CredentialedEntity, scope_str: str
     ):
-
         user = credential_type(
             identifier="bill",
             hashed_key=hash_key("and ted"),

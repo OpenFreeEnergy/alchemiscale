@@ -15,7 +15,6 @@ class TestS3ObjectStore:
         s3os._delete("_check_test")
 
     def test_push_protocolresult(self, s3os: S3ObjectStore, protocoldagresult):
-
         # try to push the result
         objstoreref: ObjectStoreRef = s3os.push_protocoldagresult(protocoldagresult)
 
@@ -30,7 +29,6 @@ class TestS3ObjectStore:
         assert objs[0].key == os.path.join(s3os.prefix, objstoreref.location)
 
     def test_pull_protocolresult(self, s3os: S3ObjectStore, protocoldagresult):
-
         objstoreref: ObjectStoreRef = s3os.push_protocoldagresult(protocoldagresult)
 
         # round trip it

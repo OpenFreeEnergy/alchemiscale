@@ -26,7 +26,6 @@ class TestComputeClient:
         compute_client: client.AlchemiscaleComputeClient,
         uvicorn_server,
     ):
-
         settings = get_compute_settings_override()
         assert compute_client._jwtoken == None
         compute_client._get_token()
@@ -50,7 +49,6 @@ class TestComputeClient:
         compute_client: client.AlchemiscaleComputeClient,
         uvicorn_server,
     ):
-
         taskqueues = compute_client.query_taskqueues([scope_test])
 
         assert len(taskqueues) == 2
@@ -65,7 +63,6 @@ class TestComputeClient:
         compute_client: client.AlchemiscaleComputeClient,
         uvicorn_server,
     ):
-
         ...
         # task = compute_client.claim_taskqueue_task(scope_test)
 

@@ -30,7 +30,6 @@ class ComputeKey(BaseModel):
 
 
 class TaskProvenance(BaseModel):
-
     computekey: ComputeKey
     datetime_start: datetime
     datetime_end: datetime
@@ -124,7 +123,6 @@ class TaskQueue(GufeTokenizable):
     weight: float
 
     def __init__(self, network: ScopedKey, weight: int = 0.5):
-
         self.network = network
         self.weight = weight
 
