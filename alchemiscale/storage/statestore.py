@@ -812,7 +812,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
-    def queue_taskhub_tasks(
+    def action_tasks(
         self,
         tasks: List[ScopedKey],
         taskhub: ScopedKey,
@@ -902,6 +902,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 q = f"""
                 MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
                 SET ar.weight = {w}
+                RETURN ar
                 """
                 with self.transaction() as tx:
                     tx.run(q)
@@ -912,9 +913,12 @@ class Neo4jStore(AlchemiscaleStateStore):
                 q = f"""
                 MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
                 SET ar.weight = {weight}
+                RETURN ar
                 """
                 with self.transaction() as tx:
                     tx.run(q)
+
+        # TODO: add exception for nothing returned for matches, or some Tasks missing
 
     def get_task_weights(
         self, tasks: List[ScopedKey], taskhub: ScopedKey
@@ -948,7 +952,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return weights
 
-    def dequeue_taskhub_tasks(
+    def cancel_tasks(
         self,
         tasks: List[ScopedKey],
         taskhub: ScopedKey,
@@ -1048,6 +1052,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         taskpool_q = f"""
         // get list of all 'waiting' tasks in the queue
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(waiting_task:Task)
+
+        // lock the TaskHub to avoid other queries from changing its state while we claim
+        SET th._lock = True
         WHERE waiting_task.status = 'waiting'
 
         // get the lowest priority
@@ -1072,6 +1079,12 @@ class Neo4jStore(AlchemiscaleStateStore):
                     chosen_one = _select_task_from_taskpool(taskpool)
                     claim_query = _generate_claim_query(chosen_one, claimant)
                     tasks.append(tx.run(claim_query).to_subgraph())
+
+                tx.run(f"""
+                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})
+                // remove lock on the TaskHub now that we're done with it
+                SET th._lock = null
+                """)
 
         return [
             ScopedKey.from_str(t["_scoped_key"]) if t is not None else None
