@@ -226,7 +226,7 @@ class FahAlchemyClient(FahAlchemyBaseClient):
 
         return [ScopedKey.from_str(i) if i is not None else None for i in actioned_sks]
 
-    def cancel_tasks(self, tasks: List[ScopedKey], network: ScopedKey):
+    def cancel_tasks(self, tasks: List[ScopedKey], network: ScopedKey) -> List[ScopedKey]:
         """Cancel Tasks for execution via the given AlchemicalNetwork's
         TaskQueue.
 
