@@ -265,6 +265,26 @@ def network_tyk2():
 
 
 @fixture(scope="session")
+def transformation(network_tyk2):
+    return list(network_tyk2.edges)[0]
+
+
+@fixture(scope="session")
+def protocoldagresults(tmpdir_factory, transformation):
+    pdrs = []
+    for i in range(3):
+        # Use tempdir_factory instead of tempdir to handle session level scope correctly
+        protocoldag = transformation.create()
+
+        # execute the task
+        with tmpdir_factory.mktemp("protocol_dag").as_cwd():
+            protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
+
+        pdrs.append(protocoldagresult)
+    return pdrs
+
+
+@fixture(scope="session")
 def network_tyk2_failure(network_tyk2):
 
     transformation = list(network_tyk2.edges)[0]
@@ -273,11 +293,33 @@ def network_tyk2_failure(network_tyk2):
         stateA=transformation.stateA,
         stateB=transformation.stateB,
         protocol=BrokenProtocol(settings=None),
+        name='broken'
     )
 
     return AlchemicalNetwork(
         edges=[broken_transformation] + list(network_tyk2.edges), name="tyk2_broken"
     )
+
+
+@fixture(scope="session")
+def transformation_failure(network_tyk2_failure):
+    return [t for t in network_tyk2_failure.edges if t.name == 'broken'][0]
+
+
+@fixture(scope="session")
+def protocoldagresults_failure(tmpdir_factory, transformation_failure):
+    pdrs = []
+    for i in range(3):
+        # Use tempdir_factory instead of tempdir to handle session level scope correctly
+        protocoldag = transformation_failure.create()
+
+        # execute the task
+        with tmpdir_factory.mktemp("protocol_dag").as_cwd():
+            protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute(),
+                                            raise_error=False)
+
+        pdrs.append(protocoldagresult)
+    return pdrs
 
 
 @fixture(scope="session")
@@ -303,18 +345,3 @@ def multiple_scopes(scope_test):
     return scopes
 
 
-@fixture(scope="session")
-def transformation(network_tyk2):
-    return list(network_tyk2.edges)[0]
-
-
-@fixture(scope="session")
-def protocoldagresult(tmpdir_factory, transformation):
-    # Use tempdir_factory instead of tempdir to handle session level scope correctly
-    protocoldag = transformation.create()
-
-    # execute the task
-    with tmpdir_factory.mktemp("protocol_dag").as_cwd():
-        protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
-
-    return protocoldagresult

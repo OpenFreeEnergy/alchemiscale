@@ -7,6 +7,7 @@ S3 Object storage --- :mod:`fah-alchemy.storage.objectstore`
 import os
 import io
 import json
+from typing import Union
 from boto3.session import Session
 from functools import lru_cache
 
@@ -131,12 +132,7 @@ class S3ObjectStore:
     def _get_bytes(self, location):
         key = os.path.join(self.prefix, location)
 
-        print(f"Key: {key}")
-
-        print("Download")
         b = self.resource.Bucket(self.bucket)
-        print(f"Bucket name: {self.bucket}")
-        print(f"Bucket content: {list(b.objects.all())}")
 
         return self.resource.Object(self.bucket, key).get()["Body"].read()
 
@@ -154,10 +150,7 @@ class S3ObjectStore:
         with open(path, "rb") as f:
             self.resource.Bucket(self.bucket).upload_fileobj(f, key)
 
-        print("Upload")
         b = self.resource.Bucket(self.bucket)
-        print(f"Bucket name: {self.bucket}")
-        print(f"Bucket content: {list(b.objects.all())}")
 
     def _exists(self, location) -> bool:
         from botocore.exceptions import ClientError
@@ -202,7 +195,7 @@ class S3ObjectStore:
         self,
         protocoldagresult: ProtocolDAGResult,
         scope: Scope,
-    ):
+    ) -> ProtocolDAGResultRef:
         """Push given `ProtocolDAGResult` to this `ObjectStore`.
 
         Parameters
@@ -250,7 +243,7 @@ class S3ObjectStore:
         transformation: ScopedKey,
         return_as="gufe",
         success=True,
-    ):
+    ) -> Union[ProtocolDAGResult, dict, str]:
         """Pull the `ProtocolDAGResult` corresponding to the given `ProtocolDAGResultRef`.
 
         Parameters

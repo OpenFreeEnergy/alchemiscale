@@ -141,13 +141,121 @@ class TestNeo4jStore(TestStateStore):
     def test_query_chemicalsystems(self):
         ...
 
-    def test_get_transformation_results(self):
-        # TODO: ADD TEST
-        ...
+    def test_get_transformation_results(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        transformation,
+        protocoldagresults,
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
-    def test_get_transformation_failures(self):
-        # TODO: ADD TEST
-        ...
+        # create a task; pretend we computed it, submit reference for pre-baked
+        # result
+        task_sk = n4js.create_task(transformation_sk)
+
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope, obj_key=protocoldagresults[0].key, success=protocoldagresults[0].ok()
+        )
+
+        # push the result
+        n4js.set_task_result(task_sk, pdr_ref)
+
+        # get the result back, at the transformation level
+        pdr_refs = n4js.get_transformation_results(transformation_sk)
+
+        assert len(pdr_refs) == 1
+        assert pdr_ref in pdr_refs
+
+        # try adding a new task, then adding the same result to it
+        # should result in two tasks pointing to the same result, and yield
+        # only one 
+        task_sk2 = n4js.create_task(transformation_sk)
+        n4js.set_task_result(task_sk2, pdr_ref)
+        pdr_refs2 = n4js.get_transformation_results(transformation_sk)
+
+        assert len(pdr_refs2) == 1
+        assert pdr_ref in pdr_refs2
+
+        # try adding additional unique results to one of the tasks
+        for pdr in protocoldagresults[1:]:
+            pdr_ref_ = ProtocolDAGResultRef(
+                scope=task_sk.scope, obj_key=pdr.key, success=pdr.ok()
+            )
+            # push the result
+            n4js.set_task_result(task_sk, pdr_ref_)
+
+        # now get all results back for this transformation
+        pdr_refs3 = n4js.get_transformation_results(transformation_sk)
+
+        assert len(pdr_refs3) == 3
+        assert set([p.obj_key for p in pdr_refs3]) == set([p.key for p in protocoldagresults])
+
+
+    def test_get_transformation_failures(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2_failure,
+        scope_test,
+        transformation_failure,
+        protocoldagresults_failure,
+    ):
+        an = network_tyk2_failure
+        network_sk = n4js.create_network(an, scope_test)
+        transformation_sk = n4js.get_scoped_key(transformation_failure, scope_test)
+
+        # create a task; pretend we computed it, submit reference for pre-baked
+        # result
+        task_sk = n4js.create_task(transformation_sk)
+
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope, obj_key=protocoldagresults_failure[0].key, 
+            success=protocoldagresults_failure[0].ok()
+        )
+
+        # push the result
+        n4js.set_task_result(task_sk, pdr_ref)
+
+        # try to get the result back, at the transformation level
+        pdr_refs = n4js.get_transformation_results(transformation_sk)
+
+        assert len(pdr_refs) == 0
+
+        # try to get failure back
+        failure_pdr_refs = n4js.get_transformation_failures(transformation_sk)
+
+        assert len(failure_pdr_refs) == 1
+        assert pdr_ref in failure_pdr_refs
+
+        # try adding a new task, then adding the same result to it
+        # should result in two tasks pointing to the same result, and yield
+        # only one 
+        task_sk2 = n4js.create_task(transformation_sk)
+        n4js.set_task_result(task_sk2, pdr_ref)
+        pdr_refs2 = n4js.get_transformation_failures(transformation_sk)
+
+        assert len(pdr_refs2) == 1
+        assert pdr_ref in pdr_refs2
+
+        # try adding additional unique results to one of the tasks
+        for pdr in protocoldagresults_failure[1:]:
+            pdr_ref_ = ProtocolDAGResultRef(
+                scope=task_sk.scope, obj_key=pdr.key, success=pdr.ok()
+            )
+            # push the result
+            n4js.set_task_result(task_sk, pdr_ref_)
+
+        # should still get 0 results back for this transformation
+        assert len(n4js.get_transformation_results(transformation_sk)) == 0
+
+        # but should get 3 failures back if we ask for those
+        pdr_refs3 = n4js.get_transformation_failures(transformation_sk)
+
+        assert len(pdr_refs3) == 3
+        assert set([p.obj_key for p in pdr_refs3]) == set([p.key for p in protocoldagresults_failure])
 
     ### compute
 
@@ -453,7 +561,7 @@ class TestNeo4jStore(TestStateStore):
         n4js: Neo4jStore,
         network_tyk2,
         scope_test,
-        protocoldagresult,
+        protocoldagresults,
     ):
         # create a network with just the transformation we care about
         transformation = list(network_tyk2.edges)[0]
@@ -476,7 +584,7 @@ class TestNeo4jStore(TestStateStore):
 
         # pretend we completed this one, and we have a protocoldagresult for it
         pdr_ref = ProtocolDAGResultRef(
-            scope=task_sk.scope, obj_key=protocoldagresult.key, success=True
+            scope=task_sk.scope, obj_key=protocoldagresults[0].key, success=True
         )
 
         # try to push the result
@@ -541,7 +649,7 @@ class TestNeo4jStore(TestStateStore):
         network_tyk2,
         scope_test,
         transformation,
-        protocoldagresult,
+        protocoldagresults,
     ):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
@@ -552,7 +660,7 @@ class TestNeo4jStore(TestStateStore):
         task_sk = n4js.create_task(transformation_sk)
 
         pdr_ref = ProtocolDAGResultRef(
-            scope=task_sk.scope, obj_key=protocoldagresult.key, success=True
+            scope=task_sk.scope, obj_key=protocoldagresults[0].key, success=protocoldagresults[0].ok()
         )
 
         # push the result
@@ -564,11 +672,85 @@ class TestNeo4jStore(TestStateStore):
         assert len(pdr_refs) == 1
         assert pdr_ref in pdr_refs
 
-    def test_get_task_failures(self):
-        # TODO: ADD TEST
-        ...
+        # try doing it again; should be idempotent
+        n4js.set_task_result(task_sk, pdr_ref)
+        pdr_refs = n4js.get_task_results(task_sk)
 
-        # use network_tyk2_failure
+        assert len(pdr_refs) == 1
+        assert pdr_ref in pdr_refs
+
+        # if we add a different result, should now have 2
+        pdr_ref2 = ProtocolDAGResultRef(
+            scope=task_sk.scope, obj_key=protocoldagresults[1].key, success=protocoldagresults[1].ok()
+        )
+
+        # push the result
+        n4js.set_task_result(task_sk, pdr_ref2)
+
+        # get the result back
+        pdr_refs = n4js.get_task_results(task_sk)
+
+        assert len(pdr_refs) == 2
+        assert pdr_ref in pdr_refs
+        assert pdr_ref2 in pdr_refs
+
+    def test_get_task_failures(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2_failure,
+        scope_test,
+        transformation_failure,
+        protocoldagresults_failure,
+    ):
+
+        an = network_tyk2_failure
+        network_sk = n4js.create_network(an, scope_test)
+        transformation_sk = n4js.get_scoped_key(transformation_failure, scope_test)
+
+        # create a task; pretend we computed it, submit reference for pre-baked
+        # result
+        task_sk = n4js.create_task(transformation_sk)
+
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope, obj_key=protocoldagresults_failure[0].key, success=protocoldagresults_failure[0].ok()
+        )
+
+        # push the result
+        n4js.set_task_result(task_sk, pdr_ref)
+
+        # try get results back
+        pdr_refs = n4js.get_task_results(task_sk)
+
+        assert len(pdr_refs) == 0
+        assert pdr_ref not in pdr_refs
+
+        # try to get failure back
+        failure_pdr_refs = n4js.get_task_failures(task_sk)
+
+        assert len(failure_pdr_refs) == 1
+        assert pdr_ref in failure_pdr_refs
+
+        # try doing it again; should be idempotent
+        n4js.set_task_result(task_sk, pdr_ref)
+        failure_pdr_refs = n4js.get_task_failures(task_sk)
+
+        assert len(failure_pdr_refs) == 1
+        assert pdr_ref in failure_pdr_refs
+
+        # if we add a different failure, should now have 2
+        pdr_ref2 = ProtocolDAGResultRef(
+            scope=task_sk.scope, obj_key=protocoldagresults_failure[1].key, success=protocoldagresults_failure[1].ok()
+        )
+
+        # push the result
+        n4js.set_task_result(task_sk, pdr_ref2)
+
+        # get the result back
+        failure_pdr_refs2 = n4js.get_task_failures(task_sk)
+
+        assert len(failure_pdr_refs2) == 2
+        assert pdr_ref in failure_pdr_refs2
+        assert pdr_ref2 in failure_pdr_refs2
 
     ### authentication
 
