@@ -133,7 +133,13 @@ class SynchronousComputeService:
     def task_to_protocoldag(
         self, task: ScopedKey
     ) -> Tuple[ProtocolDAG, Transformation, Optional[ProtocolDAGResult]]:
-        """Given a Task, produce a corresponding ProtocolDAG that can be executed."""
+        """Given a Task, produce a corresponding ProtocolDAG that can be executed.
+
+        Also gives the Transformation that this ProtocolDAG corresponds to.
+        If the Task extends another Task, then the ProtocolDAGResult for that
+        other Task is also given; otherwise `None` given.
+
+        """
         ...
 
         transformation, extends_protocoldagresult = self.client.get_task_transformation(

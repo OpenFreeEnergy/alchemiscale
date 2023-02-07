@@ -244,6 +244,8 @@ def get_tasks(
             str(sk): str(extends) if extends is not None else None
             for sk, extends in task_sks.items()
         }
+    else:
+        raise ValueError(f"`return_as` takes 'list' or 'graph', not '{return_as}'")
 
 
 @router.post("/networks/{network_scoped_key}/tasks/action")
@@ -331,7 +333,7 @@ def get_protocoldagresult(
     *,
     s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
-):
+) -> List[str]:
     sk = ScopedKey.from_str(protocoldagresult_scoped_key)
     tf_sk = ScopedKey.from_str(transformation_scoped_key)
 
@@ -355,7 +357,7 @@ def get_protocoldagresult_failure(
     *,
     s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
-):
+) -> List[str]:
     sk = ScopedKey.from_str(protocoldagresult_scoped_key)
     tf_sk = ScopedKey.from_str(transformation_scoped_key)
 

@@ -30,7 +30,7 @@ class FahAlchemyClient(FahAlchemyBaseClient):
 
     ### inputs
 
-    def get_scoped_key(self, obj: GufeTokenizable, scope: Scope):
+    def get_scoped_key(self, obj: GufeTokenizable, scope: Scope) -> ScopedKey:
         """Given any gufe object and a fully-specified Scope, return corresponding ScopedKey.
 
         This method does not check that this ScopedKey is represented in the database.
@@ -45,10 +45,13 @@ class FahAlchemyClient(FahAlchemyBaseClient):
                 "Scope for a ScopedKey must be specific; it cannot contain wildcards."
             )
 
-    def check_exists(self, scoped_key: Scope):
+    def check_exists(self, scoped_key: Scope) -> bool:
+        """Returns `True` if the given ScopedKey represents an object in the database.
+
+        """
         return self._get_resource("/exists/{scoped_key}", params={}, return_gufe=False)
 
-    def create_network(self, network: AlchemicalNetwork, scope: Scope):
+    def create_network(self, network: AlchemicalNetwork, scope: Scope) -> ScopedKey:
         """Submit an AlchemicalNetwork."""
         data = dict(network=network.to_dict(), scope=scope.dict())
         scoped_key = self._post_resource("/networks", data)
@@ -186,6 +189,8 @@ class FahAlchemyClient(FahAlchemyBaseClient):
                     g.add_edge(ScopedKey.from_str(task), ScopedKey.from_str(extends))
 
             return g
+        else:
+            raise ValueError(f"`return_as` takes 'list' or 'graph', not '{return_as}'")
 
     def get_task_transformation(self, task: ScopedKey) -> ScopedKey:
 
