@@ -255,7 +255,7 @@ def action_tasks(
     tasks: List[ScopedKey] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[Union[str,None]]:
+) -> List[Union[str, None]]:
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
@@ -272,7 +272,7 @@ def cancel_tasks(
     tasks: List[ScopedKey] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[Union[str,None]]:
+) -> List[Union[str, None]]:
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 

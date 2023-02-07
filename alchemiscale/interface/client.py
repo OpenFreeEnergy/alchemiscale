@@ -46,9 +46,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             )
 
     def check_exists(self, scoped_key: Scope) -> bool:
-        """Returns `True` if the given ScopedKey represents an object in the database.
-
-        """
+        """Returns `True` if the given ScopedKey represents an object in the database."""
         return self._get_resource("/exists/{scoped_key}", params={}, return_gufe=False)
 
     def create_network(self, network: AlchemicalNetwork, scope: Scope) -> ScopedKey:
@@ -231,7 +229,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return [ScopedKey.from_str(i) if i is not None else None for i in actioned_sks]
 
-    def cancel_tasks(self, tasks: List[ScopedKey], network: ScopedKey) -> List[ScopedKey]:
+    def cancel_tasks(
+        self, tasks: List[ScopedKey], network: ScopedKey
+    ) -> List[ScopedKey]:
         """Cancel Tasks for execution via the given AlchemicalNetwork's
         TaskQueue.
 
