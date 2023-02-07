@@ -158,7 +158,9 @@ class TestNeo4jStore(TestStateStore):
         task_sk = n4js.create_task(transformation_sk)
 
         pdr_ref = ProtocolDAGResultRef(
-            scope=task_sk.scope, obj_key=protocoldagresults[0].key, success=protocoldagresults[0].ok()
+            scope=task_sk.scope,
+            obj_key=protocoldagresults[0].key,
+            success=protocoldagresults[0].ok(),
         )
 
         # push the result
@@ -172,7 +174,7 @@ class TestNeo4jStore(TestStateStore):
 
         # try adding a new task, then adding the same result to it
         # should result in two tasks pointing to the same result, and yield
-        # only one 
+        # only one
         task_sk2 = n4js.create_task(transformation_sk)
         n4js.set_task_result(task_sk2, pdr_ref)
         pdr_refs2 = n4js.get_transformation_results(transformation_sk)
@@ -192,8 +194,9 @@ class TestNeo4jStore(TestStateStore):
         pdr_refs3 = n4js.get_transformation_results(transformation_sk)
 
         assert len(pdr_refs3) == 3
-        assert set([p.obj_key for p in pdr_refs3]) == set([p.key for p in protocoldagresults])
-
+        assert set([p.obj_key for p in pdr_refs3]) == set(
+            [p.key for p in protocoldagresults]
+        )
 
     def test_get_transformation_failures(
         self,
@@ -212,8 +215,9 @@ class TestNeo4jStore(TestStateStore):
         task_sk = n4js.create_task(transformation_sk)
 
         pdr_ref = ProtocolDAGResultRef(
-            scope=task_sk.scope, obj_key=protocoldagresults_failure[0].key, 
-            success=protocoldagresults_failure[0].ok()
+            scope=task_sk.scope,
+            obj_key=protocoldagresults_failure[0].key,
+            success=protocoldagresults_failure[0].ok(),
         )
 
         # push the result
@@ -232,7 +236,7 @@ class TestNeo4jStore(TestStateStore):
 
         # try adding a new task, then adding the same result to it
         # should result in two tasks pointing to the same result, and yield
-        # only one 
+        # only one
         task_sk2 = n4js.create_task(transformation_sk)
         n4js.set_task_result(task_sk2, pdr_ref)
         pdr_refs2 = n4js.get_transformation_failures(transformation_sk)
@@ -255,7 +259,9 @@ class TestNeo4jStore(TestStateStore):
         pdr_refs3 = n4js.get_transformation_failures(transformation_sk)
 
         assert len(pdr_refs3) == 3
-        assert set([p.obj_key for p in pdr_refs3]) == set([p.key for p in protocoldagresults_failure])
+        assert set([p.obj_key for p in pdr_refs3]) == set(
+            [p.key for p in protocoldagresults_failure]
+        )
 
     ### compute
 
@@ -660,7 +666,9 @@ class TestNeo4jStore(TestStateStore):
         task_sk = n4js.create_task(transformation_sk)
 
         pdr_ref = ProtocolDAGResultRef(
-            scope=task_sk.scope, obj_key=protocoldagresults[0].key, success=protocoldagresults[0].ok()
+            scope=task_sk.scope,
+            obj_key=protocoldagresults[0].key,
+            success=protocoldagresults[0].ok(),
         )
 
         # push the result
@@ -681,7 +689,9 @@ class TestNeo4jStore(TestStateStore):
 
         # if we add a different result, should now have 2
         pdr_ref2 = ProtocolDAGResultRef(
-            scope=task_sk.scope, obj_key=protocoldagresults[1].key, success=protocoldagresults[1].ok()
+            scope=task_sk.scope,
+            obj_key=protocoldagresults[1].key,
+            success=protocoldagresults[1].ok(),
         )
 
         # push the result
@@ -712,7 +722,9 @@ class TestNeo4jStore(TestStateStore):
         task_sk = n4js.create_task(transformation_sk)
 
         pdr_ref = ProtocolDAGResultRef(
-            scope=task_sk.scope, obj_key=protocoldagresults_failure[0].key, success=protocoldagresults_failure[0].ok()
+            scope=task_sk.scope,
+            obj_key=protocoldagresults_failure[0].key,
+            success=protocoldagresults_failure[0].ok(),
         )
 
         # push the result
@@ -739,7 +751,9 @@ class TestNeo4jStore(TestStateStore):
 
         # if we add a different failure, should now have 2
         pdr_ref2 = ProtocolDAGResultRef(
-            scope=task_sk.scope, obj_key=protocoldagresults_failure[1].key, success=protocoldagresults_failure[1].ok()
+            scope=task_sk.scope,
+            obj_key=protocoldagresults_failure[1].key,
+            success=protocoldagresults_failure[1].ok(),
         )
 
         # push the result

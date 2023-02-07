@@ -78,16 +78,18 @@ class TestComputeClient:
         taskqueue_sks = compute_client.query_taskqueues([scope_test])
 
         # claim our first task
-        task_sks = compute_client.claim_taskqueue_tasks(taskqueue_sks[0], claimant='me')
+        task_sks = compute_client.claim_taskqueue_tasks(taskqueue_sks[0], claimant="me")
 
         # check that we got the task we expected given order
         all_task_sks = n4js_preloaded.get_taskqueue_tasks(taskqueue_sks[0])
 
         assert len(task_sks) == 1
         assert task_sks[0] == all_task_sks[0]
-        
+
         # claim two more tasks
-        task_sks2 = compute_client.claim_taskqueue_tasks(taskqueue_sks[0], count=2, claimant='me')
+        task_sks2 = compute_client.claim_taskqueue_tasks(
+            taskqueue_sks[0], count=2, claimant="me"
+        )
 
         assert task_sks2 == all_task_sks[1:]
 
@@ -104,10 +106,13 @@ class TestComputeClient:
         taskqueue_sk = n4js_preloaded.get_taskqueue(an_sk)
 
         # claim our first task
-        task_sks = compute_client.claim_taskqueue_tasks(taskqueue_sk, claimant='me')
+        task_sks = compute_client.claim_taskqueue_tasks(taskqueue_sk, claimant="me")
 
         # get the transformation corresponding to this task
-        transformation_, extends_protocoldagresult = compute_client.get_task_transformation(task_sks[0])
+        (
+            transformation_,
+            extends_protocoldagresult,
+        ) = compute_client.get_task_transformation(task_sks[0])
 
         assert transformation_ == transformation
         assert extends_protocoldagresult is None
@@ -130,10 +135,13 @@ class TestComputeClient:
         taskqueue_sk = n4js_preloaded.get_taskqueue(an_sk)
 
         # claim our first task
-        task_sks = compute_client.claim_taskqueue_tasks(taskqueue_sk, claimant='me')
+        task_sks = compute_client.claim_taskqueue_tasks(taskqueue_sk, claimant="me")
 
         # get the transformation corresponding to this task
-        transformation_, extends_protocoldagresult = compute_client.get_task_transformation(task_sks[0])
+        (
+            transformation_,
+            extends_protocoldagresult,
+        ) = compute_client.get_task_transformation(task_sks[0])
 
         assert transformation_ == transformation
         assert extends_protocoldagresult is None
@@ -146,9 +154,10 @@ class TestComputeClient:
 
         # get the transformation and the protocoldagresult for the task this extends
         # no need to claim to actually do this
-        transformation2, extends_protocoldagresult2 = compute_client.get_task_transformation(task_sk2)
+        (
+            transformation2,
+            extends_protocoldagresult2,
+        ) = compute_client.get_task_transformation(task_sk2)
 
         assert transformation2 == transformation_
         assert extends_protocoldagresult2 == protocoldagresults[0]
-
-

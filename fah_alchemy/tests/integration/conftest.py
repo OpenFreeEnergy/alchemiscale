@@ -293,7 +293,7 @@ def network_tyk2_failure(network_tyk2):
         stateA=transformation.stateA,
         stateB=transformation.stateB,
         protocol=BrokenProtocol(settings=None),
-        name='broken'
+        name="broken",
     )
 
     return AlchemicalNetwork(
@@ -303,7 +303,7 @@ def network_tyk2_failure(network_tyk2):
 
 @fixture(scope="session")
 def transformation_failure(network_tyk2_failure):
-    return [t for t in network_tyk2_failure.edges if t.name == 'broken'][0]
+    return [t for t in network_tyk2_failure.edges if t.name == "broken"][0]
 
 
 @fixture(scope="session")
@@ -315,8 +315,9 @@ def protocoldagresults_failure(tmpdir_factory, transformation_failure):
 
         # execute the task
         with tmpdir_factory.mktemp("protocol_dag").as_cwd():
-            protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute(),
-                                            raise_error=False)
+            protocoldagresult = execute_DAG(
+                protocoldag, shared=Path(".").absolute(), raise_error=False
+            )
 
         pdrs.append(protocoldagresult)
     return pdrs
@@ -343,5 +344,3 @@ def multiple_scopes(scope_test):
         ]
     )
     return scopes
-
-
