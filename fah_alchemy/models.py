@@ -67,7 +67,7 @@ class Scope(BaseModel):
     def __repr__(self):  # pragma: no cover
         return f"<Scope('{str(self)}')>"
 
-    def specific(self):
+    def specific(self) -> bool:
         """Return `True` if this Scope has no unspecified elements."""
         return all(self.to_tuple())
 
