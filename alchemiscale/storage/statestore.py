@@ -5,6 +5,7 @@ Node4js state storage --- :mod:`alchemiscale.storage.statestore`
 """
 
 import abc
+from datetime import datetime
 from contextlib import contextmanager
 import json
 from functools import lru_cache
@@ -14,7 +15,7 @@ import weakref
 import numpy as np
 
 import networkx as nx
-from gufe import AlchemicalNetwork, Transformation, ProtocolDAGResult
+from gufe import AlchemicalNetwork, Transformation
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 from gufe.storage.metadatastore import MetadataStore
 from py2neo import Graph, Node, Relationship, Subgraph
@@ -28,7 +29,7 @@ from .models import (
     TaskHub,
     TaskArchive,
     TaskStatusEnum,
-    ObjectStoreRef,
+    ProtocolDAGResultRef,
 )
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
@@ -637,7 +638,7 @@ class Neo4jStore(AlchemiscaleStateStore):
           AND NOT (c)<-[:DEPENDS_ON]-(o)
         return distinct n,m
         """
-        # first, delete the network's queue if present
+        # first, delete the network's hub if present
         self.delete_taskhub(network)
 
         # then delete the network
@@ -689,12 +690,43 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_networks_for_transformation(self):
         ...
 
-    def get_transformation_results(self, transformation: ScopedKey):
-        ...
+    def _get_protocoldagresultrefs(self, q):
+        with self.transaction() as tx:
+            res = tx.run(q)
 
-        # get all tasks directly connected to given transformation
-        # for each, grab chain of extensions if present
-        # return list of lists of ObjectStoreRef
+        protocoldagresultrefs = []
+        subgraph = Subgraph()
+        for record in res:
+            protocoldagresultrefs.append(record["res"])
+            subgraph = subgraph | record["res"]
+
+        return list(self._subgraph_to_gufe(protocoldagresultrefs, subgraph).values())
+
+    def get_transformation_results(
+        self, transformation: ScopedKey
+    ) -> List[ProtocolDAGResultRef]:
+        # get all task result protocoldagresultrefs corresponding to given transformation
+        # returned in no particular order
+        q = f"""
+        MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
+              (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
+        WHERE res.success = true
+        RETURN res
+        """
+        return self._get_protocoldagresultrefs(q)
+
+    def get_transformation_failures(
+        self, transformation: ScopedKey
+    ) -> List[ProtocolDAGResultRef]:
+        # get all task failure protocoldagresultrefs corresponding to given transformation
+        # returned in no particular order
+        q = f"""
+        MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
+              (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
+        WHERE res.success = false
+        RETURN res
+        """
+        return self._get_protocoldagresultrefs(q)
 
     ## compute
 
@@ -706,7 +738,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Set the compute Strategy for the given AlchemicalNetwork."""
         ...
 
-    ## task queues
+    ## task hubs
 
     def create_taskhub(
         self,
@@ -715,7 +747,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Create a TaskHub for the given AlchemicalNetwork.
 
         An AlchemicalNetwork can have only one associated TaskHub.
-        A TaskHub is required to queue Tasks for a given AlchemicalNetwork.
+        A TaskHub is required to action Tasks for a given AlchemicalNetwork.
 
         This method will only create a TaskHub for an AlchemicalNetwork if it
         doesn't already exist; it will return the scoped key for the TaskHub
@@ -823,45 +855,49 @@ class Neo4jStore(AlchemiscaleStateStore):
         and must correspond to a Transformation in the AlchemicalNetwork.
 
         A given compute task can be represented in any number of
-        AlchemicalNetwork queues, or none at all.
+        AlchemicalNetwork hubs, or none at all.
 
         If this Task has an EXTENDS relationship to another Task, that Task must
         be 'complete' before this Task can be added to *any* TaskHub.
 
         """
+        actioned_sks = []
         for t in tasks:
             q = f"""
             // get our TaskHub, 
             MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:PERFORMS]->(an:AlchemicalNetwork)
             
-            // get the task we want to add to the queue; check that it connects to same network
-            // if it has an EXTENDS relationship, get the task it extends
-            MATCH (tn:Task {{_scoped_key: '{t}'}})-[:PERFORMS*]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
-            OPTIONAL MATCH (tn)-[:EXTENDS]->(other_task:Task)
+            // get the task we want to add to the hub; check that it connects to same network
+            // only proceed for cases where task is not already associated with the hub 
+            MATCH (task:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
+            OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
-            // only proceed for cases where task is not already in queue and only EXTENDS a 'complete' task
-            WHERE NOT (th)-[:ACTIONS* {{taskhub: '{taskhub}'}}]->(tn)
-              AND other_task.status = 'complete'
+            // only proceed for cases where task is not already actioned on hub
+            // and only EXTENDS a 'complete' task
+            WITH th, an, task, other_task
+            WHERE NOT (th)-[:ACTIONS]->(task)
+              AND other_task.status = 'complete' OR other_task IS NULL
 
             // create the connections 
-            CREATE (th)-[ar:ACTIONS {{taskhub: '{taskhub}'}}] ->
-                      (tn)
+            CREATE (th)-[ar:ACTIONS]->(task)
+
             // set the ACTIONS relationship weight to default weight of 1.0
             SET ar.weight = 1.0
+
             // set the parent_task property to the scoped key of the Task
             // this is a convenience for when we have to loop over relationships in python land
-            SET ar.parent_task = tn._scoped_key
-            RETURN tn
+            SET ar.task = task._scoped_key
+            RETURN task
             """
             with self.transaction() as tx:
                 task = tx.run(q).to_subgraph()
-
-            if task is None:
-                raise ValueError(
-                    f"Task '{t}' not found in same network as given TaskHub"
+                actioned_sks.append(
+                    ScopedKey.from_str(task["_scoped_key"])
+                    if task is not None
+                    else None
                 )
 
-        return tasks
+        return actioned_sks
 
     def set_task_weights(
         self,
@@ -878,7 +914,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         The weights can be set by either a list and a scalar, or a dict of {ScopedKey: weight} pairs.
 
-        MUST be called after `queue_taskhub_tasks`. otherwise, the TaskHub will not have an ACTIONS relationship
+        MUST be called after `action_tasks`. otherwise, the TaskHub will not have an ACTIONS relationship
         to the Task.
 
         Parameters
@@ -957,14 +993,15 @@ class Neo4jStore(AlchemiscaleStateStore):
         tasks: List[ScopedKey],
         taskhub: ScopedKey,
     ) -> List[ScopedKey]:
-        """Remove a compute Task from the TaskHub for a given AlchemicalNetwork.
+        """Remove Tasks from the TaskHub for a given AlchemicalNetwork.
 
-        Note: the Task must be within the same scope as the AlchemicalNetwork.
+        Note: Tasks must be within the same scope as the AlchemicalNetwork.
 
-        A given compute task can be represented in many AlchemicalNetwork
-        queues, or none at all.
+        A given Task can be represented in many AlchemicalNetwork hubs, or
+        none at all.
 
         """
+        canceled_sks = []
         for t in tasks:
             q = f"""
             // get our task hub, as well as the task we want to remove
@@ -972,9 +1009,14 @@ class Neo4jStore(AlchemiscaleStateStore):
             DETACH DELETE task
             """
             with self.transaction() as tx:
-                tx.run(q)
+                task = tx.run(q).to_subgraph()
+                canceled_sks.append(
+                    ScopedKey.from_str(task["_scoped_key"])
+                    if task is not None
+                    else None
+                )
 
-        return tasks
+        return canceled_sks
 
     def get_taskhub_tasks(
         self, taskhub: ScopedKey, return_gufe=False
@@ -1009,7 +1051,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Get a list of unclaimed Tasks in the TaskHub"""
 
         q = f"""
-        // get list of all unclaimed tasks in the queue
+        // get list of all unclaimed tasks in the hub 
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task)
         WHERE task.claim IS NULL
         RETURN task
@@ -1050,11 +1092,13 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         taskpool_q = f"""
-        // get list of all 'waiting' tasks in the queue
+        // get list of all 'waiting' tasks in the hub 
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(waiting_task:Task)
 
         // lock the TaskHub to avoid other queries from changing its state while we claim
         SET th._lock = True
+
+        WITH th, waiting_task
         WHERE waiting_task.status = 'waiting'
 
         // get the lowest priority
@@ -1082,6 +1126,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
                 tx.run(f"""
                 MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})
+
                 // remove lock on the TaskHub now that we're done with it
                 SET th._lock = null
                 """)
@@ -1096,7 +1141,8 @@ class Neo4jStore(AlchemiscaleStateStore):
     def create_task(
         self,
         transformation: ScopedKey,
-        extend_from: Optional[ScopedKey] = None,
+        extends: Optional[ScopedKey] = None,
+        creator: Optional[str] = None,
     ) -> ScopedKey:
         """Add a compute Task to a Transformation.
 
@@ -1108,10 +1154,10 @@ class Neo4jStore(AlchemiscaleStateStore):
             The Transformation to compute.
         scope
             The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
-        extend_from
+        extends
             The ScopedKey of the Task to use as a starting point for this Task.
             Will use the `ProtocolDAGResult` from the given Task as the
-            `extend_from` input for the Task's eventual call to `Protocol.create`.
+            `extends` input for the Task's eventual call to `Protocol.create`.
 
         """
         scope = transformation.scope
@@ -1119,7 +1165,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         # create a new task for the supplied transformation
         # use a PERFORMS relationship
-        task = Task()
+        task = Task(
+            creator=creator, extends=str(extends) if extends is not None else None
+        )
+
         _, task_node, scoped_key = self._gufe_to_subgraph(
             task.to_shallow_dict(),
             labels=["GufeTokenizable", task.__class__.__name__],
@@ -1129,8 +1178,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         subgraph = Subgraph()
 
-        if extend_from is not None:
-            previous_task_node = self._get_node(extend_from)
+        if extends is not None:
+            previous_task_node = self._get_node(extends)
             subgraph = subgraph | Relationship.type("EXTENDS")(
                 task_node,
                 previous_task_node,
@@ -1155,7 +1204,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def set_tasks(
         self,
         transformation: ScopedKey,
-        extend_from: Optional[Task] = None,
+        extends: Optional[Task] = None,
         count: int = 1,
     ) -> ScopedKey:
         """Set a fixed number of Tasks against the given Transformation if not
@@ -1169,13 +1218,13 @@ class Neo4jStore(AlchemiscaleStateStore):
             The Transformation to compute.
         scope
             The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
-        extend_from
+        extends
             The Task to use as a starting point for this Task.
             Will use the `ProtocolDAGResult` from the given Task as the
-            `extend_from` input for the Task's eventual call to `Protocol.create`.
+            `extends` input for the Task's eventual call to `Protocol.create`.
         count
             The total number of tasks that should exist corresponding to the
-            specified `transformation`, `scope`, and `extend_from`.
+            specified `transformation`, `scope`, and `extends`.
         """
         raise NotImplementedError
         # TODO: finish this one out when we have a reasonable approach to locking
@@ -1193,12 +1242,66 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
+    def get_tasks(
+        self,
+        transformation: ScopedKey,
+        extends: Optional[ScopedKey] = None,
+        return_as: str = "list",
+    ) -> Union[List[ScopedKey], Dict[ScopedKey, Optional[str]]]:
+        """Get all Tasks that perform the given Transformation.
+
+        If a Task ScopedKey is given for `extends`, then only those Tasks
+        that follow via any number of EXTENDS relationships will be returned.
+
+        `return_as` takes either `list` or `graph` as input.
+        `graph` will yield a dict mapping each Task's ScopedKey (as keys) to
+        the Task ScopedKey it extends (as values).
+
+        Parameters
+        ----------
+        transformation
+            ScopedKey of the Transformation to retrieve Tasks for.
+        extends
+
+        """
+        q = f"""
+        MATCH (trans:Transformation {{_scoped_key: '{transformation}'}})<-[:PERFORMS]-(task:Task)
+        """
+
+        if extends:
+            q += f"""
+            MATCH (trans)<-[:PERFORMS]-(extends:Task {{_scoped_key: '{extends}'}})
+            WHERE (task)-[:EXTENDS*]->(extends)
+            RETURN task
+            """
+        else:
+            q += f"""
+            RETURN task
+            """
+
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+        tasks = []
+        for record in res:
+            tasks.append(record["task"])
+
+        if return_as == "list":
+            return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
+        elif return_as == "graph":
+            return {
+                ScopedKey.from_str(t["_scoped_key"]): ScopedKey.from_str(t["extends"])
+                if t["extends"] is not None
+                else None
+                for t in tasks
+            }
+
     def query_tasks(
         self,
         scope: Optional[Scope] = None,
         network: Optional[ScopedKey] = None,
         transformation: Optional[ScopedKey] = None,
-        extend_from: Optional[ScopedKey] = None,
+        extends: Optional[ScopedKey] = None,
         status: Optional[List[TaskStatusEnum]] = None,
     ):
         raise NotImplementedError
@@ -1215,19 +1318,20 @@ class Neo4jStore(AlchemiscaleStateStore):
         instead have their tasks set to 'deleted' and retained.
 
         """
-        ...
+        raise NotImplementedError
 
     def get_task_transformation(
         self,
         task: ScopedKey,
-    ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
-        """Get the `Transformation` and `ProtocolDAGResult` to extend from (if
+        return_gufe=True,
+    ) -> Tuple[Transformation, Optional[ProtocolDAGResultRef]]:
+        """Get the `Transformation` and `ProtocolDAGResultRef` to extend from (if
         present) for the given `Task`.
 
         """
         q = f"""
         MATCH (task:Task {{_scoped_key: "{task}"}})-[:PERFORMS]->(trans:Transformation)
-        OPTIONAL MATCH (task)-[:EXTENDS]->(prev:Task)-[:RESULTS_IN]->(result:ProtocolDAGResult)
+        OPTIONAL MATCH (task)-[:EXTENDS]->(prev:Task)-[:RESULTS_IN]->(result:ProtocolDAGResultRef)
         RETURN trans, result
         """
 
@@ -1247,40 +1351,41 @@ class Neo4jStore(AlchemiscaleStateStore):
                 "More than one such object in database; this should not be possible"
             )
 
-        transformation = self.get_gufe(
-            ScopedKey.from_str(transformations[0]["_scoped_key"])
-        )
-        protocoldagresult = (
-            self.get_gufe(ScopedKey.from_str(results[0]["_scoped_key"]))
+        transformation = ScopedKey.from_str(transformations[0]["_scoped_key"])
+
+        protocoldagresultref = (
+            ScopedKey.from_str(results[0]["_scoped_key"])
             if results[0] is not None
             else None
         )
 
-        return transformation, protocoldagresult
+        if return_gufe:
+            return (
+                self.get_gufe(transformation),
+                self.get_gufe(protocoldagresultref)
+                if protocoldagresultref is not None
+                else None,
+            )
+
+        return transformation, protocoldagresultref
 
     def set_task_result(
-        self, task: ScopedKey, protocoldagresult: ObjectStoreRef
+        self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
     ) -> ScopedKey:
-        """Set an `ObjectStoreRef` for the given `Task`.
-
-        Does not store the `ProtocolDAGResult` for the task, but instead gives
-        it an `ObjectStoreRef`.
-
-        """
-
+        """Set a `ProtocolDAGResultRef` pointing to a `ProtocolDAGResult` for the given `Task`."""
         scope = task.scope
         task_node = self._get_node(task)
 
-        subgraph, protocoldagresult_node, scoped_key = self._gufe_to_subgraph(
-            protocoldagresult.to_shallow_dict(),
-            labels=["GufeTokenizable", protocoldagresult.__class__.__name__],
-            gufe_key=protocoldagresult.key,
+        subgraph, protocoldagresultref_node, scoped_key = self._gufe_to_subgraph(
+            protocoldagresultref.to_shallow_dict(),
+            labels=["GufeTokenizable", protocoldagresultref.__class__.__name__],
+            gufe_key=protocoldagresultref.key,
             scope=scope,
         )
 
         subgraph = subgraph | Relationship.type("RESULTS_IN")(
             task_node,
-            protocoldagresult_node,
+            protocoldagresultref_node,
             _org=scope.org,
             _campaign=scope.campaign,
             _project=scope.project,
@@ -1291,42 +1396,72 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return scoped_key
 
-    def set_task_waiting(
-        self,
-        task: Union[Task, ScopedKey],
-    ):
-        ...
+    def get_task_results(self, task: ScopedKey) -> List[ProtocolDAGResultRef]:
+        # get all task result protocoldagresultrefs corresponding to given task
+        # returned in no particular order
+        q = f"""
+        MATCH (task:Task {{_scoped_key: "{task}"}}),
+              (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
+        WHERE res.success = true
+        RETURN res
+        """
+        return self._get_protocoldagresultrefs(q)
 
-    def set_task_running(self, task: Union[Task, ScopedKey], computekey: ComputeKey):
+    def get_task_failures(self, task: ScopedKey) -> List[ProtocolDAGResultRef]:
+        # get all task failure protocoldagresultrefs corresponding to given task
+        # returned in no particular order
+        q = f"""
+        MATCH (task:Task {{_scoped_key: "{task}"}}),
+              (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
+        WHERE res.success = false
+        RETURN res
+        """
+        return self._get_protocoldagresultrefs(q)
+
+    def set_task_waiting(self, task: ScopedKey, clear_claim=True):
+        q = f"""
+        MATCH (t:Task {{_scoped_key: "{task}"}})
+        SET t.status = 'waiting'
+        """
+
+        if clear_claim:
+            q += ", t.claimant = null"
+
+        q += """
+        RETURN t
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)
+
+    def set_task_running(self, task: ScopedKey, computekey: ComputeKey):
         ...
 
     def set_task_complete(
         self,
         task: Union[Task, ScopedKey],
+        cancel=True,
     ):
         ...
 
     def set_task_error(
         self,
         task: Union[Task, ScopedKey],
-    ):
-        ...
-
-    def set_task_cancelled(
-        self,
-        task: Union[Task, ScopedKey],
+        cancel=True,
     ):
         ...
 
     def set_task_invalid(
         self,
         task: Union[Task, ScopedKey],
+        cancel=True,
     ):
         ...
 
     def set_task_deleted(
         self,
         task: Union[Task, ScopedKey],
+        cancel=True,
     ):
         ...
 

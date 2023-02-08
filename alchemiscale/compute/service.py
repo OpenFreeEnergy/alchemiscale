@@ -8,12 +8,14 @@ import asyncio
 import sched
 import time
 import random
-from typing import Union, Optional, List, Dict
+import threading
+from typing import Union, Optional, List, Dict, Tuple
 from pathlib import Path
 from threading import Thread
 
 import requests
 
+from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from .client import AlchemiscaleComputeClient
@@ -128,19 +130,27 @@ class SynchronousComputeService:
 
         return tasks
 
-    def task_to_protocoldag(self, task: ScopedKey) -> ProtocolDAG:
-        """Given a Task, produce a corresponding ProtocolDAG that can be executed."""
+    def task_to_protocoldag(
+        self, task: ScopedKey
+    ) -> Tuple[ProtocolDAG, Transformation, Optional[ProtocolDAGResult]]:
+        """Given a Task, produce a corresponding ProtocolDAG that can be executed.
+
+        Also gives the Transformation that this ProtocolDAG corresponds to.
+        If the Task extends another Task, then the ProtocolDAGResult for that
+        other Task is also given; otherwise `None` given.
+
+        """
         ...
 
-        transformation, protocoldag = self.client.get_task_transformation(task)
+        transformation, extends_protocoldagresult = self.client.get_task_transformation(
+            task
+        )
 
-        return transformation.protocol.create(
-            stateA=transformation.stateA,
-            stateB=transformation.stateB,
-            mapping=transformation.mapping,
-            extend_from=protocoldag,
+        protocoldag = transformation.create(
+            extends=extends_protocoldagresult,
             name=str(task),
         )
+        return protocoldag, transformation, extends_protocoldagresult
 
     def push_result(
         self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
@@ -148,26 +158,35 @@ class SynchronousComputeService:
         # TODO: this method should postprocess any paths,
         # leaf nodes in DAG for blob results that should go to object store
 
-        # TODO: add check that this protocoldagresult actually corresponds to
-        # the given task
         sk: ScopedKey = self.client.set_task_result(task, protocoldagresult)
 
         # TODO: remove claim on task, set to complete; remove from queues
+        # TODO: if protocoldagresult.ok is False, need to handle this
+        # if protocoldagresult.ok():
+        #    self.client.
+
+        return sk
 
     def execute(self, task: ScopedKey) -> ScopedKey:
         """Executes given Task.
 
-        Returns ScopedKey of ProtocolDAGResult following push to database.
+        Returns ScopedKey of ProtocolDAGResultRef following push to database.
 
         """
         # obtain a ProtocolDAG from the task
-        protocoldag = self.task_to_protocoldag(task)
+        protocoldag, transformation, extends = self.task_to_protocoldag(task)
 
-        # execute the task
-        protocoldagresult = execute_DAG(protocoldag, shared=self.shared)
+        # execute the task; this looks the same whether the ProtocolDAG is a
+        # success or failure
+        protocoldagresult = execute_DAG(
+            protocoldag,
+            shared=self.shared,
+        )
 
         # push the result (or failure) back to the compute API
-        result = self.push_result(task, protocoldagresult)
+        result_sk = self.push_result(task, protocoldagresult)
+
+        return result_sk
 
     def start(self, task_limit: Optional[int] = None):
         """Start the service.

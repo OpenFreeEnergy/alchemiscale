@@ -94,27 +94,27 @@ def n4js_preloaded(
         n4js.create_taskhub(sk2)
 
         # add a taskhub for each network and scope
-        tq_sk1 = n4js.create_taskhub(sk1)
-        tq_sk2 = n4js.create_taskhub(sk2)
+        th_sk1 = n4js.create_taskhub(sk1)
+        th_sk2 = n4js.create_taskhub(sk2)
 
         # Spawn tasks
         task_sks = defaultdict(list)
         for transformation in transformations:
             trans_sk = n4js.get_scoped_key(transformation, single_scope)
 
-            extend_from = None
+            extends = None
             for i in range(3):
-                extend_from = n4js.create_task(trans_sk, extend_from=extend_from)
-                task_sks[transformation].append(extend_from)
+                extends = n4js.create_task(trans_sk, extends=extends)
+                task_sks[transformation].append(extends)
 
-        # add tasks to both task queues
-        n4js.queue_taskhub_tasks(
-            [task_sks[transformation][0] for transformation in transformations], tq_sk1
+        # add tasks to both task hubs
+        n4js.action_tasks(
+            [task_sks[transformation][0] for transformation in transformations], th_sk1
         )
 
-        n4js.queue_taskhub_tasks(
+        n4js.action_tasks(
             [task_sks[transformation][0] for transformation in transformations[::-1]],
-            tq_sk2,
+            th_sk2,
         )
 
     # Create compute identities
