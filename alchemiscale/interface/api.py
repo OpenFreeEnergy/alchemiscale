@@ -6,7 +6,7 @@ AlchemiscaleClientAPI --- :mod:`alchemiscale.interface.api`
 """
 
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Union
 import os
 import json
 
@@ -32,7 +32,7 @@ from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ObjectStoreRef
+from ..storage.models import ProtocolDAGResultRef
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedUserIdentity
@@ -75,6 +75,19 @@ async def check(
 
 
 ### inputs
+
+
+@router.get("/exists/{scoped_key}", response_class=GufeJSONResponse)
+async def check_existence(
+    scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return n4js.check_existence(scoped_key=sk)
 
 
 @router.get("/networks", response_class=GufeJSONResponse)
@@ -129,7 +142,12 @@ def create_network(
     validate_scopes(scope, token)
 
     an = AlchemicalNetwork.from_dict(network)
-    return n4js.create_network(network=an, scope=scope)
+    an_sk = n4js.create_network(network=an, scope=scope)
+
+    # create taskqueue for this network
+    n4js.create_taskqueue(an_sk)
+
+    return an_sk
 
 
 @router.get("/transformations")
@@ -177,47 +195,236 @@ async def get_chemicalsystem(
 ### compute
 
 
-@router.put("/networks/{scoped_key}/strategy")
+@router.post("/networks/{scoped_key}/strategy")
 def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
     ...
+
+
+@router.post("/transformations/{transformation_scoped_key}/tasks")
+def create_tasks(
+    transformation_scoped_key,
+    *,
+    extends: Optional[ScopedKey] = None,
+    count: int = Body(...),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[str]:
+    sk = ScopedKey.from_str(transformation_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    task_sks = []
+    for i in range(count):
+        task_sks.append(
+            n4js.create_task(transformation=sk, extends=extends, creator=token.entity)
+        )
+
+    return [str(sk) for sk in task_sks]
+
+
+@router.get("/transformations/{transformation_scoped_key}/tasks")
+def get_tasks(
+    transformation_scoped_key,
+    *,
+    extends: str = None,
+    return_as: str = "list",
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(transformation_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    task_sks = n4js.get_tasks(sk, extends=extends, return_as=return_as)
+
+    if return_as == "list":
+        return [str(sk) for sk in task_sks]
+    elif return_as == "graph":
+        return {
+            str(sk): str(extends) if extends is not None else None
+            for sk, extends in task_sks.items()
+        }
+    else:
+        raise ValueError(f"`return_as` takes 'list' or 'graph', not '{return_as}'")
+
+
+@router.post("/networks/{network_scoped_key}/tasks/action")
+def action_tasks(
+    network_scoped_key,
+    *,
+    tasks: List[ScopedKey] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Union[str, None]]:
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    taskqueue_sk = n4js.get_taskqueue(sk)
+    actioned_sks = n4js.action_tasks(tasks, taskqueue_sk)
+
+    return [str(sk) if sk is not None else None for sk in actioned_sks]
+
+
+@router.post("/networks/{network_scoped_key}/tasks/cancel")
+def cancel_tasks(
+    network_scoped_key,
+    *,
+    tasks: List[ScopedKey] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Union[str, None]]:
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    taskqueue_sk = n4js.get_taskqueue(sk)
+    canceled_sks = n4js.cancel_tasks(tasks, taskqueue_sk)
+
+    return [str(sk) if sk is not None else None for sk in canceled_sks]
 
 
 ### results
 
 
 @router.get(
-    "/transformations/{transformation_scoped_key}/result",
+    "/transformations/{transformation_scoped_key}/results",
     response_class=GufeJSONResponse,
 )
-def get_transformation_result(
+def get_transformation_results(
     transformation_scoped_key,
     *,
-    limit: int = 10,
-    skip: int = 0,
     n4js: Neo4jStore = Depends(get_n4js_depends),
-    s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    # get all ObjectStoreRefs for the given transformation's results in a nested list
-    # each list corresponds to a single chain of extension results
-    refs: List[ObjectStoreRef] = n4js.get_transformation_results(sk)
+    # get all ProtocolDAGResultRefs for the given transformation's results
+    refs: List[ProtocolDAGResultRef] = n4js.get_transformation_results(sk)
 
-    # walk through the list, getting the actual ProtocolDAGResult object
-    # for each ObjectStoreRef, starting from `skip` and up to `limit`
-    pdrs: List[List[str]] = []
-    for reflist in refs[skip : skip + limit]:
-        pdrs_i = []
-        for ref in reflist:
-            # we leave each ProtocolDAGResult in string form to avoid
-            # deserializing/reserializing here; just passing through to clinet
-            pdr: str = s3os.pull_protocoldagresult(ref, return_as="json")
-            pdrs_i.append(pdr)
-        pdrs.append(pdrs_i)
+    return [i.to_dict() for i in refs]
 
-    return pdrs
+
+@router.get(
+    "/transformations/{transformation_scoped_key}/failures",
+    response_class=GufeJSONResponse,
+)
+def get_transformation_failures(
+    transformation_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(transformation_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    # get all ProtocolDAGResultRefs for the given transformation's results
+    refs: List[ProtocolDAGResultRef] = n4js.get_transformation_failures(sk)
+
+    return [i.to_dict() for i in refs]
+
+
+@router.get(
+    "/transformations/{transformation_scoped_key}/results/{protocoldagresult_scoped_key}",
+    response_class=GufeJSONResponse,
+)
+def get_protocoldagresult(
+    protocoldagresult_scoped_key,
+    transformation_scoped_key,
+    *,
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[str]:
+    sk = ScopedKey.from_str(protocoldagresult_scoped_key)
+    tf_sk = ScopedKey.from_str(transformation_scoped_key)
+
+    validate_scopes(sk.scope, token)
+    validate_scopes(tf_sk.scope, token)
+
+    # we leave each ProtocolDAGResult in string form to avoid
+    # deserializing/reserializing here; just passing through to client
+    pdr: str = s3os.pull_protocoldagresult(sk, tf_sk, return_as="json", success=True)
+
+    return [pdr]
+
+
+@router.get(
+    "/transformations/{transformation_scoped_key}/failures/{protocoldagresult_scoped_key}",
+    response_class=GufeJSONResponse,
+)
+def get_protocoldagresult_failure(
+    protocoldagresult_scoped_key,
+    transformation_scoped_key,
+    *,
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[str]:
+    sk = ScopedKey.from_str(protocoldagresult_scoped_key)
+    tf_sk = ScopedKey.from_str(transformation_scoped_key)
+
+    validate_scopes(sk.scope, token)
+    validate_scopes(tf_sk.scope, token)
+
+    # we leave each ProtocolDAGResult in string form to avoid
+    # deserializing/reserializing here; just passing through to client
+    pdr: str = s3os.pull_protocoldagresult(sk, tf_sk, return_as="json", success=False)
+
+    return [pdr]
+
+
+@router.get("/tasks/{task_scoped_key}/transformation", response_class=GufeJSONResponse)
+async def get_task_transformation(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    transformation: ScopedKey
+
+    transformation, protocoldagresult = n4js.get_task_transformation(
+        task=task_scoped_key,
+        return_gufe=False,
+    )
+
+    return str(transformation)
+
+
+@router.get(
+    "/tasks/{task_scoped_key}/results",
+    response_class=GufeJSONResponse,
+)
+def get_task_results(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    # get all ProtocolDAGResultRefs for the given transformation's results
+    refs: List[ProtocolDAGResultRef] = n4js.get_task_results(sk)
+
+    return [i.to_dict() for i in refs]
+
+
+@router.get(
+    "/tasks/{task_scoped_key}/failures",
+    response_class=GufeJSONResponse,
+)
+def get_task_failures(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    # get all ProtocolDAGResultRefs for the given transformation's results
+    refs: List[ProtocolDAGResultRef] = n4js.get_task_failures(sk)
+
+    return [i.to_dict() for i in refs]
 
 
 ### add router

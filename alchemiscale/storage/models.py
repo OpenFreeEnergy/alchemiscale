@@ -4,6 +4,7 @@ Data models for storage components --- :mod:`alchemiscale.storage.models`
 
 """
 
+from copy import copy
 from datetime import datetime
 from enum import Enum
 from typing import Union, Dict, Optional
@@ -14,7 +15,7 @@ import hashlib
 from pydantic import BaseModel, Field
 from gufe.tokenization import GufeTokenizable, GufeKey
 
-from ..models import ScopedKey
+from ..models import ScopedKey, Scope
 
 
 class ComputeKey(BaseModel):
@@ -59,17 +60,25 @@ class Task(GufeTokenizable):
         Priority of the task; 1 is highest, larger values indicate lower priority.
     claim
         Identifier of the compute service that has a claim on this task.
+    datetime_created
 
     """
 
     status: TaskStatusEnum
     priority: int
     claim: str
+    datetime_created: Optional[datetime]
+    creator: Optional[str]
+    extends: Optional[str]
 
     def __init__(
         self,
+        *,
         status: Union[str, TaskStatusEnum] = TaskStatusEnum.waiting,
         priority: int = 1,
+        datetime_created: Optional[datetime] = None,
+        creator: Optional[str] = None,
+        extends: Optional[str] = None,
         _key: str = None,
     ):
         if _key is not None:
@@ -77,6 +86,13 @@ class Task(GufeTokenizable):
 
         self.status: TaskStatusEnum = TaskStatusEnum(status)
         self.priority = priority
+
+        self.datetime_created = (
+            datetime_created if datetime_created is not None else datetime.utcnow()
+        )
+
+        self.creator = creator
+        self.extends = extends
 
     def _gufe_tokenize(self):
         # tokenize with uuid
@@ -86,6 +102,9 @@ class Task(GufeTokenizable):
         return {
             "status": self.status.value,
             "priority": self.priority,
+            "datetime_created": self.datetime_created,
+            "creator": self.creator,
+            "extends": self.extends,
             "_key": str(self.key),
         }
 
@@ -162,23 +181,56 @@ class TaskArchive(GufeTokenizable):
 
 
 class ObjectStoreRef(GufeTokenizable):
-    location: str
+    location: Optional[str]
+    obj_key: Optional[GufeKey]
+    scope: Scope
 
-    def __init__(self, location: str):
+    def __init__(self, *, location: str = None, obj_key: GufeKey = None, scope: Scope):
         self.location = location
+        self.obj_key = GufeKey(obj_key) if obj_key is not None else None
+        self.scope = scope
 
     def _to_dict(self):
         return {
             "location": self.location,
+            "obj_key": str(self.obj_key),
+            "scope": str(self.scope),
         }
 
     @classmethod
     def _from_dict(cls, d):
-        return cls(**d)
+        d_ = copy(d)
+        d_["scope"] = Scope.from_str(d["scope"])
+        return cls(**d_)
 
     @classmethod
     def _defaults(cls):
         return super()._defaults()
+
+
+class ProtocolDAGResultRef(ObjectStoreRef):
+    success: bool
+
+    def __init__(
+        self,
+        *,
+        location: str = None,
+        obj_key: GufeKey,
+        scope: Scope,
+        success: bool,
+    ):
+        self.location = location
+        self.obj_key = GufeKey(obj_key)
+        self.scope = scope
+        self.success = success
+
+    def _to_dict(self):
+        return {
+            "location": self.location,
+            "obj_key": str(self.obj_key),
+            "scope": str(self.scope),
+            "success": self.success,
+        }
 
 
 class TaskArchive(GufeTokenizable):
