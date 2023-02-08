@@ -9,7 +9,7 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from alchemiscale.storage import Neo4jStore
-from alchemiscale.storage.models import Task, TaskHub, ObjectStoreRef
+from alchemiscale.storage.models import Task, TaskHub, ProtocolDAGResultRef
 from alchemiscale.models import Scope, ScopedKey
 from alchemiscale.security.models import (
     CredentialedEntity,
@@ -33,7 +33,7 @@ class TestNeo4jStore(TestStateStore):
     def test_server(self, graph):
         graph.service.system_graph.call("dbms.security.listUsers")
 
-    ### gufe otject handling
+    ### gufe object handling
 
     def test_create_network(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -131,15 +131,137 @@ class TestNeo4jStore(TestStateStore):
         assert sk2 in networks_sk
         assert len(networks_sk) == 2
 
-        # add in a scope test
+        # TODO: add in a scope test
 
-        # add in a name test
+        # TODO: add in a name test
 
     def test_query_transformations(self):
         ...
 
     def test_query_chemicalsystems(self):
         ...
+
+    def test_get_transformation_results(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        transformation,
+        protocoldagresults,
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create a task; pretend we computed it, submit reference for pre-baked
+        # result
+        task_sk = n4js.create_task(transformation_sk)
+
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope,
+            obj_key=protocoldagresults[0].key,
+            success=protocoldagresults[0].ok(),
+        )
+
+        # push the result
+        n4js.set_task_result(task_sk, pdr_ref)
+
+        # get the result back, at the transformation level
+        pdr_refs = n4js.get_transformation_results(transformation_sk)
+
+        assert len(pdr_refs) == 1
+        assert pdr_ref in pdr_refs
+
+        # try adding a new task, then adding the same result to it
+        # should result in two tasks pointing to the same result, and yield
+        # only one
+        task_sk2 = n4js.create_task(transformation_sk)
+        n4js.set_task_result(task_sk2, pdr_ref)
+        pdr_refs2 = n4js.get_transformation_results(transformation_sk)
+
+        assert len(pdr_refs2) == 1
+        assert pdr_ref in pdr_refs2
+
+        # try adding additional unique results to one of the tasks
+        for pdr in protocoldagresults[1:]:
+            pdr_ref_ = ProtocolDAGResultRef(
+                scope=task_sk.scope, obj_key=pdr.key, success=pdr.ok()
+            )
+            # push the result
+            n4js.set_task_result(task_sk, pdr_ref_)
+
+        # now get all results back for this transformation
+        pdr_refs3 = n4js.get_transformation_results(transformation_sk)
+
+        assert len(pdr_refs3) == 3
+        assert set([p.obj_key for p in pdr_refs3]) == set(
+            [p.key for p in protocoldagresults]
+        )
+
+    def test_get_transformation_failures(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2_failure,
+        scope_test,
+        transformation_failure,
+        protocoldagresults_failure,
+    ):
+        an = network_tyk2_failure
+        network_sk = n4js.create_network(an, scope_test)
+        transformation_sk = n4js.get_scoped_key(transformation_failure, scope_test)
+
+        # create a task; pretend we computed it, submit reference for pre-baked
+        # result
+        task_sk = n4js.create_task(transformation_sk)
+
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope,
+            obj_key=protocoldagresults_failure[0].key,
+            success=protocoldagresults_failure[0].ok(),
+        )
+
+        # push the result
+        n4js.set_task_result(task_sk, pdr_ref)
+
+        # try to get the result back, at the transformation level
+        pdr_refs = n4js.get_transformation_results(transformation_sk)
+
+        assert len(pdr_refs) == 0
+
+        # try to get failure back
+        failure_pdr_refs = n4js.get_transformation_failures(transformation_sk)
+
+        assert len(failure_pdr_refs) == 1
+        assert pdr_ref in failure_pdr_refs
+
+        # try adding a new task, then adding the same result to it
+        # should result in two tasks pointing to the same result, and yield
+        # only one
+        task_sk2 = n4js.create_task(transformation_sk)
+        n4js.set_task_result(task_sk2, pdr_ref)
+        pdr_refs2 = n4js.get_transformation_failures(transformation_sk)
+
+        assert len(pdr_refs2) == 1
+        assert pdr_ref in pdr_refs2
+
+        # try adding additional unique results to one of the tasks
+        for pdr in protocoldagresults_failure[1:]:
+            pdr_ref_ = ProtocolDAGResultRef(
+                scope=task_sk.scope, obj_key=pdr.key, success=pdr.ok()
+            )
+            # push the result
+            n4js.set_task_result(task_sk, pdr_ref_)
+
+        # should still get 0 results back for this transformation
+        assert len(n4js.get_transformation_results(transformation_sk)) == 0
+
+        # but should get 3 failures back if we ask for those
+        pdr_refs3 = n4js.get_transformation_failures(transformation_sk)
+
+        assert len(pdr_refs3) == 3
+        assert set([p.obj_key for p in pdr_refs3]) == set(
+            [p.key for p in protocoldagresults_failure]
+        )
 
     ### compute
 
@@ -163,6 +285,47 @@ class TestNeo4jStore(TestStateStore):
         ).to_subgraph()
 
         assert m["_gufe_key"] == transformation.key
+
+    def test_get_tasks(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create a tree of tasks for a selected transformation
+        task_sks = []
+        for i in range(3):
+            task_i: ScopedKey = n4js.create_task(transformation_sk)
+            task_sks.append(task_i)
+            for j in range(3):
+                task_j = n4js.create_task(transformation_sk, extends=task_i)
+                task_sks.append(task_j)
+                for k in range(3):
+                    task_k = n4js.create_task(transformation_sk, extends=task_j)
+                    task_sks.append(task_k)
+
+        # get all tasks for the transformation
+        all_task_sks: List[ScopedKey] = n4js.get_tasks(transformation_sk)
+
+        f = lambda x, y: x**y + x ** (y - 1) + x ** (y - 2)
+
+        assert len(all_task_sks) == f(3, 3)
+        assert set(task_sks) == set(all_task_sks)
+
+        # try getting back only tasks extending from a given one
+        subtree = n4js.get_tasks(transformation_sk, extends=task_sks[0])
+
+        assert len(subtree) == f(3, 2) - 1
+        assert set(subtree) == set(task_sks[1:13])
+
+        # try getting tasks back in the "graph" representation instead
+        # this is a mapping of each Task to the Task they extend, if applicable
+        graph = n4js.get_tasks(transformation_sk, return_as="graph")
+
+        assert len(graph) == len(task_sks)
+        assert set(graph.keys()) == set(task_sks)
+        assert all([graph[t] == task_sks[0] for t in task_sks[1:13:4]])
 
     def test_create_taskhub(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try adding a taskhub
@@ -248,7 +411,7 @@ class TestNeo4jStore(TestStateStore):
         assert len(tq_dict) == 2
         assert all([isinstance(i, TaskHub) for i in tq_dict.values()])
 
-    def test_queue_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
+    def test_action_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
         taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
@@ -259,15 +422,15 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        # queue the tasks
-        n4js.queue_taskhub_tasks(task_sks, taskhub_sk)
+        # action the tasks
+        n4js.action_tasks(task_sks, taskhub_sk)
 
-        # count tasks in queue
-        queued_task_sks = n4js.get_taskhub_tasks(taskhub_sk)
-        assert set(task_sks) == set(queued_task_sks)
+        # count tasks actioned
+        actioned_task_sks = n4js.get_taskhub_tasks(taskhub_sk)
+        assert set(task_sks) == set(actioned_task_sks)
 
         # add a second network, with the transformation above missing
-        # try to add a task from that transformation to the new network's queue
+        # try to add a task from that transformation to the new network's hub
         # this should fail
 
         an2 = AlchemicalNetwork(
@@ -278,8 +441,8 @@ class TestNeo4jStore(TestStateStore):
         network_sk2 = n4js.create_network(an2, scope_test)
         taskhub_sk2: ScopedKey = n4js.create_taskhub(network_sk2)
 
-        with pytest.raises(ValueError, match="not found in same network"):
-            task_sks_fail = n4js.queue_taskhub_tasks(task_sks, taskhub_sk2)
+        task_sks_fail = n4js.action_tasks(task_sks, taskhub_sk2)
+        assert all([i is None for i in task_sks_fail])
 
     def test_get_unclaimed_tasks(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
@@ -292,15 +455,11 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        # shuffle the tasks; want to check that order of claiming is actually
-        # based on order in queue
-        random.shuffle(task_sks)
-
-        # queue the tasks
-        n4js.queue_taskhub_tasks(task_sks, taskhub_sk)
+        # action the tasks
+        n4js.action_tasks(task_sks, taskhub_sk)
 
         # claim a single task; There is no deterministic ordering of tasks, so
-        # simply test that the claimed task is one of the queued tasks
+        # simply test that the claimed task is one of the actioned tasks
         claimed = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
 
         assert claimed[0] in task_sks
@@ -321,7 +480,7 @@ class TestNeo4jStore(TestStateStore):
 
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
-        n4js.queue_taskhub_tasks(task_sks, taskhub_sk)
+        n4js.action_tasks(task_sks, taskhub_sk)
 
         # weights should all be the default 1.0
         weights = n4js.get_task_weights(task_sks, taskhub_sk)
@@ -331,7 +490,7 @@ class TestNeo4jStore(TestStateStore):
         weights = n4js.get_task_weights(task_sks, taskhub_sk)
         assert all([w == 10 for sk, w in weights.items()])
 
-    def test_claim_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
+    def test_cancel_task(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
         taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
@@ -342,20 +501,75 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        # shuffle the tasks; want to check that order of claiming is actually
-        # based on order in queue
+        # action the tasks
+        actioned = n4js.action_tasks(task_sks, taskhub_sk)
+
+        # cancel the second and third task we created
+        canceled = n4js.cancel_tasks(task_sks[1:3], taskhub_sk)
+
+        # check that the hub has the contents we expect
+        tasks = n4js.graph.run(
+            f"""
+                MATCH (tq:TaskHub {{_scoped_key: '{taskhub_sk}'}})-[:ACTIONS]->(task:Task)
+                return task
+                """
+        )
+        tasks = [record["task"] for record in tasks]
+
+        assert len(tasks) == 8
+        assert set([ScopedKey.from_str(t["_scoped_key"]) for t in tasks]) == set(
+            actioned
+        ) - set(canceled)
+
+    def test_get_taskhub_tasks(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # action the tasks
+        actioned = n4js.action_tasks(task_sks, taskhub_sk)
+
+        # get the full hub back; no particular order
+        task_sks = n4js.get_taskhub_tasks(taskhub_sk)
+
+        assert actioned == task_sks
+
+        # try getting back as gufe objects instead
+        tasks = n4js.get_taskhub_tasks(taskhub_sk, return_gufe=True)
+
+        assert all([t.key == tsk.gufe_key for t, tsk in zip(tasks.values(), task_sks)])
+
+    def test_claim_taskhub_tasks(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # shuffle the tasks; want to check that order of claiming is unrelated
+        # to order created
         random.shuffle(task_sks)
 
-        # try to claim from an empty queue
+        # try to claim from an empty hub 
         nothing = n4js.claim_taskhub_tasks(taskhub_sk, "early bird task handler")
 
         assert nothing[0] is None
 
-        # queue the tasks
-        n4js.queue_taskhub_tasks(task_sks, taskhub_sk)
+        # action the tasks
+        n4js.action_tasks(task_sks, taskhub_sk)
 
-        # claim a single task; There is no deterministic ordering of tasks, so
-        # simply test that the claimed task is one of the queued tasks
+        # claim a single task; there is no deterministic ordering of tasks, so
+        # simply test that the claimed task is one of the actioned tasks
         claimed = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
 
         assert claimed[0] in task_sks
@@ -387,10 +601,10 @@ class TestNeo4jStore(TestStateStore):
         for sk in claimed4:
             assert sk in remaining_tasks
 
-        # exhaust the queue
+        # exhaust the hub
         claimed5 = n4js.claim_taskhub_tasks(taskhub_sk, "last task handler", count=3)
 
-        # try to claim from a queue with no tasks available
+        # try to claim from a hub with no tasks available
         claimed6 = n4js.claim_taskhub_tasks(taskhub_sk, "last task handler", count=2)
         assert claimed6 == [None] * 2
 
@@ -405,31 +619,78 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        # shuffle the tasks; want to check that order of claiming is actually
-        # based on order in queue
+        # action the tasks
+        n4js.action_tasks(task_sks, taskhub_sk)
+
+        # shuffle the tasks; want to check that order of claiming is unrelated
+        # to order actioned
         random.shuffle(task_sks)
-
-        # try to claim from an empty queue
-
-        # queue the tasks
-        n4js.queue_taskhub_tasks(task_sks, taskhub_sk)
 
         # set weights on the tasks to be all 0, disabling them
         n4js.set_task_weights(task_sks, taskhub_sk, weight=0)
+
         # set the weight of the first task to be 10
         weight_dict = {task_sks[0]: 10}
         n4js.set_task_weights(weight_dict, taskhub_sk)
+
         # check that the claimed task is the first task
         claimed = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
         assert claimed[0] == task_sks[0]
+
         # claim again; should get None as no other tasks have any weight
         claimed_again = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
         assert claimed_again[0] == None
 
-    def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test, tmpdir):
-        # need to understand why ProtocolDAGResult fails to be represented as
-        # subgraph
+    def test_get_task_transformation(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        protocoldagresults,
+    ):
+        # create a network with just the transformation we care about
+        transformation = list(network_tyk2.edges)[0]
+        network_sk = n4js.create_network(
+            AlchemicalNetwork(edges=[transformation]), scope_test
+        )
 
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create a task; use its scoped key to get its transformation
+        # this should be the same one we used to spawn the task
+        task_sk = n4js.create_task(transformation_sk)
+
+        # get transformations back as both gufe objects and scoped keys
+        tf, _ = n4js.get_task_transformation(task_sk)
+        tf_sk, _ = n4js.get_task_transformation(task_sk, return_gufe=False)
+
+        assert tf == transformation
+        assert tf_sk == transformation_sk
+
+        # pretend we completed this one, and we have a protocoldagresult for it
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope, obj_key=protocoldagresults[0].key, success=True
+        )
+
+        # try to push the result
+        pdr_ref_sk = n4js.set_task_result(task_sk, pdr_ref)
+
+        # create a task that extends the previous one
+        task_sk2 = n4js.create_task(transformation_sk, extends=task_sk)
+
+        # get transformations and protocoldagresultrefs as both gufe objects and scoped keys
+        tf, protocoldagresultref = n4js.get_task_transformation(task_sk2)
+        tf_sk, protocoldagresultref_sk = n4js.get_task_transformation(
+            task_sk2, return_gufe=False
+        )
+
+        assert pdr_ref == protocoldagresultref
+        assert pdr_ref_sk == protocoldagresultref_sk
+
+        assert tf == transformation
+        assert tf_sk == transformation_sk
+
+    def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test, tmpdir):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
         taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
@@ -441,11 +702,8 @@ class TestNeo4jStore(TestStateStore):
         task_sk = n4js.create_task(transformation_sk)
 
         transformation, protocoldag_prev = n4js.get_task_transformation(task_sk)
-        protocoldag = transformation.protocol.create(
-            stateA=transformation.stateA,
-            stateB=transformation.stateB,
-            mapping=transformation.mapping,
-            extend_from=protocoldag_prev,
+        protocoldag = transformation.create(
+            extends=protocoldag_prev,
             name=str(task_sk),
         )
 
@@ -453,19 +711,138 @@ class TestNeo4jStore(TestStateStore):
         with tmpdir.as_cwd():
             protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
 
-        osr = ObjectStoreRef(location="protocoldagresult/{protocoldagresult.key}")
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope, obj_key=protocoldagresult.key, success=True
+        )
 
         # try to push the result
-        n4js.set_task_result(task_sk, osr)
+        n4js.set_task_result(task_sk, pdr_ref)
 
         n = n4js.graph.run(
             f"""
-                match (n:ObjectStoreRef)<-[:RESULTS_IN]-(t:Task)
+                match (n:ProtocolDAGResultRef)<-[:RESULTS_IN]-(t:Task)
                 return n
                 """
         ).to_subgraph()
 
-        assert n["location"] == osr.location
+        assert n["location"] == pdr_ref.location
+        assert n["obj_key"] == str(protocoldagresult.key)
+
+    def test_get_task_results(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        transformation,
+        protocoldagresults,
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create a task; pretend we computed it, submit reference for pre-baked
+        # result
+        task_sk = n4js.create_task(transformation_sk)
+
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope,
+            obj_key=protocoldagresults[0].key,
+            success=protocoldagresults[0].ok(),
+        )
+
+        # push the result
+        n4js.set_task_result(task_sk, pdr_ref)
+
+        # get the result back
+        pdr_refs = n4js.get_task_results(task_sk)
+
+        assert len(pdr_refs) == 1
+        assert pdr_ref in pdr_refs
+
+        # try doing it again; should be idempotent
+        n4js.set_task_result(task_sk, pdr_ref)
+        pdr_refs = n4js.get_task_results(task_sk)
+
+        assert len(pdr_refs) == 1
+        assert pdr_ref in pdr_refs
+
+        # if we add a different result, should now have 2
+        pdr_ref2 = ProtocolDAGResultRef(
+            scope=task_sk.scope,
+            obj_key=protocoldagresults[1].key,
+            success=protocoldagresults[1].ok(),
+        )
+
+        # push the result
+        n4js.set_task_result(task_sk, pdr_ref2)
+
+        # get the result back
+        pdr_refs = n4js.get_task_results(task_sk)
+
+        assert len(pdr_refs) == 2
+        assert pdr_ref in pdr_refs
+        assert pdr_ref2 in pdr_refs
+
+    def test_get_task_failures(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2_failure,
+        scope_test,
+        transformation_failure,
+        protocoldagresults_failure,
+    ):
+        an = network_tyk2_failure
+        network_sk = n4js.create_network(an, scope_test)
+        transformation_sk = n4js.get_scoped_key(transformation_failure, scope_test)
+
+        # create a task; pretend we computed it, submit reference for pre-baked
+        # result
+        task_sk = n4js.create_task(transformation_sk)
+
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope,
+            obj_key=protocoldagresults_failure[0].key,
+            success=protocoldagresults_failure[0].ok(),
+        )
+
+        # push the result
+        n4js.set_task_result(task_sk, pdr_ref)
+
+        # try get results back
+        pdr_refs = n4js.get_task_results(task_sk)
+
+        assert len(pdr_refs) == 0
+        assert pdr_ref not in pdr_refs
+
+        # try to get failure back
+        failure_pdr_refs = n4js.get_task_failures(task_sk)
+
+        assert len(failure_pdr_refs) == 1
+        assert pdr_ref in failure_pdr_refs
+
+        # try doing it again; should be idempotent
+        n4js.set_task_result(task_sk, pdr_ref)
+        failure_pdr_refs = n4js.get_task_failures(task_sk)
+
+        assert len(failure_pdr_refs) == 1
+        assert pdr_ref in failure_pdr_refs
+
+        # if we add a different failure, should now have 2
+        pdr_ref2 = ProtocolDAGResultRef(
+            scope=task_sk.scope,
+            obj_key=protocoldagresults_failure[1].key,
+            success=protocoldagresults_failure[1].ok(),
+        )
+
+        # push the result
+        n4js.set_task_result(task_sk, pdr_ref2)
+
+        # get the result back
+        failure_pdr_refs2 = n4js.get_task_failures(task_sk)
+
+        assert len(failure_pdr_refs2) == 2
+        assert pdr_ref in failure_pdr_refs2
+        assert pdr_ref2 in failure_pdr_refs2
 
     ### authentication
 

@@ -37,14 +37,17 @@ def user_identity_prepped(user_identity):
 
 @pytest.fixture(scope="module")
 def scopeless_credentialed_user(user_identity_prepped):
-    user = CredentialedUserIdentity(**user_identity_prepped)
+    identity = copy(user_identity_prepped)
+    identity["identifier"] = identity["identifier"] + "-a"
+
+    user = CredentialedUserIdentity(**identity)
     return user
 
 
 @pytest.fixture(scope="module")
 def single_scoped_credentialed_user(user_identity_prepped, scope_test):
     identity = copy(user_identity_prepped)
-    identity["identifier"] = identity["identifier"] + "-a"
+    identity["identifier"] = identity["identifier"] + "-b"
 
     user = CredentialedUserIdentity(**identity, scopes=[scope_test])  # Ensure list
     return user
@@ -52,10 +55,7 @@ def single_scoped_credentialed_user(user_identity_prepped, scope_test):
 
 @pytest.fixture(scope="module")
 def fully_scoped_credentialed_user(user_identity_prepped, multiple_scopes):
-    identity = copy(user_identity_prepped)
-    identity["identifier"] = identity["identifier"] + "-b"
-
-    user = CredentialedUserIdentity(**identity, scopes=multiple_scopes)
+    user = CredentialedUserIdentity(**user_identity_prepped, scopes=multiple_scopes)
     return user
 
 
@@ -80,7 +80,7 @@ def n4js_preloaded(
         # Create another network for this scope
         sk2 = n4js.create_network(an2, single_scope)
 
-        # add a taskqueue for each network
+        # add a taskhub for each network
         n4js.create_taskhub(sk1)
         n4js.create_taskhub(sk2)
 

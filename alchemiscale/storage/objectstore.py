@@ -7,18 +7,20 @@ S3 Object storage --- :mod:`alchemiscale.storage.objectstore`
 import os
 import io
 import json
+from typing import Union
 from boto3.session import Session
 from functools import lru_cache
 
 from gufe.protocols import ProtocolDAGResult
 from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
-from .models import ObjectStoreRef
+from ..models import ScopedKey, Scope
+from .models import ProtocolDAGResultRef
 from ..settings import S3ObjectStoreSettings, get_s3objectstore_settings
 
 
 @lru_cache()
-def get_s3os(settings: S3ObjectStoreSettings):
+def get_s3os(settings: S3ObjectStoreSettings, endpoint_url=None) -> "S3ObjectStore":
     """Convenience function for getting an S3ObjectStore directly from settings."""
 
     # create a boto3 Session and parameterize with keys
@@ -30,7 +32,10 @@ def get_s3os(settings: S3ObjectStoreSettings):
     )
 
     return S3ObjectStore(
-        session=session, bucket=settings.AWS_S3_BUCKET, prefix=settings.AWS_S3_PREFIX
+        session=session,
+        bucket=settings.AWS_S3_BUCKET,
+        prefix=settings.AWS_S3_PREFIX,
+        endpoint_url=endpoint_url,
     )
 
 
@@ -41,10 +46,12 @@ class S3ObjectStoreError(Exception):
 class S3ObjectStore:
     """Object storage for use with AWS S3."""
 
-    def __init__(self, session: "boto3.Session", bucket: str, prefix: str):
+    def __init__(
+        self, session: "boto3.Session", bucket: str, prefix: str, endpoint_url=None
+    ):
         """ """
         self.session = session
-        self.resource = self.session.resource("s3")
+        self.resource = self.session.resource("s3", endpoint_url=endpoint_url)
 
         self.bucket = bucket
         self.prefix = prefix
@@ -125,6 +132,8 @@ class S3ObjectStore:
     def _get_bytes(self, location):
         key = os.path.join(self.prefix, location)
 
+        b = self.resource.Bucket(self.bucket)
+
         return self.resource.Object(self.bucket, key).get()["Body"].read()
 
     def _store_path(self, location, path):
@@ -140,6 +149,8 @@ class S3ObjectStore:
 
         with open(path, "rb") as f:
             self.resource.Bucket(self.bucket).upload_fileobj(f, key)
+
+        b = self.resource.Bucket(self.bucket)
 
     def _exists(self, location) -> bool:
         from botocore.exceptions import ClientError
@@ -180,38 +191,65 @@ class S3ObjectStore:
 
         return url
 
-    def push_protocoldagresult(self, protocoldagresult: ProtocolDAGResult):
+    def push_protocoldagresult(
+        self,
+        protocoldagresult: ProtocolDAGResult,
+        scope: Scope,
+    ) -> ProtocolDAGResultRef:
         """Push given `ProtocolDAGResult` to this `ObjectStore`.
 
         Parameters
         ----------
         protocoldagresult
             ProtocolDAGResult to store.
+        scope
+            Scope to store ProtocolDAGResult under.
 
         Returns
         -------
-        ObjectStoreRef
+        ProtocolDAGResultRef
             Reference to the serialized `ProtocolDAGResult` in the object store.
 
         """
+        success = protocoldagresult.ok()
+        route = "results" if success else "failures"
 
         # build `location` based on gufe key
-        location = os.path.join("protocoldagresult", protocoldagresult.key)
+        location = os.path.join(
+            "protocoldagresult",
+            *scope.to_tuple(),
+            protocoldagresult.transformation_key,
+            route,
+            protocoldagresult.key,
+            "obj.json",
+        )
 
+        # TODO: add support for compute client-side compressed protocoldagresults
         pdr_jb = json.dumps(
             protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
         ).encode("utf-8")
         response = self._store_bytes(location, pdr_jb)
 
-        return ObjectStoreRef(location=location)
+        return ProtocolDAGResultRef(
+            location=location,
+            obj_key=protocoldagresult.key,
+            scope=scope,
+            success=success,
+        )
 
-    def pull_protocoldagresult(self, objectstoreref: ObjectStoreRef, return_as="gufe"):
-        """Pull the `ProtocolDAGResult` corresponding to the given `ObjectStoreRef`.
+    def pull_protocoldagresult(
+        self,
+        protocoldagresult: ScopedKey,
+        transformation: ScopedKey,
+        return_as="gufe",
+        success=True,
+    ) -> Union[ProtocolDAGResult, dict, str]:
+        """Pull the `ProtocolDAGResult` corresponding to the given `ProtocolDAGResultRef`.
 
         Parameters
         ----------
-        objectstoreref
-            Reference to the serialized `ProtocolDAGResult` in the object store.
+        protocoldagresult
+            ScopedKey for ProtocolDAGResult in the object store.
         return_as : ['gufe', 'dict', 'json']
             Form in which to return result; this is provided to avoid
             unnecessary deserializations where desired.
@@ -219,21 +257,37 @@ class S3ObjectStore:
         Returns
         -------
         ProtocolDAGResult
-            The `ProtocolDAGResult` corresponding to the given `ObjectStoreRef`.
+            The ProtocolDAGResult corresponding to the given `ProtocolDAGResultRef`.
 
         """
+        if transformation.scope != protocoldagresult.scope:
+            raise ValueError(
+                f"transformation scope '{transformation.scope}' differs from protocoldagresult scope '{protocoldagresult.scope}'"
+            )
 
-        location = objectstoreref.location
+        route = "results" if success else "failures"
+
+        # build `location` based on gufe key
+        location = os.path.join(
+            "protocoldagresult",
+            *protocoldagresult.scope.to_tuple(),
+            transformation.gufe_key,
+            route,
+            protocoldagresult.gufe_key,
+            "obj.json",
+        )
+
+        ## TODO: want organization alongside `obj.json` of `ProtocolUnit` gufe_keys
+        ## for any file objects stored in the same space
 
         pdr_j = self._get_bytes(location).decode("utf-8")
 
+        # TODO: add support for interface client-side decompression
         if return_as == "gufe":
-            protocoldagresult = GufeTokenizable.from_dict(
-                json.loads(pdr_j, cls=JSON_HANDLER.decoder)
-            )
+            pdr = GufeTokenizable.from_dict(json.loads(pdr_j, cls=JSON_HANDLER.decoder))
         elif return_as == "dict":
-            protocoldagresult = json.loads(pdr_j, cls=JSON_HANDLER.decoder)
+            pdr = json.loads(pdr_j, cls=JSON_HANDLER.decoder)
         elif return_as == "json":
-            protocoldagresult = pdr_j
+            pdr = pdr_j
 
-        return protocoldagresult
+        return pdr

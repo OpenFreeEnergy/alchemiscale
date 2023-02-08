@@ -13,13 +13,14 @@ from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
 from pytest import fixture
 from moto import mock_s3
+from moto.server import ThreadedMotoServer
 
 from py2neo import ServiceProfile, Graph
 from py2neo.client import Connector
 
 from gufe import ChemicalSystem, Transformation, AlchemicalNetwork
 from gufe.protocols.protocoldag import execute_DAG
-from gufe.tests.test_protocol import DummyProtocol
+from gufe.tests.test_protocol import DummyProtocol, BrokenProtocol
 from openfe_benchmarks import tyk2
 
 from alchemiscale.models import Scope
@@ -170,7 +171,7 @@ def n4js_fresh(graph):
     return n4js
 
 
-@fixture(scope="module")
+@fixture(scope="session")
 def s3objectstore_settings():
     return S3ObjectStoreSettings(
         AWS_ACCESS_KEY_ID="test-key-id",
@@ -180,6 +181,27 @@ def s3objectstore_settings():
         AWS_S3_PREFIX="test-prefix",
         AWS_DEFAULT_REGION="us-east-1",
     )
+
+
+@fixture(scope="module")
+def s3os_server(s3objectstore_settings):
+    server = ThreadedMotoServer()
+    server.start()
+
+    s3os = get_s3os(s3objectstore_settings, endpoint_url="http://127.0.0.1:5000")
+    s3os.initialize()
+
+    yield s3os
+
+    server.stop()
+
+
+@fixture
+def s3os_server_fresh(s3os_server):
+    s3os_server.reset()
+    s3os_server.initialize()
+
+    return s3os_server
 
 
 @fixture(scope="module")
@@ -242,6 +264,64 @@ def network_tyk2():
 
 
 @fixture(scope="session")
+def transformation(network_tyk2):
+    return list(network_tyk2.edges)[0]
+
+
+@fixture(scope="session")
+def protocoldagresults(tmpdir_factory, transformation):
+    pdrs = []
+    for i in range(3):
+        # Use tempdir_factory instead of tempdir to handle session level scope correctly
+        protocoldag = transformation.create()
+
+        # execute the task
+        with tmpdir_factory.mktemp("protocol_dag").as_cwd():
+            protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
+
+        pdrs.append(protocoldagresult)
+    return pdrs
+
+
+@fixture(scope="session")
+def network_tyk2_failure(network_tyk2):
+    transformation = list(network_tyk2.edges)[0]
+
+    broken_transformation = Transformation(
+        stateA=transformation.stateA,
+        stateB=transformation.stateB,
+        protocol=BrokenProtocol(settings=None),
+        name="broken",
+    )
+
+    return AlchemicalNetwork(
+        edges=[broken_transformation] + list(network_tyk2.edges), name="tyk2_broken"
+    )
+
+
+@fixture(scope="session")
+def transformation_failure(network_tyk2_failure):
+    return [t for t in network_tyk2_failure.edges if t.name == "broken"][0]
+
+
+@fixture(scope="session")
+def protocoldagresults_failure(tmpdir_factory, transformation_failure):
+    pdrs = []
+    for i in range(3):
+        # Use tempdir_factory instead of tempdir to handle session level scope correctly
+        protocoldag = transformation_failure.create()
+
+        # execute the task
+        with tmpdir_factory.mktemp("protocol_dag").as_cwd():
+            protocoldagresult = execute_DAG(
+                protocoldag, shared=Path(".").absolute(), raise_error=False
+            )
+
+        pdrs.append(protocoldagresult)
+    return pdrs
+
+
+@fixture(scope="session")
 def scope_test():
     """Primary scope for individual tests"""
     return Scope(org="test_org", campaign="test_campaign", project="test_project")
@@ -262,20 +342,3 @@ def multiple_scopes(scope_test):
         ]
     )
     return scopes
-
-
-@fixture(scope="session")
-def transformation(network_tyk2):
-    return list(network_tyk2.edges)[0]
-
-
-@fixture(scope="session")
-def protocoldagresult(tmpdir_factory, transformation):
-    # Use tempdir_factory instead of tempdir to handle session level scope correctly
-    protocoldag = transformation.create()
-
-    # execute the task
-    with tmpdir_factory.mktemp("protocol_dag").as_cwd():
-        protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
-
-    return protocoldagresult

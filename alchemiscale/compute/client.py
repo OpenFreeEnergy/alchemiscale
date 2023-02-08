@@ -5,7 +5,7 @@ Client for interacting with compute API. --- :mod:`alchemiscale.compute.client`
 
 """
 
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Union
 import json
 from urllib.parse import urljoin
 from functools import wraps
@@ -33,7 +33,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     def query_taskhubs(
         self, scopes: List[Scope], return_gufe=False, limit=None, skip=None
-    ) -> List[TaskHub]:
+    ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskHub]]:
         """Return all `TaskHub`s corresponding to given `Scope`."""
         if return_gufe:
             taskhubs = {}
@@ -51,10 +51,6 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
         return taskhubs
 
-    def get_taskhub_tasks(self, taskhub: ScopedKey) -> List[Task]:
-        """Get list of `Task`s for the given `TaskHub`."""
-        self._get_resource(f"taskhubs/{taskhub}/tasks", {})
-
     def claim_taskhub_tasks(
         self, taskhub: ScopedKey, claimant: str, count: int = 1
     ) -> Task:
@@ -67,13 +63,17 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
     def get_task_transformation(
         self, task: ScopedKey
     ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
-        transformation, protocoldagresult = self._get_resource(
+        transformation, protocoldagresult_json = self._get_resource(
             f"tasks/{task}/transformation", {}, return_gufe=False
         )
 
         return (
             GufeTokenizable.from_dict(transformation),
-            GufeTokenizable.from_dict(protocoldagresult) if protocoldagresult else None,
+            GufeTokenizable.from_dict(
+                json.loads(protocoldagresult_json, cls=JSON_HANDLER.decoder)
+            )
+            if protocoldagresult_json is not None
+            else None,
         )
 
     def set_task_result(
@@ -85,6 +85,6 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
             )
         )
 
-        pdr_sk = self._post_resource(f"tasks/{task}/result", data)
+        pdr_sk = self._post_resource(f"tasks/{task}/results", data)
 
         return ScopedKey.from_dict(pdr_sk)
