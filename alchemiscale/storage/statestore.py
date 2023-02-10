@@ -886,7 +886,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             // set the parent_task property to the scoped key of the Task
             // this is a convenience for when we have to loop over relationships in python land
-            SET ar.task = task._scoped_key
+            SET ar.parent_task = task._scoped_key
             RETURN task
             """
             with self.transaction() as tx:
@@ -1004,9 +1004,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         canceled_sks = []
         for t in tasks:
             q = f"""
-            // get our task hub, as well as the task we want to remove
-            MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task {{_scoped_key: '{t}'}}),
-            DETACH DELETE task
+            // get our task hub, as well as the task :ACTIONS relationship we want to remove
+            MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
+            DELETE ar
+            RETURN task
             """
             with self.transaction() as tx:
                 task = tx.run(q).to_subgraph()
@@ -1124,12 +1125,14 @@ class Neo4jStore(AlchemiscaleStateStore):
                     claim_query = _generate_claim_query(chosen_one, claimant)
                     tasks.append(tx.run(claim_query).to_subgraph())
 
-                tx.run(f"""
+                tx.run(
+                    f"""
                 MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})
 
                 // remove lock on the TaskHub now that we're done with it
                 SET th._lock = null
-                """)
+                """
+                )
 
         return [
             ScopedKey.from_str(t["_scoped_key"]) if t is not None else None

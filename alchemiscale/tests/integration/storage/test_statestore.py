@@ -497,16 +497,12 @@ class TestNeo4jStore(TestStateStore):
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
-
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
-
         # action the tasks
         actioned = n4js.action_tasks(task_sks, taskhub_sk)
-
         # cancel the second and third task we created
         canceled = n4js.cancel_tasks(task_sks[1:3], taskhub_sk)
-
         # check that the hub has the contents we expect
         tasks = n4js.graph.run(
             f"""
@@ -538,7 +534,8 @@ class TestNeo4jStore(TestStateStore):
         # get the full hub back; no particular order
         task_sks = n4js.get_taskhub_tasks(taskhub_sk)
 
-        assert actioned == task_sks
+        # no particular order so must check that the sets are equal
+        assert set(actioned) == set(task_sks)
 
         # try getting back as gufe objects instead
         tasks = n4js.get_taskhub_tasks(taskhub_sk, return_gufe=True)
@@ -560,7 +557,7 @@ class TestNeo4jStore(TestStateStore):
         # to order created
         random.shuffle(task_sks)
 
-        # try to claim from an empty hub 
+        # try to claim from an empty hub
         nothing = n4js.claim_taskhub_tasks(taskhub_sk, "early bird task handler")
 
         assert nothing[0] is None
