@@ -75,21 +75,23 @@ class TestComputeClient:
     ):
         taskhub_sks = compute_client.query_taskhubs([scope_test])
 
-        # claim our first task
+        # claim a single task; there is no deterministic ordering of tasks, so
+        # simply test that the claimed task is one of the actioned tasks
         task_sks = compute_client.claim_taskhub_tasks(taskhub_sks[0], claimant="me")
 
-        # check that we got the task we expected given order
         all_task_sks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0])
 
         assert len(task_sks) == 1
-        assert task_sks[0] == all_task_sks[0]
+        assert task_sks[0] in all_task_sks
 
+        remaining_tasks = n4js_preloaded.get_taskhub_unclaimed_tasks(taskhub_sks[0])
         # claim two more tasks
         task_sks2 = compute_client.claim_taskhub_tasks(
             taskhub_sks[0], count=2, claimant="me"
         )
 
-        assert task_sks2 == all_task_sks[1:]
+        assert task_sks2[0] in remaining_tasks
+        assert task_sks2[1] in remaining_tasks
 
     def test_get_task_transformation(
         self,
