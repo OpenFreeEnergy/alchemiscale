@@ -108,7 +108,6 @@ async def query_taskhubs(
 #    return
 
 
-
 @router.post("/taskhubs/{taskhub_scoped_key}/claim")
 async def claim_taskhub_tasks(
     taskhub_scoped_key,
