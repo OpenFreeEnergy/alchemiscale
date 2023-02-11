@@ -107,13 +107,11 @@ def n4js_preloaded(
                 extends = n4js.create_task(trans_sk, extends=extends)
                 task_sks[transformation].append(extends)
 
-        # add tasks to both task hubs
-        n4js.action_tasks(
-            [task_sks[transformation][0] for transformation in transformations], th_sk1
-        )
+        # add  tasks **from each network** to each task hubs
+        n4js.action_tasks(task_sks[transformations[0]], th_sk1)
 
         n4js.action_tasks(
-            [task_sks[transformation][0] for transformation in transformations[::-1]],
+            task_sks[transformations[1]],
             th_sk2,
         )
 

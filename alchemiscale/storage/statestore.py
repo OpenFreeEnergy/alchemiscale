@@ -861,6 +861,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         be 'complete' before this Task can be added to *any* TaskHub.
 
         """
+        depth = lambda L: isinstance(L, list) and max(map(depth, L)) + 1
+        if depth(tasks) > 1:
+            raise ValueError(
+                "tasks must be a flat list of ScopedKeys, list with depth > 1 not allowed"
+            )
+
         actioned_sks = []
         for t in tasks:
             q = f"""

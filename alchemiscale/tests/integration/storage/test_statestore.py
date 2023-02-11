@@ -428,7 +428,7 @@ class TestNeo4jStore(TestStateStore):
         # count tasks actioned
         actioned_task_sks = n4js.get_taskhub_tasks(taskhub_sk)
         assert set(task_sks) == set(actioned_task_sks)
-
+        assert len(task_sks) == 10
         # add a second network, with the transformation above missing
         # try to add a task from that transformation to the new network's hub
         # this should fail
@@ -443,6 +443,21 @@ class TestNeo4jStore(TestStateStore):
 
         task_sks_fail = n4js.action_tasks(task_sks, taskhub_sk2)
         assert all([i is None for i in task_sks_fail])
+
+    def test_action_task_nested_fails(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # action the tasks
+        with pytest.raises(ValueError):
+            n4js.action_tasks([task_sks], taskhub_sk)
 
     def test_get_unclaimed_tasks(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
@@ -530,6 +545,7 @@ class TestNeo4jStore(TestStateStore):
 
         # action the tasks
         actioned = n4js.action_tasks(task_sks, taskhub_sk)
+        assert len(actioned) == 10
 
         # get the full hub back; no particular order
         task_sks = n4js.get_taskhub_tasks(taskhub_sk)
