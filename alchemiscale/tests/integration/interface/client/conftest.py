@@ -17,9 +17,9 @@ from alchemiscale.tests.integration.utils import running_service
 
 
 @pytest.fixture(scope="module")
-def user_api(s3os):
+def user_api(s3os_server):
     def get_s3os_override():
-        return s3os
+        return s3os_server
 
     overrides = copy(api.app.dependency_overrides)
 
@@ -49,7 +49,6 @@ def uvicorn_server(user_api):
 
 @pytest.fixture(scope="module")
 def user_client(uvicorn_server, user_identity):
-
     return client.AlchemiscaleClient(
         api_url="http://127.0.0.1:8000/",
         identifier=user_identity["identifier"],
@@ -59,7 +58,6 @@ def user_client(uvicorn_server, user_identity):
 
 @pytest.fixture(scope="module")
 def user_client_wrong_credential(uvicorn_server, user_identity):
-
     return client.AlchemiscaleClient(
         api_url="http://127.0.0.1:8000/",
         identifier=user_identity["identifier"],

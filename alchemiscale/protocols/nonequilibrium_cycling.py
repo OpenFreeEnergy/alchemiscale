@@ -54,7 +54,6 @@ class FAHOpenmmNonEquilibriumCyclingProtocol(Protocol):
         mapping: Optional[ComponentMapping] = None,
         extend_from: Optional[ProtocolDAGResult] = None,
     ) -> List[ProtocolUnit]:
-
         # we generate a linear DAG here, since OpenMM performs nonequilibrium
         # cycling in a single simulation
         genhtop = GenerateHybridTopology(
@@ -78,7 +77,6 @@ class FAHOpenmmNonEquilibriumCyclingProtocol(Protocol):
     def _gather(
         self, protocol_dag_results: Iterable[ProtocolDAGResult]
     ) -> Dict[str, Any]:
-
         outputs = []
         for pdr in protocol_dag_results:
             for pur in pdr.protocol_unit_results:

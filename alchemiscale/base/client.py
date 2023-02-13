@@ -10,7 +10,6 @@ from urllib.parse import urljoin
 from functools import wraps
 
 import requests
-from requests.auth import HTTPBasicAuth
 
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
@@ -28,7 +27,6 @@ class AlchemiscaleBaseClient:
     _exception = AlchemiscaleBaseClientError
 
     def __init__(self, api_url, identifier, key, max_retries=5):
-
         self.api_url = api_url
         self.identifier = identifier
         self.key = key
@@ -41,7 +39,6 @@ class AlchemiscaleBaseClient:
         return f"{self.__class__.__name__}('{self.api_url}')"
 
     def _get_token(self):
-
         data = {"username": self.identifier, "password": self.key}
 
         url = urljoin(self.api_url, "/token")
@@ -76,7 +73,6 @@ class AlchemiscaleBaseClient:
 
     @_use_token
     def _query_resource(self, resource, params):
-
         url = urljoin(self.api_url, resource)
         resp = requests.get(url, params=params, headers=self._headers)
 
@@ -92,7 +88,9 @@ class AlchemiscaleBaseClient:
             return [ScopedKey.from_str(i) for i in resp.json()]
 
     @_use_token
-    def _get_resource(self, resource, params, return_gufe=True):
+    def _get_resource(self, resource, params=None, return_gufe=True):
+        if params is None:
+            params = {}
 
         url = urljoin(self.api_url, resource)
         resp = requests.get(url, params=params, headers=self._headers)

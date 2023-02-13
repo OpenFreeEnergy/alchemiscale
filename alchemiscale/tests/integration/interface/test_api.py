@@ -18,6 +18,7 @@ def pre_load_payload(network, scope, name="incomplete 2"):
     return new_network, headers, jsondata
 
 
+# TODO: switch approach to mocking out requests usage in interface client with testclient instead
 class TestAPI:
     @pytest.fixture
     def prepared_network(self, n4js_preloaded, test_client, network_tyk2, scope_test):
@@ -45,10 +46,11 @@ class TestAPI:
         response = test_client.get("/check")
         assert response.status_code == 200
 
+    ### inputs
+
     def test_create_network(
         self, n4js_preloaded, test_client, network_tyk2, scope_test
     ):
-
         n4js = n4js_preloaded
         an = network_tyk2
 
@@ -121,3 +123,42 @@ class TestAPI:
         # Check our error details are expected
         assert str(sk_unauthenticated.scope) in details
         assert str(auth_scope) in details
+
+    def test_query_transformations(
+        self, n4js_preloaded, network_tyk2, test_client, scope_test
+    ):
+        ...
+
+    def test_get_transformation(self):
+        ...
+
+    def test_query_chemicalsystems(self):
+        ...
+
+    def test_get_chemicalsystem(self):
+        ...
+
+    ### compute
+
+    def test_set_strategy(self):
+        ...
+
+    def test_create_tasks(self):
+        ...
+
+    def test_get_tasks(self):
+        ...
+
+    def test_action_tasks(self):
+        ...
+
+    def test_cancel_tasks(self):
+        ...
+
+    ### results
+
+    def test_get_transformation_results(self):
+        ...
+
+    def test_get_protocoldagresult(self):
+        ...

@@ -31,7 +31,13 @@ class Scope(BaseModel):
         if v is not None and "-" in v:
             raise ValueError(f"'{component}' must not contain dashes ('-')")
         elif v == "*":
-            return None
+            # if we're given an asterisk, cast this to `None` instead for
+            # consistency
+            v = None
+        elif v is not None and "*" in v:
+            raise ValueError(
+                f"asterisks ('*') for glob-matching components not supported at this time"
+            )
         return v
 
     @validator("org")
@@ -82,7 +88,7 @@ class Scope(BaseModel):
     def __repr__(self):  # pragma: no cover
         return f"<Scope('{str(self)}')>"
 
-    def specific(self):
+    def specific(self) -> bool:
         """Return `True` if this Scope has no unspecified elements."""
         return all(self.to_tuple())
 

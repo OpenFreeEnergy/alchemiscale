@@ -4,8 +4,9 @@ import os
 import pytest
 from gufe.protocols.protocoldag import execute_DAG
 
+from alchemiscale.models import ScopedKey
 from alchemiscale.storage import S3ObjectStore
-from alchemiscale.storage.models import ObjectStoreRef
+from alchemiscale.storage.models import ProtocolDAGResultRef
 
 
 class TestS3ObjectStore:
@@ -14,14 +15,15 @@ class TestS3ObjectStore:
         s3os._store_bytes("_check_test", b"test_check")
         s3os._delete("_check_test")
 
-    def test_push_protocolresult(self, s3os: S3ObjectStore, protocoldagresult):
-
+    def test_push_protocolresult(
+        self, s3os: S3ObjectStore, protocoldagresults, scope_test
+    ):
         # try to push the result
-        objstoreref: ObjectStoreRef = s3os.push_protocoldagresult(protocoldagresult)
-
-        assert objstoreref.location == os.path.join(
-            "protocoldagresult", protocoldagresult.key
+        objstoreref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
+            protocoldagresults[0], scope=scope_test
         )
+
+        assert objstoreref.obj_key == protocoldagresults[0].key
 
         # examine object metadata
         objs = list(s3os.resource.Bucket(s3os.bucket).objects.all())
@@ -29,12 +31,19 @@ class TestS3ObjectStore:
         assert len(objs) == 1
         assert objs[0].key == os.path.join(s3os.prefix, objstoreref.location)
 
-    def test_pull_protocolresult(self, s3os: S3ObjectStore, protocoldagresult):
-
-        objstoreref: ObjectStoreRef = s3os.push_protocoldagresult(protocoldagresult)
+    def test_pull_protocolresult(
+        self, s3os: S3ObjectStore, protocoldagresults, scope_test
+    ):
+        objstoreref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
+            protocoldagresults[0], scope=scope_test
+        )
 
         # round trip it
-        pdr = s3os.pull_protocoldagresult(objstoreref)
+        sk = ScopedKey(gufe_key=objstoreref.obj_key, **scope_test.dict())
+        tf_sk = ScopedKey(
+            gufe_key=protocoldagresults[0].transformation_key, **scope_test.dict()
+        )
+        pdr = s3os.pull_protocoldagresult(sk, tf_sk)
 
-        assert pdr.key == protocoldagresult.key
+        assert pdr.key == protocoldagresults[0].key
         assert pdr.protocol_unit_results == pdr.protocol_unit_results

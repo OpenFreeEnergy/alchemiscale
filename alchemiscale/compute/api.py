@@ -28,7 +28,7 @@ from ..base.api import (
 from ..settings import get_base_api_settings, get_compute_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ObjectStoreRef
+from ..storage.models import ProtocolDAGResultRef
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedComputeIdentity
@@ -84,7 +84,6 @@ async def query_taskqueues(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-
     # intersect query scopes with accessible scopes in the token
     query_scopes = validate_scopes_query(scope, token)
     taskqueues_handler = QueryGUFEHandler(return_gufe)
@@ -92,7 +91,6 @@ async def query_taskqueues(
     # query each scope
     # loop might be more removable in the future with a Union like operator on scopes
     for single_query_scope in query_scopes:
-
         # add new task queues
         taskqueues_handler.update_results(
             n4js.query_taskqueues(
@@ -108,11 +106,6 @@ async def query_taskqueues(
 #                        *,
 #                        n4js: Neo4jStore = Depends(get_n4js_depends)):
 #    return
-
-
-@router.get("/taskqueues/{taskqueue}/tasks")
-async def get_taskqueue_tasks():
-    return {"message": "nothing yet"}
 
 
 @router.post("/taskqueues/{taskqueue_scoped_key}/claim")
@@ -139,22 +132,32 @@ async def get_task_transformation(
     task_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
     sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(sk.scope, token)
 
-    transformation, protocoldagresult = n4js.get_task_transformation(
+    transformation, protocoldagresultref = n4js.get_task_transformation(
         task=task_scoped_key
     )
 
-    return (
-        transformation.to_dict(),
-        protocoldagresult.to_dict() if protocoldagresult is not None else None,
-    )
+    if protocoldagresultref:
+        tf_sk = ScopedKey(gufe_key=transformation.key, **sk.scope.dict())
+        pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.dict())
+
+        # we keep this as a string to avoid useless deserialization/reserialization here
+        pdr: str = s3os.pull_protocoldagresult(
+            pdr_sk, tf_sk, return_as="json", success=True
+        )
+    else:
+        pdr = None
+
+    return (transformation.to_dict(), pdr)
 
 
-@router.post("/tasks/{task_scoped_key}/result", response_model=ScopedKey)
+# TODO: support compression performed client-side
+@router.post("/tasks/{task_scoped_key}/results", response_model=ScopedKey)
 def set_task_result(
     task_scoped_key,
     *,
@@ -170,12 +173,18 @@ def set_task_result(
     pdr = GufeTokenizable.from_dict(pdr)
 
     # push the ProtocolDAGResult to the object store
-    objectstoreref: ObjectStoreRef = s3os.push_protocoldagresult(pdr)
+    protocoldagresultref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
+        pdr,
+        scope=task_sk.scope,
+    )
 
     # push the reference to the state store
     result_sk: ScopedKey = n4js.set_task_result(
-        task=task_sk, protocoldagresult=objectstoreref
+        task=task_sk, protocoldagresultref=protocoldagresultref
     )
+
+    # TODO: if success, set task complete, remove from all queues
+    # otherwise, set as errored, leave in queues
 
     return result_sk
 
