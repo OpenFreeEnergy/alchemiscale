@@ -212,7 +212,7 @@ class ObjectStoreRef(GufeTokenizable):
 
 
 class ProtocolDAGResultRef(ObjectStoreRef):
-    success: bool
+    ok: bool
 
     def __init__(
         self,
@@ -220,19 +220,19 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         location: str = None,
         obj_key: GufeKey,
         scope: Scope,
-        success: bool,
+        ok: bool,
     ):
         self.location = location
         self.obj_key = GufeKey(obj_key)
         self.scope = scope
-        self.success = success
+        self.ok = ok
 
     def _to_dict(self):
         return {
             "location": self.location,
             "obj_key": str(self.obj_key),
             "scope": str(self.scope),
-            "success": self.success,
+            "ok": self.ok,
         }
 
 
