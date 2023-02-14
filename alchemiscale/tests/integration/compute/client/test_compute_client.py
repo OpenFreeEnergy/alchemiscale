@@ -81,7 +81,9 @@ class TestComputeClient:
 
         assert len(task_sks) == 1
         assert task_sks[0] in all_tasks.keys()
-        assert [t.gufe_key for t in task_sks] == [task.key for task in all_tasks.values() if task.priority == 1]
+        assert [t.gufe_key for t in task_sks] == [
+            task.key for task in all_tasks.values() if task.priority == 1
+        ]
 
         remaining_tasks = n4js_preloaded.get_taskhub_unclaimed_tasks(taskhub_sks[0])
         # claim two more tasks
