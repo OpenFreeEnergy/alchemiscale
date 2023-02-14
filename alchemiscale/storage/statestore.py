@@ -937,7 +937,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             if isinstance(tasks, dict):
                 if weight is not None:
-                    raise ValueError("Cannot set `weight` to a scalar if `tasks` is a dict")
+                    raise ValueError(
+                        "Cannot set `weight` to a scalar if `tasks` is a dict"
+                    )
 
                 for t, w in tasks.items():
                     q = f"""
@@ -947,10 +949,11 @@ class Neo4jStore(AlchemiscaleStateStore):
                     """
                     results.append(tx.run(q))
 
-
             elif isinstance(tasks, list):
                 if weight is None:
-                    raise ValueError("Must set `weight` to a scalar if `tasks` is a list")
+                    raise ValueError(
+                        "Must set `weight` to a scalar if `tasks` is a list"
+                    )
 
                 for t in tasks:
                     q = f"""
@@ -963,16 +966,17 @@ class Neo4jStore(AlchemiscaleStateStore):
         # return ScopedKeys for Tasks we changed; `None` for tasks we didn't
         for res in results:
             for record in res:
-                task = record['task']
+                task = record["task"]
                 tasks_changed.append(
                     ScopedKey.from_str(task["_scoped_key"])
-                    if task is not None else None)
+                    if task is not None
+                    else None
+                )
 
         return tasks_changed
 
-
     def get_task_weights(
-        self, 
+        self,
         tasks: List[ScopedKey],
         taskhub: ScopedKey,
     ) -> List[Union[float, None]]:
@@ -1041,13 +1045,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         return canceled_sks
 
     def get_taskhub_tasks(
-        self, 
-        taskhub: ScopedKey,
-        return_gufe=False
+        self, taskhub: ScopedKey, return_gufe=False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
-        """Get a list of Tasks on the TaskHub.
-
-        """
+        """Get a list of Tasks on the TaskHub."""
 
         q = f"""
         // get list of all tasks associated with the taskhub
@@ -1074,9 +1074,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_taskhub_unclaimed_tasks(
         self, taskhub: ScopedKey, return_gufe=False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
-        """Get a list of unclaimed Tasks in the TaskHub.
-
-        """
+        """Get a list of unclaimed Tasks in the TaskHub."""
 
         q = f"""
         // get list of all unclaimed tasks in the hub 

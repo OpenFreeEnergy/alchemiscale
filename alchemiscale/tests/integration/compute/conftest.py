@@ -86,7 +86,6 @@ def n4js_preloaded(
 
     # set starting contents for many of the tests in this module
     for single_scope in multiple_scopes:
-
         # Create initial network for this scope
         sk1 = n4js.create_network(network_tyk2, single_scope)
 
@@ -117,8 +116,8 @@ def n4js_preloaded(
 
         # add tasks from each transformation selected to each task hubs
         n4js.action_tasks(
-                [task_sks[transformation][0] for transformation in transformations], 
-                th_sk1)
+            [task_sks[transformation][0] for transformation in transformations], th_sk1
+        )
 
         n4js.action_tasks(
             [task_sks[transformation][0] for transformation in transformations],
