@@ -62,37 +62,28 @@ def _select_task_from_taskpool(taskpool: Subgraph) -> Union[ScopedKey, None]:
     Select a Task from a pool of tasks in a neo4j subgraph according to the following scheme:
 
     PRE: taskpool is a subgraph of Tasks of equal priority with a weight on their ACTIONS relationship.
-    The records in the subgraph are :ACTIONS relationships with two properties: 'parent_task' and 'weight'.
-    1. Randomly select n Tasks from the TaskPool based on weighting
-    2. Return the ScopedKey of the Tasks.
+    The records in the subgraph are :ACTIONS relationships with two properties: 'task' and 'weight'.
+    1. Randomly select 1 Task from the TaskPool based on weighting
+    2. Return the ScopedKey of the Task.
+
     Parameters
     ----------
     taskpool: 'subgraph'
-        A subgraph of Tasks of equal priority with a weights on their ACTIONS relationship.
+        A subgraph of Tasks of equal priority with a weight on their ACTIONS relationship.
 
     Returns
     -------
     sk: ScopedKey
-        The ScopedKey of the Task selected from the TaskPool.
+        The ScopedKey of the Task selected from the taskpool.
     """
-    # get the tasks and weights of the taskpool
-    tasks_and_weights = {}
-    for record in taskpool:
-        task_sk = record.get("parent_task")
-        weight = record.get("weight")
-        tasks_and_weights[task_sk] = weight
-
     tasks = []
     weights = []
-    for k, v in tasks_and_weights.items():
-        tasks.append(k)
-        weights.append(v)
+    for actions in taskpool.relationships:
+        tasks.append(actions.get("task"))
+        weights.append(actions.get("weight"))
 
     # normalize weights
     weights = np.array(weights)
-    if all(weights == 0):
-        # no tasks have any weight, so they can't be selected
-        return None
     weights = weights / weights.sum()
 
     # randomly select a task from the taskpool based on weights without replacement
@@ -118,8 +109,6 @@ def _generate_claim_query(task_sk: ScopedKey, claimant: str) -> str:
     """
     query = f"""
     MATCH (t:Task {{_scoped_key: '{task_sk}'}})
-    // only claim one task at a time, redundant due to scoped_key but safe
-    WITH t LIMIT 1
     SET t.status = 'running', t.claim = '{claimant}'
     RETURN t
     """
@@ -848,14 +837,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         tasks: List[ScopedKey],
         taskhub: ScopedKey,
-    ) -> List[ScopedKey]:
+    ) -> List[Union[ScopedKey, None]]:
         """Add Tasks to the TaskHub for a given AlchemicalNetwork.
 
         Note: the Tasks must be within the same scope as the AlchemicalNetwork,
         and must correspond to a Transformation in the AlchemicalNetwork.
 
         A given compute task can be represented in any number of
-        AlchemicalNetwork hubs, or none at all.
+        AlchemicalNetwork TaskHubs, or none at all.
 
         If this Task has an EXTENDS relationship to another Task, that Task must
         be 'complete' before this Task can be added to *any* TaskHub.
@@ -867,35 +856,32 @@ class Neo4jStore(AlchemiscaleStateStore):
                 "tasks must be a flat list of ScopedKeys, list with depth > 1 not allowed"
             )
 
-        actioned_sks = []
-        for t in tasks:
-            q = f"""
-            // get our TaskHub, 
-            MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:PERFORMS]->(an:AlchemicalNetwork)
-            
-            // get the task we want to add to the hub; check that it connects to same network
-            // only proceed for cases where task is not already associated with the hub 
-            MATCH (task:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
-            OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
+        with self.transaction() as tx:
+            actioned_sks = []
+            for t in tasks:
+                q = f"""
+                // get our TaskHub, 
+                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:PERFORMS]->(an:AlchemicalNetwork)
+                
+                // get the task we want to add to the hub; check that it connects to same network
+                MATCH (task:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
+                OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
-            // only proceed for cases where task is not already actioned on hub
-            // and only EXTENDS a 'complete' task
-            WITH th, an, task, other_task
-            WHERE NOT (th)-[:ACTIONS]->(task)
-              AND other_task.status = 'complete' OR other_task IS NULL
+                // only proceed for cases where task is not already actioned on hub
+                // and only EXTENDS a 'complete' task
+                WITH th, an, task, other_task
+                WHERE NOT (th)-[:ACTIONS]->(task)
+                  AND other_task.status = 'complete' OR other_task IS NULL
 
-            // create the connections 
-            CREATE (th)-[ar:ACTIONS]->(task)
+                // create the connections 
+                // set the ACTIONS relationship weight to default weight of 1.0
+                CREATE (th)-[ar:ACTIONS {{weight: 1.0}}]->(task)
 
-            // set the ACTIONS relationship weight to default weight of 1.0
-            SET ar.weight = 1.0
-
-            // set the parent_task property to the scoped key of the Task
-            // this is a convenience for when we have to loop over relationships in python land
-            SET ar.parent_task = task._scoped_key
-            RETURN task
-            """
-            with self.transaction() as tx:
+                // set the task property to the scoped key of the Task
+                // this is a convenience for when we have to loop over relationships in Python
+                SET ar.task = task._scoped_key
+                RETURN task
+                """
                 task = tx.run(q).to_subgraph()
                 actioned_sks.append(
                     ScopedKey.from_str(task["_scoped_key"])
@@ -910,22 +896,23 @@ class Neo4jStore(AlchemiscaleStateStore):
         tasks: Union[Dict[ScopedKey, float], List[ScopedKey]],
         taskhub: ScopedKey,
         weight: Optional[float] = None,
-    ) -> None:
+    ) -> List[Union[ScopedKey, None]]:
         """Sets weights for the ACTIONS relationship between a TaskHub and a Task.
 
-        This is used to set the relative probabilistic execution order of a Task in a TaskHub.
-        Note that this concept is orthogonal to priority in that tasks of higher priority will
-        be executed before tasks of lower priority, but tasks of the same priority will be distributed according
+        This is used to set the relative probabilistic execution order of a
+        Task in a TaskHub. Note that this concept is orthogonal to priority in
+        that tasks of higher priority will be executed before tasks of lower
+        priority, but tasks of the same priority will be distributed according
         to their weights.
 
-        The weights can be set by either a list and a scalar, or a dict of {ScopedKey: weight} pairs.
+        The weights can be set by either a list and a scalar, or a dict of
+        {ScopedKey: weight} pairs.
 
-        MUST be called after `action_tasks`. otherwise, the TaskHub will not have an ACTIONS relationship
-        to the Task.
+        Must be called after `action_tasks` to have any effect; otherwise, the
+        TaskHub will not have an ACTIONS relationship to the Task.
 
         Parameters
         ----------
-
         tasks: Union[Dict[ScopedKey, float], List[ScopedKey]]
             If a dict, the keys are the ScopedKeys of the Tasks, and the values are the weights.
             If a list, the weights are set to the scalar value given by the `weight` argument.
@@ -936,61 +923,89 @@ class Neo4jStore(AlchemiscaleStateStore):
         weight: Optional[float]
             If `tasks` is a list, this is the weight to set for each Task.
 
+        Returns
+        -------
+        List[ScopedKey, None]
+            A list of ScopedKeys for each Task whose weight was set.
+            `None` is given for Tasks that weight was not set for; this could
+            be because the TaskHub doesn't have an ACTIONS relationship with the Task,
+            or the Task doesn't exist at all
+
         """
-        if isinstance(tasks, dict):
-            if weight is not None:
-                raise ValueError("Cannot set weight to a scalar if tasks is a dict")
-            for t, w in tasks.items():
-                q = f"""
-                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
-                SET ar.weight = {w}
-                RETURN ar
-                """
-                with self.transaction() as tx:
-                    tx.run(q)
-        elif isinstance(tasks, list):
-            if weight is None:
-                raise ValueError("Must set weight to a scalar if tasks is a list")
-            for t in tasks:
-                q = f"""
-                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
-                SET ar.weight = {weight}
-                RETURN ar
-                """
-                with self.transaction() as tx:
+        results = []
+        tasks_changed = []
+        with self.transaction() as tx:
+            if isinstance(tasks, dict):
+                if weight is not None:
+                    raise ValueError("Cannot set `weight` to a scalar if `tasks` is a dict")
+
+                for t, w in tasks.items():
+                    q = f"""
+                    MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
+                    SET ar.weight = {w}
+                    RETURN task, ar
+                    """
+                    results.append(tx.run(q))
+
+
+            elif isinstance(tasks, list):
+                if weight is None:
+                    raise ValueError("Must set `weight` to a scalar if `tasks` is a list")
+
+                for t in tasks:
+                    q = f"""
+                    MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
+                    SET ar.weight = {weight}
+                    RETURN task, ar
+                    """
                     tx.run(q)
 
-        # TODO: add exception for nothing returned for matches, or some Tasks missing
+        # return ScopedKeys for Tasks we changed; `None` for tasks we didn't
+        for res in results:
+            for record in res:
+                task = record['task']
+                tasks_changed.append(
+                    ScopedKey.from_str(task["_scoped_key"])
+                    if task is not None else None)
+
+        return tasks_changed
+
 
     def get_task_weights(
-        self, tasks: List[ScopedKey], taskhub: ScopedKey
-    ) -> Dict[ScopedKey, float]:
-        """Gets weights for the ACTIONS relationship between a TaskHub and a Task.
+        self, 
+        tasks: List[ScopedKey],
+        taskhub: ScopedKey,
+    ) -> List[Union[float, None]]:
+        """Get weights for the ACTIONS relationship between a TaskHub and a Task.
 
         Parameters
         ----------
-        tasks: List[ScopedKey]
+        tasks
             The ScopedKeys of the Tasks to get the weights for.
-        taskhub: ScopedKey
+        taskhub
             The ScopedKey of the TaskHub associated with the Tasks.
 
         Returns
         -------
-        weights: Dict[ScopedKey, float]
-            A dict of {ScopedKey: weight} pairs.
+        weights
+            Weights for the list of Tasks, in the same order.
         """
-        weights = {}
-        for t in tasks:
-            q = f"""
-            MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
-            RETURN task, ar.weight
-            """
-            with self.transaction() as tx:
+        weights = []
+        with self.transaction() as tx:
+            for t in tasks:
+                q = f"""
+                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
+                RETURN ar.weight
+                """
                 result = tx.run(q)
-            for record in result:
-                sk = record.get("task").get("_scoped_key")
-                weight = record.get("ar.weight")
-                weights[ScopedKey.from_str(sk)] = weight
+
+                weight = [record.get("ar.weight") for record in result]
+
+                # if no match for the given Task, we put a `None` as result
+                if len(weight) == 0:
+                    weights.append(None)
+                else:
+                    weights.extend(weight)
 
         return weights
 
@@ -998,24 +1013,24 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         tasks: List[ScopedKey],
         taskhub: ScopedKey,
-    ) -> List[ScopedKey]:
+    ) -> List[Union[ScopedKey, None]]:
         """Remove Tasks from the TaskHub for a given AlchemicalNetwork.
 
         Note: Tasks must be within the same scope as the AlchemicalNetwork.
 
-        A given Task can be represented in many AlchemicalNetwork hubs, or
+        A given Task can be represented in many AlchemicalNetwork TaskHubs, or
         none at all.
 
         """
         canceled_sks = []
-        for t in tasks:
-            q = f"""
-            // get our task hub, as well as the task :ACTIONS relationship we want to remove
-            MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
-            DELETE ar
-            RETURN task
-            """
-            with self.transaction() as tx:
+        with self.transaction() as tx:
+            for t in tasks:
+                q = f"""
+                // get our task hub, as well as the task :ACTIONS relationship we want to remove
+                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
+                DELETE ar
+                RETURN task
+                """
                 task = tx.run(q).to_subgraph()
                 canceled_sks.append(
                     ScopedKey.from_str(task["_scoped_key"])
@@ -1026,9 +1041,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         return canceled_sks
 
     def get_taskhub_tasks(
-        self, taskhub: ScopedKey, return_gufe=False
+        self, 
+        taskhub: ScopedKey,
+        return_gufe=False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
-        """Get a list of Tasks on the TaskHub"""
+        """Get a list of Tasks on the TaskHub.
+
+        """
 
         q = f"""
         // get list of all tasks associated with the taskhub
@@ -1055,7 +1074,9 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_taskhub_unclaimed_tasks(
         self, taskhub: ScopedKey, return_gufe=False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
-        """Get a list of unclaimed Tasks in the TaskHub"""
+        """Get a list of unclaimed Tasks in the TaskHub.
+
+        """
 
         q = f"""
         // get list of all unclaimed tasks in the hub 
@@ -1082,12 +1103,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def claim_taskhub_tasks(
         self, taskhub: ScopedKey, claimant: str, count: int = 1
-    ) -> List[ScopedKey]:
+    ) -> List[Union[ScopedKey, None]]:
         """Claim a TaskHub Task.
 
         This method will claim Tasks from a TaskHub according to the following scheme:
-        1. It will claim the Task with the highest priority.
-        2. If there are tasks of equal priority, tasks will be claimed stochastically based on the `weight` on its ACTIONS relationship.
+        1. It will select Tasks with the highest priority.
+        2. Of those, a Task will be claimed stochastically based on the `weight` of its ACTIONS relationship on the TaskHub.
         3. Repeat steps 1 and 2. until `count` Tasks have been claimed.
 
         If no Task is available, then `None` is given in its place.
@@ -1100,13 +1121,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         taskpool_q = f"""
         // get list of all 'waiting' tasks in the hub 
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(waiting_task:Task)
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(waiting_task:Task)
 
-        // lock the TaskHub to avoid other queries from changing its state while we claim
-        SET th._lock = True
-
-        WITH th, waiting_task
+        // filter on 'waiting' tasks and relationships that are greater than 0 weight
+        WITH th, waiting_task, ar
         WHERE waiting_task.status = 'waiting'
+        AND ar.weight > 0
 
         // get the lowest priority
         WITH MIN(waiting_task.priority) as min_priority
@@ -1122,6 +1142,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         tasks = []
         with self.transaction() as tx:
+            tx.run(
+                f"""
+            MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})
+
+            // lock the TaskHub to avoid other queries from changing its state while we claim
+            SET th._lock = True
+            """
+            )
             for i in range(count):
                 taskpool = tx.run(taskpool_q).to_subgraph()
                 if taskpool is None:
@@ -1131,14 +1159,14 @@ class Neo4jStore(AlchemiscaleStateStore):
                     claim_query = _generate_claim_query(chosen_one, claimant)
                     tasks.append(tx.run(claim_query).to_subgraph())
 
-                tx.run(
-                    f"""
-                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})
+            tx.run(
+                f"""
+            MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})
 
-                // remove lock on the TaskHub now that we're done with it
-                SET th._lock = null
-                """
-                )
+            // remove lock on the TaskHub now that we're done with it
+            SET th._lock = null
+            """
+            )
 
         return [
             ScopedKey.from_str(t["_scoped_key"]) if t is not None else None
@@ -1256,7 +1284,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         transformation: ScopedKey,
         extends: Optional[ScopedKey] = None,
         return_as: str = "list",
-    ) -> Union[List[ScopedKey], Dict[ScopedKey, Optional[str]]]:
+    ) -> Union[List[ScopedKey], Dict[ScopedKey, Optional[ScopedKey]]]:
         """Get all Tasks that perform the given Transformation.
 
         If a Task ScopedKey is given for `extends`, then only those Tasks

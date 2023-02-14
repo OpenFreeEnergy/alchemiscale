@@ -228,7 +228,7 @@ class TestClient:
         taskhub_sk = n4js.get_taskhub(network_sk)
         hub_task_sks = n4js.get_taskhub_tasks(taskhub_sk)
 
-        assert [actioned_sks[0], actioned_sks[2]] == hub_task_sks
+        assert set([actioned_sks[0], actioned_sks[2]]) == set(hub_task_sks)
         assert canceled_sks == [actioned_sks[1]]
 
         # try to cancel a task that's not present on the hub

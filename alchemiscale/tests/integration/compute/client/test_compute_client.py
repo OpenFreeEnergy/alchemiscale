@@ -74,27 +74,22 @@ class TestComputeClient:
         uvicorn_server,
     ):
         taskhub_sks = compute_client.query_taskhubs([scope_test])
-        # claim a single task; there is no deterministic ordering of tasks, so
-        # simply test that the claimed task is one of the actioned tasks
+
+        # claim a single task; should get highest priority task
         task_sks = compute_client.claim_taskhub_tasks(taskhub_sks[0], claimant="me")
-        all_task_sks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0])
+        all_tasks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0], return_gufe=True)
+
         assert len(task_sks) == 1
-        assert task_sks[0] in all_task_sks
+        assert task_sks[0] in all_tasks.keys()
+        assert task_sks == [task for task in all_tasks.values() if task.priority == 1]
 
-        # TODO: Currently we only allow tasks to be added to a taskhub with an EXTENDS
-        # relationship if the task.status == 'complete' this means that we cannot add tasks
-        # in the ty2k test network to the taskhub, as the tasks all have an `extends` relationship
-        # from the first task.  See #84
-
-        # remaining_tasks = n4js_preloaded.get_taskhub_unclaimed_tasks(taskhub_sks[0])
-        # print(remaining_tasks)
-        # # claim two more tasks
-        # task_sks2 = compute_client.claim_taskhub_tasks(
-        #     taskhub_sks[0], count=2, claimant="me"
-        # )
-        # print(task_sks2)
-        # assert task_sks2[0] in remaining_tasks
-        # assert task_sks2[1] in remaining_tasks
+        remaining_tasks = n4js_preloaded.get_taskhub_unclaimed_tasks(taskhub_sks[0])
+        # claim two more tasks
+        task_sks2 = compute_client.claim_taskhub_tasks(
+            taskhub_sks[0], count=2, claimant="me"
+        )
+        assert task_sks2[0] in remaining_tasks
+        assert task_sks2[1] in remaining_tasks
 
     def test_get_task_transformation(
         self,
@@ -111,6 +106,7 @@ class TestComputeClient:
 
         # claim our first task
         task_sks = compute_client.claim_taskhub_tasks(taskhub_sk, claimant="me")
+
         # get the transformation corresponding to this task
         (
             transformation_,

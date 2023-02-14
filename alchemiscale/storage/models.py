@@ -75,7 +75,7 @@ class Task(GufeTokenizable):
         self,
         *,
         status: Union[str, TaskStatusEnum] = TaskStatusEnum.waiting,
-        priority: int = 1,
+        priority: int = 10,
         datetime_created: Optional[datetime] = None,
         creator: Optional[str] = None,
         extends: Optional[str] = None,
