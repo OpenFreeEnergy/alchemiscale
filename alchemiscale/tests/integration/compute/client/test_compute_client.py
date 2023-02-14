@@ -52,44 +52,46 @@ class TestComputeClient:
 
     ### compute
 
-    def test_query_taskqueues(
+    def test_query_taskhubs(
         self,
         scope_test,
         n4js_preloaded,
         compute_client: client.AlchemiscaleComputeClient,
         uvicorn_server,
     ):
-        taskqueue_sks = compute_client.query_taskqueues([scope_test])
+        taskhub_sks = compute_client.query_taskhubs([scope_test])
 
-        assert len(taskqueue_sks) == 2
+        assert len(taskhub_sks) == 2
 
-        taskqueues = compute_client.query_taskqueues([scope_test], return_gufe=True)
-        assert all([tq.weight == 0.5 for tq in taskqueues.values()])
+        taskhubs = compute_client.query_taskhubs([scope_test], return_gufe=True)
+        assert all([tq.weight == 0.5 for tq in taskhubs.values()])
 
-    def test_claim_taskqueue_task(
+    def test_claim_taskhub_task(
         self,
         scope_test,
         n4js_preloaded,
         compute_client: client.AlchemiscaleComputeClient,
         uvicorn_server,
     ):
-        taskqueue_sks = compute_client.query_taskqueues([scope_test])
+        taskhub_sks = compute_client.query_taskhubs([scope_test])
 
-        # claim our first task
-        task_sks = compute_client.claim_taskqueue_tasks(taskqueue_sks[0], claimant="me")
-
-        # check that we got the task we expected given order
-        all_task_sks = n4js_preloaded.get_taskqueue_tasks(taskqueue_sks[0])
+        # claim a single task; should get highest priority task
+        task_sks = compute_client.claim_taskhub_tasks(taskhub_sks[0], claimant="me")
+        all_tasks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0], return_gufe=True)
 
         assert len(task_sks) == 1
-        assert task_sks[0] == all_task_sks[0]
+        assert task_sks[0] in all_tasks.keys()
+        assert [t.gufe_key for t in task_sks] == [
+            task.key for task in all_tasks.values() if task.priority == 1
+        ]
 
+        remaining_tasks = n4js_preloaded.get_taskhub_unclaimed_tasks(taskhub_sks[0])
         # claim two more tasks
-        task_sks2 = compute_client.claim_taskqueue_tasks(
-            taskqueue_sks[0], count=2, claimant="me"
+        task_sks2 = compute_client.claim_taskhub_tasks(
+            taskhub_sks[0], count=2, claimant="me"
         )
-
-        assert task_sks2 == all_task_sks[1:]
+        assert task_sks2[0] in remaining_tasks
+        assert task_sks2[1] in remaining_tasks
 
     def test_get_task_transformation(
         self,
@@ -101,10 +103,11 @@ class TestComputeClient:
         uvicorn_server,
     ):
         an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.dict())
-        taskqueue_sk = n4js_preloaded.get_taskqueue(an_sk)
+
+        taskhub_sk = n4js_preloaded.get_taskhub(an_sk)
 
         # claim our first task
-        task_sks = compute_client.claim_taskqueue_tasks(taskqueue_sk, claimant="me")
+        task_sks = compute_client.claim_taskhub_tasks(taskhub_sk, claimant="me")
 
         # get the transformation corresponding to this task
         (
@@ -129,10 +132,10 @@ class TestComputeClient:
     ):
         an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.dict())
         tf_sk = ScopedKey(gufe_key=transformation.key, **scope_test.dict())
-        taskqueue_sk = n4js_preloaded.get_taskqueue(an_sk)
+        taskhub_sk = n4js_preloaded.get_taskhub(an_sk)
 
         # claim our first task
-        task_sks = compute_client.claim_taskqueue_tasks(taskqueue_sk, claimant="me")
+        task_sks = compute_client.claim_taskhub_tasks(taskhub_sk, claimant="me")
 
         # get the transformation corresponding to this task
         (

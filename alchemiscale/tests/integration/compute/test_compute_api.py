@@ -17,15 +17,15 @@ class TestComputeAPI:
         response = test_client.get("/check")
         assert response.status_code == 200
 
-    def test_query_taskqueues(self, n4js_preloaded, test_client):
-        response = test_client.get("/taskqueues")
+    def test_query_taskhubs(self, n4js_preloaded, test_client):
+        response = test_client.get("/taskhubs")
         assert response.status_code == 200
 
         tq_sks = [ScopedKey.from_str(i) for i in response.json()]
         assert len(tq_sks) == 2
 
         # try getting back actual gufe objects
-        response = test_client.get("/taskqueues?return_gufe=True")
+        response = test_client.get("/taskhubs?return_gufe=True")
         assert response.status_code == 200
 
         tq_dict = {
@@ -39,19 +39,19 @@ class TestComputeAPI:
     def scoped_keys(self, n4js_preloaded, network_tyk2, scope_test):
         n4js = n4js_preloaded
         network_sk = n4js.get_scoped_key(network_tyk2, scope_test)
-        tq_sk = n4js.get_taskqueue(network_sk)
-        task_sks = n4js.get_taskqueue_tasks(tq_sk)
+        tq_sk = n4js.get_taskhub(network_sk)
+        task_sks = n4js.get_taskhub_tasks(tq_sk)
         assert len(task_sks) > 0
-        return {"network": network_sk, "taskqueue": tq_sk, "tasks": task_sks}
+        return {"network": network_sk, "taskhub": tq_sk, "tasks": task_sks}
 
     @pytest.fixture
     def out_of_scoped_keys(self, n4js_preloaded, network_tyk2, multiple_scopes):
         n4js = n4js_preloaded
         network_sk = n4js.get_scoped_key(network_tyk2, multiple_scopes[-1])
-        tq_sk = n4js.get_taskqueue(network_sk)
-        task_sks = n4js.get_taskqueue_tasks(tq_sk)
+        tq_sk = n4js.get_taskhub(network_sk)
+        task_sks = n4js.get_taskhub_tasks(tq_sk)
         assert len(task_sks) > 0
-        return {"network": network_sk, "taskqueue": tq_sk, "tasks": task_sks}
+        return {"network": network_sk, "taskhub": tq_sk, "tasks": task_sks}
 
     def test_get_task_transformation(
         self,

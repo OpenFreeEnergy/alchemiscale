@@ -9,7 +9,7 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from alchemiscale.storage import Neo4jStore
-from alchemiscale.storage.models import Task, TaskQueue, ProtocolDAGResultRef
+from alchemiscale.storage.models import Task, TaskHub, ProtocolDAGResultRef
 from alchemiscale.models import Scope, ScopedKey
 from alchemiscale.security.models import (
     CredentialedEntity,
@@ -327,52 +327,52 @@ class TestNeo4jStore(TestStateStore):
         assert set(graph.keys()) == set(task_sks)
         assert all([graph[t] == task_sks[0] for t in task_sks[1:13:4]])
 
-    def test_create_taskqueue(self, n4js, network_tyk2, scope_test):
-        # add alchemical network, then try adding a taskqueue
+    def test_create_taskhub(self, n4js, network_tyk2, scope_test):
+        # add alchemical network, then try adding a taskhub
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
 
-        # create taskqueue
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        # create taskhub
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         # verify creation looks as we expect
         m = n4js.graph.run(
             f"""
-                match (n:TaskQueue {{_gufe_key: '{taskqueue_sk.gufe_key}', 
-                                             _org: '{taskqueue_sk.org}', _campaign: '{taskqueue_sk.campaign}', 
-                                             _project: '{taskqueue_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+                match (n:TaskHub {{_gufe_key: '{taskhub_sk.gufe_key}', 
+                                             _org: '{taskhub_sk.org}', _campaign: '{taskhub_sk.campaign}', 
+                                             _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
                 return m
                 """
         ).to_subgraph()
 
         assert m["_gufe_key"] == an.key
 
-        # try adding the task queue again; this should yield exactly the same node
-        taskqueue_sk2: ScopedKey = n4js.create_taskqueue(network_sk)
+        # try adding the task hub again; this should yield exactly the same node
+        taskhub_sk2: ScopedKey = n4js.create_taskhub(network_sk)
 
-        assert taskqueue_sk2 == taskqueue_sk
+        assert taskhub_sk2 == taskhub_sk
 
         records = n4js.graph.run(
             f"""
-                match (n:TaskQueue {{network: '{network_sk}', 
-                                             _org: '{taskqueue_sk.org}', _campaign: '{taskqueue_sk.campaign}', 
-                                             _project: '{taskqueue_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+                match (n:TaskHub {{network: '{network_sk}', 
+                                             _org: '{taskhub_sk.org}', _campaign: '{taskhub_sk.campaign}', 
+                                             _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
                 return n
                 """
         )
 
         assert len(list(records)) == 1
 
-    def test_create_taskqueue_weight(self, n4js, network_tyk2, scope_test):
+    def test_create_taskhub_weight(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
 
-        # create taskqueue
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        # create taskhub
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         n = n4js.graph.run(
             f"""
-                match (n:TaskQueue)
+                match (n:TaskHub)
                 return n
                 """
         ).to_subgraph()
@@ -380,41 +380,41 @@ class TestNeo4jStore(TestStateStore):
         assert n["weight"] == 0.5
 
         # change the weight
-        n4js.set_taskqueue_weight(network_sk, 0.7)
+        n4js.set_taskhub_weight(network_sk, 0.7)
 
         n = n4js.graph.run(
             f"""
-                match (n:TaskQueue)
+                match (n:TaskHub)
                 return n
                 """
         ).to_subgraph()
 
         assert n["weight"] == 0.7
 
-    def test_query_taskqueues(self, n4js: Neo4jStore, network_tyk2, scope_test):
+    def test_query_taskhubs(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         # add a slightly different network
         an2 = AlchemicalNetwork(
             edges=list(an.edges)[:-1], name="tyk2_relative_benchmark_-1"
         )
         network_sk2 = n4js.create_network(an2, scope_test)
-        taskqueue_sk2: ScopedKey = n4js.create_taskqueue(network_sk2)
+        taskhub_sk2: ScopedKey = n4js.create_taskhub(network_sk2)
 
-        tq_sks: List[ScopedKey] = n4js.query_taskqueues()
+        tq_sks: List[ScopedKey] = n4js.query_taskhubs()
         assert len(tq_sks) == 2
         assert all([isinstance(i, ScopedKey) for i in tq_sks])
 
-        tq_dict: Dict[ScopedKey, TaskQueue] = n4js.query_taskqueues(return_gufe=True)
+        tq_dict: Dict[ScopedKey, TaskHub] = n4js.query_taskhubs(return_gufe=True)
         assert len(tq_dict) == 2
-        assert all([isinstance(i, TaskQueue) for i in tq_dict.values()])
+        assert all([isinstance(i, TaskHub) for i in tq_dict.values()])
 
     def test_action_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
@@ -422,15 +422,16 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        # queue the tasks
-        n4js.action_tasks(task_sks, taskqueue_sk)
+        # action the tasks
+        n4js.action_tasks(task_sks, taskhub_sk)
 
-        # count tasks in queue
-        queued_task_sks = n4js.get_taskqueue_tasks(taskqueue_sk)
-        assert task_sks == queued_task_sks
+        # count tasks actioned
+        actioned_task_sks = n4js.get_taskhub_tasks(taskhub_sk)
+        assert set(task_sks) == set(actioned_task_sks)
+        assert len(task_sks) == 10
 
         # add a second network, with the transformation above missing
-        # try to add a task from that transformation to the new network's queue
+        # try to add a task from that transformation to the new network's hub
         # this should fail
         an2 = AlchemicalNetwork(
             edges=list(an.edges)[1:], name="tyk2_relative_benchmark_-1"
@@ -438,15 +439,15 @@ class TestNeo4jStore(TestStateStore):
         assert transformation not in an2.edges
 
         network_sk2 = n4js.create_network(an2, scope_test)
-        taskqueue_sk2: ScopedKey = n4js.create_taskqueue(network_sk2)
+        taskhub_sk2: ScopedKey = n4js.create_taskhub(network_sk2)
 
-        task_sks_fail = n4js.action_tasks(task_sks, taskqueue_sk2)
+        task_sks_fail = n4js.action_tasks(task_sks, taskhub_sk2)
         assert all([i is None for i in task_sks_fail])
 
-    def test_cancel_task(self, n4js, network_tyk2, scope_test):
+    def test_get_unclaimed_tasks(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
@@ -454,17 +455,63 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        # queue the tasks
-        actioned = n4js.action_tasks(task_sks, taskqueue_sk)
+        # action the tasks
+        n4js.action_tasks(task_sks, taskhub_sk)
 
-        # cancel the second and third task in the queue
-        canceled = n4js.cancel_tasks(task_sks[1:3], taskqueue_sk)
+        # claim a single task; There is no deterministic ordering of tasks, so
+        # simply test that the claimed task is one of the actioned tasks
+        claimed = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
 
-        # check that the queue has the contents we expect
+        assert claimed[0] in task_sks
+
+        # query for unclaimed tasks
+        unclaimed = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
+
+        assert set(unclaimed) == set(task_sks) - set(claimed)
+        assert len(unclaimed) == 9
+
+    def test_get_set_weights(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        n4js.action_tasks(task_sks, taskhub_sk)
+
+        # weights should all be the default 1.0
+        weights = n4js.get_task_weights(task_sks, taskhub_sk)
+        assert all([w == 1.0 for w in weights])
+
+        # set weights on the tasks to be all 10
+        n4js.set_task_weights(task_sks, taskhub_sk, weight=10)
+        weights = n4js.get_task_weights(task_sks, taskhub_sk)
+        assert all([w == 10 for w in weights])
+
+    def test_cancel_task(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # action the tasks
+        actioned = n4js.action_tasks(task_sks, taskhub_sk)
+
+        # cancel the second and third task we created
+        canceled = n4js.cancel_tasks(task_sks[1:3], taskhub_sk)
+
+        # check that the hub has the contents we expect
         tasks = n4js.graph.run(
             f"""
-                MATCH (tq:TaskQueue {{_scoped_key: '{taskqueue_sk}'}})-->
-                      (head:TaskQueueHead)<-[:FOLLOWS* {{taskqueue: '{taskqueue_sk}'}}]-(task:Task)
+                MATCH (tq:TaskHub {{_scoped_key: '{taskhub_sk}'}})-[:ACTIONS]->(task:Task)
                 return task
                 """
         )
@@ -475,13 +522,10 @@ class TestNeo4jStore(TestStateStore):
             actioned
         ) - set(canceled)
 
-        # check the order is preserved
-        assert [ScopedKey.from_str(t["_scoped_key"]) for t in tasks[1:]] == actioned[3:]
-
-    def test_get_taskqueue_tasks(self, n4js, network_tyk2, scope_test):
+    def test_get_taskhub_tasks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
@@ -489,23 +533,25 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        # queue the tasks
-        actioned = n4js.action_tasks(task_sks, taskqueue_sk)
+        # action the tasks
+        actioned = n4js.action_tasks(task_sks, taskhub_sk)
+        assert len(actioned) == 10
 
-        # get the full queue back, in order
-        task_sks = n4js.get_taskqueue_tasks(taskqueue_sk)
+        # get the full hub back; no particular order
+        task_sks = n4js.get_taskhub_tasks(taskhub_sk)
 
-        assert actioned == task_sks
+        # no particular order so must check that the sets are equal
+        assert set(actioned) == set(task_sks)
 
         # try getting back as gufe objects instead
-        tasks = n4js.get_taskqueue_tasks(taskqueue_sk, return_gufe=True)
+        tasks = n4js.get_taskhub_tasks(taskhub_sk, return_gufe=True)
 
         assert all([t.key == tsk.gufe_key for t, tsk in zip(tasks.values(), task_sks)])
 
-    def test_claim_taskqueue_tasks(self, n4js: Neo4jStore, network_tyk2, scope_test):
+    def test_claim_taskhub_tasks(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
@@ -513,51 +559,90 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        # shuffle the tasks; want to check that order of claiming is actually
-        # based on order in queue
+        # shuffle the tasks; want to check that order of claiming is unrelated
+        # to order created
         random.shuffle(task_sks)
 
-        # try to claim from an empty queue
-        nothing = n4js.claim_taskqueue_tasks(taskqueue_sk, "early bird task handler")
+        # try to claim from an empty hub
+        nothing = n4js.claim_taskhub_tasks(taskhub_sk, "early bird task handler")
+
         assert nothing[0] is None
 
-        # queue the tasks
-        n4js.action_tasks(task_sks, taskqueue_sk)
+        # action the tasks
+        n4js.action_tasks(task_sks, taskhub_sk)
 
-        # claim a single task; we expect this should be the first in the list
-        claimed = n4js.claim_taskqueue_tasks(taskqueue_sk, "the best task handler")
-        assert claimed[0] == task_sks[0]
+        # claim a single task; there is no deterministic ordering of tasks, so
+        # simply test that the claimed task is one of the actioned tasks
+        claimed = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
 
-        # set all tasks to priority 5, fourth task to priority 1; claim should
-        # yield fourth task
-        for task_sk in task_sks[1:]:
+        assert claimed[0] in task_sks
+
+        # filter out the claimed task so that we have clean list of remaining
+        # tasks
+        remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
+
+        # set all tasks to priority 5, first task to priority 1; claim should
+        # yield first task
+        for task_sk in remaining_tasks:
             n4js.set_task_priority(task_sk, 5)
-        n4js.set_task_priority(task_sks[3], 1)
+        n4js.set_task_priority(remaining_tasks[0], 1)
 
-        claimed2 = n4js.claim_taskqueue_tasks(taskqueue_sk, "another task handler")
-        assert claimed2[0] == task_sks[3]
+        claimed2 = n4js.claim_taskhub_tasks(taskhub_sk, "another task handler")
+        assert claimed2[0] == remaining_tasks[0]
 
-        # next task claimed should be the second task in line
-        claimed3 = n4js.claim_taskqueue_tasks(taskqueue_sk, "yet another task handler")
-        assert claimed3[0] == task_sks[1]
+        remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
+
+        # next task claimed should be one of the remaining tasks
+        claimed3 = n4js.claim_taskhub_tasks(taskhub_sk, "yet another task handler")
+        assert claimed3[0] in remaining_tasks
+
+        remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
         # try to claim multiple tasks
-        claimed4 = n4js.claim_taskqueue_tasks(
-            taskqueue_sk, "last task handler", count=4
-        )
-        assert claimed4[0] == task_sks[2]
-        assert claimed4[1:] == task_sks[4:7]
+        claimed4 = n4js.claim_taskhub_tasks(taskhub_sk, "last task handler", count=4)
+        assert len(claimed4) == 4
+        for sk in claimed4:
+            assert sk in remaining_tasks
 
-        # exhaust the queue
-        claimed5 = n4js.claim_taskqueue_tasks(
-            taskqueue_sk, "last task handler", count=3
-        )
+        # exhaust the hub
+        claimed5 = n4js.claim_taskhub_tasks(taskhub_sk, "last task handler", count=3)
 
-        # try to claim from a queue with no tasks available
-        claimed6 = n4js.claim_taskqueue_tasks(
-            taskqueue_sk, "last task handler", count=2
-        )
+        # try to claim from a hub with no tasks available
+        claimed6 = n4js.claim_taskhub_tasks(taskhub_sk, "last task handler", count=2)
         assert claimed6 == [None] * 2
+
+    def test_claim_task_byweight(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # action the tasks
+        n4js.action_tasks(task_sks, taskhub_sk)
+
+        # shuffle the tasks; want to check that order of claiming is unrelated
+        # to order actioned
+        random.shuffle(task_sks)
+
+        # set weights on the tasks to be all 0, disabling them
+        n4js.set_task_weights(task_sks, taskhub_sk, weight=0)
+
+        # set the weight of the first task to be 10
+        weight_dict = {task_sks[0]: 10}
+        n4js.set_task_weights(weight_dict, taskhub_sk)
+
+        # check that the claimed task is the first task
+        claimed = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
+        assert claimed[0] == task_sks[0]
+
+        # claim again; should get None as no other tasks have any weight
+        claimed_again = n4js.claim_taskhub_tasks(taskhub_sk, "the best task handler")
+        assert claimed_again[0] == None
 
     def test_get_task_transformation(
         self,
@@ -611,7 +696,7 @@ class TestNeo4jStore(TestStateStore):
     def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test, tmpdir):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
-        taskqueue_sk: ScopedKey = n4js.create_taskqueue(network_sk)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)

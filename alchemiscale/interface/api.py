@@ -144,8 +144,8 @@ def create_network(
     an = AlchemicalNetwork.from_dict(network)
     an_sk = n4js.create_network(network=an, scope=scope)
 
-    # create taskqueue for this network
-    n4js.create_taskqueue(an_sk)
+    # create taskhub for this network
+    n4js.create_taskhub(an_sk)
 
     return an_sk
 
@@ -257,8 +257,8 @@ def action_tasks(
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
-    taskqueue_sk = n4js.get_taskqueue(sk)
-    actioned_sks = n4js.action_tasks(tasks, taskqueue_sk)
+    taskhub_sk = n4js.get_taskhub(sk)
+    actioned_sks = n4js.action_tasks(tasks, taskhub_sk)
 
     return [str(sk) if sk is not None else None for sk in actioned_sks]
 
@@ -274,8 +274,8 @@ def cancel_tasks(
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
-    taskqueue_sk = n4js.get_taskqueue(sk)
-    canceled_sks = n4js.cancel_tasks(tasks, taskqueue_sk)
+    taskhub_sk = n4js.get_taskhub(sk)
+    canceled_sks = n4js.cancel_tasks(tasks, taskhub_sk)
 
     return [str(sk) if sk is not None else None for sk in canceled_sks]
 

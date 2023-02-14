@@ -201,7 +201,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self, tasks: List[ScopedKey], network: ScopedKey
     ) -> List[Optional[ScopedKey]]:
         """Action Tasks for execution via the given AlchemicalNetwork's
-        TaskQueue.
+        TaskHub.
 
         A Task cannot be actioned:
             - to an AlchemicalNetwork in a different Scope.
@@ -213,7 +213,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             Task ScopedKeys to action for execution.
         network
             The AlchemicalNetwork ScopedKey to action the Tasks for.
-            The Tasks will be added to the network's associated TaskQueue.
+            The Tasks will be added to the network's associated TaskHub.
 
         Returns
         -------
@@ -232,10 +232,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self, tasks: List[ScopedKey], network: ScopedKey
     ) -> List[ScopedKey]:
         """Cancel Tasks for execution via the given AlchemicalNetwork's
-        TaskQueue.
+        TaskHub.
 
         A Task cannot be canceled:
-            - if it is not present in the AlchemicalNetwork's TaskQueue.
+            - if it is not present in the AlchemicalNetwork's TaskHub.
 
         Parameters
         ----------
@@ -243,7 +243,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             Task ScopedKeys to cancel for execution.
         network
             The AlchemicalNetwork ScopedKey to cancel the Tasks for.
-            The Tasks will be removed from the network's associated TaskQueue.
+            The Tasks will be removed from the network's associated TaskHub.
 
         Returns
         -------

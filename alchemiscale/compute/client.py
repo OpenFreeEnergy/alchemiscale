@@ -19,7 +19,7 @@ from gufe.protocols import ProtocolDAGResult
 
 from ..base.client import AlchemiscaleBaseClient, AlchemiscaleBaseClientError
 from ..models import Scope, ScopedKey
-from ..storage.models import TaskQueue, Task
+from ..storage.models import TaskHub, Task
 
 
 class AlchemiscaleComputeClientError(AlchemiscaleBaseClientError):
@@ -31,32 +31,32 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     _exception = AlchemiscaleComputeClientError
 
-    def query_taskqueues(
+    def query_taskhubs(
         self, scopes: List[Scope], return_gufe=False, limit=None, skip=None
-    ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskQueue]]:
-        """Return all `TaskQueue`s corresponding to given `Scope`."""
+    ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskHub]]:
+        """Return all `TaskHub`s corresponding to given `Scope`."""
         if return_gufe:
-            taskqueues = {}
+            taskhubs = {}
         else:
-            taskqueues = []
+            taskhubs = []
 
         for scope in scopes:
             params = dict(
                 return_gufe=return_gufe, limit=limit, skip=skip, **scope.dict()
             )
             if return_gufe:
-                taskqueues.update(self._query_resource("/taskqueues", params=params))
+                taskhubs.update(self._query_resource("/taskhubs", params=params))
             else:
-                taskqueues.extend(self._query_resource("/taskqueues", params=params))
+                taskhubs.extend(self._query_resource("/taskhubs", params=params))
 
-        return taskqueues
+        return taskhubs
 
-    def claim_taskqueue_tasks(
-        self, taskqueue: ScopedKey, claimant: str, count: int = 1
+    def claim_taskhub_tasks(
+        self, taskhub: ScopedKey, claimant: str, count: int = 1
     ) -> Task:
-        """Claim a `Task` from the specified `TaskQueue`"""
+        """Claim a `Task` from the specified `TaskHub`"""
         data = dict(claimant=claimant, count=count)
-        tasks = self._post_resource(f"taskqueues/{taskqueue}/claim", data)
+        tasks = self._post_resource(f"taskhubs/{taskhub}/claim", data)
 
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]
 

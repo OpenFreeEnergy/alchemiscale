@@ -72,6 +72,7 @@ def second_network_an2(network_tyk2):
 def n4js_preloaded(
     n4js_fresh,
     network_tyk2,
+    transformation,
     second_network_an2,
     multiple_scopes,
     scopeless_credentialed_compute,
@@ -81,21 +82,23 @@ def n4js_preloaded(
     n4js: Neo4jStore = n4js_fresh
 
     # Set up tasks from select set of transformations
-    transformations = list(second_network_an2.edges)[0:3]
+    transformations = list(network_tyk2.edges)[0:3]
 
     # set starting contents for many of the tests in this module
     for single_scope in multiple_scopes:
         # Create initial network for this scope
         sk1 = n4js.create_network(network_tyk2, single_scope)
+
         # Create another network for this scope
         sk2 = n4js.create_network(second_network_an2, single_scope)
-        # add a taskqueue for each network
-        n4js.create_taskqueue(sk1)
-        n4js.create_taskqueue(sk2)
 
-        # add a taskqueue for each network and scope
-        tq_sk1 = n4js.create_taskqueue(sk1)
-        tq_sk2 = n4js.create_taskqueue(sk2)
+        # add a taskhub for each network
+        n4js.create_taskhub(sk1)
+        n4js.create_taskhub(sk2)
+
+        # add a taskhub for each network and scope
+        th_sk1 = n4js.create_taskhub(sk1)
+        th_sk2 = n4js.create_taskhub(sk2)
 
         # Spawn tasks
         task_sks = defaultdict(list)
@@ -107,14 +110,18 @@ def n4js_preloaded(
                 extends = n4js.create_task(trans_sk, extends=extends)
                 task_sks[transformation].append(extends)
 
-        # add tasks to both task queues
+        # set task priority higher the first transformation
+        # used for claim determinism in some tests
+        n4js.set_task_priority(task_sks[transformations[0]][0], 1)
+
+        # add tasks from each transformation selected to each task hubs
         n4js.action_tasks(
-            [task_sks[transformation][0] for transformation in transformations], tq_sk1
+            [task_sks[transformation][0] for transformation in transformations], th_sk1
         )
 
         n4js.action_tasks(
-            [task_sks[transformation][0] for transformation in transformations[::-1]],
-            tq_sk2,
+            [task_sks[transformation][0] for transformation in transformations],
+            th_sk2,
         )
 
     # Create compute identities

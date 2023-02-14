@@ -19,7 +19,7 @@ from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from .client import AlchemiscaleComputeClient
-from ..storage.models import Task, TaskQueue
+from ..storage.models import Task, TaskHub
 from ..models import Scope, ScopedKey
 
 
@@ -85,7 +85,7 @@ class SynchronousComputeService:
         Parameters
         ----------
         limit
-            Maximum number of Tasks to claim at a time from a TaskQueue.
+            Maximum number of Tasks to claim at a time from a TaskHub.
 
         """
         self.api_url = api_url
@@ -114,18 +114,18 @@ class SynchronousComputeService:
         Returns `None` if no Task was available matching service configuration.
 
         """
-        taskqueues: Dict[ScopedKey, TaskQueue] = self.client.query_taskqueues(
+        taskhubs: Dict[ScopedKey, TaskHub] = self.client.query_taskhubs(
             scopes=self.scopes, return_gufe=True
         )
 
-        # based on weights, choose taskqueue to draw from
-        taskqueue: List[ScopedKey] = random.choices(
-            list(taskqueues.keys()), weights=[tq.weight for tq in taskqueues.values()]
+        # based on weights, choose taskhub to draw from
+        taskhub: List[ScopedKey] = random.choices(
+            list(taskhubs.keys()), weights=[tq.weight for tq in taskhubs.values()]
         )[0]
 
-        # claim tasks from the taskqueue
-        tasks = self.client.claim_taskqueue_tasks(
-            taskqueue, claimant=self.name, count=count
+        # claim tasks from the taskhub
+        tasks = self.client.claim_taskhub_tasks(
+            taskhub, claimant=self.name, count=count
         )
 
         return tasks
@@ -160,7 +160,7 @@ class SynchronousComputeService:
 
         sk: ScopedKey = self.client.set_task_result(task, protocoldagresult)
 
-        # TODO: remove claim on task, set to complete; remove from queues
+        # TODO: remove claim on task, set to complete; remove from hubs
         # TODO: if protocoldagresult.ok is False, need to handle this
         # if protocoldagresult.ok():
         #    self.client.

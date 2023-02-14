@@ -80,9 +80,9 @@ def n4js_preloaded(
         # Create another network for this scope
         sk2 = n4js.create_network(an2, single_scope)
 
-        # add a taskqueue for each network
-        n4js.create_taskqueue(sk1)
-        n4js.create_taskqueue(sk2)
+        # add a taskhub for each network
+        n4js.create_taskhub(sk1)
+        n4js.create_taskhub(sk2)
 
     # Create user identities
     for user in [

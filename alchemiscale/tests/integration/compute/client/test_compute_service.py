@@ -36,9 +36,9 @@ class TestSynchronousComputeService:
     ):
         n4js: Neo4jStore = n4js_preloaded
         network_sk = n4js.get_scoped_key(network_tyk2, scope_test)
-        tq_sk = n4js.get_taskqueue(network_sk)
+        tq_sk = n4js.get_taskhub(network_sk)
 
-        task_sks = n4js.get_taskqueue_tasks(tq_sk)
+        task_sks = n4js.get_taskhub_tasks(tq_sk)
 
         protocoldag, transformation, protocoldagresult = service.task_to_protocoldag(
             task_sks[0]
@@ -51,9 +51,9 @@ class TestSynchronousComputeService:
     ):
         n4js: Neo4jStore = n4js_preloaded
         network_sk = n4js.get_scoped_key(network_tyk2, scope_test)
-        tq_sk = n4js.get_taskqueue(network_sk)
+        tq_sk = n4js.get_taskhub(network_sk)
 
-        task_sks = n4js.get_taskqueue_tasks(tq_sk)
+        task_sks = n4js.get_taskhub_tasks(tq_sk)
 
         protocoldagresultref_sk = service.execute(task_sks[0])
 

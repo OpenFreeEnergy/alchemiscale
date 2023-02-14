@@ -66,7 +66,7 @@ class Task(GufeTokenizable):
 
     status: TaskStatusEnum
     priority: int
-    claim: str
+    claim: Optional[str]
     datetime_created: Optional[datetime]
     creator: Optional[str]
     extends: Optional[str]
@@ -75,10 +75,11 @@ class Task(GufeTokenizable):
         self,
         *,
         status: Union[str, TaskStatusEnum] = TaskStatusEnum.waiting,
-        priority: int = 1,
+        priority: int = 10,
         datetime_created: Optional[datetime] = None,
         creator: Optional[str] = None,
         extends: Optional[str] = None,
+        claim: Optional[str] = None,
         _key: str = None,
     ):
         if _key is not None:
@@ -93,6 +94,7 @@ class Task(GufeTokenizable):
 
         self.creator = creator
         self.extends = extends
+        self.claim = claim
 
     def _gufe_tokenize(self):
         # tokenize with uuid
@@ -105,6 +107,7 @@ class Task(GufeTokenizable):
             "datetime_created": self.datetime_created,
             "creator": self.creator,
             "extends": self.extends,
+            "claim": self.claim,
             "_key": str(self.key),
         }
 
@@ -117,23 +120,23 @@ class Task(GufeTokenizable):
         return super()._defaults()
 
 
-class TaskQueue(GufeTokenizable):
+class TaskHub(GufeTokenizable):
     """
 
     Attributes
     ----------
     network : str
-        ScopedKey of the AlchemicalNetwork this TaskQueue corresponds to.
-        Used to ensure that there is only one TaskQueue for a given
+        ScopedKey of the AlchemicalNetwork this TaskHub corresponds to.
+        Used to ensure that there is only one TaskHub for a given
         AlchemicalNetwork using neo4j constraints.
     weight : float
-        Value between 0.0 and 1.0 giving the weight of this TaskQueue. This
-        number is used to allocate attention to this TaskQueue relative to
-        others by a ComputeService. TaskQueues with equal weight will be given
-        equal attention; a TaskQueue with greater weight than another will
+        Value between 0.0 and 1.0 giving the weight of this TaskHub. This
+        number is used to allocate attention to this TaskHub relative to
+        others by a ComputeService. TaskHub with equal weight will be given
+        equal attention; a TaskHub with greater weight than another will
         receive more attention.
 
-        Setting the weight to 0.0 will give the TaskQueue no attention,
+        Setting the weight to 0.0 will give the TaskHub no attention,
         effectively disabling it.
 
     """

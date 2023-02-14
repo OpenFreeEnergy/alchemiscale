@@ -183,11 +183,11 @@ class TestClient:
         # action these task for this network, in reverse order
         actioned_sks = user_client.action_tasks(task_sks[::-1], network_sk)
 
-        # check that the taskqueue looks as we expect
-        taskqueue_sk = n4js.get_taskqueue(network_sk)
-        queued_sks = n4js.get_taskqueue_tasks(taskqueue_sk)
+        # check that the taskhub looks as we expect
+        taskhub_sk = n4js.get_taskhub(network_sk)
+        hub_task_sks = n4js.get_taskhub_tasks(taskhub_sk)
 
-        assert actioned_sks == queued_sks
+        assert set(actioned_sks) == set(hub_task_sks)
         assert actioned_sks == task_sks[::-1]
 
         # create extending tasks; try to action one of them
@@ -224,14 +224,14 @@ class TestClient:
         # try canceling one of these tasks
         canceled_sks = user_client.cancel_tasks(task_sks[1:2], network_sk)
 
-        # check that the taskqueue looks as we expect
-        taskqueue_sk = n4js.get_taskqueue(network_sk)
-        queued_sks = n4js.get_taskqueue_tasks(taskqueue_sk)
+        # check that the taskhub looks as we expect
+        taskhub_sk = n4js.get_taskhub(network_sk)
+        hub_task_sks = n4js.get_taskhub_tasks(taskhub_sk)
 
-        assert [actioned_sks[0], actioned_sks[2]] == queued_sks
+        assert set([actioned_sks[0], actioned_sks[2]]) == set(hub_task_sks)
         assert canceled_sks == [actioned_sks[1]]
 
-        # try to cancel a task that's not present in the queue
+        # try to cancel a task that's not present on the hub
         canceled_sks_2 = user_client.cancel_tasks(task_sks[1:2], network_sk)
 
         assert canceled_sks_2 == [None]
