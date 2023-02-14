@@ -66,7 +66,7 @@ class Task(GufeTokenizable):
 
     status: TaskStatusEnum
     priority: int
-    claim: str
+    claim: Optional[str]
     datetime_created: Optional[datetime]
     creator: Optional[str]
     extends: Optional[str]
@@ -79,6 +79,7 @@ class Task(GufeTokenizable):
         datetime_created: Optional[datetime] = None,
         creator: Optional[str] = None,
         extends: Optional[str] = None,
+        claim: Optional[str] = None,
         _key: str = None,
     ):
         if _key is not None:
@@ -93,6 +94,7 @@ class Task(GufeTokenizable):
 
         self.creator = creator
         self.extends = extends
+        self.claim = claim
 
     def _gufe_tokenize(self):
         # tokenize with uuid
@@ -105,6 +107,7 @@ class Task(GufeTokenizable):
             "datetime_created": self.datetime_created,
             "creator": self.creator,
             "extends": self.extends,
+            "claim": self.claim,
             "_key": str(self.key),
         }
 
