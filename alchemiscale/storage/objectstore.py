@@ -211,8 +211,8 @@ class S3ObjectStore:
             Reference to the serialized `ProtocolDAGResult` in the object store.
 
         """
-        success = protocoldagresult.ok()
-        route = "results" if success else "failures"
+        ok = protocoldagresult.ok()
+        route = "results" if ok else "failures"
 
         # build `location` based on gufe key
         location = os.path.join(
@@ -234,7 +234,7 @@ class S3ObjectStore:
             location=location,
             obj_key=protocoldagresult.key,
             scope=scope,
-            success=success,
+            ok=ok,
         )
 
     def pull_protocoldagresult(
@@ -242,7 +242,7 @@ class S3ObjectStore:
         protocoldagresult: ScopedKey,
         transformation: ScopedKey,
         return_as="gufe",
-        success=True,
+        ok=True,
     ) -> Union[ProtocolDAGResult, dict, str]:
         """Pull the `ProtocolDAGResult` corresponding to the given `ProtocolDAGResultRef`.
 
@@ -265,7 +265,7 @@ class S3ObjectStore:
                 f"transformation scope '{transformation.scope}' differs from protocoldagresult scope '{protocoldagresult.scope}'"
             )
 
-        route = "results" if success else "failures"
+        route = "results" if ok else "failures"
 
         # build `location` based on gufe key
         location = os.path.join(

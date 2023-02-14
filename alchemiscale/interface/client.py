@@ -273,9 +273,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         protocoldagresultrefs: List[ProtocolDAGResultRef],
         transformation: ScopedKey,
-        success: bool,
+        ok: bool,
     ):
-        if success:
+        if ok:
             route = "results"
         else:
             route = "failures"
@@ -332,7 +332,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_prototocoldagresults(
-            protocoldagresultrefs, transformation, success=True
+            protocoldagresultrefs, transformation, ok=True
         )
 
         if return_protocoldagresults:
@@ -359,7 +359,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_prototocoldagresults(
-            protocoldagresultrefs, transformation, success=False
+            protocoldagresultrefs, transformation, ok=False
         )
 
         return pdrs
@@ -376,7 +376,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_prototocoldagresults(
-            protocoldagresultrefs, transformation, success=True
+            protocoldagresultrefs, transformation, ok=True
         )
 
         return pdrs
@@ -393,7 +393,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_prototocoldagresults(
-            protocoldagresultrefs, transformation, success=False
+            protocoldagresultrefs, transformation, ok=False
         )
 
         return pdrs

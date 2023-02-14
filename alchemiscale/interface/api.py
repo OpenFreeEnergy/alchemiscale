@@ -340,7 +340,7 @@ def get_protocoldagresult(
 
     # we leave each ProtocolDAGResult in string form to avoid
     # deserializing/reserializing here; just passing through to client
-    pdr: str = s3os.pull_protocoldagresult(sk, tf_sk, return_as="json", success=True)
+    pdr: str = s3os.pull_protocoldagresult(sk, tf_sk, return_as="json", ok=True)
 
     return [pdr]
 
@@ -364,7 +364,7 @@ def get_protocoldagresult_failure(
 
     # we leave each ProtocolDAGResult in string form to avoid
     # deserializing/reserializing here; just passing through to client
-    pdr: str = s3os.pull_protocoldagresult(sk, tf_sk, return_as="json", success=False)
+    pdr: str = s3os.pull_protocoldagresult(sk, tf_sk, return_as="json", ok=False)
 
     return [pdr]
 

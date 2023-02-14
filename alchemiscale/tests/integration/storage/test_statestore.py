@@ -160,7 +160,7 @@ class TestNeo4jStore(TestStateStore):
         pdr_ref = ProtocolDAGResultRef(
             scope=task_sk.scope,
             obj_key=protocoldagresults[0].key,
-            success=protocoldagresults[0].ok(),
+            ok=protocoldagresults[0].ok(),
         )
 
         # push the result
@@ -185,7 +185,7 @@ class TestNeo4jStore(TestStateStore):
         # try adding additional unique results to one of the tasks
         for pdr in protocoldagresults[1:]:
             pdr_ref_ = ProtocolDAGResultRef(
-                scope=task_sk.scope, obj_key=pdr.key, success=pdr.ok()
+                scope=task_sk.scope, obj_key=pdr.key, ok=pdr.ok()
             )
             # push the result
             n4js.set_task_result(task_sk, pdr_ref_)
@@ -217,7 +217,7 @@ class TestNeo4jStore(TestStateStore):
         pdr_ref = ProtocolDAGResultRef(
             scope=task_sk.scope,
             obj_key=protocoldagresults_failure[0].key,
-            success=protocoldagresults_failure[0].ok(),
+            ok=protocoldagresults_failure[0].ok(),
         )
 
         # push the result
@@ -247,7 +247,7 @@ class TestNeo4jStore(TestStateStore):
         # try adding additional unique results to one of the tasks
         for pdr in protocoldagresults_failure[1:]:
             pdr_ref_ = ProtocolDAGResultRef(
-                scope=task_sk.scope, obj_key=pdr.key, success=pdr.ok()
+                scope=task_sk.scope, obj_key=pdr.key, ok=pdr.ok()
             )
             # push the result
             n4js.set_task_result(task_sk, pdr_ref_)
@@ -672,7 +672,7 @@ class TestNeo4jStore(TestStateStore):
 
         # pretend we completed this one, and we have a protocoldagresult for it
         pdr_ref = ProtocolDAGResultRef(
-            scope=task_sk.scope, obj_key=protocoldagresults[0].key, success=True
+            scope=task_sk.scope, obj_key=protocoldagresults[0].key, ok=True
         )
 
         # try to push the result
@@ -715,7 +715,7 @@ class TestNeo4jStore(TestStateStore):
             protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
 
         pdr_ref = ProtocolDAGResultRef(
-            scope=task_sk.scope, obj_key=protocoldagresult.key, success=True
+            scope=task_sk.scope, obj_key=protocoldagresult.key, ok=True
         )
 
         # try to push the result
@@ -750,7 +750,7 @@ class TestNeo4jStore(TestStateStore):
         pdr_ref = ProtocolDAGResultRef(
             scope=task_sk.scope,
             obj_key=protocoldagresults[0].key,
-            success=protocoldagresults[0].ok(),
+            ok=protocoldagresults[0].ok(),
         )
 
         # push the result
@@ -773,7 +773,7 @@ class TestNeo4jStore(TestStateStore):
         pdr_ref2 = ProtocolDAGResultRef(
             scope=task_sk.scope,
             obj_key=protocoldagresults[1].key,
-            success=protocoldagresults[1].ok(),
+            ok=protocoldagresults[1].ok(),
         )
 
         # push the result
@@ -805,7 +805,7 @@ class TestNeo4jStore(TestStateStore):
         pdr_ref = ProtocolDAGResultRef(
             scope=task_sk.scope,
             obj_key=protocoldagresults_failure[0].key,
-            success=protocoldagresults_failure[0].ok(),
+            ok=protocoldagresults_failure[0].ok(),
         )
 
         # push the result
@@ -834,7 +834,7 @@ class TestNeo4jStore(TestStateStore):
         pdr_ref2 = ProtocolDAGResultRef(
             scope=task_sk.scope,
             obj_key=protocoldagresults_failure[1].key,
-            success=protocoldagresults_failure[1].ok(),
+            ok=protocoldagresults_failure[1].ok(),
         )
 
         # push the result
