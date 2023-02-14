@@ -699,7 +699,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         q = f"""
         MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
-        WHERE res.success = true
+        WHERE res.ok = true
         RETURN res
         """
         return self._get_protocoldagresultrefs(q)
@@ -712,7 +712,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         q = f"""
         MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
-        WHERE res.success = false
+        WHERE res.ok = false
         RETURN res
         """
         return self._get_protocoldagresultrefs(q)
@@ -1431,7 +1431,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         q = f"""
         MATCH (task:Task {{_scoped_key: "{task}"}}),
               (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
-        WHERE res.success = true
+        WHERE res.ok = true
         RETURN res
         """
         return self._get_protocoldagresultrefs(q)
@@ -1442,7 +1442,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         q = f"""
         MATCH (task:Task {{_scoped_key: "{task}"}}),
               (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
-        WHERE res.success = false
+        WHERE res.ok = false
         RETURN res
         """
         return self._get_protocoldagresultrefs(q)

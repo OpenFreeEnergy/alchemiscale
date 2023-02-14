@@ -148,7 +148,7 @@ async def get_task_transformation(
 
         # we keep this as a string to avoid useless deserialization/reserialization here
         pdr: str = s3os.pull_protocoldagresult(
-            pdr_sk, tf_sk, return_as="json", success=True
+            pdr_sk, tf_sk, return_as="json", ok=True
         )
     else:
         pdr = None
