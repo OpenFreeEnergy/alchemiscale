@@ -17,11 +17,15 @@ class TestComputeAPI:
         response = test_client.get("/check")
         assert response.status_code == 200
 
-    def test_scopes(self, test_client):
-        response = test_client.get("/scopes")
-        print(response)
+    def test_scopes(
+        self, n4js_preloaded, test_client, fully_scoped_credentialed_compute
+    ):
+        response = test_client.get(
+            f"/scopes/{fully_scoped_credentialed_compute.identifier}"
+        )
         assert response.status_code == 200
-
+        scopes = response.json()
+        assert scopes == fully_scoped_credentialed_compute.scopes
 
     def test_query_taskhubs(self, n4js_preloaded, test_client):
         response = test_client.get("/taskhubs")

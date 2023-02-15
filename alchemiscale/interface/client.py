@@ -14,14 +14,11 @@ from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 
-
 from ..base.client import AlchemiscaleBaseClient, AlchemiscaleBaseClientError
 from ..models import Scope, ScopedKey
 from ..storage.models import Task, ProtocolDAGResultRef
 from ..strategies import Strategy
-from ..security.models import (
-    CredentialedUserIdentity
-)
+from ..security.models import CredentialedUserIdentity
 
 
 class AlchemiscaleClientError(AlchemiscaleBaseClientError):
@@ -404,4 +401,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return pdrs
 
     def list_scopes(self):
-        return self._get_resource("/scopes", params={'identifier':self.identifier, 'id_type':CredentialedUserIdentity}, return_gufe=False)
+        return self._get_resource(
+            "/scopes",
+            params={
+                "identifier": self.identifier,
+                "identifier_type_cls": CredentialedUserIdentity,
+            },
+            return_gufe=False,
+        )
