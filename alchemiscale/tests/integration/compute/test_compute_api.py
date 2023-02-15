@@ -17,6 +17,12 @@ class TestComputeAPI:
         response = test_client.get("/check")
         assert response.status_code == 200
 
+    def test_scopes(self, test_client):
+        response = test_client.get("/scopes")
+        print(response)
+        assert response.status_code == 200
+
+
     def test_query_taskhubs(self, n4js_preloaded, test_client):
         response = test_client.get("/taskhubs")
         assert response.status_code == 200
