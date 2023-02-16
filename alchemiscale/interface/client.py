@@ -402,10 +402,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def list_scopes(self):
         return self._get_resource(
-            "/scopes",
-            params={
-                "identifier": self.identifier,
-                "identifier_type_cls": CredentialedUserIdentity,
-            },
+            f"/scopes/{self.identifier}",
             return_gufe=False,
         )

@@ -82,7 +82,12 @@ async def check(
 
 
 @router.get("/scopes/{identifier}")
-async def scopes(*, identifier, n4js: Neo4jStore = Depends(get_n4js_depends)):
+async def scopes(
+    *,
+    identifier,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
     scopes = n4js.list_scopes(identifier, CredentialedComputeIdentity)
     return [str(scope) for scope in scopes]
 

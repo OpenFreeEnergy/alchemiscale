@@ -63,6 +63,14 @@ class TestClient:
     ):
         user_client._api_check()
 
+    def test_list_scope(
+        self,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        uvicorn_server,
+    ):
+        scopes = user_client.list_scopes()
+
     ### inputs
 
     def test_create_network(

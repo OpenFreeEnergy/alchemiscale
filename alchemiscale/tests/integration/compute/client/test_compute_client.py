@@ -50,6 +50,14 @@ class TestComputeClient:
     ):
         compute_client._api_check()
 
+    def test_list_scope(
+        self,
+        n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        uvicorn_server,
+    ):
+        scopes = compute_client.list_scopes()
+
     ### compute
 
     def test_query_taskhubs(
