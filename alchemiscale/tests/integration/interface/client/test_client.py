@@ -68,8 +68,11 @@ class TestClient:
         n4js_preloaded,
         user_client: client.AlchemiscaleClient,
         uvicorn_server,
+        multiple_scopes,
     ):
         scopes = user_client.list_scopes()
+        # multiple scopes matches identity used to initialise the client in conftest
+        assert set(scopes) == {str(s) for s in multiple_scopes}
 
     ### inputs
 
