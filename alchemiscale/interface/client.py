@@ -400,7 +400,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return pdrs
 
-    def list_scopes(self):
+    def list_scopes(self) -> List[str]:
         return self._get_resource(
             f"/scopes/{self.identifier}",
             return_gufe=False,

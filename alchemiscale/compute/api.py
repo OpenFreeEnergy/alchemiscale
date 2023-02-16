@@ -35,7 +35,6 @@ from ..security.models import (
     Token,
     TokenData,
     CredentialedComputeIdentity,
-    CredentialedEntity,
 )
 
 
@@ -87,7 +86,7 @@ async def scopes(
     identifier,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-):
+) -> List[str]:
     scopes = n4js.list_scopes(identifier, CredentialedComputeIdentity)
     return [str(scope) for scope in scopes]
 

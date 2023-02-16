@@ -89,7 +89,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
         return ScopedKey.from_dict(pdr_sk)
 
-    def list_scopes(self):
+    def list_scopes(self) -> List[str]:
         return self._get_resource(
             f"/scopes/{self.identifier}",
             return_gufe=False,
