@@ -725,6 +725,68 @@ class TestNeo4jStore(TestStateStore):
         claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=1)
         assert claimed_task_sks == collected_sks[1:2]
 
+    def test_action_claim_task_extends_bifuricating(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
+        # tests the ability to action and claim a set of tasks in an
+        # EXTENDS chain
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 7 tasks that extend in a bifuricating  EXTENDS chain
+
+        first_task = n4js.create_task(transformation_sk)
+
+        layer_two_1 = n4js.create_task(transformation_sk, extends=first_task)
+        layer_two_2 = n4js.create_task(transformation_sk, extends=first_task)
+
+        layer_three_1 = n4js.create_task(transformation_sk, extends=layer_two_1)
+        layer_three_2 = n4js.create_task(transformation_sk, extends=layer_two_1)
+        layer_three_3 = n4js.create_task(transformation_sk, extends=layer_two_2)
+        layer_three_4 = n4js.create_task(transformation_sk, extends=layer_two_2)
+
+        import pdb
+
+        pdb.set_trace()
+
+        collected_sks = [
+            first_task,
+            layer_two_1,
+            layer_two_2,
+            layer_three_1,
+            layer_three_2,
+            layer_three_3,
+            layer_three_4,
+        ]
+        # action the tasks
+        actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
+        assert set(actioned_task_sks) == set(collected_sks)
+
+        # claim the first task
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler")
+
+        assert claimed_task_sks == [first_task]
+        # complete the first task
+        n4js.set_task_complete(first_task)
+
+        # claim the next layer of tasks, should be all of layer two
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=2)
+        assert set(claimed_task_sks) == set([layer_two_1, layer_two_2])
+
+        # complete the layer two tasks
+        n4js.set_task_complete(layer_two_1)
+        n4js.set_task_complete(layer_two_2)
+
+        # claim the next layer of tasks, should be all of layer three
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=4)
+        assert set(claimed_task_sks) == set(
+            [layer_three_1, layer_three_2, layer_three_3, layer_three_4]
+        )
+
     def test_claim_task_byweight(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
