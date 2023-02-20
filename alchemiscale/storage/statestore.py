@@ -862,6 +862,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 // only proceed for cases where task is not already actioned on hub
                 WITH th, an, task
                 WHERE NOT (th)-[:ACTIONS]->(task)
+                // call allows us to return the results to the outer scope
                 CALL {{
                 WITH th, an, task
                     // create the connections 
@@ -873,6 +874,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                     RETURN collect(task) as main_task
                 }}
                 
+                // now we need to check if the task extends another task
+                // call allows us to return the results to the outer scope
                 CALL {{
                 WITH th, an, task
                     MATCH (task)-[:EXTENDS]->(extends_task:Task)
@@ -882,19 +885,21 @@ class Neo4jStore(AlchemiscaleStateStore):
                     return collect(extends_task) as extends 
                 }}
 
+                // we used collect so return type is a 'Cursor' object
                 return main_task, extends
 
                 """
-                import pdb
-                pdb.set_trace()
-
-                task = tx.run(q)
-                print(task)
-                actioned_sks.append(
-                    ScopedKey.from_str(task["_scoped_key"])
-                    if task is not None
-                    else None
-                )
+                tasks = tx.run(q)
+                # ugly nesting because of `collect`
+                for stream in tasks:
+                    for graph in stream:
+                        for record in graph:
+                            if record is not None:
+                                actioned_sks.append(
+                                    ScopedKey.from_str(record.get("_scoped_key"))
+                                )
+                            else:
+                                actioned_sks.append(None)
 
         return actioned_sks
 

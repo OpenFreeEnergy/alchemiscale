@@ -533,17 +533,12 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        # import pdb
-        # pdb.set_trace()
-
         # action the tasks
         actioned = n4js.action_tasks(task_sks, taskhub_sk)
         assert len(actioned) == 10
-        # print(actioned)
 
         # get the full hub back; no particular order
         task_sks = n4js.get_taskhub_tasks(taskhub_sk)
-        # print(task_sks)
 
         # no particular order so must check that the sets are equal
         assert set(actioned) == set(task_sks)
