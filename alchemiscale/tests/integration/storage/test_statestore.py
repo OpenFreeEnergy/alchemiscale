@@ -444,6 +444,27 @@ class TestNeo4jStore(TestStateStore):
         task_sks_fail = n4js.action_tasks(task_sks, taskhub_sk2)
         assert all([i is None for i in task_sks_fail])
 
+    def test_action_task_extends(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks that extend in an EXTENDS chain
+        first_task = n4js.create_task(transformation_sk)
+        collected_sks = [first_task]
+        prev = first_task
+        for i in range(9):
+            curr = n4js.create_task(transformation_sk, extends=prev)
+            collected_sks.append(curr)
+            prev = curr
+
+        # action the tasks
+        actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
+        assert set(actioned_task_sks) == set(collected_sks)
+
     def test_get_unclaimed_tasks(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
