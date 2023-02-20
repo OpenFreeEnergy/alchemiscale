@@ -749,10 +749,6 @@ class TestNeo4jStore(TestStateStore):
         layer_three_3 = n4js.create_task(transformation_sk, extends=layer_two_2)
         layer_three_4 = n4js.create_task(transformation_sk, extends=layer_two_2)
 
-        import pdb
-
-        pdb.set_trace()
-
         collected_sks = [
             first_task,
             layer_two_1,
