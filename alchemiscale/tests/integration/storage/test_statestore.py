@@ -632,6 +632,47 @@ class TestNeo4jStore(TestStateStore):
         claimed6 = n4js.claim_taskhub_tasks(taskhub_sk, "last task handler", count=2)
         assert claimed6 == [None] * 2
 
+    def test_claim_action_task_extends(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks that extend in an EXTENDS chain
+        first_task = n4js.create_task(transformation_sk)
+        collected_sks = [first_task]
+        prev = first_task
+        for i in range(9):
+            curr = n4js.create_task(transformation_sk, extends=prev)
+            collected_sks.append(curr)
+            prev = curr
+
+        # action the tasks
+        actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
+        assert set(actioned_task_sks) == set(collected_sks)
+
+        # claim the first task
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler")
+
+        assert claimed_task_sks == collected_sks[:1]
+
+        # claim the next 9 tasks
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=9)
+        # oops the extends task is still running!
+        assert claimed_task_sks == [None] * 9
+
+        # complete the extends task
+        n4js.set_task_complete(claimed_task_sks[0])
+
+        # claim the next 9 tasks again
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=9)
+        # oops the extends task is still running!
+        assert claimed_task_sks == collected_sks[1:]
+
     def test_claim_task_byweight(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)

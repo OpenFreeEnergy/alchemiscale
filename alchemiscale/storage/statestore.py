@@ -1118,8 +1118,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         This method will claim Tasks from a TaskHub according to the following scheme:
         1. It will select Tasks with the highest priority.
-        2. Of those, a Task will be claimed stochastically based on the `weight` of its ACTIONS relationship on the TaskHub.
-        3. Repeat steps 1 and 2. until `count` Tasks have been claimed.
+        2. It will look to see if it has any `EXTENDS` relationships to other Tasks and checks if they are complete or NULL.
+        3. Of those, a Task will be claimed stochastically based on the `weight` of its ACTIONS relationship on the TaskHub.
+        4. Repeat steps 1 and 2. until `count` Tasks have been claimed.
 
         If no Task is available, then `None` is given in its place.
 
@@ -1131,23 +1132,28 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         taskpool_q = f"""
         // get list of all 'waiting' tasks in the hub 
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(waiting_task:Task)
-
-        // filter on 'waiting' tasks and relationships that are greater than 0 weight
-        WITH th, waiting_task, ar
-        WHERE waiting_task.status = 'waiting'
-        AND ar.weight > 0
-
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[task_pool_actions:ACTIONS]-(task_pool:Task)
+        WHERE task_pool.status = 'waiting'
+        AND task_pool_actions.weight > 0
+        OPTIONAL MATCH (task_pool)-[:EXTENDS]->(other_task:Task)
+        WITH th,  task_pool, other_task, task_pool_actions
+        WHERE NOT (th)-[:ACTIONS]->(task_pool)
+        AND other_task.status = 'complete' OR other_task IS NULL
         // get the lowest priority
-        WITH MIN(waiting_task.priority) as min_priority
+        WITH MIN(task_pool.priority) as min_priority
 
-        // match where the priority is the lowest (first in line)
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[tasks_actions:ACTIONS]->(tasks:Task)
-        WHERE tasks.status = 'waiting'
-        AND tasks.priority = min_priority
+        // match again where we filter on lowest priority
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[task_pool_actions:ACTIONS]-(task_pool:Task)
+        WHERE task_pool.status = 'waiting'
+        AND task_pool_actions.weight > 0
+        AND task_pool.priority = min_priority
+        OPTIONAL MATCH (task_pool)-[:EXTENDS]->(other_task:Task)
+        WITH th,  task_pool, other_task, task_pool_actions
+        WHERE NOT (th)-[:ACTIONS]->(task_pool)
+        AND other_task.status = 'complete' OR other_task IS NULL
 
         // return the tasks       
-        RETURN tasks, tasks_actions
+        RETURN task_pool, task_pool_actions
         """
 
         tasks = []
@@ -1486,10 +1492,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def set_task_complete(
         self,
-        task: Union[Task, ScopedKey],
-        cancel=True,
+        task: ScopedKey,
     ):
-        ...
+        q = f"""
+        MATCH (t:Task {{_scoped_key: "{task}"}})
+        SET t.status = 'complete'
+        """
+        with self.transaction() as tx:
+            tx.run(q)
 
     def set_task_error(
         self,
