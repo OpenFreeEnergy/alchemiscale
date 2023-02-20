@@ -190,15 +190,14 @@ class TestClient:
         assert set(actioned_sks) == set(hub_task_sks)
         assert actioned_sks == task_sks[::-1]
 
-        # create extending tasks; try to action one of them
-        # this should yield `None` in results, since it shouldn't be possible to action these tasks
-        # if they extend a task that isn't 'complete'
+        # create extending tasks; these should be actioned to the
+        # taskhub but not claimable
         task_sks_e = user_client.create_tasks(
             transformation_sk, count=4, extends=task_sks[0]
         )
         actioned_sks_e = user_client.action_tasks(task_sks_e, network_sk)
 
-        assert all([i is None for i in actioned_sks_e])
+        assert set(task_sks_e) == set(actioned_sks_e)
 
     def test_cancel_tasks(
         self,

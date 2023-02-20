@@ -846,9 +846,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         A given compute task can be represented in any number of
         AlchemicalNetwork TaskHubs, or none at all.
 
-        If this Task has an EXTENDS relationship to another Task, that Task must
-        be 'complete' before this Task can be added to *any* TaskHub.
-
+        If this Task has an EXTENDS relationship to another Task, that Task will
+        also be added to the TaskHub. Logic in the claim_tasks method will
+        ensure that the Task is only claimed if the task it EXTENDS has been completed.
         """
         with self.transaction() as tx:
             actioned_sks = []
