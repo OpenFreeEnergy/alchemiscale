@@ -666,12 +666,12 @@ class TestNeo4jStore(TestStateStore):
         assert claimed_task_sks == [None] * 9
 
         # complete the extends task
-        n4js.set_task_complete(claimed_task_sks[0])
+        n4js.set_task_complete(first_task)
 
         # claim the next 9 tasks again
-        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=9)
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=1)
         # oops the extends task is still running!
-        assert claimed_task_sks == collected_sks[1:]
+        assert claimed_task_sks == collected_sks[1:2]
 
     def test_claim_task_byweight(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2

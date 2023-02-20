@@ -1137,8 +1137,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         AND task_pool_actions.weight > 0
         OPTIONAL MATCH (task_pool)-[:EXTENDS]->(other_task:Task)
         WITH th,  task_pool, other_task, task_pool_actions
-        WHERE NOT (th)-[:ACTIONS]->(task_pool)
-        AND other_task.status = 'complete' OR other_task IS NULL
+        WHERE other_task.status = 'complete' OR other_task IS NULL
         // get the lowest priority
         WITH MIN(task_pool.priority) as min_priority
 
@@ -1149,8 +1148,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         AND task_pool.priority = min_priority
         OPTIONAL MATCH (task_pool)-[:EXTENDS]->(other_task:Task)
         WITH th,  task_pool, other_task, task_pool_actions
-        WHERE NOT (th)-[:ACTIONS]->(task_pool)
-        AND other_task.status = 'complete' OR other_task IS NULL
+        WHERE other_task.status = 'complete' OR other_task IS NULL
 
         // return the tasks       
         RETURN task_pool, task_pool_actions
