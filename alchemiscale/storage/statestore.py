@@ -859,24 +859,37 @@ class Neo4jStore(AlchemiscaleStateStore):
                 
                 // get the task we want to add to the hub; check that it connects to same network
                 MATCH (task:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
-                OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
-
                 // only proceed for cases where task is not already actioned on hub
-                // and only EXTENDS a 'complete' task
-                WITH th, an, task, other_task
+                WITH th, an, task
                 WHERE NOT (th)-[:ACTIONS]->(task)
-                  AND other_task.status = 'complete' OR other_task IS NULL
+                CALL {{
+                WITH th, an, task
+                    // create the connections 
+                    // set the ACTIONS relationship weight to default weight of 1.0
+                    CREATE (th)-[ar:ACTIONS {{weight: 1.0}}]->(task)
+                    // set the task property to the scoped key of the Task
+                    // this is a convenience for when we have to loop over relationships in Python
+                    SET ar.task = task._scoped_key
+                    RETURN collect(task) as main_task
+                }}
+                
+                CALL {{
+                WITH th, an, task
+                    MATCH (task)-[:EXTENDS]->(extends_task:Task)
+                    WHERE NOT (th)-[:ACTIONS]->(extends_task) OR extends_task IS NULL
+                    CREATE (th)-[ar_e:ACTIONS {{weight: 1.0}}]->(extends_task)
+                    SET ar_e.task = extends_task._scoped_key
+                    return collect(extends_task) as extends 
+                }}
 
-                // create the connections 
-                // set the ACTIONS relationship weight to default weight of 1.0
-                CREATE (th)-[ar:ACTIONS {{weight: 1.0}}]->(task)
+                return main_task, extends
 
-                // set the task property to the scoped key of the Task
-                // this is a convenience for when we have to loop over relationships in Python
-                SET ar.task = task._scoped_key
-                RETURN task
                 """
-                task = tx.run(q).to_subgraph()
+                import pdb
+                pdb.set_trace()
+
+                task = tx.run(q)
+                print(task)
                 actioned_sks.append(
                     ScopedKey.from_str(task["_scoped_key"])
                     if task is not None
