@@ -48,7 +48,7 @@ class TestAPI:
 
     def test_scopes(self, n4js_preloaded, test_client, fully_scoped_credentialed_user):
         response = test_client.get(
-            f"/scopes/{fully_scoped_credentialed_user.identifier}"
+            f"/identity/{fully_scoped_credentialed_user.identifier}/scopes"
         )
         assert response.status_code == 200
         scopes = response.json()

@@ -59,7 +59,7 @@ class TestComputeClient:
     ):
         scopes = compute_client.list_scopes()
         # scope_test matches identity used to initialise the client in conftest
-        assert scopes == [str(scope_test)]
+        assert scopes == [scope_test]
 
     ### compute
 

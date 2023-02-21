@@ -72,7 +72,7 @@ class TestClient:
     ):
         scopes = user_client.list_scopes()
         # multiple scopes matches identity used to initialise the client in conftest
-        assert set(scopes) == {str(s) for s in multiple_scopes}
+        assert set(scopes) == set(multiple_scopes)
 
     ### inputs
 

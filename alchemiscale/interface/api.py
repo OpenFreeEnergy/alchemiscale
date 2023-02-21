@@ -74,8 +74,8 @@ async def check(
     _check_store_connectivity(n4js, s3os)
 
 
-@router.get("/scopes/{identifier}")
-async def scopes(
+@router.get("/identity/{identifier}/scopes")
+async def list_scopes(
     *,
     identifier,
     n4js: Neo4jStore = Depends(get_n4js_depends),

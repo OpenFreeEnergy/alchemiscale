@@ -30,6 +30,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     _exception = AlchemiscaleClientError
 
+    def list_scopes(self) -> List[Scope]:
+        scopes = self._get_resource(
+            f"/identity/{self.identifier}/scopes",
+            return_gufe=False,
+        )
+        return [Scope.from_str(s) for s in scopes]
+
     ### inputs
 
     def get_scoped_key(self, obj: GufeTokenizable, scope: Scope) -> ScopedKey:
@@ -400,8 +407,3 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return pdrs
 
-    def list_scopes(self) -> List[str]:
-        return self._get_resource(
-            f"/scopes/{self.identifier}",
-            return_gufe=False,
-        )
