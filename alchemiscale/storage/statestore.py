@@ -1124,7 +1124,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         1. `waiting` Tasks with the highest priority are selected for consideration.
         2. Tasks with an `EXTENDS` relationship to an incomplete Task are dropped from consideration.
         3. Of those that remain, a Task is claimed stochastically based on the `weight` of its ACTIONS relationship on the TaskHub.
-        
+
         This process is repeated until `count` Tasks have been claimed.
         If no Task is available, then `None` is given in its place.
 
