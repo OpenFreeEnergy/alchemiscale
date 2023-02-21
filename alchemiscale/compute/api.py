@@ -80,14 +80,14 @@ async def check(
     _check_store_connectivity(n4js, s3os)
 
 
-@router.get("/identity/{identifier}/scopes")
+@router.get("/identities/{identity_identifier}/scopes")
 async def list_scopes(
     *,
-    identifier,
+    identity_identifier,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> List[str]:
-    scopes = n4js.list_scopes(identifier, CredentialedComputeIdentity)
+    scopes = n4js.list_scopes(identity_identifier, CredentialedComputeIdentity)
     return [str(scope) for scope in scopes]
 
 

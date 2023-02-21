@@ -32,7 +32,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def list_scopes(self) -> List[Scope]:
         scopes = self._get_resource(
-            f"/identity/{self.identifier}/scopes",
+            f"/identities/{self.identifier}/scopes",
             return_gufe=False,
         )
         return [Scope.from_str(s) for s in scopes]
