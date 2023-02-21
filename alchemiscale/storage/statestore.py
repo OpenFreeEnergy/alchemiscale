@@ -863,48 +863,19 @@ class Neo4jStore(AlchemiscaleStateStore):
                 // only proceed for cases where task is not already actioned on hub
                 WITH th, an, task
                 WHERE NOT (th)-[:ACTIONS]->(task)
-
-                // call allows us to return the results to the outer scope
-                CALL {{
-                WITH th, an, task
-
-                    // create the connections 
-                    // set the ACTIONS relationship weight to default weight of 1.0
-                    CREATE (th)-[ar:ACTIONS {{weight: 1.0}}]->(task)
-
-                    // set the task property to the scoped key of the Task
-                    // this is a convenience for when we have to loop over relationships in Python
-                    SET ar.task = task._scoped_key
-                    RETURN collect(task) as main_task
-                }}
-                
-                // now we need to check if the task extends another task
-                // call allows us to return the results to the outer scope
-                CALL {{
-                WITH th, an, task
-                    MATCH (task)-[:EXTENDS]->(extends_task:Task)
-                    WHERE NOT (th)-[:ACTIONS]->(extends_task) OR extends_task IS NULL
-                    CREATE (th)-[ar_e:ACTIONS {{weight: 1.0}}]->(extends_task)
-                    SET ar_e.task = extends_task._scoped_key
-                    return collect(extends_task) as extends 
-                }}
-
-                // we used collect so return type is a 'Cursor' object
-                return main_task, extends
-
+                // create the connection
+                CREATE (th)-[ar:ACTIONS {{weight: 1.0}}]->(task)
+                // set the task property to the scoped key of the Task
+                // this is a convenience for when we have to loop over relationships in Python
+                SET ar.task = task._scoped_key
+                RETURN task
                 """
-                tasks = tx.run(q)
-                # ugly nesting because of `collect`
-                for stream in tasks:
-                    for graph in stream:
-                        for record in graph:
-                            if record is not None:
-                                actioned_sks.append(
-                                    ScopedKey.from_str(record.get("_scoped_key"))
-                                )
-                            else:
-                                actioned_sks.append(None)
-
+                task = tx.run(q).to_subgraph()
+                actioned_sks.append(
+                    ScopedKey.from_str(task["_scoped_key"])
+                    if task is not None
+                    else None
+                )
         return actioned_sks
 
     def set_task_weights(
