@@ -406,4 +406,3 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         return pdrs
-

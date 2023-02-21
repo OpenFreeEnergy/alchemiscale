@@ -95,4 +95,3 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         pdr_sk = self._post_resource(f"tasks/{task}/results", data)
 
         return ScopedKey.from_dict(pdr_sk)
-
