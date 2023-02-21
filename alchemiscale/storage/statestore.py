@@ -859,15 +859,19 @@ class Neo4jStore(AlchemiscaleStateStore):
                 
                 // get the task we want to add to the hub; check that it connects to same network
                 MATCH (task:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
+
                 // only proceed for cases where task is not already actioned on hub
                 WITH th, an, task
                 WHERE NOT (th)-[:ACTIONS]->(task)
+
                 // call allows us to return the results to the outer scope
                 CALL {{
                 WITH th, an, task
+
                     // create the connections 
                     // set the ACTIONS relationship weight to default weight of 1.0
                     CREATE (th)-[ar:ACTIONS {{weight: 1.0}}]->(task)
+
                     // set the task property to the scoped key of the Task
                     // this is a convenience for when we have to loop over relationships in Python
                     SET ar.task = task._scoped_key
@@ -1116,42 +1120,49 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> List[Union[ScopedKey, None]]:
         """Claim a TaskHub Task.
 
-        This method will claim Tasks from a TaskHub according to the following scheme:
-        1. It will select Tasks with the highest priority.
-        2. It will look to see if it has any `EXTENDS` relationships to other Tasks and checks if they are complete or NULL.
-        3. Of those, a Task will be claimed stochastically based on the `weight` of its ACTIONS relationship on the TaskHub.
-        4. Repeat steps 1 and 2. until `count` Tasks have been claimed.
-
+        This method will claim Tasks from a TaskHub according to the following process:
+        1. `waiting` Tasks with the highest priority are selected for consideration.
+        2. Tasks with an `EXTENDS` relationship to an incomplete Task are dropped from consideration.
+        3. Of those that remain, a Task is claimed stochastically based on the `weight` of its ACTIONS relationship on the TaskHub.
+        
+        This process is repeated until `count` Tasks have been claimed.
         If no Task is available, then `None` is given in its place.
 
         Parameters
         ----------
+        claimant
+            Unique identifier for the entity claiming the Tasks for execution.
         count
             Claim the given number of Tasks in a single transaction.
 
         """
         taskpool_q = f"""
         // get list of all 'waiting' tasks in the hub 
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[task_pool_actions:ACTIONS]-(task_pool:Task)
-        WHERE task_pool.status = 'waiting'
-        AND task_pool_actions.weight > 0
-        OPTIONAL MATCH (task_pool)-[:EXTENDS]->(other_task:Task)
-        WITH th,  task_pool, other_task, task_pool_actions
-        WHERE other_task.status = 'complete' OR other_task IS NULL
-        // get the lowest priority
-        WITH MIN(task_pool.priority) as min_priority
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
+        WHERE task.status = 'waiting'
+        AND actions.weight > 0
+        OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
-        // match again where we filter on lowest priority
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[task_pool_actions:ACTIONS]-(task_pool:Task)
-        WHERE task_pool.status = 'waiting'
-        AND task_pool_actions.weight > 0
-        AND task_pool.priority = min_priority
-        OPTIONAL MATCH (task_pool)-[:EXTENDS]->(other_task:Task)
-        WITH th,  task_pool, other_task, task_pool_actions
+        // drop tasks from consideration if they EXTENDS an incomplete task
+        WITH task, other_task, actions
         WHERE other_task.status = 'complete' OR other_task IS NULL
 
-        // return the tasks       
-        RETURN task_pool, task_pool_actions
+        // get the highest priority present (value nearest to 1)
+        WITH MIN(task.priority) as min_priority
+
+        // match again, this time filtering on lowest priority
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
+        WHERE task.status = 'waiting'
+        AND actions.weight > 0
+        AND task.priority = min_priority
+        OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
+
+        // drop tasks from consideration if they EXTENDS an incomplete task
+        WITH task, other_task, actions
+        WHERE other_task.status = 'complete' OR other_task IS NULL
+
+        // return the tasks and actions relationships
+        RETURN task, actions
         """
 
         tasks = []
