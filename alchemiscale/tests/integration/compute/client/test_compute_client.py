@@ -50,6 +50,17 @@ class TestComputeClient:
     ):
         compute_client._api_check()
 
+    def test_list_scope(
+        self,
+        n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        uvicorn_server,
+        scope_test,
+    ):
+        scopes = compute_client.list_scopes()
+        # scope_test matches identity used to initialise the client in conftest
+        assert scopes == [scope_test]
+
     ### compute
 
     def test_query_taskhubs(

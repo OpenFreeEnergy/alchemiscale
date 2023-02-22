@@ -17,7 +17,6 @@ import numpy as np
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
-from gufe.storage.metadatastore import MetadataStore
 from py2neo import Graph, Node, Relationship, Subgraph
 from py2neo.database import Transaction
 from py2neo.matching import NodeMatcher
@@ -846,34 +845,28 @@ class Neo4jStore(AlchemiscaleStateStore):
         A given compute task can be represented in any number of
         AlchemicalNetwork TaskHubs, or none at all.
 
-        If this Task has an EXTENDS relationship to another Task, that Task must
-        be 'complete' before this Task can be added to *any* TaskHub.
-
         """
         with self.transaction() as tx:
             actioned_sks = []
             for t in tasks:
                 q = f"""
-                // get our TaskHub, 
+                // get our TaskHub
                 MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:PERFORMS]->(an:AlchemicalNetwork)
                 
                 // get the task we want to add to the hub; check that it connects to same network
                 MATCH (task:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
-                OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
                 // only proceed for cases where task is not already actioned on hub
-                // and only EXTENDS a 'complete' task
-                WITH th, an, task, other_task
+                WITH th, an, task
                 WHERE NOT (th)-[:ACTIONS]->(task)
-                  AND other_task.status = 'complete' OR other_task IS NULL
 
-                // create the connections 
-                // set the ACTIONS relationship weight to default weight of 1.0
+                // create the connection
                 CREATE (th)-[ar:ACTIONS {{weight: 1.0}}]->(task)
 
                 // set the task property to the scoped key of the Task
                 // this is a convenience for when we have to loop over relationships in Python
                 SET ar.task = task._scoped_key
+
                 RETURN task
                 """
                 task = tx.run(q).to_subgraph()
@@ -882,7 +875,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                     if task is not None
                     else None
                 )
-
         return actioned_sks
 
     def set_task_weights(
@@ -1098,38 +1090,51 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> List[Union[ScopedKey, None]]:
         """Claim a TaskHub Task.
 
-        This method will claim Tasks from a TaskHub according to the following scheme:
-        1. It will select Tasks with the highest priority.
-        2. Of those, a Task will be claimed stochastically based on the `weight` of its ACTIONS relationship on the TaskHub.
-        3. Repeat steps 1 and 2. until `count` Tasks have been claimed.
+        This method will claim Tasks from a TaskHub according to the following process:
+        1. `waiting` Tasks with the highest priority are selected for consideration.
+        2. Tasks with an `EXTENDS` relationship to an incomplete Task are dropped
+           from consideration.
+        3. Of those that remain, a Task is claimed stochastically based on the
+           `weight` of its ACTIONS relationship with the TaskHub.
 
+        This process is repeated until `count` Tasks have been claimed.
         If no Task is available, then `None` is given in its place.
 
         Parameters
         ----------
+        claimant
+            Unique identifier for the entity claiming the Tasks for execution.
         count
             Claim the given number of Tasks in a single transaction.
 
         """
         taskpool_q = f"""
-        // get list of all 'waiting' tasks in the hub 
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(waiting_task:Task)
+        // get list of all eligible 'waiting' tasks in the hub 
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
+        WHERE task.status = 'waiting'
+        AND actions.weight > 0
+        OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
-        // filter on 'waiting' tasks and relationships that are greater than 0 weight
-        WITH th, waiting_task, ar
-        WHERE waiting_task.status = 'waiting'
-        AND ar.weight > 0
+        // drop tasks from consideration if they EXTENDS an incomplete task
+        WITH task, other_task, actions
+        WHERE other_task.status = 'complete' OR other_task IS NULL
 
-        // get the lowest priority
-        WITH MIN(waiting_task.priority) as min_priority
+        // get the highest priority present among these tasks (value nearest to 1)
+        WITH MIN(task.priority) as top_priority
 
-        // match where the priority is the lowest (first in line)
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[tasks_actions:ACTIONS]->(tasks:Task)
-        WHERE tasks.status = 'waiting'
-        AND tasks.priority = min_priority
+        // match again, this time filtering on highest priority
+        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
+        WHERE task.status = 'waiting'
+        AND actions.weight > 0
+        AND task.priority = top_priority
+        OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
-        // return the tasks       
-        RETURN tasks, tasks_actions
+        // drop tasks from consideration if they EXTENDS an incomplete task
+        WITH task, other_task, actions
+        WHERE other_task.status = 'complete' OR other_task IS NULL
+
+        // return the tasks and actions relationships
+        RETURN task, actions
         """
 
         tasks = []
@@ -1468,10 +1473,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def set_task_complete(
         self,
-        task: Union[Task, ScopedKey],
-        cancel=True,
+        task: ScopedKey,
     ):
-        ...
+        q = f"""
+        MATCH (t:Task {{_scoped_key: "{task}"}})
+        SET t.status = 'complete'
+        """
+        with self.transaction() as tx:
+            tx.run(q)
 
     def set_task_error(
         self,

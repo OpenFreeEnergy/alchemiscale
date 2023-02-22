@@ -444,6 +444,27 @@ class TestNeo4jStore(TestStateStore):
         task_sks_fail = n4js.action_tasks(task_sks, taskhub_sk2)
         assert all([i is None for i in task_sks_fail])
 
+    def test_action_task_extends(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks that extend in an EXTENDS chain
+        first_task = n4js.create_task(transformation_sk)
+        collected_sks = [first_task]
+        prev = first_task
+        for i in range(9):
+            curr = n4js.create_task(transformation_sk, extends=prev)
+            collected_sks.append(curr)
+            prev = curr
+
+        # action the tasks
+        actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
+        assert set(actioned_task_sks) == set(collected_sks)
+
     def test_get_unclaimed_tasks(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
@@ -610,6 +631,157 @@ class TestNeo4jStore(TestStateStore):
         # try to claim from a hub with no tasks available
         claimed6 = n4js.claim_taskhub_tasks(taskhub_sk, "last task handler", count=2)
         assert claimed6 == [None] * 2
+
+    def test_action_claim_task_extends(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
+        # tests the ability to action and claim a set of tasks in an
+        # EXTENDS chain
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks that extend in an EXTENDS chain
+        first_task = n4js.create_task(transformation_sk)
+        collected_sks = [first_task]
+        prev = first_task
+        for i in range(9):
+            curr = n4js.create_task(transformation_sk, extends=prev)
+            collected_sks.append(curr)
+            prev = curr
+
+        # action the tasks
+        actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
+        assert set(actioned_task_sks) == set(collected_sks)
+
+        # claim the first task
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler")
+
+        assert claimed_task_sks == collected_sks[:1]
+
+        # claim the next 9 tasks
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=9)
+        # oops the extends task is still running!
+        assert claimed_task_sks == [None] * 9
+
+        # complete the extends task
+        n4js.set_task_complete(first_task)
+
+        # claim the next task again
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=1)
+        assert claimed_task_sks == collected_sks[1:2]
+
+    def test_action_claim_task_extends_non_extends(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
+        # tests the ability to action and claim a set of tasks that have a mix of
+        # EXTENDS and non-EXTENDS tasks
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks that extend in an EXTENDS chain
+        first_task = n4js.create_task(transformation_sk)
+        collected_sks = [first_task]
+        prev = first_task
+        for i in range(9):
+            curr = n4js.create_task(transformation_sk, extends=prev)
+            collected_sks.append(curr)
+            prev = curr
+
+        # create another two tasks that don't extend anything
+        extra_task_1 = n4js.create_task(transformation_sk)
+        extra_task_2 = n4js.create_task(transformation_sk)
+        extra_tasks = [extra_task_1, extra_task_2]
+        collected_sks.extend(extra_tasks)
+
+        # action the tasks
+        actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
+        assert set(actioned_task_sks) == set(collected_sks)
+
+        # claim the first task **3** tasks, this set should be the first extends
+        # task and the two non-extends tasks
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=3)
+
+        assert set(claimed_task_sks) == set([first_task] + extra_tasks)
+
+        # claim the next 10 tasks
+        claimed_task_sks = n4js.claim_taskhub_tasks(
+            taskhub_sk, "task handler", count=10
+        )
+        # oops the extends task is still running and there should be no other tasks to grab
+        assert claimed_task_sks == [None] * 10
+
+        # complete the extends task
+        n4js.set_task_complete(first_task)
+
+        # claim the next task again
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=1)
+        assert claimed_task_sks == collected_sks[1:2]
+
+    def test_action_claim_task_extends_bifuricating(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
+        # tests the ability to action and claim a set of tasks in an
+        # EXTENDS chain
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 7 tasks that extend in a bifuricating  EXTENDS chain
+
+        first_task = n4js.create_task(transformation_sk)
+
+        layer_two_1 = n4js.create_task(transformation_sk, extends=first_task)
+        layer_two_2 = n4js.create_task(transformation_sk, extends=first_task)
+
+        layer_three_1 = n4js.create_task(transformation_sk, extends=layer_two_1)
+        layer_three_2 = n4js.create_task(transformation_sk, extends=layer_two_1)
+        layer_three_3 = n4js.create_task(transformation_sk, extends=layer_two_2)
+        layer_three_4 = n4js.create_task(transformation_sk, extends=layer_two_2)
+
+        collected_sks = [
+            first_task,
+            layer_two_1,
+            layer_two_2,
+            layer_three_1,
+            layer_three_2,
+            layer_three_3,
+            layer_three_4,
+        ]
+        # action the tasks
+        actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
+        assert set(actioned_task_sks) == set(collected_sks)
+
+        # claim the first task
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler")
+
+        assert claimed_task_sks == [first_task]
+        # complete the first task
+        n4js.set_task_complete(first_task)
+
+        # claim the next layer of tasks, should be all of layer two
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=2)
+        assert set(claimed_task_sks) == set([layer_two_1, layer_two_2])
+
+        # complete the layer two tasks
+        n4js.set_task_complete(layer_two_1)
+        n4js.set_task_complete(layer_two_2)
+
+        # claim the next layer of tasks, should be all of layer three
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=4)
+        assert set(claimed_task_sks) == set(
+            [layer_three_1, layer_three_2, layer_three_3, layer_three_4]
+        )
 
     def test_claim_task_byweight(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
