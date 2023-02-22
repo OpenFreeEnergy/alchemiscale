@@ -13,10 +13,12 @@ from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
+
 from ..base.client import AlchemiscaleBaseClient, AlchemiscaleBaseClientError
 from ..models import Scope, ScopedKey
 from ..storage.models import Task, ProtocolDAGResultRef
 from ..strategies import Strategy
+from ..security.models import CredentialedUserIdentity
 
 
 class AlchemiscaleClientError(AlchemiscaleBaseClientError):
@@ -27,6 +29,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     """Client for user interaction with API service."""
 
     _exception = AlchemiscaleClientError
+
+    def list_scopes(self) -> List[Scope]:
+        scopes = self._get_resource(
+            f"/identities/{self.identifier}/scopes",
+            return_gufe=False,
+        )
+        return [Scope.from_str(s) for s in scopes]
 
     ### inputs
 
