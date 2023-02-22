@@ -1471,38 +1471,71 @@ class Neo4jStore(AlchemiscaleStateStore):
     def set_task_running(self, task: ScopedKey, computekey: ComputeKey):
         ...
 
+    def _set_task_status(
+        self,
+        task: Union[ScopedKey,List[ScopedKey]],
+        status: TaskStatusEnum
+    ) -> None:
+    """Set the status of a task or list of tasks. Not designed to be called directly.
+
+    Parameters
+    ----------
+    task : Union[ScopedKey,List[ScopedKey]]
+        The task or list of tasks to set the status of.
+    status : TaskStatusEnum
+        The status to set the task to.
+    """
+        if isinstance(task, ScopedKey):
+            task = [task]
+        
+        with self.transaction() as tx:
+            for t in task:
+                q = f"""
+                MATCH (t:Task {{_scoped_key: '{task}'}})
+                SET t.status = '{status.value}'
+                """
+                tx.run(q)
+
     def set_task_complete(
         self,
-        task: ScopedKey,
-    ):
-        q = f"""
-        MATCH (t:Task {{_scoped_key: "{task}"}})
-        SET t.status = 'complete'
-        """
-        with self.transaction() as tx:
-            tx.run(q)
+        task: Union[ScopedKey,List[ScopedKey]]
+    ) -> None:
+    """
+    Set the status of a task or list of tasks to `complete`.
+    """
+        self._set_task_status(task, TaskStatusEnum.complete)
+
 
     def set_task_error(
         self,
-        task: Union[Task, ScopedKey],
-        cancel=True,
-    ):
-        ...
+        task: Union[ScopedKey, List[ScopedKey]],
+    ) -> None:
+    """
+    Set the status of a task or list of tasks to `error`.
+    """
+        self._set_task_status(task, TaskStatusEnum.error)
+
 
     def set_task_invalid(
         self,
         task: Union[Task, ScopedKey],
         cancel=True,
-    ):
-        ...
+    ) -> None:
+    """
+    Set the status of a task or list of tasks to `invalid`.
+    """
+        self._set_task_status(task, TaskStatusEnum.invalid)
 
     def set_task_deleted(
         self,
         task: Union[Task, ScopedKey],
         cancel=True,
-    ):
-        ...
-
+    ) -> None:
+    """
+    Set the status of a task or list of tasks to `deleted`.
+    """
+        self._set_task_status(task, TaskStatusEnum.deleted)
+    
     ## authentication
 
     def create_credentialed_entity(self, entity: CredentialedEntity):
