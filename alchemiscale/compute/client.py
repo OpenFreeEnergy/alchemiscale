@@ -31,6 +31,13 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     _exception = AlchemiscaleComputeClientError
 
+    def list_scopes(self) -> List[Scope]:
+        scopes = self._get_resource(
+            f"/identities/{self.identifier}/scopes",
+            return_gufe=False,
+        )
+        return [Scope.from_str(s) for s in scopes]
+
     def query_taskhubs(
         self, scopes: List[Scope], return_gufe=False, limit=None, skip=None
     ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskHub]]:

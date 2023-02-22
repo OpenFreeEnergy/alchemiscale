@@ -63,6 +63,17 @@ class TestClient:
     ):
         user_client._api_check()
 
+    def test_list_scope(
+        self,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        uvicorn_server,
+        multiple_scopes,
+    ):
+        scopes = user_client.list_scopes()
+        # multiple scopes matches identity used to initialise the client in conftest
+        assert set(scopes) == set(multiple_scopes)
+
     ### inputs
 
     def test_create_network(
