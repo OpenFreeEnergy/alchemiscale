@@ -846,15 +846,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         A given compute task can be represented in any number of
         AlchemicalNetwork TaskHubs, or none at all.
 
-        If this Task has an EXTENDS relationship to another Task, that Task will
-        also be added to the TaskHub. Logic in the claim_tasks method will
-        ensure that the Task is only claimed if the task it EXTENDS has been completed.
         """
         with self.transaction() as tx:
             actioned_sks = []
             for t in tasks:
                 q = f"""
-                // get our TaskHub, 
+                // get our TaskHub
                 MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:PERFORMS]->(an:AlchemicalNetwork)
                 
                 // get the task we want to add to the hub; check that it connects to same network
@@ -863,11 +860,14 @@ class Neo4jStore(AlchemiscaleStateStore):
                 // only proceed for cases where task is not already actioned on hub
                 WITH th, an, task
                 WHERE NOT (th)-[:ACTIONS]->(task)
+
                 // create the connection
                 CREATE (th)-[ar:ACTIONS {{weight: 1.0}}]->(task)
+
                 // set the task property to the scoped key of the Task
                 // this is a convenience for when we have to loop over relationships in Python
                 SET ar.task = task._scoped_key
+
                 RETURN task
                 """
                 task = tx.run(q).to_subgraph()
@@ -1093,8 +1093,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         This method will claim Tasks from a TaskHub according to the following process:
         1. `waiting` Tasks with the highest priority are selected for consideration.
-        2. Tasks with an `EXTENDS` relationship to an incomplete Task are dropped from consideration.
-        3. Of those that remain, a Task is claimed stochastically based on the `weight` of its ACTIONS relationship on the TaskHub.
+        2. Tasks with an `EXTENDS` relationship to an incomplete Task are dropped 
+           from consideration.
+        3. Of those that remain, a Task is claimed stochastically based on the 
+           `weight` of its ACTIONS relationship with the TaskHub.
 
         This process is repeated until `count` Tasks have been claimed.
         If no Task is available, then `None` is given in its place.
@@ -1108,7 +1110,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         taskpool_q = f"""
-        // get list of all 'waiting' tasks in the hub 
+        // get list of all eligible 'waiting' tasks in the hub 
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
         WHERE task.status = 'waiting'
         AND actions.weight > 0
@@ -1118,14 +1120,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         WITH task, other_task, actions
         WHERE other_task.status = 'complete' OR other_task IS NULL
 
-        // get the highest priority present (value nearest to 1)
-        WITH MIN(task.priority) as min_priority
+        // get the highest priority present among these tasks (value nearest to 1)
+        WITH MIN(task.priority) as top_priority
 
-        // match again, this time filtering on lowest priority
+        // match again, this time filtering on highest priority
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
         WHERE task.status = 'waiting'
         AND actions.weight > 0
-        AND task.priority = min_priority
+        AND task.priority = top_priority
         OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
         // drop tasks from consideration if they EXTENDS an incomplete task
