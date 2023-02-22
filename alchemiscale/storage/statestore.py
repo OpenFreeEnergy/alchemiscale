@@ -1093,9 +1093,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         This method will claim Tasks from a TaskHub according to the following process:
         1. `waiting` Tasks with the highest priority are selected for consideration.
-        2. Tasks with an `EXTENDS` relationship to an incomplete Task are dropped 
+        2. Tasks with an `EXTENDS` relationship to an incomplete Task are dropped
            from consideration.
-        3. Of those that remain, a Task is claimed stochastically based on the 
+        3. Of those that remain, a Task is claimed stochastically based on the
            `weight` of its ACTIONS relationship with the TaskHub.
 
         This process is repeated until `count` Tasks have been claimed.
