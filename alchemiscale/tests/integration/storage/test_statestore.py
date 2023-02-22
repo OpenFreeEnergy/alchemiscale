@@ -9,7 +9,12 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from alchemiscale.storage import Neo4jStore
-from alchemiscale.storage.models import Task, TaskHub, ProtocolDAGResultRef
+from alchemiscale.storage.models import (
+    Task,
+    TaskHub,
+    ProtocolDAGResultRef,
+    TaskStatusEnum,
+)
 from alchemiscale.models import Scope, ScopedKey
 from alchemiscale.security.models import (
     CredentialedEntity,
@@ -1245,3 +1250,55 @@ class TestNeo4jStore(TestStateStore):
         scopes = n4js.list_scopes(user.identifier, credential_type)
         assert scope not in scopes
         assert not_removed in scopes
+
+    # status-setting function related tests.
+    # would be too much boilerplate to test all the functions individually
+    # so we parameterize over the methods
+
+    @pytest.fixture()
+    def f_set_task_complete(self, n4js):
+        return n4js.set_task_complete
+
+    @pytest.mark.parametrize(
+        "status_func, status",
+        [
+            ("f_set_task_complete", TaskStatusEnum.complete),
+        ],
+    )
+    def test_set_task_status(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        status_func,
+        status,
+        request,
+        f_set_task_complete,
+    ):
+        neo4j_status_op = request.getfixturevalue(status_func)
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # change status of one task
+        neo4j_status_op(task_sks[0])
+
+        q = f"""
+        MATCH (task:Task {{_scoped_key: '{task_sks[0]}'}})
+        RETURN task
+        """
+        task_qr = n4js.graph.run(q).to_subgraph()
+        task = task_qr.get("task")
+        assert task.get("status") == status.value
+
+        # now change status of the rest of the tasks
+        neo4j_status_op(task_sks[1:])
+        task_qr = n4js.graph.run(q).to_subgraph()
+        task = task_qr.get("n")
+        assert task.get("status") == status.value

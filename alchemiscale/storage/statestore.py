@@ -1468,9 +1468,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
-    def set_task_running(self, task: ScopedKey, computekey: ComputeKey):
-        ...
-
     def _set_task_status(
         self, task: Union[ScopedKey, List[ScopedKey]], status: TaskStatusEnum
     ) -> None:
@@ -1494,6 +1491,12 @@ class Neo4jStore(AlchemiscaleStateStore):
                 """
                 tx.run(q)
 
+    def set_task_running(self, task: Union[ScopedKey, List[ScopedKey]]) -> None:
+        """
+        Set the status of a task or list of tasks to `running`.
+        """
+        self._set_task_status(task, TaskStatusEnum.running)
+
     def set_task_complete(self, task: Union[ScopedKey, List[ScopedKey]]) -> None:
         """
         Set the status of a task or list of tasks to `complete`.
@@ -1511,8 +1514,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def set_task_invalid(
         self,
-        task: Union[Task, ScopedKey],
-        cancel=True,
+        task: Union[ScopedKey, List[ScopedKey]],
     ) -> None:
         """
         Set the status of a task or list of tasks to `invalid`.
@@ -1521,8 +1523,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def set_task_deleted(
         self,
-        task: Union[Task, ScopedKey],
-        cancel=True,
+        task: Union[ScopedKey, List[ScopedKey]],
     ) -> None:
         """
         Set the status of a task or list of tasks to `deleted`.
