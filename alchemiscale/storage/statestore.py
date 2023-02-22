@@ -17,7 +17,6 @@ import numpy as np
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
-from gufe.storage.metadatastore import MetadataStore
 from py2neo import Graph, Node, Relationship, Subgraph
 from py2neo.database import Transaction
 from py2neo.matching import NodeMatcher

@@ -291,18 +291,11 @@ class TestClient:
         network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
-        # user client : create a tree of tasks for the transformation
+        # user client : create three independent tasks for the transformation
         tasks = user_client.create_tasks(transformation_sk, count=3)
-        for task in tasks:
-            tasks_2 = user_client.create_tasks(transformation_sk, extends=task, count=3)
-            for task2 in tasks_2:
-                user_client.create_tasks(transformation_sk, extends=task2, count=3)
 
         # user client : action the tasks for execution
         all_tasks = user_client.get_tasks(transformation_sk)
-        # all_tasks = reversed(list(nx.topological_sort(all_tasks_g)))
-
-        # only tasks that do not extend an incomplete task are actioned
         actioned_tasks = user_client.action_tasks(all_tasks, network_sk)
 
         # execute the actioned tasks and push results directly using statestore and object store
