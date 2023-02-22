@@ -201,15 +201,14 @@ class TestClient:
         assert set(actioned_sks) == set(hub_task_sks)
         assert actioned_sks == task_sks[::-1]
 
-        # create extending tasks; try to action one of them
-        # this should yield `None` in results, since it shouldn't be possible to action these tasks
-        # if they extend a task that isn't 'complete'
+        # create extending tasks; these should be actioned to the
+        # taskhub but not claimable
         task_sks_e = user_client.create_tasks(
             transformation_sk, count=4, extends=task_sks[0]
         )
         actioned_sks_e = user_client.action_tasks(task_sks_e, network_sk)
 
-        assert all([i is None for i in actioned_sks_e])
+        assert set(task_sks_e) == set(actioned_sks_e)
 
     def test_cancel_tasks(
         self,
@@ -303,18 +302,11 @@ class TestClient:
         network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
-        # user client : create a tree of tasks for the transformation
+        # user client : create three independent tasks for the transformation
         tasks = user_client.create_tasks(transformation_sk, count=3)
-        for task in tasks:
-            tasks_2 = user_client.create_tasks(transformation_sk, extends=task, count=3)
-            for task2 in tasks_2:
-                user_client.create_tasks(transformation_sk, extends=task2, count=3)
 
         # user client : action the tasks for execution
         all_tasks = user_client.get_tasks(transformation_sk)
-        # all_tasks = reversed(list(nx.topological_sort(all_tasks_g)))
-
-        # only tasks that do not extend an incomplete task are actioned
         actioned_tasks = user_client.action_tasks(all_tasks, network_sk)
 
         # execute the actioned tasks and push results directly using statestore and object store
