@@ -1486,7 +1486,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             for t in task:
                 q = f"""
-                MATCH (t:Task {{_scoped_key: '{task}'}})
+                MATCH (t:Task {{_scoped_key: '{t}'}})
                 SET t.status = '{status.value}'
                 """
                 tx.run(q)
