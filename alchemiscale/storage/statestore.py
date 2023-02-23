@@ -1494,14 +1494,95 @@ class Neo4jStore(AlchemiscaleStateStore):
     def set_task_running(self, task: Union[ScopedKey, List[ScopedKey]]) -> None:
         """
         Set the status of a task or list of tasks to `running`.
+
+        As per the design of the `Task` data lifecycle only `waiting`
+        tasks can be set to `running`.
+
+        Parameters
+        ----------
+        task : Union[ScopedKey,List[ScopedKey]]
+            The task or list of tasks to set the status of.
+        status : TaskStatusEnum
+            The status to set the task to.
         """
-        self._set_task_status(task, TaskStatusEnum.running)
+        if isinstance(task, ScopedKey):
+            task = [task]
+
+        with self.transaction() as tx:
+            for t in task:
+                q = f"""
+                MATCH (t:Task {{_scoped_key: '{t}'}})
+                RETURN t
+                """
+                task = tx.run(q).to_subgraph()
+                status = task.get("status")
+                if status != TaskStatusEnum.waiting.value:
+                    raise ValueError(
+                        f"Cannot set task {t} to `running` as it is not currently `waiting`."
+                    )
+                q2 = f"""
+                MATCH (t:Task {{_scoped_key: '{t}'}})
+                SET t.status = '{TaskStatusEnum.running.value}'
+                """
+                tx.run(q2)
 
     def set_task_complete(self, task: Union[ScopedKey, List[ScopedKey]]) -> None:
         """
         Set the status of a task or list of tasks to `complete`.
+
+        As per the design of the `Task` data lifecycle only `running`
+        tasks can be set to `complete`.
+
         """
-        self._set_task_status(task, TaskStatusEnum.complete)
+        if isinstance(task, ScopedKey):
+            task = [task]
+
+        with self.transaction() as tx:
+            for t in task:
+                q = f"""
+                MATCH (t:Task {{_scoped_key: '{t}'}})
+                RETURN t
+                """
+                task = tx.run(q).to_subgraph()
+                status = task.get("status")
+                if status != TaskStatusEnum.running.value:
+                    raise ValueError(
+                        f"Cannot set task {t} to `complete` as it is not currently `running`."
+                    )
+                q2 = f"""
+                MATCH (t:Task {{_scoped_key: '{t}'}})
+                SET t.status = '{TaskStatusEnum.complete.value}'
+                """
+                tx.run(q2)
+
+    def set_task_waiting(self, task: Union[ScopedKey, List[ScopedKey]]) -> None:
+        """
+        Set the status of a task or list of tasks to `waiting`.
+
+        As per the design of the `Task` data lifecycle only `error`
+        tasks can be set to `waiting`.
+
+        """
+        if isinstance(task, ScopedKey):
+            task = [task]
+
+        with self.transaction() as tx:
+            for t in task:
+                q = f"""
+                MATCH (t:Task {{_scoped_key: '{t}'}})
+                RETURN t
+                """
+                task = tx.run(q).to_subgraph()
+                status = task.get("status")
+                if status != TaskStatusEnum.error.value:
+                    raise ValueError(
+                        f"Cannot set task {t} to `waiting` as it is not currently `error`."
+                    )
+                q2 = f"""
+                MATCH (t:Task {{_scoped_key: '{t}'}})
+                SET t.status = '{TaskStatusEnum.waiting.value}'
+                """
+                tx.run(q2)
 
     def set_task_error(
         self,
@@ -1509,8 +1590,34 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> None:
         """
         Set the status of a task or list of tasks to `error`.
+
+        As per the design of the `Task` data lifecycle `waiting`, `running` and `complete`
+        tasks can be set to `error`.
         """
-        self._set_task_status(task, TaskStatusEnum.error)
+        if isinstance(task, ScopedKey):
+            task = [task]
+
+        with self.transaction() as tx:
+            for t in task:
+                q = f"""
+                MATCH (t:Task {{_scoped_key: '{t}'}})
+                RETURN t
+                """
+                task = tx.run(q).to_subgraph()
+                status = task.get("status")
+                if (
+                    (status != TaskStatusEnum.running.value)
+                    or (status != TaskStatusEnum.waiting.value)
+                    or (status != TaskStatusEnum.complete.value)
+                ):
+                    raise ValueError(
+                        f"Cannot set task {t} to `error` as it is not currently `running`, `waiting` or `complete` ."
+                    )
+                q2 = f"""
+                MATCH (t:Task {{_scoped_key: '{t}'}})
+                SET t.status = '{TaskStatusEnum.error.value}'
+                """
+                tx.run(q2)
 
     def set_task_invalid(
         self,
@@ -1518,8 +1625,20 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> None:
         """
         Set the status of a task or list of tasks to `invalid`.
+
+        As per the design of the `Task` data lifecycle any task can be set to `invalid`.
+        Once `invalid` is set the task cannot change status
         """
-        self._set_task_status(task, TaskStatusEnum.invalid)
+        if isinstance(task, ScopedKey):
+            task = [task]
+
+        with self.transaction() as tx:
+            for t in task:
+                q = f"""
+                MATCH (t:Task {{_scoped_key: '{t}'}})
+                SET t.status = '{TaskStatusEnum.invalid.value}'
+                """
+                tx.run(q)
 
     def set_task_deleted(
         self,
@@ -1527,8 +1646,20 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> None:
         """
         Set the status of a task or list of tasks to `deleted`.
+
+        As per the design of the `Task` data lifecycle any task can be set to `deleted`.
+        Once `deleted` is set the task cannot change status
         """
-        self._set_task_status(task, TaskStatusEnum.deleted)
+        if isinstance(task, ScopedKey):
+            task = [task]
+
+        with self.transaction() as tx:
+            for t in task:
+                q = f"""
+                MATCH (t:Task {{_scoped_key: '{t}'}})
+                SET t.status = '{TaskStatusEnum.deleted.value}'
+                """
+                tx.run(q)
 
     ## authentication
 
