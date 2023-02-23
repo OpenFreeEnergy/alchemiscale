@@ -196,6 +196,6 @@ services:
     logging:
        driver: "awslogs"
        options:
-          awslogs-region: "us-east-1"
+          awslogs-region: "${AWS_DEFAULT_REGION}"
           awslogs-group: "alchemiscale"
           tag: "{{.Name}}/{{.ID}}"
