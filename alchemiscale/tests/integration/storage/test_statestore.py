@@ -1317,7 +1317,7 @@ class TestNeo4jStore(TestStateStore):
         assert task_qr.get("status") == status.value
 
         # now change status of the rest of the tasks
-        # neo4j_status_op(task_sks[1:])
-        # task_qr = n4js.graph.run(q).to_subgraph()
-        # task = task_qr.get("n")
-        # assert task.get("status") == status.value
+        neo4j_status_op(task_sks[1:])
+        task_qr = n4js.graph.run(q).to_subgraph()
+        all_status = [task.get("status") for task in task_qr.nodes]
+        assert all(s == status.value for s in all_status)
