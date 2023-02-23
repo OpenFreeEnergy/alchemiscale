@@ -1452,45 +1452,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._get_protocoldagresultrefs(q)
 
-    def set_task_waiting(self, task: ScopedKey, clear_claim=True):
-        q = f"""
-        MATCH (t:Task {{_scoped_key: "{task}"}})
-        SET t.status = 'waiting'
-        """
-
-        if clear_claim:
-            q += ", t.claimant = null"
-
-        q += """
-        RETURN t
-        """
-
-        with self.transaction() as tx:
-            tx.run(q)
-
-    def _set_task_status(
-        self, task: Union[ScopedKey, List[ScopedKey]], status: TaskStatusEnum
-    ) -> None:
-        """Set the status of a task or list of tasks. Not designed to be called directly.
-
-        Parameters
-        ----------
-        task : Union[ScopedKey,List[ScopedKey]]
-            The task or list of tasks to set the status of.
-        status : TaskStatusEnum
-            The status to set the task to.
-        """
-        if isinstance(task, ScopedKey):
-            task = [task]
-
-        with self.transaction() as tx:
-            for t in task:
-                q = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
-                SET t.status = '{status.value}'
-                """
-                tx.run(q)
-
     def set_task_running(self, task: Union[ScopedKey, List[ScopedKey]]) -> None:
         """
         Set the status of a task or list of tasks to `running`.
@@ -1516,9 +1477,11 @@ class Neo4jStore(AlchemiscaleStateStore):
                 """
                 task = tx.run(q).to_subgraph()
                 status = task.get("status")
+                if status == TaskStatusEnum.running.value:
+                    continue  # no-op
                 if status != TaskStatusEnum.waiting.value:
                     raise ValueError(
-                        f"Cannot set task {t} to `running` as it is not currently `waiting`."
+                        f"Cannot set task {t} with current status: {status} to `running` as it is not currently `waiting`."
                     )
                 q2 = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
@@ -1545,9 +1508,11 @@ class Neo4jStore(AlchemiscaleStateStore):
                 """
                 task = tx.run(q).to_subgraph()
                 status = task.get("status")
+                if status == TaskStatusEnum.complete.value:
+                    continue  # no-op
                 if status != TaskStatusEnum.running.value:
                     raise ValueError(
-                        f"Cannot set task {t} to `complete` as it is not currently `running`."
+                        f"Cannot set task {t} with current status: {status} to `complete` as it is not currently `running`."
                     )
                 q2 = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
@@ -1555,12 +1520,16 @@ class Neo4jStore(AlchemiscaleStateStore):
                 """
                 tx.run(q2)
 
-    def set_task_waiting(self, task: Union[ScopedKey, List[ScopedKey]]) -> None:
+    def set_task_waiting(
+        self,
+        task: Union[ScopedKey, List[ScopedKey]],
+        clear_claim: Optional[bool] = False,
+    ) -> None:
         """
         Set the status of a task or list of tasks to `waiting`.
 
         As per the design of the `Task` data lifecycle only `error`
-        tasks can be set to `waiting`.
+        tasks can be set to `waiting`, or a `waiting` no-op can be performed
 
         """
         if isinstance(task, ScopedKey):
@@ -1574,14 +1543,18 @@ class Neo4jStore(AlchemiscaleStateStore):
                 """
                 task = tx.run(q).to_subgraph()
                 status = task.get("status")
+                if status == TaskStatusEnum.waiting.value:
+                    continue  # no-op
                 if status != TaskStatusEnum.error.value:
                     raise ValueError(
-                        f"Cannot set task {t} to `waiting` as it is not currently `error`."
+                        f"Cannot set task {t} with current status: {status} to `waiting` as it is not currently `error`."
                     )
                 q2 = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
                 SET t.status = '{TaskStatusEnum.waiting.value}'
                 """
+                if clear_claim:
+                    q2 += ", t.claimant = null"
                 tx.run(q2)
 
     def set_task_error(
@@ -1605,13 +1578,15 @@ class Neo4jStore(AlchemiscaleStateStore):
                 """
                 task = tx.run(q).to_subgraph()
                 status = task.get("status")
+                if status == TaskStatusEnum.error.value:
+                    continue  # no-op
                 if (
                     (status != TaskStatusEnum.running.value)
-                    or (status != TaskStatusEnum.waiting.value)
-                    or (status != TaskStatusEnum.complete.value)
+                    and (status != TaskStatusEnum.waiting.value)
+                    and (status != TaskStatusEnum.complete.value)
                 ):
                     raise ValueError(
-                        f"Cannot set task {t} to `error` as it is not currently `running`, `waiting` or `complete` ."
+                        f"Cannot set task {t} with current status: {status} to `error` as it is not currently `running`, `waiting` or `complete`"
                     )
                 q2 = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
