@@ -1462,10 +1462,10 @@ class TestNeo4jStore(TestStateStore):
         n4js.set_task_running(extra)  # waiting -> running
         n4js.set_task_complete(extra)  # running -> complete
         with pytest.raises(ValueError, match="Cannot set task"):
-            n4js.set_task_waiting(task_sks[0])  # complete -> waiting X
+            n4js.set_task_waiting(extra)  # complete -> waiting X
         # complete -> running
         with pytest.raises(ValueError, match="Cannot set task"):
-            n4js.set_task_running(task_sks[0])
+            n4js.set_task_running(extra)
 
     # allowed = [error, invalid, deleted, waiting]
     # no-op = [error]
@@ -1537,3 +1537,43 @@ class TestNeo4jStore(TestStateStore):
         # error -> complete
         with pytest.raises(ValueError, match="Cannot set task"):
             n4js.set_task_complete(extra)  # error -> complete X
+
+    @pytest.mark.parametrize(
+        "status_func, status",
+        [
+            ("f_set_task_error", TaskStatusEnum.error),
+            ("f_set_task_waiting", TaskStatusEnum.waiting),
+            ("f_set_task_running", TaskStatusEnum.running),
+            ("f_set_task_complete", TaskStatusEnum.complete),
+        ],
+    )
+    def test_set_task_status_from_terminals(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        status_func,
+        status,
+        request,
+    ):
+        # request param fixture used to get function fixture.
+        neo4j_status_op = request.getfixturevalue(status_func)
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        neo4j.set_task_invalid(task_sks[0])
+        neo4j.set_task_deleted(task_sks[1])
+        # change status of one task
+
+        with pytest.raises(ValueError, match="Cannot set task"):
+            neo4j_status_op(task_sks[0])
+
+        with pytest.raises(ValueError, match="Cannot set task"):
+            neo4j_status_op(task_sks[1])
