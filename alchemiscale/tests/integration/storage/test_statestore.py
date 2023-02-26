@@ -291,6 +291,28 @@ class TestNeo4jStore(TestStateStore):
 
         assert m["_gufe_key"] == transformation.key
 
+    def test_create_task_extends_invalid_deleted(self, n4js, network_tyk2, scope_test):
+        # add alchemical network, then try generating task
+        an = network_tyk2
+        n4js.create_network(an, scope_test)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        task_sk_invalid = n4js.create_task(transformation_sk)
+        n4js.set_task_invalid(task_sk_invalid)
+
+        task_sk_deleted = n4js.create_task(transformation_sk)
+        n4js.set_task_deleted(task_sk_deleted)
+
+        with pytest.raises(ValueError, match="Cannot extend"):
+            # try and create a task that extends an invalid task
+            _ = n4js.create_task(transformation_sk, extends=task_sk_invalid)
+
+        with pytest.raises(ValueError, match="Cannot extend"):
+            # try and create a task that extends a deleted task
+            _ = n4js.create_task(transformation_sk, extends=task_sk_deleted)
+
     def test_get_tasks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
@@ -1568,8 +1590,8 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        neo4j.set_task_invalid(task_sks[0])
-        neo4j.set_task_deleted(task_sks[1])
+        n4js.set_task_invalid(task_sks[0])
+        n4js.set_task_deleted(task_sks[1])
         # change status of one task
 
         with pytest.raises(ValueError, match="Cannot set task"):

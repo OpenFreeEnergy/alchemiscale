@@ -1214,6 +1214,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         if extends is not None:
             previous_task_node = self._get_node(extends)
+            stat = previous_task_node.get("status")
+            # do not allow creation of a task that extends an invalid or deleted task.
+            if (stat == "invalid") or (stat == "deleted"):
+                raise ValueError(
+                    f"Cannot extend a `deleted` or `invalid` Task: {previous_task_node}"
+                )
             subgraph = subgraph | Relationship.type("EXTENDS")(
                 task_node,
                 previous_task_node,
@@ -1514,9 +1520,13 @@ class Neo4jStore(AlchemiscaleStateStore):
                     raise ValueError(
                         f"Cannot set task {t} with current status: {status} to `complete` as it is not currently `running`."
                     )
+                # set the status and delete the ACTIONS relationship
                 q2 = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
                 SET t.status = '{TaskStatusEnum.complete.value}'
+                WITH t
+                OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
+                DETACH DELETE ar
                 """
                 tx.run(q2)
 
@@ -1609,9 +1619,13 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         with self.transaction() as tx:
             for t in task:
+                # set the status and delete the ACTIONS relationship
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
                 SET t.status = '{TaskStatusEnum.invalid.value}'
+                WITH t
+                OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
+                DETACH DELETE ar
                 """
                 tx.run(q)
 
@@ -1630,9 +1644,13 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         with self.transaction() as tx:
             for t in task:
+                # set the status and delete any ACTIONS relationship
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
                 SET t.status = '{TaskStatusEnum.deleted.value}'
+                WITH t
+                OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
+                DETACH DELETE ar
                 """
                 tx.run(q)
 
