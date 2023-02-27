@@ -111,15 +111,15 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
             self._get_resource(f"tasks/{task}/status", return_gufe=False)
         )
 
-    def complete_task(self, task: ScopedKey) -> None:
+    def set_task_complete(self, task: ScopedKey) -> None:
         """Complete a `Task`, while also checking that the status has not been set
         to something else in the interim. If the status has been set to something,
         that status is retained."""
 
-        status = self.test_get_task_status(task)
+        status = self.get_task_status(task)
         # any task we are trying to complete should be in the running state
         if status == TaskStatusEnum.running:
-            self.set_task_status(task, TaskStatusEnum.completed)
+            self.set_task_status(task, TaskStatusEnum.complete)
         else:
             # if the status is not running, then we do not want to change it
             pass
