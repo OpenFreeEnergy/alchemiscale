@@ -1643,6 +1643,50 @@ class TestNeo4jStore(TestStateStore):
         result = n4js.graph.run(q).to_subgraph()
         assert result == None
 
+    # check that the status is set correctly through the generic method
+    # NOTE: a precondition operation is used for `complete` as it is not
+    # reachable from the default status of `waiting`
+    @pytest.mark.parametrize(
+        "status, precondition_op",
+        [
+            (TaskStatusEnum.waiting, None),
+            (TaskStatusEnum.running, None),
+            (TaskStatusEnum.error, None),
+            (TaskStatusEnum.complete, "f_set_task_running"),
+            (TaskStatusEnum.invalid, None),
+            (TaskStatusEnum.deleted, None),
+        ],
+    )
+    def test_set_task_status(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        status,
+        precondition_op,
+        request,
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create a single task
+        task_sk = n4js.create_task(transformation_sk)
+
+        # request param fixture used to get function fixture.
+        if precondition_op:
+            precondition_op = request.getfixturevalue(precondition_op)
+            precondition_op(task_sk)
+
+        # set the status
+        n4js.set_task_status(task_sk, status)
+
+        # check the status
+        assert n4js.get_task_status(task_sk) == status
+
     def test_get_task_status(
         self,
         n4js: Neo4jStore,
