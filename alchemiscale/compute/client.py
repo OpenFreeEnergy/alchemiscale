@@ -67,11 +67,6 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]
 
-    def set_task_status(self, task: ScopedKey, status: TaskStatusEnum) -> None:
-        """Set the status of a `Task`."""
-
-        task_sk = self._post_resource(f"tasks/{task}/status", status.value)
-
     def get_task_transformation(
         self, task: ScopedKey
     ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
@@ -100,3 +95,8 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         pdr_sk = self._post_resource(f"tasks/{task}/results", data)
 
         return ScopedKey.from_dict(pdr_sk)
+
+    def set_task_status(self, task: ScopedKey, status: TaskStatusEnum) -> None:
+        """Set the status of a `Task`."""
+
+        self._post_resource(f"tasks/{task}/status", status.value)
