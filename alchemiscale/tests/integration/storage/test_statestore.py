@@ -1599,3 +1599,46 @@ class TestNeo4jStore(TestStateStore):
 
         with pytest.raises(ValueError, match="Cannot set task"):
             neo4j_status_op(task_sks[1])
+
+    # check that setting complete, invalid or deleted removes the
+    # actions relationship with taskhub
+    def test_set_task_status_removes_actions_relationship(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 3 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+
+        n4js.action_tasks(task_sks, taskhub_sk)
+
+        # claim all the tasks
+        n4js.claim_taskhub_tasks(taskhub_sk, "claimer", count=3)
+
+        q = f"""
+        MATCH (taskhub:TaskHub {{_scoped_key: '{taskhub_sk}'}})
+        MATCH (taskhub)-[:ACTIONS]->(task:Task)
+        return task
+        """
+
+        result = n4js.graph.run(q).to_subgraph()
+        sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
+        assert set(sks) == set(task_sks)
+
+        # set one to invalid
+        n4js.set_task_invalid(task_sks[0])
+        # set one to deleted
+        n4js.set_task_deleted(task_sks[1])
+        # set one to complete
+        n4js.set_task_complete(task_sks[2])
+
+        result = n4js.graph.run(q).to_subgraph()
+        assert result == None
