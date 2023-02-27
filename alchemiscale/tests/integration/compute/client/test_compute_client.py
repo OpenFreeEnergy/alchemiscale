@@ -5,6 +5,7 @@ from gufe.tokenization import GufeTokenizable
 
 from alchemiscale.models import ScopedKey
 from alchemiscale.compute import client
+from alchemiscale.storage.models import TaskStatusEnum
 
 from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
 
@@ -173,29 +174,20 @@ class TestComputeClient:
         assert transformation2 == transformation_
         assert extends_protocoldagresult2 == protocoldagresults[0]
 
+    @pytest.mark.parametrize("status", [member for member in TaskStatusEnum])
     def test_set_task_status(
         self,
         scope_test,
         n4js_preloaded,
         compute_client: client.AlchemiscaleComputeClient,
         uvicorn_server,
+        status,
     ):
         taskhub_sks = compute_client.query_taskhubs([scope_test])
 
-        # claim a single task; should get highest priority task
-        task_sks = compute_client.claim_taskhub_tasks(taskhub_sks[0], claimant="me")
-        all_tasks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0], return_gufe=True)
+        all_tasks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0], return_gufe=False)
+        # set the status of a task
+        compute_client.set_task_status(all_tasks[0], status)
 
-        # assert len(task_sks) == 1
-        # assert task_sks[0] in all_tasks.keys()
-        # assert [t.gufe_key for t in task_sks] == [
-        #     task.key for task in all_tasks.values() if task.priority == 1
-        # ]
-
-        # remaining_tasks = n4js_preloaded.get_taskhub_unclaimed_tasks(taskhub_sks[0])
-        # # claim two more tasks
-        # task_sks2 = compute_client.claim_taskhub_tasks(
-        #     taskhub_sks[0], count=2, claimant="me"
-        # )
-        # assert task_sks2[0] in remaining_tasks
-        # assert task_sks2[1] in remaining_tasks
+        # check that the status has been set
+        assert n4js_preloaded.get_task_status(all_tasks[0]) == status
