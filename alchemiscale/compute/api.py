@@ -203,7 +203,7 @@ def set_task_result(
 
 
 @router.post("/tasks/{task_scoped_key}/status")
-def set_task_status(
+async def set_task_status(
     task_scoped_key,
     status: str = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -213,6 +213,18 @@ def set_task_status(
     validate_scopes(task_sk.scope, token)
     status = TaskStatusEnum(status)
     n4js.set_task_status(task_sk, status)
+
+
+@router.get("/tasks/{task_scoped_key}/status")
+async def get_task_status(
+    task_scoped_key,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    task_sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(task_sk.scope, token)
+    status = n4js.get_task_status(task_sk)
+    return status
 
 
 @router.get("/chemicalsystems")
