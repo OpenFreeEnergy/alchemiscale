@@ -1642,3 +1642,55 @@ class TestNeo4jStore(TestStateStore):
 
         result = n4js.graph.run(q).to_subgraph()
         assert result == None
+
+    def test_get_task_status(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 6 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(6)]
+
+        # task 0 will remain waiting
+
+        # task 1 will be set to running
+        n4js.set_task_running(task_sks[1])
+
+        # task 2 will be set to error
+        n4js.set_task_running(task_sks[2])
+        n4js.set_task_error(task_sks[2])
+
+        # task 3 will be set to complete
+        n4js.set_task_running(task_sks[3])
+        n4js.set_task_complete(task_sks[3])
+
+        # task 4 will be set to invalid
+        n4js.set_task_invalid(task_sks[4])
+
+        # task 5 will be set to deleted
+        n4js.set_task_deleted(task_sks[5])
+
+        assert n4js.get_task_status(task_sks[0]) == TaskStatusEnum.waiting
+        assert n4js.get_task_status(task_sks[1]) == TaskStatusEnum.running
+        assert n4js.get_task_status(task_sks[2]) == TaskStatusEnum.error
+        assert n4js.get_task_status(task_sks[3]) == TaskStatusEnum.complete
+        assert n4js.get_task_status(task_sks[4]) == TaskStatusEnum.invalid
+        assert n4js.get_task_status(task_sks[5]) == TaskStatusEnum.deleted
+
+        # now lets try get them back as a dict of task sks and statuses
+        task_statuses = n4js.get_task_status(task_sks)
+
+        assert task_statuses[task_sks[0]] == TaskStatusEnum.waiting
+        assert task_statuses[task_sks[1]] == TaskStatusEnum.running
+        assert task_statuses[task_sks[2]] == TaskStatusEnum.error
+        assert task_statuses[task_sks[3]] == TaskStatusEnum.complete
+        assert task_statuses[task_sks[4]] == TaskStatusEnum.invalid
+        assert task_statuses[task_sks[5]] == TaskStatusEnum.deleted
