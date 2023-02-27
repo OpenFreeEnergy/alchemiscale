@@ -97,7 +97,11 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         return ScopedKey.from_dict(pdr_sk)
 
     def set_task_status(self, task: ScopedKey, status: TaskStatusEnum) -> None:
-        """Set the status of a `Task`."""
+        """Set the status of a `Task`. NOTE: this should not be used to set
+        a task to completion in isolation, as the task must
+        first be checked for async changes to its status. Instead use the
+        `complete_task` method instead.
+        """
 
         self._post_resource(f"tasks/{task}/status", status.value)
 
@@ -106,3 +110,16 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         return TaskStatusEnum(
             self._get_resource(f"tasks/{task}/status", return_gufe=False)
         )
+
+    def complete_task(self, task: ScopedKey) -> None:
+        """Complete a `Task`, while also checking that the status has not been set
+        to something else in the interim. If the status has been set to something,
+        that status is retained."""
+
+        status = self.test_get_task_status(task)
+        # any task we are trying to complete should be in the running state
+        if status == TaskStatusEnum.running:
+            self.set_task_status(task, TaskStatusEnum.completed)
+        else:
+            # if the status is not running, then we do not want to change it
+            pass
