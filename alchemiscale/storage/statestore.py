@@ -1458,7 +1458,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._get_protocoldagresultrefs(q)
 
-    def set_task_status(self, task, ScopedKey, status: TaskStatusEnum) -> ScopedKey:
+    def set_task_status(self, task: ScopedKey, status: TaskStatusEnum) -> ScopedKey:
         """
         Set the status of a task, this is a master method that calls the
         appropriate method for the status.
@@ -1472,6 +1472,42 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         method = getattr(self, f"set_task_{status.value}")
         return method(task)
+
+    def get_task_status(
+        self, task: Union[ScopedKey, List[ScopedKey]]
+    ) -> Union[TaskStatusEnum, Dict[ScopedKey, TaskStatusEnum]]:
+        """
+        Get the status of a task or list of tasks.
+
+        Parameters
+        ----------
+        task : Union[ScopedKey,List[ScopedKey]]
+            The task or list of tasks to set the status of.
+
+        Returns
+        -------
+        Union[TaskStatusEnum, Dict[ScopedKey,TaskStatusEnum]]
+            The status of the task or a dictionary of tasks and their statuses.
+        """
+
+        if isinstance(task, ScopedKey):
+            task = [task]
+
+        statuses = {}
+        with self.transaction() as tx:
+            for t in task:
+                q = f"""
+                MATCH (t:Task {{_scoped_key: '{t}'}})
+                RETURN t
+                """
+                task = tx.run(q).to_subgraph()
+                status = task.get("status")
+                statuses[t] = TaskStatusEnum(status)
+
+        if len(statuses) == 1:
+            return list(statuses.values())[0]
+
+        return statuses
 
     def set_task_running(self, task: Union[ScopedKey, List[ScopedKey]]) -> None:
         """
