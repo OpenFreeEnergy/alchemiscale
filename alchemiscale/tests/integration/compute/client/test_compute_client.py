@@ -186,6 +186,10 @@ class TestComputeClient:
         taskhub_sks = compute_client.query_taskhubs([scope_test])
 
         all_tasks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0], return_gufe=False)
+        # special case for "complete" status as it cannot be reached from
+        # "waiting" so we set to running first
+        if status == TaskStatusEnum.complete:
+            compute_client.set_task_status(all_tasks[0], TaskStatusEnum.running)
         # set the status of a task
         compute_client.set_task_status(all_tasks[0], status)
 
