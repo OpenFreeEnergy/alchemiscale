@@ -19,7 +19,7 @@ from gufe.protocols import ProtocolDAGResult
 
 from ..base.client import AlchemiscaleBaseClient, AlchemiscaleBaseClientError
 from ..models import Scope, ScopedKey
-from ..storage.models import TaskHub, Task
+from ..storage.models import TaskHub, Task, TaskStatusEnum
 
 
 class AlchemiscaleComputeClientError(AlchemiscaleBaseClientError):
@@ -66,6 +66,11 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         tasks = self._post_resource(f"taskhubs/{taskhub}/claim", data)
 
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]
+
+    def set_task_status(self, task: ScopedKey, status: TaskStatusEnum) -> None:
+        """Set the status of a `Task`."""
+
+        task_sk = self._post_resource(f"tasks/{task}/status", status.value)
 
     def get_task_transformation(
         self, task: ScopedKey

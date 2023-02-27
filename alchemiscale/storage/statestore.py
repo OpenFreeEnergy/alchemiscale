@@ -1458,6 +1458,21 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._get_protocoldagresultrefs(q)
 
+    def set_task_status(self, task, ScopedKey, status: TaskStatusEnum) -> ScopedKey:
+        """
+        Set the status of a task, this is a master method that calls the
+        appropriate method for the status.
+
+        Parameters
+        ----------
+        task : Union[ScopedKey,List[ScopedKey]]
+            The task or list of tasks to set the status of.
+        status : TaskStatusEnum
+            The status to set the task to.
+        """
+        method = getattr(self, f"set_task_{status.value}")
+        return method(task)
+
     def set_task_running(self, task: Union[ScopedKey, List[ScopedKey]]) -> None:
         """
         Set the status of a task or list of tasks to `running`.
