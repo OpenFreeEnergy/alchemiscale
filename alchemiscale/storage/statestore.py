@@ -1470,7 +1470,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         status : TaskStatusEnum
             The status to set the task to.
         """
-        method = getattr(self, f"set_task_{status.value}")
+        method = getattr(self, f"set_task_{status}")
         return method(task)
 
     def get_task_status(
@@ -1542,7 +1542,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     )
                 q2 = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                SET t.status = '{TaskStatusEnum.running.value}'
+                SET t.status = '{TaskStatusEnum.running}'
                 """
                 tx.run(q2)
 
@@ -1574,7 +1574,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 # set the status and delete the ACTIONS relationship
                 q2 = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                SET t.status = '{TaskStatusEnum.complete.value}'
+                SET t.status = '{TaskStatusEnum.complete}'
                 WITH t
                 OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
                 DETACH DELETE ar
@@ -1612,7 +1612,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     )
                 q2 = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                SET t.status = '{TaskStatusEnum.waiting.value}'
+                SET t.status = '{TaskStatusEnum.waiting}'
                 """
                 if clear_claim:
                     q2 += ", t.claimant = null"
@@ -1651,7 +1651,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     )
                 q2 = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                SET t.status = '{TaskStatusEnum.error.value}'
+                SET t.status = '{TaskStatusEnum.error}'
                 """
                 tx.run(q2)
 
@@ -1673,7 +1673,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 # set the status and delete the ACTIONS relationship
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                SET t.status = '{TaskStatusEnum.invalid.value}'
+                SET t.status = '{TaskStatusEnum.invalid}'
                 WITH t
                 OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
                 DETACH DELETE ar
@@ -1698,7 +1698,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 # set the status and delete any ACTIONS relationship
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                SET t.status = '{TaskStatusEnum.deleted.value}'
+                SET t.status = '{TaskStatusEnum.deleted}'
                 WITH t
                 OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
                 DETACH DELETE ar
