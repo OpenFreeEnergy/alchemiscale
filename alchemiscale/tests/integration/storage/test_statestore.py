@@ -1305,13 +1305,14 @@ class TestNeo4jStore(TestStateStore):
     # no-op = [waiting]
     # not allowed = [complete]
     @pytest.mark.parametrize(
-        "status_func, status",
+        "status_func, status, should_raise",
         [
-            ("f_set_task_running", TaskStatusEnum.running),
-            ("f_set_task_error", TaskStatusEnum.error),
-            ("f_set_task_invalid", TaskStatusEnum.invalid),
-            ("f_set_task_deleted", TaskStatusEnum.deleted),
-            ("f_set_task_waiting", TaskStatusEnum.waiting),
+            ("f_set_task_running", TaskStatusEnum.running, False),
+            ("f_set_task_error", TaskStatusEnum.error, False),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, False),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, False),
+            ("f_set_task_waiting", TaskStatusEnum.waiting, False),
+            ("f_set_task_complete", TaskStatusEnum.complete, True),
         ],
     )
     def test_set_task_status_from_waiting(
@@ -1321,6 +1322,7 @@ class TestNeo4jStore(TestStateStore):
         scope_test,
         status_func,
         status,
+        should_raise,
         request,
     ):
         # request param fixture used to get function fixture.
@@ -1335,42 +1337,27 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        # create one extra task for manual testing
-        extra = n4js.create_task(transformation_sk)
+        if should_raise:
+            with pytest.raises(ValueError, match="Cannot set task"):
+                neo4j_status_op(task_sks)
+        else:
+            neo4j_status_op(task_sks)
+            all_status = n4js.get_task_status(task_sks).values()
 
-        # change status of one task
-        neo4j_status_op(task_sks[0])
-
-        q = f"""
-        MATCH (task:Task {{_scoped_key: '{task_sks[0]}'}})
-        RETURN task
-        """
-        task_qr = n4js.graph.run(q).to_subgraph()
-        assert task_qr.get("status") == status.value
-
-        # now change status of the rest of the tasks
-        neo4j_status_op(task_sks[1:])
-        task_qr = n4js.graph.run(q).to_subgraph()
-        all_status = [task.get("status") for task in task_qr.nodes]
-        assert all(s == status.value for s in all_status)
-
-        # manually test not allowed
-        # waiting -> complete
-        n4js.set_task_waiting(extra)
-        with pytest.raises(ValueError, match="Cannot set task"):
-            n4js.set_task_complete(extra)
+            assert all(s == status for s in all_status)
 
     # allowed = [complete, error, invalid, deleted]
     # no-op = [running]
     # not allowed = [waiting]
     @pytest.mark.parametrize(
-        "status_func, status",
+        "status_func, status, should_raise",
         [
-            ("f_set_task_complete", TaskStatusEnum.complete),
-            ("f_set_task_error", TaskStatusEnum.error),
-            ("f_set_task_invalid", TaskStatusEnum.invalid),
-            ("f_set_task_deleted", TaskStatusEnum.deleted),
-            ("f_set_task_running", TaskStatusEnum.running),
+            ("f_set_task_complete", TaskStatusEnum.complete, False),
+            ("f_set_task_error", TaskStatusEnum.error, False),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, False),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, False),
+            ("f_set_task_running", TaskStatusEnum.running, False),
+            ("f_set_task_waiting", TaskStatusEnum.waiting, True),
         ],
     )
     def test_set_task_status_from_running(
@@ -1380,6 +1367,7 @@ class TestNeo4jStore(TestStateStore):
         scope_test,
         status_func,
         status,
+        should_raise,
         request,
     ):
         # request param fixture used to get function fixture.
@@ -1394,44 +1382,30 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        # create one extra task for manual testing
-        extra = n4js.create_task(transformation_sk)
-
         # set all the tasks to running
         n4js.set_task_running(task_sks)
 
-        # change status of one task
-        neo4j_status_op(task_sks[0])
+        if should_raise:
+            with pytest.raises(ValueError, match="Cannot set task"):
+                neo4j_status_op(task_sks)
+        else:
+            neo4j_status_op(task_sks)
+            all_status = n4js.get_task_status(task_sks).values()
 
-        q = f"""
-        MATCH (task:Task {{_scoped_key: '{task_sks[0]}'}})
-        RETURN task
-        """
-        task_qr = n4js.graph.run(q).to_subgraph()
-        assert task_qr.get("status") == status.value
-
-        # now change status of the rest of the tasks
-        neo4j_status_op(task_sks[1:])
-        task_qr = n4js.graph.run(q).to_subgraph()
-        all_status = [task.get("status") for task in task_qr.nodes]
-        assert all(s == status.value for s in all_status)
-
-        # manually test not allowed
-        # running -> waiting
-        n4js.set_task_running(extra)  # waiting -> running
-        with pytest.raises(ValueError, match="Cannot set task"):
-            n4js.set_task_waiting(extra)  # running -> waiting X
+            assert all(s == status for s in all_status)
 
     # allowed = [error, invalid, deleted]
     # no-op = [complete]
     # not allowed = [waiting, running]
     @pytest.mark.parametrize(
-        "status_func, status",
+        "status_func, status, should_raise",
         [
-            ("f_set_task_error", TaskStatusEnum.error),
-            ("f_set_task_invalid", TaskStatusEnum.invalid),
-            ("f_set_task_deleted", TaskStatusEnum.deleted),
-            ("f_set_task_complete", TaskStatusEnum.complete),
+            ("f_set_task_error", TaskStatusEnum.error, False),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, False),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, False),
+            ("f_set_task_complete", TaskStatusEnum.complete, False),
+            ("f_set_task_waiting", TaskStatusEnum.waiting, True),
+            ("f_set_task_running", TaskStatusEnum.running, True),
         ],
     )
     def test_set_task_status_from_complete(
@@ -1441,6 +1415,7 @@ class TestNeo4jStore(TestStateStore):
         scope_test,
         status_func,
         status,
+        should_raise,
         request,
     ):
         # request param fixture used to get function fixture.
@@ -1455,50 +1430,33 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        extra = n4js.create_task(transformation_sk)
-
         # set all the tasks to running
         n4js.set_task_running(task_sks)
 
         # set all the tasks to complete
         n4js.set_task_complete(task_sks)
 
-        # change status of one task
-        neo4j_status_op(task_sks[0])
+        if should_raise:
+            with pytest.raises(ValueError, match="Cannot set task"):
+                neo4j_status_op(task_sks)
+        else:
+            neo4j_status_op(task_sks)
+            all_status = n4js.get_task_status(task_sks).values()
 
-        q = f"""
-        MATCH (task:Task {{_scoped_key: '{task_sks[0]}'}})
-        RETURN task
-        """
-        task_qr = n4js.graph.run(q).to_subgraph()
-        assert task_qr.get("status") == status.value
-
-        # now change status of the rest of the tasks
-        neo4j_status_op(task_sks[1:])
-        task_qr = n4js.graph.run(q).to_subgraph()
-        all_status = [task.get("status") for task in task_qr.nodes]
-        assert all(s == status.value for s in all_status)
-
-        # manually test not allowed
-        # complete -> waiting
-        n4js.set_task_running(extra)  # waiting -> running
-        n4js.set_task_complete(extra)  # running -> complete
-        with pytest.raises(ValueError, match="Cannot set task"):
-            n4js.set_task_waiting(extra)  # complete -> waiting X
-        # complete -> running
-        with pytest.raises(ValueError, match="Cannot set task"):
-            n4js.set_task_running(extra)
+            assert all(s == status for s in all_status)
 
     # allowed = [error, invalid, deleted, waiting]
     # no-op = [error]
     # not allowed = [running, complete]
     @pytest.mark.parametrize(
-        "status_func, status",
+        "status_func, status, should_raise",
         [
-            ("f_set_task_error", TaskStatusEnum.error),
-            ("f_set_task_waiting", TaskStatusEnum.waiting),
-            ("f_set_task_invalid", TaskStatusEnum.invalid),
-            ("f_set_task_deleted", TaskStatusEnum.deleted),
+            ("f_set_task_error", TaskStatusEnum.error, False),
+            ("f_set_task_waiting", TaskStatusEnum.waiting, False),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, False),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, False),
+            ("f_set_task_running", TaskStatusEnum.running, True),
+            ("f_set_task_complete", TaskStatusEnum.complete, True),
         ],
     )
     def test_set_task_status_from_error(
@@ -1508,6 +1466,7 @@ class TestNeo4jStore(TestStateStore):
         scope_test,
         status_func,
         status,
+        should_raise,
         request,
     ):
         # request param fixture used to get function fixture.
@@ -1533,32 +1492,14 @@ class TestNeo4jStore(TestStateStore):
         # set all the tasks to error
         n4js.set_task_error(task_sks)
 
-        # change status of one task
-        neo4j_status_op(task_sks[0])
+        if should_raise:
+            with pytest.raises(ValueError, match="Cannot set task"):
+                neo4j_status_op(task_sks)
+        else:
+            neo4j_status_op(task_sks)
+            all_status = n4js.get_task_status(task_sks).values()
 
-        q = f"""
-        MATCH (task:Task {{_scoped_key: '{task_sks[0]}'}})
-        RETURN task
-        """
-        task_qr = n4js.graph.run(q).to_subgraph()
-        assert task_qr.get("status") == status.value
-
-        # now change status of the rest of the tasks
-        neo4j_status_op(task_sks[1:])
-        task_qr = n4js.graph.run(q).to_subgraph()
-        all_status = [task.get("status") for task in task_qr.nodes]
-        assert all(s == status.value for s in all_status)
-
-        # manually test not allowed
-
-        # error -> running
-        n4js.set_task_running(extra)  # waiting -> running
-        n4js.set_task_error(extra)  # running -> error
-        with pytest.raises(ValueError, match="Cannot set task"):
-            n4js.set_task_running(extra)  # error -> running X
-        # error -> complete
-        with pytest.raises(ValueError, match="Cannot set task"):
-            n4js.set_task_complete(extra)  # error -> complete X
+            assert all(s == status for s in all_status)
 
     @pytest.mark.parametrize(
         "status_func, status",
