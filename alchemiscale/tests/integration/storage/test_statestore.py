@@ -1625,7 +1625,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.set_task_status([task_sk], status)
 
         # check the status
-        assert n4js.get_task_status([task_sk]).values()[0] == status
+        assert list(n4js.get_task_status([task_sk]).values())[0] == status
 
     def test_get_task_status(
         self,
