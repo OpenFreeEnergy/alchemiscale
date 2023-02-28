@@ -47,7 +47,7 @@ services:
     logging:
        driver: "awslogs"
        options:
-          awslogs-region: "${AWS_DEFAULT_REGION}"
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
           awslogs-group: "alchemiscale"
           tag: "{{.Name}}/{{.ID}}"
 
@@ -91,7 +91,7 @@ services:
     logging:
        driver: "awslogs"
        options:
-          awslogs-region: "${AWS_DEFAULT_REGION}"
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
           awslogs-group: "alchemiscale"
           tag: "{{.Name}}/{{.ID}}"
 
@@ -137,7 +137,7 @@ services:
     logging:
        driver: "awslogs"
        options:
-          awslogs-region: "${AWS_DEFAULT_REGION}"
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
           awslogs-group: "alchemiscale"
           tag: "{{.Name}}/{{.ID}}"
 
@@ -165,7 +165,7 @@ services:
     logging:
        driver: "awslogs"
        options:
-          awslogs-region: "${AWS_DEFAULT_REGION}"
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
           awslogs-group: "alchemiscale"
           tag: "{{.Name}}/{{.ID}}"
 
@@ -196,6 +196,6 @@ services:
     logging:
        driver: "awslogs"
        options:
-          awslogs-region: "${AWS_DEFAULT_REGION}"
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
           awslogs-group: "alchemiscale"
           tag: "{{.Name}}/{{.ID}}"
