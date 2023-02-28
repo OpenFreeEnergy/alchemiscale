@@ -1458,30 +1458,30 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._get_protocoldagresultrefs(q)
 
-    def set_task_status(self, task: ScopedKey, status: TaskStatusEnum) -> ScopedKey:
+    def set_task_status(self, tasks: List[ScopedKey], status: TaskStatusEnum) -> None:
         """
         Set the status of a task, this is a master method that calls the
         appropriate method for the status.
 
         Parameters
         ----------
-        task : ScopedKey
+        tasks : ScopedKey
             The task or list of tasks to set the status of.
         status : TaskStatusEnum
             The status to set the task to.
         """
         method = getattr(self, f"set_task_{status.value}")
-        return method(task)
+        return method(tasks)
 
     def get_task_status(
-        self, task: Union[ScopedKey, List[ScopedKey]]
-    ) -> Union[TaskStatusEnum, Dict[ScopedKey, TaskStatusEnum]]:
+        self, tasks: List[ScopedKey]
+    ) -> Dict[ScopedKey, TaskStatusEnum]:
         """
         Get the status of a task or list of tasks.
 
         Parameters
         ----------
-        task : Union[ScopedKey,List[ScopedKey]]
+        tasks : Union[ScopedKey,List[ScopedKey]]
             The task or list of tasks to set the status of.
 
         Returns
@@ -1490,12 +1490,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             The status of the task or a dictionary of tasks and their statuses.
         """
 
-        if isinstance(task, ScopedKey):
-            task = [task]
-
         statuses = {}
         with self.transaction() as tx:
-            for t in task:
+            for t in tasks:
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
                 RETURN t
@@ -1504,12 +1501,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                 status = task.get("status")
                 statuses[t] = TaskStatusEnum(status)
 
-        if len(statuses) == 1:
-            return list(statuses.values())[0]
-
         return statuses
 
-    def set_task_running(self, task: Union[ScopedKey, List[ScopedKey]]) -> None:
+    def set_task_running(self, tasks: List[ScopedKey]) -> None:
         """
         Set the status of a task or list of tasks to `running`.
 
@@ -1518,16 +1512,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Parameters
         ----------
-        task : Union[ScopedKey,List[ScopedKey]]
+        tasks : Union[ScopedKey,List[ScopedKey]]
             The task or list of tasks to set the status of.
         status : TaskStatusEnum
             The status to set the task to.
         """
-        if isinstance(task, ScopedKey):
-            task = [task]
 
         with self.transaction() as tx:
-            for t in task:
+            for t in tasks:
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
                 RETURN t
@@ -1546,7 +1538,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 """
                 tx.run(q2)
 
-    def set_task_complete(self, task: Union[ScopedKey, List[ScopedKey]]) -> None:
+    def set_task_complete(self, tasks: List[ScopedKey]) -> None:
         """
         Set the status of a task or list of tasks to `complete`.
 
@@ -1554,11 +1546,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         tasks can be set to `complete`.
 
         """
-        if isinstance(task, ScopedKey):
-            task = [task]
 
         with self.transaction() as tx:
-            for t in task:
+            for t in tasks:
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
                 RETURN t
@@ -1583,7 +1573,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def set_task_waiting(
         self,
-        task: Union[ScopedKey, List[ScopedKey]],
+        tasks: List[ScopedKey],
         clear_claim: Optional[bool] = False,
     ) -> None:
         """
@@ -1593,11 +1583,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         tasks can be set to `waiting`, or a `waiting` no-op can be performed
 
         """
-        if isinstance(task, ScopedKey):
-            task = [task]
 
         with self.transaction() as tx:
-            for t in task:
+            for t in tasks:
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
                 RETURN t
@@ -1620,7 +1608,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def set_task_error(
         self,
-        task: Union[ScopedKey, List[ScopedKey]],
+        tasks: List[ScopedKey],
     ) -> None:
         """
         Set the status of a task or list of tasks to `error`.
@@ -1628,11 +1616,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         As per the design of the `Task` data lifecycle `waiting`, `running` and `complete`
         tasks can be set to `error`.
         """
-        if isinstance(task, ScopedKey):
-            task = [task]
 
         with self.transaction() as tx:
-            for t in task:
+            for t in tasks:
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
                 RETURN t
@@ -1657,7 +1643,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def set_task_invalid(
         self,
-        task: Union[ScopedKey, List[ScopedKey]],
+        tasks: Union[ScopedKey, List[ScopedKey]],
     ) -> None:
         """
         Set the status of a task or list of tasks to `invalid`.
@@ -1665,11 +1651,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         As per the design of the `Task` data lifecycle any task can be set to `invalid`.
         Once `invalid` is set the task cannot change status
         """
-        if isinstance(task, ScopedKey):
-            task = [task]
 
         with self.transaction() as tx:
-            for t in task:
+            for t in tasks:
                 # set the status and delete the ACTIONS relationship
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
@@ -1682,7 +1666,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def set_task_deleted(
         self,
-        task: Union[ScopedKey, List[ScopedKey]],
+        tasks: List[ScopedKey],
     ) -> None:
         """
         Set the status of a task or list of tasks to `deleted`.
@@ -1690,11 +1674,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         As per the design of the `Task` data lifecycle any task can be set to `deleted`.
         Once `deleted` is set the task cannot change status
         """
-        if isinstance(task, ScopedKey):
-            task = [task]
 
         with self.transaction() as tx:
-            for t in task:
+            for t in tasks:
                 # set the status and delete any ACTIONS relationship
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})

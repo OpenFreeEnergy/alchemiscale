@@ -300,10 +300,10 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         task_sk_invalid = n4js.create_task(transformation_sk)
-        n4js.set_task_invalid(task_sk_invalid)
+        n4js.set_task_invalid([task_sk_invalid])
 
         task_sk_deleted = n4js.create_task(transformation_sk)
-        n4js.set_task_deleted(task_sk_deleted)
+        n4js.set_task_deleted([task_sk_deleted])
 
         with pytest.raises(ValueError, match="Cannot extend"):
             # try and create a task that extends an invalid task
@@ -695,7 +695,7 @@ class TestNeo4jStore(TestStateStore):
         assert claimed_task_sks == [None] * 9
 
         # complete the extends task
-        n4js.set_task_complete(first_task)
+        n4js.set_task_complete([first_task])
 
         # claim the next task again
         claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=1)
@@ -746,7 +746,7 @@ class TestNeo4jStore(TestStateStore):
         assert claimed_task_sks == [None] * 10
 
         # complete the extends task
-        n4js.set_task_complete(first_task)
+        n4js.set_task_complete([first_task])
 
         # claim the next task again
         claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=1)
@@ -794,15 +794,14 @@ class TestNeo4jStore(TestStateStore):
 
         assert claimed_task_sks == [first_task]
         # complete the first task
-        n4js.set_task_complete(first_task)
+        n4js.set_task_complete([first_task])
 
         # claim the next layer of tasks, should be all of layer two
         claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=2)
         assert set(claimed_task_sks) == set([layer_two_1, layer_two_2])
 
         # complete the layer two tasks
-        n4js.set_task_complete(layer_two_1)
-        n4js.set_task_complete(layer_two_2)
+        n4js.set_task_complete([layer_two_1, layer_two_2])
 
         # claim the next layer of tasks, should be all of layer three
         claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=4)
@@ -1531,15 +1530,15 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        n4js.set_task_invalid(task_sks[0])
-        n4js.set_task_deleted(task_sks[1])
+        n4js.set_task_invalid(task_sks[0:1])
+        n4js.set_task_deleted(task_sks[1:2])
         # change status of one task
 
         with pytest.raises(ValueError, match="Cannot set task"):
-            neo4j_status_op(task_sks[0])
+            neo4j_status_op(task_sks[0:1])
 
         with pytest.raises(ValueError, match="Cannot set task"):
-            neo4j_status_op(task_sks[1])
+            neo4j_status_op(task_sks[1:2])
 
     # check that setting complete, invalid or deleted removes the
     # actions relationship with taskhub
@@ -1575,11 +1574,11 @@ class TestNeo4jStore(TestStateStore):
         assert set(sks) == set(task_sks)
 
         # set one to invalid
-        n4js.set_task_invalid(task_sks[0])
+        n4js.set_task_invalid(task_sks[0:1])
         # set one to deleted
-        n4js.set_task_deleted(task_sks[1])
+        n4js.set_task_deleted(task_sks[1:2])
         # set one to complete
-        n4js.set_task_complete(task_sks[2])
+        n4js.set_task_complete(task_sks[2:3])
 
         result = n4js.graph.run(q).to_subgraph()
         assert result == None
@@ -1623,10 +1622,10 @@ class TestNeo4jStore(TestStateStore):
             precondition_op(task_sk)
 
         # set the status
-        n4js.set_task_status(task_sk, status)
+        n4js.set_task_status([task_sk], status)
 
         # check the status
-        assert n4js.get_task_status(task_sk) == status
+        assert n4js.get_task_status([task_sk]).values()[0] == status
 
     def test_get_task_status(
         self,
@@ -1647,28 +1646,21 @@ class TestNeo4jStore(TestStateStore):
         # task 0 will remain waiting
 
         # task 1 will be set to running
-        n4js.set_task_running(task_sks[1])
+        n4js.set_task_running(task_sks[1:2])
 
         # task 2 will be set to error
-        n4js.set_task_running(task_sks[2])
-        n4js.set_task_error(task_sks[2])
+        n4js.set_task_running(task_sks[2:3])
+        n4js.set_task_error(task_sks[2:3])
 
         # task 3 will be set to complete
-        n4js.set_task_running(task_sks[3])
-        n4js.set_task_complete(task_sks[3])
+        n4js.set_task_running(task_sks[3:4])
+        n4js.set_task_complete(task_sks[3:4])
 
         # task 4 will be set to invalid
-        n4js.set_task_invalid(task_sks[4])
+        n4js.set_task_invalid(task_sks[4:5])
 
         # task 5 will be set to deleted
-        n4js.set_task_deleted(task_sks[5])
-
-        assert n4js.get_task_status(task_sks[0]) == TaskStatusEnum.waiting
-        assert n4js.get_task_status(task_sks[1]) == TaskStatusEnum.running
-        assert n4js.get_task_status(task_sks[2]) == TaskStatusEnum.error
-        assert n4js.get_task_status(task_sks[3]) == TaskStatusEnum.complete
-        assert n4js.get_task_status(task_sks[4]) == TaskStatusEnum.invalid
-        assert n4js.get_task_status(task_sks[5]) == TaskStatusEnum.deleted
+        n4js.set_task_deleted(task_sks[5:6])
 
         # now lets try get them back as a dict of task sks and statuses
         task_statuses = n4js.get_task_status(task_sks)

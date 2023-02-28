@@ -212,7 +212,7 @@ async def set_task_status(
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
     status = TaskStatusEnum(status)
-    n4js.set_task_status(task_sk, status)
+    n4js.set_task_status([task_sk], status)
 
 
 @router.get("/tasks/{task_scoped_key}/status")
@@ -223,7 +223,7 @@ async def get_task_status(
 ):
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
-    status = n4js.get_task_status(task_sk)
+    status = n4js.get_task_status([task_sk])
     return status
 
 
