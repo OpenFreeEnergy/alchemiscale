@@ -1465,7 +1465,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Parameters
         ----------
-        task : Union[ScopedKey,List[ScopedKey]]
+        task : ScopedKey
             The task or list of tasks to set the status of.
         status : TaskStatusEnum
             The status to set the task to.
