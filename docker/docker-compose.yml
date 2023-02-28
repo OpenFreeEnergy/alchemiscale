@@ -44,6 +44,12 @@ services:
     user: ${USER_ID:?err}:${GROUP_ID:?err}
     labels:
       - "traefik.enable=false"
+    logging:
+       driver: "awslogs"
+       options:
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
+          awslogs-group: "alchemiscale"
+          tag: "{{.Name}}/{{.ID}}"
 
   alchemiscale-client-API:
     image: ${ALCHEMISCALE_DOCKER_IMAGE:?err}
@@ -82,6 +88,12 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+    logging:
+       driver: "awslogs"
+       options:
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
+          awslogs-group: "alchemiscale"
+          tag: "{{.Name}}/{{.ID}}"
 
   alchemiscale-compute-API:
     image: ${ALCHEMISCALE_DOCKER_IMAGE:?err}
@@ -122,6 +134,12 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+    logging:
+       driver: "awslogs"
+       options:
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
+          awslogs-group: "alchemiscale"
+          tag: "{{.Name}}/{{.ID}}"
 
   alchemiscale-db-init:
     image: ${ALCHEMISCALE_DOCKER_IMAGE:?err}
@@ -144,6 +162,12 @@ services:
       neo4j:
         condition: service_healthy
     command: "database init"
+    logging:
+       driver: "awslogs"
+       options:
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
+          awslogs-group: "alchemiscale"
+          tag: "{{.Name}}/{{.ID}}"
 
   reverse-proxy:
     # The official v2 Traefik docker image
@@ -169,3 +193,9 @@ services:
       # So that Traefik can listen to the Docker events
       - /var/run/docker.sock:/var/run/docker.sock
       - ./letsencrypt:/letsencrypt
+    logging:
+       driver: "awslogs"
+       options:
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
+          awslogs-group: "alchemiscale"
+          tag: "{{.Name}}/{{.ID}}"
