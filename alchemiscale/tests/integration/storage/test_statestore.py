@@ -1605,12 +1605,30 @@ class TestNeo4jStore(TestStateStore):
             assert all(s == status for s in all_status)
 
     @pytest.mark.parametrize(
-        "status_func, status",
+        "terminal_status_func, terminal_status",
         [
-            ("f_set_task_error", TaskStatusEnum.error),
-            ("f_set_task_waiting", TaskStatusEnum.waiting),
-            ("f_set_task_running", TaskStatusEnum.running),
-            ("f_set_task_complete", TaskStatusEnum.complete),
+            ("f_set_task_invalid", TaskStatusEnum.invalid),
+            ("f_set_task_deleted", TaskStatusEnum.deleted),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "status_func, status, should_raise, kwargs",
+        [
+            ("f_set_task_error", TaskStatusEnum.error, True, {}),
+            ("f_set_task_waiting", TaskStatusEnum.waiting, True, {}),
+            ("f_set_task_running", TaskStatusEnum.running, True, {}),
+            (
+                "f_set_task_complete",
+                TaskStatusEnum.complete,
+                True,
+                {"strict_complete": True},
+            ),
+            (
+                "f_set_task_complete",
+                TaskStatusEnum.complete,
+                False,
+                {"strict_complete": False},
+            ),
         ],
     )
     def test_set_task_status_from_terminals(
@@ -1618,12 +1636,18 @@ class TestNeo4jStore(TestStateStore):
         n4js: Neo4jStore,
         network_tyk2,
         scope_test,
+        terminal_status_func,
+        terminal_status,
         status_func,
         status,
+        should_raise,
+        kwargs,
         request,
     ):
         # request param fixture used to get function fixture.
         neo4j_status_op = request.getfixturevalue(status_func)
+        neo4j_terminal_op = request.getfixturevalue(terminal_status_func)
+
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
         taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
@@ -1634,15 +1658,17 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        n4js.set_task_invalid(task_sks[0:1])
-        n4js.set_task_deleted(task_sks[1:2])
-        # change status of one task
+        # move it to one of the terminal statuses
+        neo4j_terminal_op(task_sks)
 
-        with pytest.raises(ValueError, match="Cannot set task"):
-            neo4j_status_op(task_sks[0:1])
+        if should_raise:
+            with pytest.raises(ValueError, match="Cannot set task"):
+                neo4j_status_op(task_sks, **kwargs)
 
-        with pytest.raises(ValueError, match="Cannot set task"):
-            neo4j_status_op(task_sks[1:2])
+        else:
+            neo4j_status_op(task_sks, **kwargs)
+            all_status = n4js.get_task_status(task_sks).values()
+            assert all(s == terminal_status for s in all_status)
 
     # check that setting complete, invalid or deleted removes the
     # actions relationship with taskhub
