@@ -194,7 +194,9 @@ class TestComputeClient:
         compute_client.set_task_status(all_tasks[0], status)
 
         # check that the status has been set
-        assert n4js_preloaded.get_task_status(all_tasks[0]) == status
+        # note must be list on n4js side
+        stat_dict = n4js_preloaded.get_task_status([all_tasks[0]])
+        assert stat_dict[all_tasks[0]] == status
 
     @pytest.mark.parametrize("status", [member for member in TaskStatusEnum])
     def test_get_task_status(
@@ -231,12 +233,14 @@ class TestComputeClient:
 
         compute_client.set_task_status(all_tasks[0], TaskStatusEnum.running)
         # complete the task
-        compute_client.set_task_complete(all_tasks[0])
+        compute_client.set_task_status(all_tasks[0], TaskStatusEnum.complete)
 
         # check that the status has been set
         assert compute_client.get_task_status(all_tasks[0]) == TaskStatusEnum.complete
 
         # test if we change the status to something else it preserves it
         compute_client.set_task_status(all_tasks[1], TaskStatusEnum.invalid)
+
+        compute_client.set_task_status(all_tasks[1], TaskStatusEnum.complete)
 
         assert compute_client.get_task_status(all_tasks[1]) == TaskStatusEnum.invalid

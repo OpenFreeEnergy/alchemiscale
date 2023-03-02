@@ -218,6 +218,7 @@ async def set_task_status(
 @router.get("/tasks/{task_scoped_key}/status")
 async def get_task_status(
     task_scoped_key,
+    *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):

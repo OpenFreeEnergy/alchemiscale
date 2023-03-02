@@ -1619,7 +1619,7 @@ class TestNeo4jStore(TestStateStore):
         # request param fixture used to get function fixture.
         if precondition_op:
             precondition_op = request.getfixturevalue(precondition_op)
-            precondition_op(task_sk)
+            precondition_op([task_sk])
 
         # set the status
         n4js.set_task_status([task_sk], status)
