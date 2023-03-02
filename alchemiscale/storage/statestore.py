@@ -1538,13 +1538,23 @@ class Neo4jStore(AlchemiscaleStateStore):
                 """
                 tx.run(q2)
 
-    def set_task_complete(self, tasks: List[ScopedKey]) -> None:
+    def set_task_complete(
+        self, tasks: List[ScopedKey], strict: Optional[bool] = True
+    ) -> None:
         """
         Set the status of a task or list of tasks to `complete`.
 
-        As per the design of the `Task` data lifecycle only `running`
-        tasks can be set to `complete`.
+        There are two types of desired behavior for this method:
 
+        1. strict: If the task is currently `running` then set it to `complete`,
+                   otherwise raise an Exception
+        2. Non-strict: if the task has been set to anything other than running then
+                        do no-op
+
+        As per the design of the `Task` data lifecycle only `running`
+        tasks can be set to `complete`. If the task is not currently running
+        then the strict=True behavior is to raise an Exception. If strict=False
+        then the task is not set to `complete` and no Exception is raised.
         """
 
         with self.transaction() as tx:
@@ -1558,9 +1568,12 @@ class Neo4jStore(AlchemiscaleStateStore):
                 if status == TaskStatusEnum.complete.value:
                     continue  # no-op
                 if status != TaskStatusEnum.running.value:
-                    raise ValueError(
-                        f"Cannot set task {t} with current status: {status} to `complete` as it is not currently `running`."
-                    )
+                    if strict:
+                        raise ValueError(
+                            f"Cannot set task {t} with current status: {status} to `complete` as it is not currently `running`."
+                        )
+                    else:
+                        continue  # no-op
                 # set the status and delete the ACTIONS relationship
                 q2 = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})

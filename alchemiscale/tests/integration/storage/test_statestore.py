@@ -1480,8 +1480,6 @@ class TestNeo4jStore(TestStateStore):
         # create 10 tasks
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
 
-        extra = n4js.create_task(transformation_sk)
-
         # set all the tasks to running
         n4js.set_task_running(task_sks)
 
@@ -1498,6 +1496,64 @@ class TestNeo4jStore(TestStateStore):
             neo4j_status_op(task_sks)
             all_status = n4js.get_task_status(task_sks).values()
 
+            assert all(s == status for s in all_status)
+
+    # NOTE: a precondition operation is used for `complete` as it is not
+    # reachable from the default status of `waiting` in strict mode.
+    @pytest.mark.parametrize(
+        "status_func, status, precondition_op_func",
+        [
+            ("f_set_task_error", TaskStatusEnum.error, None),
+            ("f_set_task_waiting", TaskStatusEnum.waiting, None),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, None),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, None),
+            ("f_set_task_running", TaskStatusEnum.running, None),
+            ("f_set_task_complete", TaskStatusEnum.complete, "f_set_task_running"),
+        ],
+    )
+    def test_set_task_status_complete_noops(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        status_func,
+        status,
+        precondition_op_func,
+        request,
+    ):
+        # request param fixture used to get function fixture.
+        neo4j_status_op = request.getfixturevalue(status_func)
+
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        if precondition_op_func:
+            precondition_op = request.getfixturevalue(precondition_op_func)
+            precondition_op(task_sks)
+
+        neo4j_status_op(task_sks)
+
+        # set to complete in struct and non-strict mode,
+
+        # strict should be an error, except where running or complete
+        if status not in [TaskStatusEnum.running, TaskStatusEnum.complete]:
+            with pytest.raises(ValueError, match="Cannot set task"):
+                n4js.set_task_complete(task_sks, strict=True)
+
+        # non-strict should be a no-op except where running
+        n4js.set_task_complete(task_sks, strict=False)
+        all_status = n4js.get_task_status(task_sks).values()
+
+        if status == TaskStatusEnum.running:
+            assert all(s == TaskStatusEnum.complete for s in all_status)
+        else:
             assert all(s == status for s in all_status)
 
     @pytest.mark.parametrize(
