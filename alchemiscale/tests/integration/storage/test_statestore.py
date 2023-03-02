@@ -1713,6 +1713,75 @@ class TestNeo4jStore(TestStateStore):
         result = n4js.graph.run(q).to_subgraph()
         assert result == None
 
+
+    def test_set_task_status_removes_actions_relationship_extends(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+    ):
+                # tests the ability to action and claim a set of tasks in an
+        # EXTENDS chain
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 7 tasks that extend in a bifuricating  EXTENDS chain
+
+        first_task = n4js.create_task(transformation_sk)
+
+        layer_two_1 = n4js.create_task(transformation_sk, extends=first_task)
+        layer_two_2 = n4js.create_task(transformation_sk, extends=first_task)
+
+        layer_three_1 = n4js.create_task(transformation_sk, extends=layer_two_1)
+        layer_three_2 = n4js.create_task(transformation_sk, extends=layer_two_1)
+        layer_three_3 = n4js.create_task(transformation_sk, extends=layer_two_2)
+        layer_three_4 = n4js.create_task(transformation_sk, extends=layer_two_2)
+
+        collected_sks = [
+            first_task,
+            layer_two_1,
+            layer_two_2,
+            layer_three_1,
+            layer_three_2,
+            layer_three_3,
+            layer_three_4,
+        ]
+        # action the tasks
+        actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
+        
+
+        q = f"""
+        MATCH (taskhub:TaskHub {{_scoped_key: '{taskhub_sk}'}})
+        MATCH (taskhub)-[:ACTIONS]->(task:Task)
+        return task
+        """
+
+        result = n4js.graph.run(q).to_subgraph()
+        sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
+        assert set(sks) == set(collected_sks)
+        assert (len(sks) == 7)
+
+        # set layer one to invalid, this should invalidate the entire chain
+        n4js.set_task_invalid([first_task])
+
+        result = n4js.graph.run(q).to_subgraph()
+        assert result == None
+
+        q = f"""
+        MATCH (task:Task)
+        WHERE task.status = 'invalid'
+        return task
+        """
+        result = n4js.graph.run(q).to_subgraph()
+        sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
+        assert(set(sks) ==  set(collected_sks))
+        assert (len(sks) == 7)
+
+
     # check that the status is set correctly through the generic method
     # NOTE: a precondition operation is used for `complete` as it is not
     # reachable from the default status of `waiting`

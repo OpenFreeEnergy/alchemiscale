@@ -1667,12 +1667,18 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             for t in tasks:
                 # set the status and delete the ACTIONS relationship
+                # make sure we follow the extends chain and set all tasks to invalid
+                # and remove actions relationships
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
+                OPTIONAL MATCH (t)<-[er:EXTENDS]-(extends_task:Task) 
                 SET t.status = '{TaskStatusEnum.invalid.value}'
-                WITH t
+                SET extends_task.status = '{TaskStatusEnum.invalid.value}'
+                WITH t, extends_task
                 OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
+                OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
                 DETACH DELETE ar
+                DETACH DELETE are
                 """
                 tx.run(q)
 
@@ -1686,13 +1692,19 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         with self.transaction() as tx:
             for t in tasks:
-                # set the status and delete any ACTIONS relationship
+                # set the status and delete the ACTIONS relationship
+                # make sure we follow the extends chain and set all tasks to invalid
+                # and remove actions relationships
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
+                OPTIONAL MATCH (t)<-[er:EXTENDS]-(extends_task:Task) 
                 SET t.status = '{TaskStatusEnum.deleted.value}'
-                WITH t
+                SET extends_task.status = '{TaskStatusEnum.deleted.value}'
+                WITH t, extends_task
                 OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
+                OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
                 DETACH DELETE ar
+                DETACH DELETE are
                 """
                 tx.run(q)
 
