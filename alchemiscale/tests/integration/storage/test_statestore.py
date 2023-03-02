@@ -1301,17 +1301,28 @@ class TestNeo4jStore(TestStateStore):
         return n4js.set_task_deleted
 
     # allowed = [running, error, invalid, deleted]
-    # no-op = [waiting]
-    # not allowed = [complete]
+    # no-op = [waiting, complete[strict=False]]
+    # not allowed = [complete[strict=True]]
     @pytest.mark.parametrize(
-        "status_func, status, should_raise",
+        "status_func, status, should_raise, kwargs",
         [
-            ("f_set_task_running", TaskStatusEnum.running, False),
-            ("f_set_task_error", TaskStatusEnum.error, False),
-            ("f_set_task_invalid", TaskStatusEnum.invalid, False),
-            ("f_set_task_deleted", TaskStatusEnum.deleted, False),
-            ("f_set_task_waiting", TaskStatusEnum.waiting, False),
-            ("f_set_task_complete", TaskStatusEnum.complete, True),
+            ("f_set_task_running", TaskStatusEnum.running, False, {}),
+            ("f_set_task_error", TaskStatusEnum.error, False, {}),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, False, {}),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, False, {}),
+            ("f_set_task_waiting", TaskStatusEnum.waiting, False, {}),
+            (
+                "f_set_task_complete",
+                TaskStatusEnum.complete,
+                True,
+                {"strict_complete": True},
+            ),
+            (
+                "f_set_task_complete",
+                TaskStatusEnum.waiting,
+                False,
+                {"strict_complete": False},
+            ),
         ],
     )
     def test_set_task_status_from_waiting(
@@ -1322,6 +1333,7 @@ class TestNeo4jStore(TestStateStore):
         status_func,
         status,
         should_raise,
+        kwargs,
         request,
     ):
         # request param fixture used to get function fixture.
@@ -1338,25 +1350,36 @@ class TestNeo4jStore(TestStateStore):
 
         if should_raise:
             with pytest.raises(ValueError, match="Cannot set task"):
-                neo4j_status_op(task_sks)
+                neo4j_status_op(task_sks, **kwargs)
         else:
-            neo4j_status_op(task_sks)
+            neo4j_status_op(task_sks, **kwargs)
             all_status = n4js.get_task_status(task_sks).values()
 
             assert all(s == status for s in all_status)
 
-    # allowed = [complete, error, invalid, deleted]
+    # allowed = [complete[strict=True], complete[strict=False] , error, invalid, deleted]
     # no-op = [running]
     # not allowed = [waiting]
     @pytest.mark.parametrize(
-        "status_func, status, should_raise",
+        "status_func, status, should_raise, kwargs",
         [
-            ("f_set_task_complete", TaskStatusEnum.complete, False),
-            ("f_set_task_error", TaskStatusEnum.error, False),
-            ("f_set_task_invalid", TaskStatusEnum.invalid, False),
-            ("f_set_task_deleted", TaskStatusEnum.deleted, False),
-            ("f_set_task_running", TaskStatusEnum.running, False),
-            ("f_set_task_waiting", TaskStatusEnum.waiting, True),
+            (
+                "f_set_task_complete",
+                TaskStatusEnum.complete,
+                False,
+                {"strict_complete": True},
+            ),
+            (
+                "f_set_task_complete",
+                TaskStatusEnum.complete,
+                False,
+                {"strict_complete": False},
+            ),
+            ("f_set_task_error", TaskStatusEnum.error, False, {}),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, False, {}),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, False, {}),
+            ("f_set_task_running", TaskStatusEnum.running, False, {}),
+            ("f_set_task_waiting", TaskStatusEnum.waiting, True, {}),
         ],
     )
     def test_set_task_status_from_running(
@@ -1367,6 +1390,7 @@ class TestNeo4jStore(TestStateStore):
         status_func,
         status,
         should_raise,
+        kwargs,
         request,
     ):
         # request param fixture used to get function fixture.
@@ -1386,25 +1410,36 @@ class TestNeo4jStore(TestStateStore):
 
         if should_raise:
             with pytest.raises(ValueError, match="Cannot set task"):
-                neo4j_status_op(task_sks)
+                neo4j_status_op(task_sks, **kwargs)
         else:
-            neo4j_status_op(task_sks)
+            neo4j_status_op(task_sks, **kwargs)
             all_status = n4js.get_task_status(task_sks).values()
 
             assert all(s == status for s in all_status)
 
     # allowed = [error, invalid, deleted]
-    # no-op = [complete]
+    # no-op = [complete[strict=True], complete[strict=False]]
     # not allowed = [waiting, running]
     @pytest.mark.parametrize(
-        "status_func, status, should_raise",
+        "status_func, status, should_raise, kwargs",
         [
-            ("f_set_task_error", TaskStatusEnum.error, False),
-            ("f_set_task_invalid", TaskStatusEnum.invalid, False),
-            ("f_set_task_deleted", TaskStatusEnum.deleted, False),
-            ("f_set_task_complete", TaskStatusEnum.complete, False),
-            ("f_set_task_waiting", TaskStatusEnum.waiting, True),
-            ("f_set_task_running", TaskStatusEnum.running, True),
+            ("f_set_task_error", TaskStatusEnum.error, False, {}),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, False, {}),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, False, {}),
+            (
+                "f_set_task_complete",
+                TaskStatusEnum.complete,
+                False,
+                {"strict_complete": True},
+            ),
+            (
+                "f_set_task_complete",
+                TaskStatusEnum.complete,
+                False,
+                {"strict_complete": False},
+            ),
+            ("f_set_task_waiting", TaskStatusEnum.waiting, True, {}),
+            ("f_set_task_running", TaskStatusEnum.running, True, {}),
         ],
     )
     def test_set_task_status_from_complete(
@@ -1415,6 +1450,7 @@ class TestNeo4jStore(TestStateStore):
         status_func,
         status,
         should_raise,
+        kwargs,
         request,
     ):
         # request param fixture used to get function fixture.
@@ -1437,25 +1473,36 @@ class TestNeo4jStore(TestStateStore):
 
         if should_raise:
             with pytest.raises(ValueError, match="Cannot set task"):
-                neo4j_status_op(task_sks)
+                neo4j_status_op(task_sks, **kwargs)
         else:
-            neo4j_status_op(task_sks)
+            neo4j_status_op(task_sks, **kwargs)
             all_status = n4js.get_task_status(task_sks).values()
 
             assert all(s == status for s in all_status)
 
     # allowed = [error, invalid, deleted, waiting]
-    # no-op = [error]
-    # not allowed = [running, complete]
+    # no-op = [error, complete[strict=False]]
+    # not allowed = [running, complete[strict=True]]
     @pytest.mark.parametrize(
-        "status_func, status, should_raise",
+        "status_func, status, should_raise, kwargs",
         [
-            ("f_set_task_error", TaskStatusEnum.error, False),
-            ("f_set_task_waiting", TaskStatusEnum.waiting, False),
-            ("f_set_task_invalid", TaskStatusEnum.invalid, False),
-            ("f_set_task_deleted", TaskStatusEnum.deleted, False),
-            ("f_set_task_running", TaskStatusEnum.running, True),
-            ("f_set_task_complete", TaskStatusEnum.complete, True),
+            ("f_set_task_error", TaskStatusEnum.error, False, {}),
+            ("f_set_task_waiting", TaskStatusEnum.waiting, False, {}),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, False, {}),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, False, {}),
+            ("f_set_task_running", TaskStatusEnum.running, True, {}),
+            (
+                "f_set_task_complete",
+                TaskStatusEnum.complete,
+                True,
+                {"strict_complete": True},
+            ),
+            (
+                "f_set_task_complete",
+                TaskStatusEnum.error,
+                False,
+                {"strict_complete": False},
+            ),
         ],
     )
     def test_set_task_status_from_error(
@@ -1466,6 +1513,7 @@ class TestNeo4jStore(TestStateStore):
         status_func,
         status,
         should_raise,
+        kwargs,
         request,
     ):
         # request param fixture used to get function fixture.
@@ -1491,9 +1539,9 @@ class TestNeo4jStore(TestStateStore):
 
         if should_raise:
             with pytest.raises(ValueError, match="Cannot set task"):
-                neo4j_status_op(task_sks)
+                neo4j_status_op(task_sks, **kwargs)
         else:
-            neo4j_status_op(task_sks)
+            neo4j_status_op(task_sks, **kwargs)
             all_status = n4js.get_task_status(task_sks).values()
 
             assert all(s == status for s in all_status)
@@ -1545,10 +1593,10 @@ class TestNeo4jStore(TestStateStore):
         # strict should be an error, except where running or complete
         if status not in [TaskStatusEnum.running, TaskStatusEnum.complete]:
             with pytest.raises(ValueError, match="Cannot set task"):
-                n4js.set_task_complete(task_sks, strict=True)
+                n4js.set_task_complete(task_sks, strict_complete=True)
 
         # non-strict should be a no-op except where running
-        n4js.set_task_complete(task_sks, strict=False)
+        n4js.set_task_complete(task_sks, strict_complete=False)
         all_status = n4js.get_task_status(task_sks).values()
 
         if status == TaskStatusEnum.running:

@@ -1458,7 +1458,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._get_protocoldagresultrefs(q)
 
-    def set_task_status(self, tasks: List[ScopedKey], status: TaskStatusEnum) -> None:
+    def set_task_status(
+        self, tasks: List[ScopedKey], status: TaskStatusEnum, **kwargs
+    ) -> None:
         """
         Set the status of a task, this is a master method that calls the
         appropriate method for the status.
@@ -1469,15 +1471,17 @@ class Neo4jStore(AlchemiscaleStateStore):
             The task or list of tasks to set the status of.
         status : TaskStatusEnum
             The status to set the task to.
+        **kwargs
+            Additional keyword arguments to pass to the status method.
         """
         method = getattr(self, f"set_task_{status.value}")
-        return method(tasks)
+        return method(tasks, **kwargs)
 
     def get_task_status(
         self, tasks: List[ScopedKey]
     ) -> Dict[ScopedKey, TaskStatusEnum]:
         """
-        Get the status of a task or list of tasks.
+        Get the status of a list of tasks.
 
         Parameters
         ----------
@@ -1503,9 +1507,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return statuses
 
-    def set_task_running(self, tasks: List[ScopedKey]) -> None:
+    def set_task_running(self, tasks: List[ScopedKey], **kwargs) -> None:
         """
-        Set the status of a task or list of tasks to `running`.
+        Set the status of a list of tasks to `running`.
 
         As per the design of the `Task` data lifecycle only `waiting`
         tasks can be set to `running`.
@@ -1539,10 +1543,10 @@ class Neo4jStore(AlchemiscaleStateStore):
                 tx.run(q2)
 
     def set_task_complete(
-        self, tasks: List[ScopedKey], strict: Optional[bool] = True
+        self, tasks: List[ScopedKey], strict_complete: Optional[bool] = False, **kwargs
     ) -> None:
         """
-        Set the status of a task or list of tasks to `complete`.
+        Set the status of a list of tasks to `complete`.
 
         There are two types of desired behavior for this method:
 
@@ -1553,8 +1557,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         As per the design of the `Task` data lifecycle only `running`
         tasks can be set to `complete`. If the task is not currently running
-        then the strict=True behavior is to raise an Exception. If strict=False
-        then the task is not set to `complete` and no Exception is raised.
+        then the strict_complete=True behavior is to raise an Exception.
+        If strict_complete=False then the task status is left unchanged and
+        no exception is raised.
         """
 
         with self.transaction() as tx:
@@ -1568,7 +1573,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 if status == TaskStatusEnum.complete.value:
                     continue  # no-op
                 if status != TaskStatusEnum.running.value:
-                    if strict:
+                    if strict_complete:
                         raise ValueError(
                             f"Cannot set task {t} with current status: {status} to `complete` as it is not currently `running`."
                         )
@@ -1585,12 +1590,10 @@ class Neo4jStore(AlchemiscaleStateStore):
                 tx.run(q2)
 
     def set_task_waiting(
-        self,
-        tasks: List[ScopedKey],
-        clear_claim: Optional[bool] = False,
+        self, tasks: List[ScopedKey], clear_claim: Optional[bool] = False, **kwargs
     ) -> None:
         """
-        Set the status of a task or list of tasks to `waiting`.
+        Set the status of a list of tasks to `waiting`.
 
         As per the design of the `Task` data lifecycle only `error`
         tasks can be set to `waiting`, or a `waiting` no-op can be performed
@@ -1619,12 +1622,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                     q2 += ", t.claimant = null"
                 tx.run(q2)
 
-    def set_task_error(
-        self,
-        tasks: List[ScopedKey],
-    ) -> None:
+    def set_task_error(self, tasks: List[ScopedKey], **kwargs) -> None:
         """
-        Set the status of a task or list of tasks to `error`.
+        Set the status of a list of tasks to `error`.
 
         As per the design of the `Task` data lifecycle `waiting`, `running` and `complete`
         tasks can be set to `error`.
@@ -1655,11 +1655,10 @@ class Neo4jStore(AlchemiscaleStateStore):
                 tx.run(q2)
 
     def set_task_invalid(
-        self,
-        tasks: Union[ScopedKey, List[ScopedKey]],
+        self, tasks: Union[ScopedKey, List[ScopedKey]], **kwargs
     ) -> None:
         """
-        Set the status of a task or list of tasks to `invalid`.
+        Set the status of a list of tasks to `invalid`.
 
         As per the design of the `Task` data lifecycle any task can be set to `invalid`.
         Once `invalid` is set the task cannot change status
@@ -1677,12 +1676,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                 """
                 tx.run(q)
 
-    def set_task_deleted(
-        self,
-        tasks: List[ScopedKey],
-    ) -> None:
+    def set_task_deleted(self, tasks: List[ScopedKey], **kwargs) -> None:
         """
-        Set the status of a task or list of tasks to `deleted`.
+        Set the status of a list of tasks to `deleted`.
 
         As per the design of the `Task` data lifecycle any task can be set to `deleted`.
         Once `deleted` is set the task cannot change status

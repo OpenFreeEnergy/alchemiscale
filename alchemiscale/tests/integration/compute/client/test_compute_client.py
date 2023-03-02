@@ -239,6 +239,7 @@ class TestComputeClient:
         assert compute_client.get_task_status(all_tasks[0]) == TaskStatusEnum.complete
 
         # test if we change the status to something else it preserves it
+        # IE see that the strict=False behaviour is upheld
         compute_client.set_task_status(all_tasks[1], TaskStatusEnum.invalid)
 
         compute_client.set_task_status(all_tasks[1], TaskStatusEnum.complete)
