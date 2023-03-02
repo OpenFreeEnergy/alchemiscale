@@ -225,7 +225,9 @@ async def get_task_status(
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
     status = n4js.get_task_status([task_sk])
-    return status
+    # cast the Python Enum to a string, as the JSON encoder doesn't know how
+    # to handle it
+    return status[task_sk].value
 
 
 @router.get("/chemicalsystems")
