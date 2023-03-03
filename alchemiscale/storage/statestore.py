@@ -15,7 +15,7 @@ import weakref
 import numpy as np
 
 import networkx as nx
-from gufe import AlchemicalNetwork, Transformation
+from gufe import AlchemicalNetwork, Transformation, Settings
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 from py2neo import Graph, Node, Relationship, Subgraph
 from py2neo.database import Transaction
@@ -120,6 +120,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     # with that label
     constraints = {
         "GufeTokenizable": {"name": "scoped_key", "property": "_scoped_key"},
+        "Settings": {"name": "settings_content", "property": "content"},
         "CredentialedUserIdentity": {
             "name": "user_identifier",
             "property": "identifier",
@@ -345,6 +346,32 @@ class Neo4jStore(AlchemiscaleStateStore):
                     )
                     | subgraph_
                 )
+            elif isinstance(value, Settings):
+                # TODO: finish up approach here for serializing settings
+                # include reverse operation in `subgraph_to_gufe`
+                settings_json = json.dumps(
+                        value.settings,
+                        cls=JSON_HANDLER.encoder,
+                        sort_keys=True)
+
+                node_ = Node("Settings")
+                node_["content"] = settings_json
+                node_["hashdigest"] = hashlib.md5(
+                        settings_json.encode(), 
+                        usedforsecurity=False).hexdigest()
+                subgraph = (
+                    subgraph
+                    | Relationship.type("DEPENDS_ON")(
+                        node,
+                        node_,
+                        attribute=key,
+                        _org=scope.org,
+                        _campaign=scope.campaign,
+                        _project=scope.project,
+                    )
+                    | subgraph_
+                )
+
             else:
                 node[key] = value
 

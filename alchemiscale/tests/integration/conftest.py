@@ -245,7 +245,7 @@ def network_tyk2():
         Transformation(
             stateA=complexes[edge[0]],
             stateB=complexes[edge[1]],
-            protocol=DummyProtocol(settings=None),
+            protocol=DummyProtocol(settings=DummyProtocol.default_settings()),
         )
         for edge in tyk2s.connections
     ]
@@ -253,7 +253,7 @@ def network_tyk2():
         Transformation(
             stateA=solvated[edge[0]],
             stateB=solvated[edge[1]],
-            protocol=DummyProtocol(settings=None),
+            protocol=DummyProtocol(settings=DummyProtocol.default_settings()),
         )
         for edge in tyk2s.connections
     ]
@@ -290,7 +290,7 @@ def network_tyk2_failure(network_tyk2):
     broken_transformation = Transformation(
         stateA=transformation.stateA,
         stateB=transformation.stateB,
-        protocol=BrokenProtocol(settings=None),
+        protocol=BrokenProtocol(settings=BrokenProtocol.default_settings()),
         name="broken",
     )
 
