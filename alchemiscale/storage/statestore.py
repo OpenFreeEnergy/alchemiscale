@@ -320,6 +320,14 @@ class Neo4jStore(AlchemiscaleStateStore):
                 ):
                     node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
                     node["_json_props"].append(key)
+            elif isinstance(value, Settings):
+                # TODO: finish up approach here for serializing settings
+                # include reverse operation in `subgraph_to_gufe`
+                node[key] = json.dumps(
+                            value,
+                            cls=JSON_HANDLER.encoder,
+                            sort_keys=True)
+                node["_json_props"].append(key)
             elif isinstance(value, GufeTokenizable):
                 node_ = subgraph_ = self.gufe_nodes.get(
                     (value.key, scope.org, scope.campaign, scope.project)
@@ -334,31 +342,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                     self.gufe_nodes[
                         (value.key, scope.org, scope.campaign, scope.project)
                     ] = node_
-                subgraph = (
-                    subgraph
-                    | Relationship.type("DEPENDS_ON")(
-                        node,
-                        node_,
-                        attribute=key,
-                        _org=scope.org,
-                        _campaign=scope.campaign,
-                        _project=scope.project,
-                    )
-                    | subgraph_
-                )
-            elif isinstance(value, Settings):
-                # TODO: finish up approach here for serializing settings
-                # include reverse operation in `subgraph_to_gufe`
-                settings_json = json.dumps(
-                        value.settings,
-                        cls=JSON_HANDLER.encoder,
-                        sort_keys=True)
-
-                node_ = Node("Settings")
-                node_["content"] = settings_json
-                node_["hashdigest"] = hashlib.md5(
-                        settings_json.encode(), 
-                        usedforsecurity=False).hexdigest()
                 subgraph = (
                     subgraph
                     | Relationship.type("DEPENDS_ON")(
@@ -416,33 +399,32 @@ class Neo4jStore(AlchemiscaleStateStore):
             return gufe_obj
 
         dct = dict(node)
-        for key, value in dict(node).items():
-            # deserialize json-serialized attributes
-            if key in dct["_json_props"]:
-                dct[key] = json.loads(value, cls=JSON_HANDLER.decoder)
+        # deserialize json-serialized attributes
+        for key in dct["_json_props"]:
+            dct[key] = json.loads(dct[key], cls=JSON_HANDLER.decoder)
 
-            # inject dependencies
-            dep_edges = g.edges(node)
-            postprocess = set()
-            for edge in dep_edges:
-                u, v = edge
-                edgedct = g.get_edge_data(u, v)
-                if "attribute" in edgedct:
-                    if "key" in edgedct:
-                        if not edgedct["attribute"] in dct:
-                            dct[edgedct["attribute"]] = dict()
-                        dct[edgedct["attribute"]][edgedct["key"]] = self._node_to_gufe(
-                            v, g, mapping
-                        )
-                    elif "index" in edgedct:
-                        postprocess.add(edgedct["attribute"])
-                        if not edgedct["attribute"] in dct:
-                            dct[edgedct["attribute"]] = list()
-                        dct[edgedct["attribute"]].append(
-                            (edgedct["index"], self._node_to_gufe(v, g, mapping))
-                        )
-                    else:
-                        dct[edgedct["attribute"]] = self._node_to_gufe(v, g, mapping)
+        # inject dependencies
+        dep_edges = g.edges(node)
+        postprocess = set()
+        for edge in dep_edges:
+            u, v = edge
+            edgedct = g.get_edge_data(u, v)
+            if "attribute" in edgedct:
+                if "key" in edgedct:
+                    if not edgedct["attribute"] in dct:
+                        dct[edgedct["attribute"]] = dict()
+                    dct[edgedct["attribute"]][edgedct["key"]] = self._node_to_gufe(
+                        v, g, mapping
+                    )
+                elif "index" in edgedct:
+                    postprocess.add(edgedct["attribute"])
+                    if not edgedct["attribute"] in dct:
+                        dct[edgedct["attribute"]] = list()
+                    dct[edgedct["attribute"]].append(
+                        (edgedct["index"], self._node_to_gufe(v, g, mapping))
+                    )
+                else:
+                    dct[edgedct["attribute"]] = self._node_to_gufe(v, g, mapping)
 
         # postprocess any attributes that are lists
         # needed because we don't control the order in which a list is built up
@@ -474,8 +456,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         properties = {"_scoped_key": str(scoped_key)}
         prop_string = ", ".join(
-            "{}: '{}'".format(key, value) for key, value in properties.items()
-        )
+                "{}: '{}'".format(key, value) for key, value in properties.items()
+                )
 
         prop_string = f" {{{prop_string}}}"
 
@@ -508,8 +490,8 @@ class Neo4jStore(AlchemiscaleStateStore):
             raise KeyError("No such object in database")
         elif len(nodes) > 1:
             raise Neo4JStoreError(
-                "More than one such object in database; this should not be possible"
-            )
+                    "More than one such object in database; this should not be possible"
+                    )
 
         if return_subgraph:
             return list(nodes)[0], subgraph
@@ -1385,7 +1367,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         task: ScopedKey,
         return_gufe=True,
-    ) -> Tuple[Transformation, Optional[ProtocolDAGResultRef]]:
+    ) -> Union[Tuple[Transformation, Optional[ProtocolDAGResultRef]], 
+               Tuple[ScopedKey, Optional[ScopedKey]]]:
         """Get the `Transformation` and `ProtocolDAGResultRef` to extend from (if
         present) for the given `Task`.
 

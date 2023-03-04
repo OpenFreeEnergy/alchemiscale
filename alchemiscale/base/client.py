@@ -17,6 +17,10 @@ from ..models import Scope, ScopedKey
 from ..storage.models import TaskHub, Task
 
 
+def json_to_gufe(jsondata):
+    return GufeTokenizable.from_dict(json.loads(jsondata, cls=JSON_HANDLER.decoder))
+
+
 class AlchemiscaleBaseClientError(Exception):
     ...
 
@@ -81,14 +85,14 @@ class AlchemiscaleBaseClient:
 
         if params.get("return_gufe"):
             return {
-                ScopedKey.from_str(k): GufeTokenizable.from_dict(v)
+                ScopedKey.from_str(k): json_to_gufe(v)
                 for k, v in resp.json().items()
             }
         else:
             return [ScopedKey.from_str(i) for i in resp.json()]
 
     @_use_token
-    def _get_resource(self, resource, params=None, return_gufe=True):
+    def _get_resource(self, resource, params=None):
         if params is None:
             params = {}
 
@@ -100,11 +104,7 @@ class AlchemiscaleBaseClient:
                 f"Status Code {resp.status_code} : {resp.reason} : Details {resp.json()['detail']}"
             )
         content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
-
-        if return_gufe:
-            return GufeTokenizable.from_dict(content)
-        else:
-            return content
+        return content
 
     @_use_token
     def _post_resource(self, resource, data):
@@ -119,9 +119,9 @@ class AlchemiscaleBaseClient:
         return resp.json()
 
     def get_info(self):
-        return self._get_resource("/info", params={}, return_gufe=False)
+        return self._get_resource("/info")
 
     @_use_token
     def _api_check(self):
         # Check if the API is up and running and can reach services
-        self._get_resource("/check", params={}, return_gufe=False)
+        self._get_resource("/check")

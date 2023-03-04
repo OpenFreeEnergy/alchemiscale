@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from py2neo import Graph
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
-from gufe.tokenization import JSON_HANDLER
+from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
 from ..settings import (
     JWTSettings,
@@ -83,6 +83,10 @@ def validate_scopes_query(
     return scope_space
 
 
+def gufe_to_json(obj: GufeTokenizable):
+    return json.dumps(obj.to_dict(), cls=JSON_HANDLER.encoder)
+
+
 class QueryGUFEHandler:
     """
     Helper class to provide a single-dispatch like handling of the query
@@ -114,7 +118,7 @@ class QueryGUFEHandler:
 
     def format_return(self):
         if self.return_gufe:
-            return {str(sk): tq.to_dict() for sk, tq in self._results.items()}
+            return {str(sk): gufe_to_json(tq) for sk, tq in self._results.items()}
         else:
             return [str(sk) for sk in self._results]
 

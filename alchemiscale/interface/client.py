@@ -5,7 +5,7 @@ Client for interacting with user-facing API. --- :mod:`alchemiscale.interface.cl
 
 """
 
-from typing import Union, List, Dict, Optional
+from typing import Union, List, Dict, Optional, Tuple
 import json
 
 import networkx as nx
@@ -14,7 +14,7 @@ from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 
-from ..base.client import AlchemiscaleBaseClient, AlchemiscaleBaseClientError
+from ..base.client import AlchemiscaleBaseClient, AlchemiscaleBaseClientError, json_to_gufe
 from ..models import Scope, ScopedKey
 from ..storage.models import Task, ProtocolDAGResultRef
 from ..strategies import Strategy
@@ -33,7 +33,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def list_scopes(self) -> List[Scope]:
         scopes = self._get_resource(
             f"/identities/{self.identifier}/scopes",
-            return_gufe=False,
         )
         return [Scope.from_str(s) for s in scopes]
 
@@ -56,7 +55,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def check_exists(self, scoped_key: Scope) -> bool:
         """Returns `True` if the given ScopedKey represents an object in the database."""
-        return self._get_resource("/exists/{scoped_key}", params={}, return_gufe=False)
+        return self._get_resource("/exists/{scoped_key}")
 
     def create_network(self, network: AlchemicalNetwork, scope: Scope) -> ScopedKey:
         """Submit an AlchemicalNetwork."""
@@ -98,21 +97,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return networks
 
     def get_network(self, network: Union[ScopedKey, str]) -> AlchemicalNetwork:
-        return self._get_resource(f"/networks/{network}", {}, return_gufe=True)
+        return json_to_gufe(self._get_resource(f"/networks/{network}"))
 
     def get_transformation(
         self, transformation: Union[ScopedKey, str]
     ) -> Transformation:
-        return self._get_resource(
-            f"/transformations/{transformation}", {}, return_gufe=True
-        )
+        return json_to_gufe(self._get_resource( f"/transformations/{transformation}"))
 
     def get_chemicalsystem(
         self, chemicalsystem: Union[ScopedKey, str]
     ) -> ChemicalSystem:
-        return self._get_resource(
-            f"/chemicalsystems/{chemicalsystem}", {}, return_gufe=True
-        )
+        return json_to_gufe(self._get_resource( f"/chemicalsystems/{chemicalsystem}"))
 
     ### compute
 
@@ -183,7 +178,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         params = dict(extends=extends, return_as=return_as)
         task_sks = self._get_resource(
-            f"/transformations/{transformation}/tasks", params, return_gufe=False
+            f"/transformations/{transformation}/tasks", params
         )
 
         if return_as == "list":
@@ -200,10 +195,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             raise ValueError(f"`return_as` takes 'list' or 'graph', not '{return_as}'")
 
     def get_task_transformation(self, task: ScopedKey) -> ScopedKey:
-        transformation = self._get_resource(
-            f"tasks/{task}/transformation", {}, return_gufe=False
-        )
-
+        transformation = self._get_resource(f"tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
 
     def action_tasks(
@@ -280,7 +272,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def _get_prototocoldagresults(
         self,
-        protocoldagresultrefs: List[ProtocolDAGResultRef],
+        protocoldagresultrefs: List[Dict],
         transformation: ScopedKey,
         ok: bool,
     ):
@@ -302,7 +294,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             pdr_json = self._get_resource(
                 f"/transformations/{transformation}/{route}/{pdr_sk}",
-                return_gufe=False,
             )[0]
 
             pdr = GufeTokenizable.from_dict(
@@ -337,7 +328,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         # get all protocoldagresultrefs for the given transformation
         protocoldagresultrefs = self._get_resource(
             f"/transformations/{transformation}/results",
-            return_gufe=False,
         )
 
         pdrs = self._get_prototocoldagresults(
@@ -364,7 +354,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         # get all protocoldagresultrefs for the given transformation
         protocoldagresultrefs = self._get_resource(
             f"/transformations/{transformation}/failures",
-            return_gufe=False,
         )
 
         pdrs = self._get_prototocoldagresults(
@@ -381,7 +370,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         # get all protocoldagresultrefs for the given transformation
         protocoldagresultrefs = self._get_resource(
             f"/tasks/{task}/results",
-            return_gufe=False,
         )
 
         pdrs = self._get_prototocoldagresults(
@@ -393,12 +381,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_task_failures(self, task: ScopedKey):
         """Get failed `ProtocolDAGResult`s for the given `Task`."""
         # first, get the transformation; also confirms it exists
-        transformation: ScopedKey = self.get_task_transformation(task)
+        transformation: ScopedKey  = self.get_task_transformation(task)
 
         # get all protocoldagresultrefs for the given transformation
         protocoldagresultrefs = self._get_resource(
             f"/tasks/{task}/failures",
-            return_gufe=False,
         )
 
         pdrs = self._get_prototocoldagresults(

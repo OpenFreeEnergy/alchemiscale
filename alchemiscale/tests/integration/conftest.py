@@ -5,7 +5,7 @@
 ## storage
 ### below from `py2neo.test.integration.conftest.py`
 
-from os import getenv
+import os
 from time import sleep
 from pathlib import Path
 
@@ -30,7 +30,7 @@ from alchemiscale.protocols import FAHOpenmmNonEquilibriumCyclingProtocol
 
 
 NEO4J_PROCESS = {}
-NEO4J_VERSION = getenv("NEO4J_VERSION", "")
+NEO4J_VERSION = os.getenv("NEO4J_VERSION", "")
 
 
 class DeploymentProfile(object):
@@ -173,14 +173,14 @@ def n4js_fresh(graph):
 
 @fixture(scope="session")
 def s3objectstore_settings():
-    return S3ObjectStoreSettings(
-        AWS_ACCESS_KEY_ID="test-key-id",
-        AWS_SECRET_ACCESS_KEY="test-key",
-        AWS_SESSION_TOKEN="test-session-token",
-        AWS_S3_BUCKET="test-bucket",
-        AWS_S3_PREFIX="test-prefix",
-        AWS_DEFAULT_REGION="us-east-1",
-    )
+    os.environ['AWS_ACCESS_KEY_ID'] = "test-key-id"
+    os.environ['AWS_SECRET_ACCESS_KEY'] = "test-key"
+    os.environ['AWS_SESSION_TOKEN'] = "test-session-token"
+    os.environ['AWS_S3_BUCKET'] = "test-bucket"
+    os.environ['AWS_S3_PREFIX'] = "test-prefix"
+    os.environ['AWS_DEFAULT_REGION'] = "us-east-1"
+
+    return S3ObjectStoreSettings()
 
 
 @fixture(scope="module")
