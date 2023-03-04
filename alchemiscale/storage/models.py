@@ -18,13 +18,13 @@ from gufe.tokenization import GufeTokenizable, GufeKey
 from ..models import ScopedKey, Scope
 
 
-class ComputeKey(BaseModel):
+class ComputeServiceID(BaseModel):
     """Unique identifier for AlchemiscaleComputeService instances."""
 
     identifier: str
 
     def __repr__(self):  # pragma: no cover
-        return f"<ComputeKey('{str(self)}')>"
+        return f"<ComputeServiceIdentity('{str(self)}')>"
 
     def __str__(self):
         return "-".join([self.identifier])

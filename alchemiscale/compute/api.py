@@ -91,6 +91,30 @@ async def list_scopes(
     return [str(scope) for scope in scopes]
 
 
+@router.post("/computeservice/{identifier}/register")
+async def register_computeservice(
+    identifier,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    n4js.register_computeservice(identifier)
+
+
+@router.post("/computeservice/{identifier}/deregister")
+async def deregister_computeservice(
+    identifier,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    n4js.deregister_computeservice(identifier)
+
+
+@router.post("/computeserviceid/{identifier}/unclaim")
+async def unclaim_tasks(
+    identifier,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    n4js.unclaim_tasks(identifier)
+
+
 @router.get("/taskhubs")
 async def query_taskhubs(
     *,
@@ -127,7 +151,7 @@ async def query_taskhubs(
 async def claim_taskhub_tasks(
     taskhub_scoped_key,
     *,
-    claimant: str = Body(),
+    computeserviceid: str = Body(),
     count: int = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
@@ -136,7 +160,7 @@ async def claim_taskhub_tasks(
     validate_scopes(sk.scope, token)
 
     tasks = n4js.claim_taskhub_tasks(
-        taskhub=taskhub_scoped_key, claimant=claimant, count=count
+        taskhub=taskhub_scoped_key, computeservice=computeserviceid, count=count
     )
 
     return [str(t) if t is not None else None for t in tasks]
@@ -200,11 +224,6 @@ def set_task_result(
     # otherwise, set as errored, leave in hubs
 
     return result_sk
-
-
-@router.get("/chemicalsystems")
-async def chemicalsystems():
-    return {"message": "nothing yet"}
 
 
 ### add router

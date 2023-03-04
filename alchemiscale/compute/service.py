@@ -7,6 +7,7 @@ AlchemiscaleComputeService --- :mod:`alchemiscale.compute.service`
 import asyncio
 import sched
 import time
+from uuid import uuid4
 import random
 import threading
 from typing import Union, Optional, List, Dict, Tuple
@@ -19,7 +20,7 @@ from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from .client import AlchemiscaleComputeClient
-from ..storage.models import Task, TaskHub
+from ..storage.models import Task, TaskHub, ComputeServiceID
 from ..models import Scope, ScopedKey
 
 
@@ -74,16 +75,42 @@ class SynchronousComputeService:
         identifier: str,
         key: str,
         name: str,
-        shared_path: Path,
+        shared_basedir: Path,
+        scratch_basedir: Path,
+        keep_scratch: bool = False,
         sleep_interval: int = 30,
         heartbeat_frequency: int = 30,
         scopes: Optional[List[Scope]] = None,
         limit: int = 1,
     ):
-        """
+        """Create a `SynchronousComputeService` instance.
 
         Parameters
         ----------
+        api_url
+            URL pointing to the compute API to execute Tasks for.
+        identifier
+            Identifier for the compute identity used for authentication.
+        key
+            Credential for the compute identity used for authentication.
+        name
+            The name to give this compute service; used for Task provenance, so
+            typically set to a distinct value to distinguish different compute
+            resources, e.g. different hosts or HPC clusters. 
+        shared_basedir
+            Filesystem path to use for `ProtocolDAG` `shared` space.
+        scratch_basedir
+            Filesystem path to use for `ProtocolUnit` `scratch` space.
+        keep_scratch
+            If True, don't remove scratch directories for `ProtocolUnit`s after
+            completion.
+        sleep_interval
+            Time in seconds to sleep if no Tasks claimed from compute API.
+        heartbeat_frequency
+            Frequency at which to send heartbeats to compute API.
+        scopes
+            Scopes to limit Task claiming to; defaults to all Scopes accessible
+            by compute identity.
         limit
             Maximum number of Tasks to claim at a time from a TaskHub.
 
@@ -99,16 +126,40 @@ class SynchronousComputeService:
         if scopes is None:
             self.scopes = [Scope()]
 
-        self.shared = shared_path
+        self.shared_basedir = shared_basedir
+        self.shared_basedir.mkdir(exist_ok=True)
+
+        self.scratch_basedir = scratch_basedir
+        self.scratch_basedir.mkdir(exist_ok=True)
+        self.keep_scratch = keep_scratch
+
         self.scheduler = sched.scheduler(time.monotonic, time.sleep)
 
+        self.counter = 0
+
+        self.computeserviceid = ComputeServiceID(
+                identifier=f"{self.name}-{uuid4()}")
+
         self._stop = False
+
+
+    def _register(self):
+        """Register this compute service with the compute API.
+
+        """
+        self.client.register(self.computeserviceid)
+
+    def _deregister(self):
+        """Deregister this compute service with the compute API.
+
+        """
+        self.client.deregister(self.computeserviceid)
 
     def heartbeat(self):
         """Deliver a heartbeat to the compute API, indicating this service is still alive."""
         ...
 
-    def get_tasks(self, count=1) -> List[Optional[ScopedKey]]:
+    def claim_tasks(self, count=1) -> List[Optional[ScopedKey]]:
         """Get a Task to execute from compute API.
 
         Returns `None` if no Task was available matching service configuration.
@@ -130,6 +181,9 @@ class SynchronousComputeService:
 
         return tasks
 
+    def unclaim_tasks(self):
+        self.client.unclaim_tasks()
+
     def task_to_protocoldag(
         self, task: ScopedKey
     ) -> Tuple[ProtocolDAG, Transformation, Optional[ProtocolDAGResult]]:
@@ -140,7 +194,6 @@ class SynchronousComputeService:
         other Task is also given; otherwise `None` given.
 
         """
-        ...
 
         transformation, extends_protocoldagresult = self.client.get_task_transformation(
             task
@@ -158,12 +211,10 @@ class SynchronousComputeService:
         # TODO: this method should postprocess any paths,
         # leaf nodes in DAG for blob results that should go to object store
 
-        sk: ScopedKey = self.client.set_task_result(task, protocoldagresult)
+        # TODO: ship paths to object store
 
-        # TODO: remove claim on task, set to complete; remove from hubs
-        # TODO: if protocoldagresult.ok is False, need to handle this
-        # if protocoldagresult.ok():
-        #    self.client.
+        # finally, push ProtocolDAGResult
+        sk: ScopedKey = self.client.set_task_result(task, protocoldagresult)
 
         return sk
 
@@ -178,9 +229,14 @@ class SynchronousComputeService:
 
         # execute the task; this looks the same whether the ProtocolDAG is a
         # success or failure
+        shared = self.shared_basedir / str(protocoldag.key) / self.counter
+        shared.mkdir()
+
         protocoldagresult = execute_DAG(
             protocoldag,
-            shared=self.shared,
+            shared=shared,
+            scratch_basdir = self.scratch_basedir,
+            keep_scratch=self.keep_scratch
         )
 
         # push the result (or failure) back to the compute API
@@ -194,10 +250,11 @@ class SynchronousComputeService:
         Parameters
         ----------
         task_limit
-            Number of tasks to complete before exiting.
+            Number of Tasks to complete before exiting.
             If `None`, the service will continue until told to stop.
 
         """
+        self._register()
 
         def scheduler_heartbeat():
             self.heartbeat()
@@ -205,36 +262,48 @@ class SynchronousComputeService:
 
         self.scheduler.enter(0, 2, scheduler_heartbeat)
 
-        counter = 0
         while True:
             if task_limit is not None:
-                if counter >= task_limit:
+                if self.counter >= task_limit:
                     break
 
             if self._stop:
                 return
 
-            # get a task from the compute API
-            tasks: List[ScopedKey] = self.get_tasks(self.limit)
+            # claim tasks from the compute API
+            tasks: List[ScopedKey] = self.claim_tasks(self.limit)
 
+            # if no tasks claimed, sleep
             if all([task is None for task in tasks]):
+                if self._stop:
+                    return
                 time.sleep(self.sleep_interval)
                 continue
 
+            # otherwise, process tasks
             for task in tasks:
+                if self._stop:
+                    return
+
                 if task is None:
                     continue
 
+                # execute each task
                 self.execute(task)
-
-                counter += 1
+                self.counter += 1
 
     def stop(self):
         self._stop = True
 
-        # Interrupt the scheduler (will finish if in the middle of an update or something, but will
-        # cancel running calculations)
+        # TODO: drop claims on tasks
+        self.unclaim_tasks()
+
+        # Interrupt the scheduler (will finish if in the middle of an update or
+        # something, but will cancel running calculations)
         self.int_sleep.interrupt()
+
+        self._deregister()
+
 
 
 class AsynchronousComputeService(SynchronousComputeService):

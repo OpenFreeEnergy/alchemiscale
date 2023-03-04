@@ -31,6 +31,12 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     _exception = AlchemiscaleComputeClientError
 
+    def register(self):
+        ...
+
+    def deregister(self):
+        ...
+
     def list_scopes(self) -> List[Scope]:
         scopes = self._get_resource(
             f"/identities/{self.identifier}/scopes",
@@ -66,6 +72,10 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         tasks = self._post_resource(f"taskhubs/{taskhub}/claim", data)
 
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]
+
+    def unclaim_tasks(self):
+        """Drop all `Task` claims."""
+        ...
 
     def get_task_transformation(
         self, task: ScopedKey
