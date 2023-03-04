@@ -17,7 +17,11 @@ from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 
-from ..base.client import AlchemiscaleBaseClient, AlchemiscaleBaseClientError, json_to_gufe
+from ..base.client import (
+    AlchemiscaleBaseClient,
+    AlchemiscaleBaseClientError,
+    json_to_gufe,
+)
 from ..models import Scope, ScopedKey
 from ..storage.models import TaskHub, Task
 
@@ -69,7 +73,9 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
     def get_task_transformation(
         self, task: ScopedKey
     ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
-        transformation, protocoldagresult = self._get_resource(f"tasks/{task}/transformation")
+        transformation, protocoldagresult = self._get_resource(
+            f"tasks/{task}/transformation"
+        )
 
         return (
             json_to_gufe(transformation),

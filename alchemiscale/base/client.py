@@ -85,8 +85,7 @@ class AlchemiscaleBaseClient:
 
         if params.get("return_gufe"):
             return {
-                ScopedKey.from_str(k): json_to_gufe(v)
-                for k, v in resp.json().items()
+                ScopedKey.from_str(k): json_to_gufe(v) for k, v in resp.json().items()
             }
         else:
             return [ScopedKey.from_str(i) for i in resp.json()]

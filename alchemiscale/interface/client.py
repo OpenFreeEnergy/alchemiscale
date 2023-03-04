@@ -14,7 +14,11 @@ from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 
-from ..base.client import AlchemiscaleBaseClient, AlchemiscaleBaseClientError, json_to_gufe
+from ..base.client import (
+    AlchemiscaleBaseClient,
+    AlchemiscaleBaseClientError,
+    json_to_gufe,
+)
 from ..models import Scope, ScopedKey
 from ..storage.models import Task, ProtocolDAGResultRef
 from ..strategies import Strategy
@@ -102,12 +106,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_transformation(
         self, transformation: Union[ScopedKey, str]
     ) -> Transformation:
-        return json_to_gufe(self._get_resource( f"/transformations/{transformation}"))
+        return json_to_gufe(self._get_resource(f"/transformations/{transformation}"))
 
     def get_chemicalsystem(
         self, chemicalsystem: Union[ScopedKey, str]
     ) -> ChemicalSystem:
-        return json_to_gufe(self._get_resource( f"/chemicalsystems/{chemicalsystem}"))
+        return json_to_gufe(self._get_resource(f"/chemicalsystems/{chemicalsystem}"))
 
     ### compute
 
@@ -381,7 +385,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_task_failures(self, task: ScopedKey):
         """Get failed `ProtocolDAGResult`s for the given `Task`."""
         # first, get the transformation; also confirms it exists
-        transformation: ScopedKey  = self.get_task_transformation(task)
+        transformation: ScopedKey = self.get_task_transformation(task)
 
         # get all protocoldagresultrefs for the given transformation
         protocoldagresultrefs = self._get_resource(

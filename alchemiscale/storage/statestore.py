@@ -323,10 +323,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             elif isinstance(value, Settings):
                 # TODO: finish up approach here for serializing settings
                 # include reverse operation in `subgraph_to_gufe`
-                node[key] = json.dumps(
-                            value,
-                            cls=JSON_HANDLER.encoder,
-                            sort_keys=True)
+                node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
                 node["_json_props"].append(key)
             elif isinstance(value, GufeTokenizable):
                 node_ = subgraph_ = self.gufe_nodes.get(
@@ -456,8 +453,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         properties = {"_scoped_key": str(scoped_key)}
         prop_string = ", ".join(
-                "{}: '{}'".format(key, value) for key, value in properties.items()
-                )
+            "{}: '{}'".format(key, value) for key, value in properties.items()
+        )
 
         prop_string = f" {{{prop_string}}}"
 
@@ -490,8 +487,8 @@ class Neo4jStore(AlchemiscaleStateStore):
             raise KeyError("No such object in database")
         elif len(nodes) > 1:
             raise Neo4JStoreError(
-                    "More than one such object in database; this should not be possible"
-                    )
+                "More than one such object in database; this should not be possible"
+            )
 
         if return_subgraph:
             return list(nodes)[0], subgraph
@@ -1367,8 +1364,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         task: ScopedKey,
         return_gufe=True,
-    ) -> Union[Tuple[Transformation, Optional[ProtocolDAGResultRef]], 
-               Tuple[ScopedKey, Optional[ScopedKey]]]:
+    ) -> Union[
+        Tuple[Transformation, Optional[ProtocolDAGResultRef]],
+        Tuple[ScopedKey, Optional[ScopedKey]],
+    ]:
         """Get the `Transformation` and `ProtocolDAGResultRef` to extend from (if
         present) for the given `Task`.
 

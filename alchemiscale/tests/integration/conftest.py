@@ -173,12 +173,12 @@ def n4js_fresh(graph):
 
 @fixture(scope="session")
 def s3objectstore_settings():
-    os.environ['AWS_ACCESS_KEY_ID'] = "test-key-id"
-    os.environ['AWS_SECRET_ACCESS_KEY'] = "test-key"
-    os.environ['AWS_SESSION_TOKEN'] = "test-session-token"
-    os.environ['AWS_S3_BUCKET'] = "test-bucket"
-    os.environ['AWS_S3_PREFIX'] = "test-prefix"
-    os.environ['AWS_DEFAULT_REGION'] = "us-east-1"
+    os.environ["AWS_ACCESS_KEY_ID"] = "test-key-id"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "test-key"
+    os.environ["AWS_SESSION_TOKEN"] = "test-session-token"
+    os.environ["AWS_S3_BUCKET"] = "test-bucket"
+    os.environ["AWS_S3_PREFIX"] = "test-prefix"
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
     return S3ObjectStoreSettings()
 

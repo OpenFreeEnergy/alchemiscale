@@ -27,7 +27,7 @@ from ..base.api import (
     validate_scopes,
     validate_scopes_query,
     _check_store_connectivity,
-    gufe_to_json
+    gufe_to_json,
 )
 from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
