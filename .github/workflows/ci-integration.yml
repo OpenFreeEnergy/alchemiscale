@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ['ubuntu', 'macOS']
+        os: ['ubuntu']
         python-version:
           - 3.9
     env:
