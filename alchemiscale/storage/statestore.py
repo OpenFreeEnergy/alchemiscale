@@ -321,8 +321,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                     node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
                     node["_json_props"].append(key)
             elif isinstance(value, Settings):
-                # TODO: finish up approach here for serializing settings
-                # include reverse operation in `subgraph_to_gufe`
                 node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
                 node["_json_props"].append(key)
             elif isinstance(value, GufeTokenizable):
@@ -1370,6 +1368,10 @@ class Neo4jStore(AlchemiscaleStateStore):
     ]:
         """Get the `Transformation` and `ProtocolDAGResultRef` to extend from (if
         present) for the given `Task`.
+
+        If `return_gufe` is `True`, returns actual `Transformation` and
+        `ProtocolDAGResultRef` object (`None` if not present); if `False`, returns
+        `ScopedKey`s for these instead.
 
         """
         q = f"""
