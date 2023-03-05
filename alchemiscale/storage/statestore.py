@@ -15,7 +15,7 @@ import weakref
 import numpy as np
 
 import networkx as nx
-from gufe import AlchemicalNetwork, Transformation
+from gufe import AlchemicalNetwork, Transformation, Settings
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 from py2neo import Graph, Node, Relationship, Subgraph
 from py2neo.database import Transaction
@@ -120,6 +120,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     # with that label
     constraints = {
         "GufeTokenizable": {"name": "scoped_key", "property": "_scoped_key"},
+        "Settings": {"name": "settings_content", "property": "content"},
         "CredentialedUserIdentity": {
             "name": "user_identifier",
             "property": "identifier",
@@ -319,6 +320,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                 ):
                     node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
                     node["_json_props"].append(key)
+            elif isinstance(value, Settings):
+                node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
+                node["_json_props"].append(key)
             elif isinstance(value, GufeTokenizable):
                 node_ = subgraph_ = self.gufe_nodes.get(
                     (value.key, scope.org, scope.campaign, scope.project)
@@ -345,6 +349,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     )
                     | subgraph_
                 )
+
             else:
                 node[key] = value
 
@@ -389,33 +394,32 @@ class Neo4jStore(AlchemiscaleStateStore):
             return gufe_obj
 
         dct = dict(node)
-        for key, value in dict(node).items():
-            # deserialize json-serialized attributes
-            if key in dct["_json_props"]:
-                dct[key] = json.loads(value, cls=JSON_HANDLER.decoder)
+        # deserialize json-serialized attributes
+        for key in dct["_json_props"]:
+            dct[key] = json.loads(dct[key], cls=JSON_HANDLER.decoder)
 
-            # inject dependencies
-            dep_edges = g.edges(node)
-            postprocess = set()
-            for edge in dep_edges:
-                u, v = edge
-                edgedct = g.get_edge_data(u, v)
-                if "attribute" in edgedct:
-                    if "key" in edgedct:
-                        if not edgedct["attribute"] in dct:
-                            dct[edgedct["attribute"]] = dict()
-                        dct[edgedct["attribute"]][edgedct["key"]] = self._node_to_gufe(
-                            v, g, mapping
-                        )
-                    elif "index" in edgedct:
-                        postprocess.add(edgedct["attribute"])
-                        if not edgedct["attribute"] in dct:
-                            dct[edgedct["attribute"]] = list()
-                        dct[edgedct["attribute"]].append(
-                            (edgedct["index"], self._node_to_gufe(v, g, mapping))
-                        )
-                    else:
-                        dct[edgedct["attribute"]] = self._node_to_gufe(v, g, mapping)
+        # inject dependencies
+        dep_edges = g.edges(node)
+        postprocess = set()
+        for edge in dep_edges:
+            u, v = edge
+            edgedct = g.get_edge_data(u, v)
+            if "attribute" in edgedct:
+                if "key" in edgedct:
+                    if not edgedct["attribute"] in dct:
+                        dct[edgedct["attribute"]] = dict()
+                    dct[edgedct["attribute"]][edgedct["key"]] = self._node_to_gufe(
+                        v, g, mapping
+                    )
+                elif "index" in edgedct:
+                    postprocess.add(edgedct["attribute"])
+                    if not edgedct["attribute"] in dct:
+                        dct[edgedct["attribute"]] = list()
+                    dct[edgedct["attribute"]].append(
+                        (edgedct["index"], self._node_to_gufe(v, g, mapping))
+                    )
+                else:
+                    dct[edgedct["attribute"]] = self._node_to_gufe(v, g, mapping)
 
         # postprocess any attributes that are lists
         # needed because we don't control the order in which a list is built up
@@ -1364,9 +1368,16 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         task: ScopedKey,
         return_gufe=True,
-    ) -> Tuple[Transformation, Optional[ProtocolDAGResultRef]]:
+    ) -> Union[
+        Tuple[Transformation, Optional[ProtocolDAGResultRef]],
+        Tuple[ScopedKey, Optional[ScopedKey]],
+    ]:
         """Get the `Transformation` and `ProtocolDAGResultRef` to extend from (if
         present) for the given `Task`.
+
+        If `return_gufe` is `True`, returns actual `Transformation` and
+        `ProtocolDAGResultRef` object (`None` if not present); if `False`, returns
+        `ScopedKey`s for these instead.
 
         """
         q = f"""

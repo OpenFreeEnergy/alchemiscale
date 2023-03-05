@@ -24,6 +24,7 @@ from ..base.api import (
     validate_scopes,
     validate_scopes_query,
     _check_store_connectivity,
+    gufe_to_json,
 )
 from ..settings import get_base_api_settings, get_compute_api_settings
 from ..storage.statestore import Neo4jStore
@@ -166,7 +167,7 @@ async def get_task_transformation(
     else:
         pdr = None
 
-    return (transformation.to_dict(), pdr)
+    return (gufe_to_json(transformation), pdr)
 
 
 # TODO: support compression performed client-side
