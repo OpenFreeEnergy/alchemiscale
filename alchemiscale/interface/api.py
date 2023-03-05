@@ -27,6 +27,7 @@ from ..base.api import (
     validate_scopes,
     validate_scopes_query,
     _check_store_connectivity,
+    gufe_to_json,
 )
 from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
@@ -139,7 +140,7 @@ def get_network(
     validate_scopes(sk.scope, token)
 
     network = n4js.get_gufe(scoped_key=sk)
-    return network.to_dict()
+    return gufe_to_json(network)
 
 
 @router.post("/networks", response_model=ScopedKey)
@@ -179,7 +180,7 @@ async def get_transformation(
     validate_scopes(sk.scope, token)
 
     transformation = n4js.get_gufe(scoped_key=sk)
-    return transformation.to_dict()
+    return gufe_to_json(transformation)
 
 
 @router.get("/chemicalsystems")
@@ -200,7 +201,7 @@ async def get_chemicalsystem(
     validate_scopes(sk.scope, token)
 
     chemicalsystem = n4js.get_gufe(scoped_key=sk)
-    return chemicalsystem.to_dict()
+    return gufe_to_json(chemicalsystem)
 
 
 ### compute
@@ -392,7 +393,7 @@ async def get_task_transformation(
 
     transformation: ScopedKey
 
-    transformation, protocoldagresult = n4js.get_task_transformation(
+    transformation, protocoldagresultref = n4js.get_task_transformation(
         task=task_scoped_key,
         return_gufe=False,
     )
