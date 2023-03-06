@@ -82,6 +82,7 @@ def db_params(func):
         help="database URI",
         type=str,
         envvar="NEO4J_URL",
+        required=True,
         **SETTINGS_OPTION_KWARGS,
     )
     user = click.option(
@@ -89,6 +90,7 @@ def db_params(func):
         help="database user name",
         type=str,
         envvar="NEO4J_USER",
+        required=True,
         **SETTINGS_OPTION_KWARGS,
     )
     password = click.option(
@@ -96,6 +98,7 @@ def db_params(func):
         help="database password",
         type=str,
         envvar="NEO4J_PASS",
+        required=True,
         **SETTINGS_OPTION_KWARGS,
     )
     dbname = click.option(
@@ -163,15 +166,24 @@ def s3os_params(func):
         **SETTINGS_OPTION_KWARGS,
     )
     s3_bucket = click.option(
-        "--s3-bucket", type=str, envvar="AWS_S3_BUCKET", **SETTINGS_OPTION_KWARGS
+        "--s3-bucket",
+        type=str,
+        envvar="AWS_S3_BUCKET",
+        required=True,
+        **SETTINGS_OPTION_KWARGS,
     )
     s3_prefix = click.option(
-        "--s3-prefix", type=str, envvar="AWS_S3_PREFIX", **SETTINGS_OPTION_KWARGS
+        "--s3-prefix",
+        type=str,
+        envvar="AWS_S3_PREFIX",
+        required=True,
+        **SETTINGS_OPTION_KWARGS,
     )
     default_region = click.option(
         "--default-region",
         type=str,
         envvar="AWS_DEFAULT_REGION",
+        required=True,
         **SETTINGS_OPTION_KWARGS,
     )
     return access_key_id(
