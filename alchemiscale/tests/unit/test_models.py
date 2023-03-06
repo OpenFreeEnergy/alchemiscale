@@ -81,7 +81,7 @@ def test_scope_superset_false(super_scope_str, sub_scope_str):
     ],
 )
 def test_scope_non_alphanumeric_invalid(scope_string):
-    with pytest.raises(ValueError, match="must be alphanumeric or underscore"):
+    with pytest.raises(ValidationError, match="must be alphanumeric or underscore"):
         scope = Scope.from_str(scope_string)
 
 

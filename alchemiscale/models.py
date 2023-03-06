@@ -34,7 +34,7 @@ class Scope(BaseModel):
         # we require that there is a full match, so that the string is not
         # allowed to contain any other characters.
         if v is not None and not fullmatch(r"^[a-zA-Z0-9_]+|\*$", v):
-            raise ValueError(
+            raise InvalidScopeError(
                 f"'{component}' must be alphanumeric or underscore ('_') and must not contain dashes ('-') OR must be a single asterisk ('*') "
             )
         elif v == "*":
