@@ -312,7 +312,7 @@ def synchronous():
     ...
 
 
-@cli.group()
+@cli.group(help="Subcommands for the database")
 def database():
     ...
 
@@ -412,7 +412,7 @@ def scope(func):
     return scope(func)
 
 
-@cli.group()
+@cli.group(help="Subcommands for managing identities")
 def identity():
     ...
 
