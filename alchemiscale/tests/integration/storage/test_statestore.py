@@ -1713,14 +1713,13 @@ class TestNeo4jStore(TestStateStore):
         result = n4js.graph.run(q).to_subgraph()
         assert result == None
 
-
     def test_set_task_status_removes_actions_relationship_extends(
         self,
         n4js: Neo4jStore,
         network_tyk2,
         scope_test,
     ):
-                # tests the ability to action and claim a set of tasks in an
+        # tests the ability to action and claim a set of tasks in an
         # EXTENDS chain
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
@@ -1752,7 +1751,6 @@ class TestNeo4jStore(TestStateStore):
         ]
         # action the tasks
         actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
-        
 
         q = f"""
         MATCH (taskhub:TaskHub {{_scoped_key: '{taskhub_sk}'}})
@@ -1763,7 +1761,7 @@ class TestNeo4jStore(TestStateStore):
         result = n4js.graph.run(q).to_subgraph()
         sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
         assert set(sks) == set(collected_sks)
-        assert (len(sks) == 7)
+        assert len(sks) == 7
 
         # set layer one to invalid, this should invalidate the entire chain
         n4js.set_task_invalid([first_task])
@@ -1778,9 +1776,8 @@ class TestNeo4jStore(TestStateStore):
         """
         result = n4js.graph.run(q).to_subgraph()
         sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
-        assert(set(sks) ==  set(collected_sks))
-        assert (len(sks) == 7)
-
+        assert set(sks) == set(collected_sks)
+        assert len(sks) == 7
 
     # check that the status is set correctly through the generic method
     # NOTE: a precondition operation is used for `complete` as it is not
