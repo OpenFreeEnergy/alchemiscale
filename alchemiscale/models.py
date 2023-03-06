@@ -35,16 +35,12 @@ class Scope(BaseModel):
         # allowed to contain any other characters.
         if v is not None and not fullmatch(r"^[a-zA-Z0-9_]+|\*$", v):
             raise ValueError(
-                f"'{component}' must be alphanumeric or underscore ('_') and must not contain dashes ('-')"
+                f"'{component}' must be alphanumeric or underscore ('_') and must not contain dashes ('-') OR must be a single asterisk ('*') "
             )
         elif v == "*":
             # if we're given an asterisk, cast this to `None` instead for
             # consistency
             v = None
-        elif v is not None and "*" in v:
-            raise ValueError(
-                f"asterisks ('*') for glob-matching components not supported at this time"
-            )
         return v
 
     @validator("org")
