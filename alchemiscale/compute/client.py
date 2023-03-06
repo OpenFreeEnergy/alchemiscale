@@ -102,5 +102,5 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     def get_task_status(self, task: ScopedKey) -> TaskStatusEnum:
         """Get the status of a `Task`."""
-        status = self._get_resource(f"tasks/{task}/status", {}, return_gufe=False)
+        status = self._get_resource(f"tasks/{task}/status")
         return TaskStatusEnum(status)

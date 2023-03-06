@@ -1682,7 +1682,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                 # and remove actions relationships
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                OPTIONAL MATCH (t)<-[er:EXTENDS]-(extends_task:Task) 
+                // EXTENDS* used to get all tasks in the extends chain
+                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task) 
                 SET t.status = '{TaskStatusEnum.invalid.value}'
                 SET extends_task.status = '{TaskStatusEnum.invalid.value}'
                 WITH t, extends_task
@@ -1708,7 +1709,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                 # and remove actions relationships
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                OPTIONAL MATCH (t)<-[er:EXTENDS]-(extends_task:Task) 
+                // EXTENDS* used to get all tasks in the extends chain
+                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task) 
                 SET t.status = '{TaskStatusEnum.deleted.value}'
                 SET extends_task.status = '{TaskStatusEnum.deleted.value}'
                 WITH t, extends_task
