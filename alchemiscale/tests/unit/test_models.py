@@ -72,6 +72,8 @@ def test_scope_superset_false(super_scope_str, sub_scope_str):
     "scope_string",
     [
         "*foo-*-*",
+        "*_foo-*-*",
+        "*-foo-*-*",
         "f-oo-bar-baz",
         "!@#$%^&-bar-baz",
         "☺☻♥♦♣-bar-baz",
@@ -79,6 +81,19 @@ def test_scope_superset_false(super_scope_str, sub_scope_str):
         "𝄞𝄢𝄪𝄫𝅘𝅥𝅮𝅥𝅲𝅳𝆺𝅥𝆹𝅥𝅮𝆺𝅥𝅮𝆹𝅥𝅯𝆺𝅥𝅯𝇁𝇂𝇃-bar-baz",
     ],
 )
-def test_scope_non_alphanumeric_or_underscore_invalid(scope_string):
+def test_scope_non_alphanumeric_invalid(scope_string):
     with pytest.raises(ValueError):
         scope = Scope.from_str(scope_string)
+
+
+@pytest.mark.parametrize(
+    "scope_string",
+    [
+        "a_b-*-*",
+        "a_b-c_d-*",
+        "a_b-c_d-e_f",
+        "org_1-campaign_A-project_I",
+    ],
+)
+def test_underscore_scopes_valid(scope_string):
+    scope = Scope.from_str(scope_string)
