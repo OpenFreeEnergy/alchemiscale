@@ -29,18 +29,26 @@ class Scope(BaseModel):
 
     @staticmethod
     def _validate_component(v, component):
-        # use regex to check that the component is alphanumeric or underscore
-        # and does not contain dashes and contains only a single asterisk.
+        """
+        Use regex to check that the component:
+        - contains only alphanumeric or underscore characters, or is just a single asterisk
+        - does not start with an underscore or number
+        """
+
         # we require that there is a full match, so that the string is not
         # allowed to contain any other characters.
-        if v is not None and not fullmatch(r"^[a-zA-Z0-9_]+|\*$", v):
+        if v is not None and not fullmatch(r"^[a-zA-Z][a-zA-Z0-9_]*|\*$", v):
             raise InvalidScopeError(
-                f"'{component}' must be alphanumeric or underscore ('_') and must not contain dashes ('-') OR must be a single asterisk ('*') "
+                f"'{component}' must either start with an alphabetical and contain "
+                "only alphanumeric or underscore ('_') thereafter "
+                "OR must be a single asterisk ('*')"
             )
-        elif v == "*":
+
+        if v == "*":
             # if we're given an asterisk, cast this to `None` instead for
             # consistency
             v = None
+
         return v
 
     @validator("org")

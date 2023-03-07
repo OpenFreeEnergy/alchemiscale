@@ -78,6 +78,9 @@ def test_scope_superset_false(super_scope_str, sub_scope_str):
         "☺☻♥♦♣-bar-baz",
         ",.<>/?|-bar-baz",
         "𝄞𝄢𝄪𝄫𝅘𝅥𝅮𝅥𝅲𝅳𝆺𝅥𝆹𝅥𝅮𝆺𝅥𝅮𝆹𝅥𝅯𝆺𝅥𝅯𝇁𝇂𝇃-bar-baz",
+        "TO͇̹̺ͅƝ̴ȳ̳ TH̘Ë͖́̉ ͠P̯͍̭O̚N̐Y̡ -H̸̡̪̯ͨ͊̽̅̾̎Ȩ̬̩̾͛ͪ̈́̀́͘ ̶̧̨̱̹̭̯ͧ̾ͬ-C̷̙̲̝͖ͭ̏ͥͮ͟Oͮ͏̮̪̝͍M̲̖͊̒ͪͩͬ̚̚͜Ȇ̴̟̟͙̞ͩ͌͝S̨̥̫͎̭ͯ̿̔̀ͅ",
+        "all-0-base",
+        "_a-b-c",
     ],
 )
 def test_scope_non_alphanumeric_invalid(scope_string):
