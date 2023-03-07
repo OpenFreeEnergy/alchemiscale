@@ -1315,13 +1315,13 @@ class TestNeo4jStore(TestStateStore):
                 "f_set_task_complete",
                 TaskStatusEnum.complete,
                 True,
-                {"strict_complete": True},
+                {"raise_error": True},
             ),
             (
                 "f_set_task_complete",
                 TaskStatusEnum.waiting,
                 False,
-                {"strict_complete": False},
+                {"raise_error": False},
             ),
         ],
     )
@@ -1367,13 +1367,13 @@ class TestNeo4jStore(TestStateStore):
                 "f_set_task_complete",
                 TaskStatusEnum.complete,
                 False,
-                {"strict_complete": True},
+                {"raise_error": True},
             ),
             (
                 "f_set_task_complete",
                 TaskStatusEnum.complete,
                 False,
-                {"strict_complete": False},
+                {"raise_error": False},
             ),
             ("f_set_task_error", TaskStatusEnum.error, False, {}),
             ("f_set_task_invalid", TaskStatusEnum.invalid, False, {}),
@@ -1430,13 +1430,13 @@ class TestNeo4jStore(TestStateStore):
                 "f_set_task_complete",
                 TaskStatusEnum.complete,
                 False,
-                {"strict_complete": True},
+                {"raise_error": True},
             ),
             (
                 "f_set_task_complete",
                 TaskStatusEnum.complete,
                 False,
-                {"strict_complete": False},
+                {"raise_error": False},
             ),
             ("f_set_task_waiting", TaskStatusEnum.waiting, True, {}),
             ("f_set_task_running", TaskStatusEnum.running, True, {}),
@@ -1495,13 +1495,13 @@ class TestNeo4jStore(TestStateStore):
                 "f_set_task_complete",
                 TaskStatusEnum.complete,
                 True,
-                {"strict_complete": True},
+                {"raise_error": True},
             ),
             (
                 "f_set_task_complete",
                 TaskStatusEnum.error,
                 False,
-                {"strict_complete": False},
+                {"raise_error": False},
             ),
         ],
     )
@@ -1593,10 +1593,10 @@ class TestNeo4jStore(TestStateStore):
         # strict should be an error, except where running or complete
         if status not in [TaskStatusEnum.running, TaskStatusEnum.complete]:
             with pytest.raises(ValueError, match="Cannot set task"):
-                n4js.set_task_complete(task_sks, strict_complete=True)
+                n4js.set_task_complete(task_sks, raise_error=True)
 
         # non-strict should be a no-op except where running
-        n4js.set_task_complete(task_sks, strict_complete=False)
+        n4js.set_task_complete(task_sks, raise_error=False)
         all_status = n4js.get_task_status(task_sks).values()
 
         if status == TaskStatusEnum.running:
@@ -1621,13 +1621,13 @@ class TestNeo4jStore(TestStateStore):
                 "f_set_task_complete",
                 TaskStatusEnum.complete,
                 True,
-                {"strict_complete": True},
+                {"raise_error": True},
             ),
             (
                 "f_set_task_complete",
                 TaskStatusEnum.complete,
                 False,
-                {"strict_complete": False},
+                {"raise_error": False},
             ),
         ],
     )

@@ -211,7 +211,7 @@ async def set_task_status(
     token: TokenData = Depends(get_token_data_depends),
 ):
     """
-    NOTE: The strict_complete=False kwarg (the default case regardless) is to
+    NOTE: The raise_error=False kwarg (the default case regardless) is to
     remind us that we are choosing the no-op behavior, rather than raising an
     error when using `set_task_complete` to attempt to finish a task that has
     been removed from running. This has no effect on the behavior of other
@@ -220,7 +220,7 @@ async def set_task_status(
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
     status = TaskStatusEnum(status)
-    n4js.set_task_status([task_sk], status, strict_complete=False)
+    n4js.set_task_status([task_sk], status, raise_error=False)
 
 
 @router.get("/tasks/{task_scoped_key}/status")

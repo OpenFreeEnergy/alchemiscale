@@ -1554,22 +1554,22 @@ class Neo4jStore(AlchemiscaleStateStore):
                 tx.run(q2)
 
     def set_task_complete(
-        self, tasks: List[ScopedKey], strict_complete: Optional[bool] = False, **kwargs
+        self, tasks: List[ScopedKey], raise_error: Optional[bool] = False, **kwargs
     ) -> None:
         """
         Set the status of a list of tasks to `complete`.
 
         There are two types of desired behavior for this method:
 
-        1. strict: If the task is currently `running` then set it to `complete`,
+        1. raise_error=True: If the task is currently `running` then set it to `complete`,
                    otherwise raise an Exception
-        2. Non-strict: if the task has been set to anything other than running then
+        2. raise_error=False: if the task has been set to anything other than running then
                         do no-op
 
         As per the design of the `Task` data lifecycle only `running`
         tasks can be set to `complete`. If the task is not currently running
-        then the strict_complete=True behavior is to raise an Exception.
-        If strict_complete=False then the task status is left unchanged and
+        then the raise_error=True behavior is to raise an Exception.
+        If raise_error=False then the task status is left unchanged and
         no exception is raised.
         """
 
@@ -1584,7 +1584,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 if status == TaskStatusEnum.complete.value:
                     continue  # no-op
                 if status != TaskStatusEnum.running.value:
-                    if strict_complete:
+                    if raise_error:
                         raise ValueError(
                             f"Cannot set task {t} with current status: {status} to `complete` as it is not currently `running`."
                         )
