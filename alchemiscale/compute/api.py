@@ -210,18 +210,11 @@ async def set_task_status(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    """
-    NOTE: The raise_error=False kwarg (the default case regardless) is to
-    remind us that we are choosing the no-op behavior, rather than raising an
-    error when using `set_task_complete` to attempt to finish a task that has
-    been removed from running. This has no effect on the behavior of other
-    `set_task_status` methods.
-    """
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
 
     status = TaskStatusEnum(status)
-    n4js.set_task_status([task_sk], status, raise_error=False)
+    n4js.set_task_status([task_sk], status)
 
 
 @router.get("/tasks/{task_scoped_key}/status")
@@ -235,9 +228,8 @@ async def get_task_status(
     validate_scopes(task_sk.scope, token)
 
     status = n4js.get_task_status([task_sk])
-    # cast the Python Enum to a string, as the JSON encoder doesn't know how
-    # to handle it
-    return status[task_sk].value
+
+    return status[0].value
 
 
 @router.get("/chemicalsystems")

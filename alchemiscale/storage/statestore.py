@@ -1496,7 +1496,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         method = getattr(self, f"set_task_{status.value}")
         return method(tasks, raise_error=raise_error)
 
-    def get_task_status(self, tasks: List[ScopedKey]) -> Dict[ScopedKey, TaskStatusEnum]:
+    def get_task_status(self, tasks: List[ScopedKey]) -> List[TaskStatusEnum]:
         """Get the status of a list of Tasks.
 
         Parameters
@@ -1510,7 +1510,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             A dictionary of Tasks and their statuses.
         """
 
-        statuses = {}
+        statuses = []
         with self.transaction() as tx:
             for t in tasks:
                 q = f"""
@@ -1518,8 +1518,11 @@ class Neo4jStore(AlchemiscaleStateStore):
                 RETURN t
                 """
                 task = tx.run(q).to_subgraph()
-                status = task.get("status")
-                statuses[t] = TaskStatusEnum(status)
+                if task is None:
+                    statuses.append(None)
+                else:
+                    status = task.get("status")
+                    statuses.append(TaskStatusEnum(status))
 
         return statuses
 

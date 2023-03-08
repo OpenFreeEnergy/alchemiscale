@@ -1277,6 +1277,10 @@ class TestNeo4jStore(TestStateStore):
     # so we parameterize over the methods
 
     @pytest.fixture()
+    def f_set_task_waiting(self, n4js):
+        return n4js.set_task_waiting
+
+    @pytest.fixture()
     def f_set_task_running(self, n4js):
         return n4js.set_task_running
 
@@ -1289,10 +1293,6 @@ class TestNeo4jStore(TestStateStore):
         return n4js.set_task_error
 
     @pytest.fixture()
-    def f_set_task_waiting(self, n4js):
-        return n4js.set_task_waiting
-
-    @pytest.fixture()
     def f_set_task_invalid(self, n4js):
         return n4js.set_task_invalid
 
@@ -1300,9 +1300,8 @@ class TestNeo4jStore(TestStateStore):
     def f_set_task_deleted(self, n4js):
         return n4js.set_task_deleted
 
-    # allowed = [running, error, invalid, deleted]
-    # no-op = [waiting, complete[strict=False]]
-    # not allowed = [complete[strict=True]]
+    # allowed = [running, invalid, deleted]
+    # not allowed = [complete, error]
     @pytest.mark.parametrize(
         "status_func, status, should_raise, kwargs",
         [
@@ -1353,13 +1352,11 @@ class TestNeo4jStore(TestStateStore):
                 neo4j_status_op(task_sks, **kwargs)
         else:
             neo4j_status_op(task_sks, **kwargs)
-            all_status = n4js.get_task_status(task_sks).values()
+            all_status = n4js.get_task_status(task_sks)
 
             assert all(s == status for s in all_status)
 
-    # allowed = [complete[strict=True], complete[strict=False] , error, invalid, deleted]
-    # no-op = [running]
-    # not allowed = [waiting]
+    # allowed = [waiting, complete, error, invalid, deleted]
     @pytest.mark.parametrize(
         "status_func, status, should_raise, kwargs",
         [
@@ -1413,13 +1410,12 @@ class TestNeo4jStore(TestStateStore):
                 neo4j_status_op(task_sks, **kwargs)
         else:
             neo4j_status_op(task_sks, **kwargs)
-            all_status = n4js.get_task_status(task_sks).values()
+            all_status = n4js.get_task_status(task_sks)
 
             assert all(s == status for s in all_status)
 
-    # allowed = [error, invalid, deleted]
-    # no-op = [complete[strict=True], complete[strict=False]]
-    # not allowed = [waiting, running]
+    # allowed = [invalid, deleted]
+    # not allowed = [waiting, running, error]
     @pytest.mark.parametrize(
         "status_func, status, should_raise, kwargs",
         [
@@ -1476,13 +1472,12 @@ class TestNeo4jStore(TestStateStore):
                 neo4j_status_op(task_sks, **kwargs)
         else:
             neo4j_status_op(task_sks, **kwargs)
-            all_status = n4js.get_task_status(task_sks).values()
+            all_status = n4js.get_task_status(task_sks)
 
             assert all(s == status for s in all_status)
 
-    # allowed = [error, invalid, deleted, waiting]
-    # no-op = [error, complete[strict=False]]
-    # not allowed = [running, complete[strict=True]]
+    # allowed = [invalid, deleted, waiting]
+    # not allowed = [running, complete]
     @pytest.mark.parametrize(
         "status_func, status, should_raise, kwargs",
         [
@@ -1539,12 +1534,12 @@ class TestNeo4jStore(TestStateStore):
                 neo4j_status_op(task_sks, **kwargs)
         else:
             neo4j_status_op(task_sks, **kwargs)
-            all_status = n4js.get_task_status(task_sks).values()
+            all_status = n4js.get_task_status(task_sks)
 
             assert all(s == status for s in all_status)
 
-    # NOTE: a precondition operation is used for `complete` as it is not
-    # reachable from the default status of `waiting` in strict mode.
+    # NOTE: a precondition operation is used for `complete`, `error` as these
+    # are not reachable from the default status of `waiting`.
     @pytest.mark.parametrize(
         "status_func, status, precondition_op_func",
         [
@@ -1594,7 +1589,7 @@ class TestNeo4jStore(TestStateStore):
 
         # non-strict should be a no-op except where running
         n4js.set_task_complete(task_sks, raise_error=False)
-        all_status = n4js.get_task_status(task_sks).values()
+        all_status = n4js.get_task_status(task_sks)
 
         if status == TaskStatusEnum.running:
             assert all(s == TaskStatusEnum.complete for s in all_status)
@@ -1664,7 +1659,7 @@ class TestNeo4jStore(TestStateStore):
 
         else:
             neo4j_status_op(task_sks, **kwargs)
-            all_status = n4js.get_task_status(task_sks).values()
+            all_status = n4js.get_task_status(task_sks)
             assert all(s == terminal_status for s in all_status)
 
     # check that setting complete, invalid or deleted removes the
@@ -1777,8 +1772,8 @@ class TestNeo4jStore(TestStateStore):
         assert len(sks) == 7
 
     # check that the status is set correctly through the generic method
-    # NOTE: a precondition operation is used for `complete` as it is not
-    # reachable from the default status of `waiting`
+    # NOTE: a precondition operation is used for `complete`,`error` as these
+    # are not reachable from the default status of `waiting`
     @pytest.mark.parametrize(
         "status, precondition_op",
         [
@@ -1818,7 +1813,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.set_task_status([task_sk], status)
 
         # check the status
-        assert list(n4js.get_task_status([task_sk]).values())[0] == status
+        assert n4js.get_task_status([task_sk])[0] == status
 
     def test_get_task_status(
         self,
@@ -1855,12 +1850,12 @@ class TestNeo4jStore(TestStateStore):
         # task 5 will be set to deleted
         n4js.set_task_deleted(task_sks[5:6])
 
-        # now lets try get them back as a dict of task sks and statuses
+        # now lets try get them back as a list of statuses
         task_statuses = n4js.get_task_status(task_sks)
 
-        assert task_statuses[task_sks[0]] == TaskStatusEnum.waiting
-        assert task_statuses[task_sks[1]] == TaskStatusEnum.running
-        assert task_statuses[task_sks[2]] == TaskStatusEnum.error
-        assert task_statuses[task_sks[3]] == TaskStatusEnum.complete
-        assert task_statuses[task_sks[4]] == TaskStatusEnum.invalid
-        assert task_statuses[task_sks[5]] == TaskStatusEnum.deleted
+        assert task_statuses[0] == TaskStatusEnum.waiting
+        assert task_statuses[1] == TaskStatusEnum.running
+        assert task_statuses[2] == TaskStatusEnum.error
+        assert task_statuses[3] == TaskStatusEnum.complete
+        assert task_statuses[4] == TaskStatusEnum.invalid
+        assert task_statuses[5] == TaskStatusEnum.deleted
