@@ -1548,7 +1548,7 @@ class TestNeo4jStore(TestStateStore):
     @pytest.mark.parametrize(
         "status_func, status, precondition_op_func",
         [
-            ("f_set_task_error", TaskStatusEnum.error, None),
+            ("f_set_task_error", TaskStatusEnum.error, "f_set_task_running"),
             ("f_set_task_waiting", TaskStatusEnum.waiting, None),
             ("f_set_task_invalid", TaskStatusEnum.invalid, None),
             ("f_set_task_deleted", TaskStatusEnum.deleted, None),
@@ -1611,9 +1611,9 @@ class TestNeo4jStore(TestStateStore):
     @pytest.mark.parametrize(
         "status_func, status, should_raise, kwargs",
         [
-            ("f_set_task_error", TaskStatusEnum.error, True, {}),
-            ("f_set_task_waiting", TaskStatusEnum.waiting, True, {}),
-            ("f_set_task_running", TaskStatusEnum.running, True, {}),
+            ("f_set_task_error", TaskStatusEnum.error, True, {"raise_error": True}),
+            ("f_set_task_waiting", TaskStatusEnum.waiting, True, {"raise_error": True}),
+            ("f_set_task_running", TaskStatusEnum.running, True, {"raise_error": True}),
             (
                 "f_set_task_complete",
                 TaskStatusEnum.complete,
@@ -1784,7 +1784,7 @@ class TestNeo4jStore(TestStateStore):
         [
             (TaskStatusEnum.waiting, None),
             (TaskStatusEnum.running, None),
-            (TaskStatusEnum.error, None),
+            (TaskStatusEnum.error, "f_set_task_running"),
             (TaskStatusEnum.complete, "f_set_task_running"),
             (TaskStatusEnum.invalid, None),
             (TaskStatusEnum.deleted, None),

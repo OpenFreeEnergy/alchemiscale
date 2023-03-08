@@ -1574,38 +1574,21 @@ class Neo4jStore(AlchemiscaleStateStore):
         Only Tasks with status `waiting` can be set to `running`.
 
         """
-        tasks_set = []
-        with self.transaction() as tx:
-            for t in tasks:
-                q = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
+        def q(t):
+            return f"""
+            MATCH (t:Task {{_scoped_key: '{t}'}})
 
-                OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
-                WHERE t_.status IN ['running', 'waiting']
-                SET t_.status = '{TaskStatusEnum.running.value}'
+            OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
+            WHERE t_.status IN ['running', 'waiting']
+            SET t_.status = '{TaskStatusEnum.running.value}'
 
-                RETURN t, t_
-                """
+            RETURN t, t_
+            """
 
-                res = tx.run(q)
-                for record in res:
-                    task_i = record['t']
-                    task_set= record['t_']
+        def err_msg(t, status):
+            return f"Cannot set task {t} with current status: {status} to `running` as it is not currently `waiting`."
 
-                if task_set is None:
-                    if raise_error:
-                        status = task_i['status']
-                        raise ValueError(
-                                f"Cannot set task {t} with current status: {status} to `running` as it is not currently `waiting`."
-                        )
-                    tasks_set.append(None)
-                elif task_i is None:
-                    tasks_set.append(None)
-                else:
-                    tasks_set.append(t)
-
-        return tasks_set
-
+        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_complete(
         self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
@@ -1614,42 +1597,28 @@ class Neo4jStore(AlchemiscaleStateStore):
         Only `running` Tasks can be set to `complete`.
 
         """
-        tasks_set = []
-        with self.transaction() as tx:
-            for t in tasks:
-                q = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
+        def q(t):
+            return f"""
+            MATCH (t:Task {{_scoped_key: '{t}'}})
 
-                OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
-                WHERE t_.status IN ['complete', 'running']
-                SET t_.status = '{TaskStatusEnum.complete.value}'
+            OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
+            WHERE t_.status IN ['complete', 'running']
+            SET t_.status = '{TaskStatusEnum.complete.value}'
 
-                WITH t, t_
+            WITH t, t_
 
-                // if we changed the status to complete,
-                // drop all ACTIONS relationships
-                OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
-                DETACH DELETE ar
+            // if we changed the status to complete,
+            // drop all ACTIONS relationships
+            OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
+            DETACH DELETE ar
 
-                RETURN t, t_
-                """
+            RETURN t, t_
+            """
 
-                res = tx.run(q)
-                for record in res:
-                    task_i = record['t']
-                    task_set= record['t_']
+        def err_msg(t, status):
+            return f"Cannot set task {t} with current status: {status} to `complete` as it is not currently `running`."
 
-                if task_set is None:
-                    if raise_error:
-                        status = task_i['status']
-                        raise ValueError(
-                                f"Cannot set task {t} with current status: {status} to `complete` as it is not currently `running`."
-                        )
-                    tasks_set.append(None)
-                else:
-                    tasks_set.append(t)
-
-        return tasks_set
+        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_error(self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
         """Set the status of a list of Tasks to `error`.
@@ -1657,36 +1626,21 @@ class Neo4jStore(AlchemiscaleStateStore):
         Only `running` Tasks can be set to `error`.
 
         """
+        def q(t):
+            return f"""
+            MATCH (t:Task {{_scoped_key: '{t}'}})
 
-        tasks_set = []
-        with self.transaction() as tx:
-            for t in tasks:
-                q = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
+            OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
+            WHERE t_.status IN ['error', 'running']
+            SET t_.status = '{TaskStatusEnum.error.value}'
 
-                OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
-                WHERE t_.status IN ['error', 'running']
-                SET t_.status = '{TaskStatusEnum.error.value}'
+            RETURN t, t_
+            """
 
-                RETURN t, t_
-                """
+        def err_msg(t, status):
+            return f"Cannot set task {t} with current status: {status} to `error` as it is not currently `running`."
 
-                res = tx.run(q)
-                for record in res:
-                    task_i = record['t']
-                    task_set= record['t_']
-
-                if task_set is None:
-                    if raise_error:
-                        status = task_i['status']
-                        raise ValueError(
-                                f"Cannot set task {t} with current status: {status} to `error` as it is not currently `running`."
-                        )
-                    tasks_set.append(None)
-                else:
-                    tasks_set.append(t)
-
-        return tasks_set
+        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_invalid(self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
         """Set the status of a list of Tasks to `invalid`.
