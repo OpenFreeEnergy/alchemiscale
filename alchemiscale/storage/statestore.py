@@ -1470,9 +1470,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         return self._get_protocoldagresultrefs(q)
 
     def set_task_status(
-            self, tasks: List[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
+        self, tasks: List[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
     ) -> List[Optional[ScopedKey]]:
-        """Set the status of a list of Tasks. 
+        """Set the status of a list of Tasks.
 
         This is a master method that calls the appropriate method for the
         status.
@@ -1532,12 +1532,12 @@ class Neo4jStore(AlchemiscaleStateStore):
             for t in tasks:
                 res = tx.run(q_func(t))
                 for record in res:
-                    task_i = record['t']
-                    task_set = record['t_']
+                    task_i = record["t"]
+                    task_set = record["t_"]
 
                 if task_set is None:
                     if raise_error:
-                        status = task_i['status']
+                        status = task_i["status"]
                         raise ValueError(err_msg_func(t, status))
                     tasks_set.append(None)
                 elif task_i is None:
@@ -1549,12 +1549,15 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return tasks_set
 
-    def set_task_waiting(self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
+    def set_task_waiting(
+        self, tasks: List[ScopedKey], raise_error: bool = False
+    ) -> List[Optional[ScopedKey]]:
         """Set the status of a list of Tasks to `waiting`.
 
         Only Tasks with status `error` or `running` can be set to `waiting`.
 
         """
+
         def q(t):
             return f"""
             MATCH (t:Task {{_scoped_key: '{t}'}})
@@ -1571,12 +1574,15 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
-    def set_task_running(self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
+    def set_task_running(
+        self, tasks: List[ScopedKey], raise_error: bool = False
+    ) -> List[Optional[ScopedKey]]:
         """Set the status of a list of Tasks to `running`.
 
         Only Tasks with status `waiting` can be set to `running`.
 
         """
+
         def q(t):
             return f"""
             MATCH (t:Task {{_scoped_key: '{t}'}})
@@ -1594,12 +1600,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_complete(
-        self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
+        self, tasks: List[ScopedKey], raise_error: bool = False
+    ) -> List[Optional[ScopedKey]]:
         """Set the status of a list of Tasks to `complete`.
 
         Only `running` Tasks can be set to `complete`.
 
         """
+
         def q(t):
             return f"""
             MATCH (t:Task {{_scoped_key: '{t}'}})
@@ -1623,12 +1631,15 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
-    def set_task_error(self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
+    def set_task_error(
+        self, tasks: List[ScopedKey], raise_error: bool = False
+    ) -> List[Optional[ScopedKey]]:
         """Set the status of a list of Tasks to `error`.
 
         Only `running` Tasks can be set to `error`.
 
         """
+
         def q(t):
             return f"""
             MATCH (t:Task {{_scoped_key: '{t}'}})
@@ -1645,7 +1656,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
-    def set_task_invalid(self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
+    def set_task_invalid(
+        self, tasks: List[ScopedKey], raise_error: bool = False
+    ) -> List[Optional[ScopedKey]]:
         """Set the status of a list of Tasks to `invalid`.
 
         Any Task can be set to `invalid`; an `invalid` Task cannot change to
@@ -1677,7 +1690,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return tasks
 
-    def set_task_deleted(self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
+    def set_task_deleted(
+        self, tasks: List[ScopedKey], raise_error: bool = False
+    ) -> List[Optional[ScopedKey]]:
         """Set the status of a list of Tasks to `deleted`.
 
         Any Task can be set to `deleted`; a `deleted` Task cannot change to
