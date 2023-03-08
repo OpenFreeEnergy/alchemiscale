@@ -153,8 +153,8 @@ class TestComputeClient:
 
         # check that the status has been set
         # note must be list on n4js side
-        stat_dict = n4js_preloaded.get_task_status([all_tasks[0]])
-        assert stat_dict[all_tasks[0]] == status
+        statuses = n4js_preloaded.get_task_status([all_tasks[0]])
+        assert statuses[0] == status
 
     @pytest.mark.parametrize("status", [member for member in TaskStatusEnum])
     def test_get_task_status(
