@@ -219,6 +219,7 @@ async def set_task_status(
     """
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
+
     status = TaskStatusEnum(status)
     n4js.set_task_status([task_sk], status, raise_error=False)
 
@@ -232,6 +233,7 @@ async def get_task_status(
 ):
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
+
     status = n4js.get_task_status([task_sk])
     # cast the Python Enum to a string, as the JSON encoder doesn't know how
     # to handle it

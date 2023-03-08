@@ -97,7 +97,6 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     def set_task_status(self, task: ScopedKey, status: TaskStatusEnum) -> None:
         """Set the status of a `Task`."""
-
         self._post_resource(f"tasks/{task}/status", status.value)
 
     def get_task_status(self, task: ScopedKey) -> TaskStatusEnum:

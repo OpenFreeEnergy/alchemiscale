@@ -1470,39 +1470,44 @@ class Neo4jStore(AlchemiscaleStateStore):
         return self._get_protocoldagresultrefs(q)
 
     def set_task_status(
-        self, tasks: List[ScopedKey], status: TaskStatusEnum, **kwargs
-    ) -> None:
-        """
-        Set the status of a task, this is a master method that calls the
-        appropriate method for the status.
+            self, tasks: List[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
+    ) -> List[Optional[ScopedKey]]:
+        """Set the status of a list of Tasks. 
+
+        This is a master method that calls the appropriate method for the
+        status.
 
         Parameters
         ----------
-        tasks : ScopedKey
-            The task or list of tasks to set the status of.
-        status : TaskStatusEnum
-            The status to set the task to.
-        **kwargs
-            Additional keyword arguments to pass to the status method.
-        """
-        method = getattr(self, f"set_task_{status.value}")
-        return method(tasks, **kwargs)
-
-    def get_task_status(
-        self, tasks: List[ScopedKey]
-    ) -> Dict[ScopedKey, TaskStatusEnum]:
-        """
-        Get the status of a list of tasks.
-
-        Parameters
-        ----------
-        tasks : Union[ScopedKey,List[ScopedKey]]
-            The task or list of tasks to set the status of.
+        tasks
+            The list of Tasks to set the status of.
+        status
+            The status to set the Task to.
+        raise_error
+            If `True`, raise a `ValueError` if the status of a given Task cannot be changed.
 
         Returns
         -------
-        Union[TaskStatusEnum, Dict[ScopedKey,TaskStatusEnum]]
-            The status of the task or a dictionary of tasks and their statuses.
+        List[Optional[ScopedKey]]
+            A list of the Task ScopedKeys for which status was changed; `None`
+            is given for any Tasks for which the status could not be changed.
+
+        """
+        method = getattr(self, f"set_task_{status.value}")
+        return method(tasks, raise_error=raise_error)
+
+    def get_task_status(self, tasks: List[ScopedKey]) -> Dict[ScopedKey, TaskStatusEnum]:
+        """Get the status of a list of Tasks.
+
+        Parameters
+        ----------
+        tasks
+            The list of Tasks to get the status for.
+
+        Returns
+        -------
+        Dict[ScopedKey,TaskStatusEnum]
+            A dictionary of Tasks and their statuses.
         """
 
         statuses = {}
@@ -1518,161 +1523,177 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return statuses
 
-    def set_task_running(self, tasks: List[ScopedKey], **kwargs) -> None:
+    def _set_task_status(self, tasks, q_func, err_msg_func, raise_error):
+        tasks_set = []
+        with self.transaction() as tx:
+            for t in tasks:
+                res = tx.run(q_func(t))
+                for record in res:
+                    task_i = record['t']
+                    task_set = record['t_']
+
+                if task_set is None:
+                    if raise_error:
+                        status = task_i['status']
+                        raise ValueError(err_msg_func(t, status))
+                    tasks_set.append(None)
+                elif task_i is None:
+                    if raise_error:
+                        raise ValueError("No such task {t}")
+                    tasks_set.append(None)
+                else:
+                    tasks_set.append(t)
+
+        return tasks_set
+
+    def set_task_waiting(self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
+        """Set the status of a list of Tasks to `waiting`.
+
+        Only Tasks with status `error` or `running` can be set to `waiting`.
+
         """
-        Set the status of a list of tasks to `running`.
+        def q(t):
+            return f"""
+            MATCH (t:Task {{_scoped_key: '{t}'}})
 
-        As per the design of the `Task` data lifecycle only `waiting`
-        tasks can be set to `running`.
+            OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
+            WHERE t_.status IN ['waiting', 'running', 'error']
+            SET t_.status = '{TaskStatusEnum.waiting.value}', t_.claimant = null
 
-        Parameters
-        ----------
-        tasks : Union[ScopedKey,List[ScopedKey]]
-            The task or list of tasks to set the status of.
-        status : TaskStatusEnum
-            The status to set the task to.
+            RETURN t, t_
+            """
+
+        def err_msg(t, status):
+            return f"Cannot set task {t} with current status: {status} to `waiting` as it is not currently `error` or `running`."
+
+        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
+
+    def set_task_running(self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
+        """Set the status of a list of Tasks to `running`.
+
+        Only Tasks with status `waiting` can be set to `running`.
+
         """
-
+        tasks_set = []
         with self.transaction() as tx:
             for t in tasks:
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                RETURN t
+
+                OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
+                WHERE t_.status IN ['running', 'waiting']
+                SET t_.status = '{TaskStatusEnum.running.value}'
+
+                RETURN t, t_
                 """
-                task = tx.run(q).to_subgraph()
-                status = task.get("status")
-                if status == TaskStatusEnum.running.value:
-                    continue  # no-op
-                if status != TaskStatusEnum.waiting.value:
-                    raise ValueError(
-                        f"Cannot set task {t} with current status: {status} to `running` as it is not currently `waiting`."
-                    )
-                q2 = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
-                SET t.status = '{TaskStatusEnum.running.value}'
-                """
-                tx.run(q2)
+
+                res = tx.run(q)
+                for record in res:
+                    task_i = record['t']
+                    task_set= record['t_']
+
+                if task_set is None:
+                    if raise_error:
+                        status = task_i['status']
+                        raise ValueError(
+                                f"Cannot set task {t} with current status: {status} to `running` as it is not currently `waiting`."
+                        )
+                    tasks_set.append(None)
+                elif task_i is None:
+                    tasks_set.append(None)
+                else:
+                    tasks_set.append(t)
+
+        return tasks_set
+
 
     def set_task_complete(
-        self, tasks: List[ScopedKey], raise_error: Optional[bool] = False, **kwargs
-    ) -> None:
+        self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
+        """Set the status of a list of Tasks to `complete`.
+
+        Only `running` Tasks can be set to `complete`.
+
         """
-        Set the status of a list of tasks to `complete`.
-
-        There are two types of desired behavior for this method:
-
-        1. raise_error=True: If the task is currently `running` then set it to `complete`,
-                   otherwise raise an Exception
-        2. raise_error=False: if the task has been set to anything other than running then
-                        do no-op
-
-        As per the design of the `Task` data lifecycle only `running`
-        tasks can be set to `complete`. If the task is not currently running
-        then the raise_error=True behavior is to raise an Exception.
-        If raise_error=False then the task status is left unchanged and
-        no exception is raised.
-        """
-
+        tasks_set = []
         with self.transaction() as tx:
             for t in tasks:
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                RETURN t
-                """
-                task = tx.run(q).to_subgraph()
-                status = task.get("status")
-                if status == TaskStatusEnum.complete.value:
-                    continue  # no-op
-                if status != TaskStatusEnum.running.value:
-                    if raise_error:
-                        raise ValueError(
-                            f"Cannot set task {t} with current status: {status} to `complete` as it is not currently `running`."
-                        )
-                    else:
-                        continue  # no-op
-                # set the status and delete the ACTIONS relationship
-                q2 = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
-                SET t.status = '{TaskStatusEnum.complete.value}'
-                WITH t
-                OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
+
+                OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
+                WHERE t_.status IN ['complete', 'running']
+                SET t_.status = '{TaskStatusEnum.complete.value}'
+
+                WITH t, t_
+
+                // if we changed the status to complete,
+                // drop all ACTIONS relationships
+                OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
                 DETACH DELETE ar
+
+                RETURN t, t_
                 """
-                tx.run(q2)
 
-    def set_task_waiting(
-        self, tasks: List[ScopedKey], clear_claim: Optional[bool] = False, **kwargs
-    ) -> None:
+                res = tx.run(q)
+                for record in res:
+                    task_i = record['t']
+                    task_set= record['t_']
+
+                if task_set is None:
+                    if raise_error:
+                        status = task_i['status']
+                        raise ValueError(
+                                f"Cannot set task {t} with current status: {status} to `complete` as it is not currently `running`."
+                        )
+                    tasks_set.append(None)
+                else:
+                    tasks_set.append(t)
+
+        return tasks_set
+
+    def set_task_error(self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
+        """Set the status of a list of Tasks to `error`.
+
+        Only `running` Tasks can be set to `error`.
+
         """
-        Set the status of a list of tasks to `waiting`.
 
-        As per the design of the `Task` data lifecycle only `error`
-        tasks can be set to `waiting`, or a `waiting` no-op can be performed
-
-        """
-
+        tasks_set = []
         with self.transaction() as tx:
             for t in tasks:
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                RETURN t
+
+                OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
+                WHERE t_.status IN ['error', 'running']
+                SET t_.status = '{TaskStatusEnum.error.value}'
+
+                RETURN t, t_
                 """
-                task = tx.run(q).to_subgraph()
-                status = task.get("status")
-                if status == TaskStatusEnum.waiting.value:
-                    continue  # no-op
-                if status != TaskStatusEnum.error.value:
-                    raise ValueError(
-                        f"Cannot set task {t} with current status: {status} to `waiting` as it is not currently `error`."
-                    )
-                q2 = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
-                SET t.status = '{TaskStatusEnum.waiting.value}'
-                """
-                if clear_claim:
-                    q2 += ", t.claimant = null"
-                tx.run(q2)
 
-    def set_task_error(self, tasks: List[ScopedKey], **kwargs) -> None:
-        """
-        Set the status of a list of tasks to `error`.
+                res = tx.run(q)
+                for record in res:
+                    task_i = record['t']
+                    task_set= record['t_']
 
-        As per the design of the `Task` data lifecycle `waiting`, `running` and `complete`
-        tasks can be set to `error`.
-        """
+                if task_set is None:
+                    if raise_error:
+                        status = task_i['status']
+                        raise ValueError(
+                                f"Cannot set task {t} with current status: {status} to `error` as it is not currently `running`."
+                        )
+                    tasks_set.append(None)
+                else:
+                    tasks_set.append(t)
 
-        with self.transaction() as tx:
-            for t in tasks:
-                q = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
-                RETURN t
-                """
-                task = tx.run(q).to_subgraph()
-                status = task.get("status")
-                if status == TaskStatusEnum.error.value:
-                    continue  # no-op
-                if (
-                    (status != TaskStatusEnum.running.value)
-                    and (status != TaskStatusEnum.waiting.value)
-                    and (status != TaskStatusEnum.complete.value)
-                ):
-                    raise ValueError(
-                        f"Cannot set task {t} with current status: {status} to `error` as it is not currently `running`, `waiting` or `complete`"
-                    )
-                q2 = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
-                SET t.status = '{TaskStatusEnum.error.value}'
-                """
-                tx.run(q2)
+        return tasks_set
 
-    def set_task_invalid(
-        self, tasks: Union[ScopedKey, List[ScopedKey]], **kwargs
-    ) -> None:
-        """
-        Set the status of a list of tasks to `invalid`.
+    def set_task_invalid(self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
+        """Set the status of a list of Tasks to `invalid`.
 
-        As per the design of the `Task` data lifecycle any task can be set to `invalid`.
-        Once `invalid` is set the task cannot change status
+        Any Task can be set to `invalid`; an `invalid` Task cannot change to
+        any other status.
+
         """
 
         with self.transaction() as tx:
@@ -1682,44 +1703,54 @@ class Neo4jStore(AlchemiscaleStateStore):
                 # and remove actions relationships
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
+
                 // EXTENDS* used to get all tasks in the extends chain
                 OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task) 
                 SET t.status = '{TaskStatusEnum.invalid.value}'
                 SET extends_task.status = '{TaskStatusEnum.invalid.value}'
                 WITH t, extends_task
+
                 OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
                 OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
+
                 DETACH DELETE ar
                 DETACH DELETE are
                 """
                 tx.run(q)
 
-    def set_task_deleted(self, tasks: List[ScopedKey], **kwargs) -> None:
-        """
-        Set the status of a list of tasks to `deleted`.
+        return tasks
 
-        As per the design of the `Task` data lifecycle any task can be set to `deleted`.
-        Once `deleted` is set the task cannot change status
+    def set_task_deleted(self, tasks: List[ScopedKey], raise_error: bool = False) -> List[Optional[ScopedKey]]:
+        """Set the status of a list of Tasks to `deleted`.
+
+        Any Task can be set to `deleted`; a `deleted` Task cannot change to
+        any other status.
+
         """
 
         with self.transaction() as tx:
             for t in tasks:
                 # set the status and delete the ACTIONS relationship
-                # make sure we follow the extends chain and set all tasks to invalid
+                # make sure we follow the extends chain and set all tasks to deleted
                 # and remove actions relationships
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
+
                 // EXTENDS* used to get all tasks in the extends chain
                 OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task) 
                 SET t.status = '{TaskStatusEnum.deleted.value}'
                 SET extends_task.status = '{TaskStatusEnum.deleted.value}'
                 WITH t, extends_task
+
                 OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
                 OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
+
                 DETACH DELETE ar
                 DETACH DELETE are
                 """
                 tx.run(q)
+
+        return tasks
 
     ## authentication
 
