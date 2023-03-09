@@ -61,4 +61,5 @@ dependencies:
     - git+https://github.com/OpenFreeEnergy/openfe
     - git+https://github.com/OpenFreeEnergy/openfe-benchmarks
     - git+https://github.com/mikemhenry/openff-models.git@support_nested_models
+    - git+https://github.com/choderalab/perses.git@protocol-neqcyc
     #- git+https://github.com/openforcefield/protein-ligand-benchmark
