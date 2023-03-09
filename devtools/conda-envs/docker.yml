@@ -60,6 +60,7 @@ dependencies:
   - cloudpathlib
   - dask
   - distributed
+  - numba
 
   - pip:
     #- git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment
