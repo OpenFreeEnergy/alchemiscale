@@ -54,6 +54,12 @@ dependencies:
   - lomap2>=2.1.0
   - openmmtools
   - openmmforcefields
+    
+  ## needed for perses
+  - openmoltools
+  - cloudpathlib
+  - dask
+  - distributed
 
   - pip:
     #- git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment
