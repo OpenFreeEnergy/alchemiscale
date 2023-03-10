@@ -23,7 +23,7 @@ from ..base.client import (
     json_to_gufe,
 )
 from ..models import Scope, ScopedKey
-from ..storage.models import TaskHub, Task
+from ..storage.models import TaskHub, Task, TaskStatusEnum
 
 
 class AlchemiscaleComputeClientError(AlchemiscaleBaseClientError):
@@ -94,3 +94,13 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         pdr_sk = self._post_resource(f"tasks/{task}/results", data)
 
         return ScopedKey.from_dict(pdr_sk)
+
+    def set_task_status(self, task: ScopedKey, status: TaskStatusEnum) -> None:
+        """Set the status of a `Task`."""
+        task_sk = self._post_resource(f"tasks/{task}/status", status.value)
+        return ScopedKey.from_str(task_sk) if task_sk is not None else None
+
+    def get_task_status(self, task: ScopedKey) -> TaskStatusEnum:
+        """Get the status of a `Task`."""
+        status = self._get_resource(f"tasks/{task}/status")
+        return TaskStatusEnum(status)
