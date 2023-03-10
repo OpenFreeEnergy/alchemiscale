@@ -43,7 +43,6 @@ class TaskStatusEnum(Enum):
     waiting = "waiting"
     running = "running"
     error = "error"
-    cancelled = "cancelled"
     invalid = "invalid"
     deleted = "deleted"
 

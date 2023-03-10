@@ -3,6 +3,7 @@ import pytest
 from gufe import Transformation
 from gufe.tokenization import GufeTokenizable
 
+from alchemiscale.base.client import json_to_gufe
 from alchemiscale.models import ScopedKey
 from alchemiscale.compute import client
 from alchemiscale.storage.models import ObjectStoreRef
@@ -39,8 +40,7 @@ class TestComputeAPI:
         assert response.status_code == 200
 
         tq_dict = {
-            ScopedKey.from_str(k): GufeTokenizable.from_dict(v)
-            for k, v in response.json().items()
+            ScopedKey.from_str(k): json_to_gufe(v) for k, v in response.json().items()
         }
         assert len(tq_dict) == 2
         assert all([i.weight == 0.5 for i in tq_dict.values()])
@@ -74,7 +74,7 @@ class TestComputeAPI:
         data = response.json()
         assert len(data) == 2
 
-        transformation = GufeTokenizable.from_dict(data[0])
+        transformation = json_to_gufe(data[0])
 
         assert isinstance(transformation, Transformation)
 

@@ -24,11 +24,12 @@ from ..base.api import (
     validate_scopes,
     validate_scopes_query,
     _check_store_connectivity,
+    gufe_to_json,
 )
 from ..settings import get_base_api_settings, get_compute_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ProtocolDAGResultRef, ComputeServiceID
+from ..storage.models import ProtocolDAGResultRef, ComputeServiceID, TaskStatusEnum
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import (
@@ -183,7 +184,7 @@ async def get_task_transformation(
     else:
         pdr = None
 
-    return (transformation.to_dict(), pdr)
+    return (gufe_to_json(transformation), pdr)
 
 
 # TODO: support compression performed client-side
@@ -217,6 +218,41 @@ def set_task_result(
     # otherwise, set as errored, leave in hubs
 
     return result_sk
+
+
+@router.post("/tasks/{task_scoped_key}/status")
+async def set_task_status(
+    task_scoped_key,
+    status: str = Body(),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    task_sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(task_sk.scope, token)
+
+    status = TaskStatusEnum(status)
+    tasks_statused = n4js.set_task_status([task_sk], status)
+    return [str(t) if t is not None else None for t in tasks_statused][0]
+
+
+@router.get("/tasks/{task_scoped_key}/status")
+async def get_task_status(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    task_sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(task_sk.scope, token)
+
+    status = n4js.get_task_status([task_sk])
+
+    return status[0].value
+
+
+@router.get("/chemicalsystems")
+async def chemicalsystems():
+    return {"message": "nothing yet"}
 
 
 ### add router
