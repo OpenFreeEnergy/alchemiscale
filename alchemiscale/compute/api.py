@@ -214,7 +214,8 @@ async def set_task_status(
     validate_scopes(task_sk.scope, token)
 
     status = TaskStatusEnum(status)
-    n4js.set_task_status([task_sk], status)
+    tasks_statused = n4js.set_task_status([task_sk], status)
+    return [str(t) if t is not None else None for t in tasks_statused][0]
 
 
 @router.get("/tasks/{task_scoped_key}/status")

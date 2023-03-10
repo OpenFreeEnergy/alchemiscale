@@ -1527,11 +1527,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         return statuses
 
     def _set_task_status(self, tasks, q_func, err_msg_func, raise_error):
-        tasks_set = []
+        tasks_statused = []
         with self.transaction() as tx:
             for t in tasks:
                 res = tx.run(q_func(t))
-                for record in res:
+                for i, record in enumerate(res):
+                    if i > 0:
+                        raise Neo4JStoreError("More than one such object in database; this should not be possible")
                     task_i = record["t"]
                     task_set = record["t_"]
 
@@ -1539,15 +1541,15 @@ class Neo4jStore(AlchemiscaleStateStore):
                     if raise_error:
                         status = task_i["status"]
                         raise ValueError(err_msg_func(t, status))
-                    tasks_set.append(None)
+                    tasks_statused.append(None)
                 elif task_i is None:
                     if raise_error:
                         raise ValueError("No such task {t}")
-                    tasks_set.append(None)
+                    tasks_statused.append(None)
                 else:
-                    tasks_set.append(t)
+                    tasks_statused.append(t)
 
-        return tasks_set
+        return tasks_statused
 
     def set_task_waiting(
         self, tasks: List[ScopedKey], raise_error: bool = False
