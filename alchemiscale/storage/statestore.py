@@ -1533,7 +1533,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                 res = tx.run(q_func(t))
                 for i, record in enumerate(res):
                     if i > 0:
-                        raise Neo4JStoreError("More than one such object in database; this should not be possible")
+                        raise Neo4JStoreError(
+                            "More than one such object in database; this should not be possible"
+                        )
                     task_i = record["t"]
                     task_set = record["t_"]
 
