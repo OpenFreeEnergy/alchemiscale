@@ -176,7 +176,7 @@ class SynchronousComputeService:
 
         # claim tasks from the taskhub
         tasks = self.client.claim_taskhub_tasks(
-            taskhub, claimant=self.name, count=count
+            taskhub, computeserviceid=self.computeserviceid, count=count
         )
 
         return tasks

@@ -19,7 +19,7 @@ from gufe.protocols import ProtocolDAGResult
 
 from ..base.client import AlchemiscaleBaseClient, AlchemiscaleBaseClientError
 from ..models import Scope, ScopedKey
-from ..storage.models import TaskHub, Task
+from ..storage.models import TaskHub, Task, ComputeServiceID
 
 
 class AlchemiscaleComputeClientError(AlchemiscaleBaseClientError):
@@ -65,10 +65,10 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         return taskhubs
 
     def claim_taskhub_tasks(
-        self, taskhub: ScopedKey, claimant: str, count: int = 1
+        self, taskhub: ScopedKey, computeserviceid: ComputeServiceID, count: int = 1
     ) -> Task:
         """Claim a `Task` from the specified `TaskHub`"""
-        data = dict(claimant=claimant, count=count)
+        data = dict(computeserviceid=computeserviceid, count=count)
         tasks = self._post_resource(f"taskhubs/{taskhub}/claim", data)
 
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]

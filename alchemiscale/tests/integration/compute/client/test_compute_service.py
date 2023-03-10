@@ -20,13 +20,14 @@ class TestSynchronousComputeService:
                 identifier=compute_client.identifier,
                 key=compute_client.key,
                 name="test_compute_service",
-                shared_path=Path(".").absolute(),
+                shared_basedir=Path("shared").absolute(),
+                scratch_basedir=Path("scratch").absolute(),
             )
 
-    def test_get_tasks(self, n4js_preloaded, service):
+    def test_claim_tasks(self, n4js_preloaded, service):
         n4js: Neo4jStore = n4js_preloaded
 
-        task_sks: List[Optional[ScopedKey]] = service.get_tasks(count=2)
+        task_sks: List[Optional[ScopedKey]] = service.claim_tasks(count=2)
 
         # should have 2 tasks
         assert len(task_sks) == 2

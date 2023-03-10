@@ -31,7 +31,7 @@ class ComputeServiceID(BaseModel):
 
 
 class TaskProvenance(BaseModel):
-    computekey: ComputeKey
+    computekey: ComputeServiceID
     datetime_start: datetime
     datetime_end: datetime
 

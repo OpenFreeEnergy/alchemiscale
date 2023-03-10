@@ -28,7 +28,7 @@ from ..base.api import (
 from ..settings import get_base_api_settings, get_compute_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ProtocolDAGResultRef
+from ..storage.models import ProtocolDAGResultRef, ComputeServiceID
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import (
@@ -140,18 +140,11 @@ async def query_taskhubs(
     return taskhubs_handler.format_return()
 
 
-# @app.get("/taskhubs/{scoped_key}")
-# async def get_taskhub(scoped_key: str,
-#                        *,
-#                        n4js: Neo4jStore = Depends(get_n4js_depends)):
-#    return
-
-
 @router.post("/taskhubs/{taskhub_scoped_key}/claim")
 async def claim_taskhub_tasks(
     taskhub_scoped_key,
     *,
-    computeserviceid: str = Body(),
+    computeserviceid: ComputeServiceID ,
     count: int = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
@@ -160,7 +153,7 @@ async def claim_taskhub_tasks(
     validate_scopes(sk.scope, token)
 
     tasks = n4js.claim_taskhub_tasks(
-        taskhub=taskhub_scoped_key, computeservice=computeserviceid, count=count
+        taskhub=taskhub_scoped_key, computeserviceid=computeserviceid, count=count
     )
 
     return [str(t) if t is not None else None for t in tasks]

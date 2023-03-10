@@ -23,7 +23,7 @@ from py2neo.matching import NodeMatcher
 from py2neo.errors import ClientError
 
 from .models import (
-    ComputeKey,
+    ComputeServiceID,
     Task,
     TaskHub,
     TaskArchive,
@@ -91,7 +91,7 @@ def _select_task_from_taskpool(taskpool: Subgraph) -> Union[ScopedKey, None]:
     return chosen_one[0]
 
 
-def _generate_claim_query(task_sk: ScopedKey, claimant: str) -> str:
+def _generate_claim_query(task_sk: ScopedKey, computeserviceid: ComputeServiceID) -> str:
     """
     Generate a query to claim a single Task.
     Parameters
@@ -108,7 +108,7 @@ def _generate_claim_query(task_sk: ScopedKey, claimant: str) -> str:
     """
     query = f"""
     MATCH (t:Task {{_scoped_key: '{task_sk}'}})
-    SET t.status = 'running', t.claim = '{claimant}'
+    SET t.status = 'running', t.claim = '{computeserviceid.identifier}'
     RETURN t
     """
     return query
@@ -1086,7 +1086,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
     def claim_taskhub_tasks(
-        self, taskhub: ScopedKey, claimant: str, count: int = 1
+        self, taskhub: ScopedKey, computeserviceid: ComputeServiceID, count: int = 1
     ) -> List[Union[ScopedKey, None]]:
         """Claim a TaskHub Task.
 
@@ -1153,7 +1153,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     tasks.append(None)
                 else:
                     chosen_one = _select_task_from_taskpool(taskpool)
-                    claim_query = _generate_claim_query(chosen_one, claimant)
+                    claim_query = _generate_claim_query(chosen_one, computeserviceid)
                     tasks.append(tx.run(claim_query).to_subgraph())
 
             tx.run(
@@ -1468,7 +1468,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
-    def set_task_running(self, task: ScopedKey, computekey: ComputeKey):
+    def set_task_running(self, task: ScopedKey, computeserviceid: ComputeServiceID):
         ...
 
     def set_task_complete(
