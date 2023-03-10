@@ -6,6 +6,7 @@ Data models --- :mod:`alchemiscale.models`
 from typing import Optional, Union
 from pydantic import BaseModel, Field, validator, root_validator
 from gufe.tokenization import GufeKey
+from re import fullmatch
 
 
 class Scope(BaseModel):
@@ -28,16 +29,26 @@ class Scope(BaseModel):
 
     @staticmethod
     def _validate_component(v, component):
-        if v is not None and "-" in v:
-            raise ValueError(f"'{component}' must not contain dashes ('-')")
-        elif v == "*":
+        """
+        Use regex to check that the component:
+        - contains only alphanumeric or underscore characters, or is just a single asterisk
+        - does not start with an underscore or number
+        """
+
+        # we require that there is a full match, so that the string is not
+        # allowed to contain any other characters.
+        if v is not None and not fullmatch(r"^[a-zA-Z][a-zA-Z0-9_]*|\*$", v):
+            raise InvalidScopeError(
+                f"'{component}' must either start with an alphabetical and contain "
+                "only alphanumeric or underscore ('_') thereafter "
+                "OR must be a single asterisk ('*')"
+            )
+
+        if v == "*":
             # if we're given an asterisk, cast this to `None` instead for
             # consistency
             v = None
-        elif v is not None and "*" in v:
-            raise ValueError(
-                f"asterisks ('*') for glob-matching components not supported at this time"
-            )
+
         return v
 
     @validator("org")

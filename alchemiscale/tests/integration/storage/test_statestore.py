@@ -9,7 +9,12 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from alchemiscale.storage import Neo4jStore
-from alchemiscale.storage.models import Task, TaskHub, ProtocolDAGResultRef
+from alchemiscale.storage.models import (
+    Task,
+    TaskHub,
+    ProtocolDAGResultRef,
+    TaskStatusEnum,
+)
 from alchemiscale.models import Scope, ScopedKey
 from alchemiscale.security.models import (
     CredentialedEntity,
@@ -285,6 +290,28 @@ class TestNeo4jStore(TestStateStore):
         ).to_subgraph()
 
         assert m["_gufe_key"] == transformation.key
+
+    def test_create_task_extends_invalid_deleted(self, n4js, network_tyk2, scope_test):
+        # add alchemical network, then try generating task
+        an = network_tyk2
+        n4js.create_network(an, scope_test)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        task_sk_invalid = n4js.create_task(transformation_sk)
+        n4js.set_task_invalid([task_sk_invalid])
+
+        task_sk_deleted = n4js.create_task(transformation_sk)
+        n4js.set_task_deleted([task_sk_deleted])
+
+        with pytest.raises(ValueError, match="Cannot extend"):
+            # try and create a task that extends an invalid task
+            _ = n4js.create_task(transformation_sk, extends=task_sk_invalid)
+
+        with pytest.raises(ValueError, match="Cannot extend"):
+            # try and create a task that extends a deleted task
+            _ = n4js.create_task(transformation_sk, extends=task_sk_deleted)
 
     def test_get_tasks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -668,7 +695,7 @@ class TestNeo4jStore(TestStateStore):
         assert claimed_task_sks == [None] * 9
 
         # complete the extends task
-        n4js.set_task_complete(first_task)
+        n4js.set_task_complete([first_task])
 
         # claim the next task again
         claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=1)
@@ -719,7 +746,7 @@ class TestNeo4jStore(TestStateStore):
         assert claimed_task_sks == [None] * 10
 
         # complete the extends task
-        n4js.set_task_complete(first_task)
+        n4js.set_task_complete([first_task])
 
         # claim the next task again
         claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=1)
@@ -767,15 +794,14 @@ class TestNeo4jStore(TestStateStore):
 
         assert claimed_task_sks == [first_task]
         # complete the first task
-        n4js.set_task_complete(first_task)
+        n4js.set_task_complete([first_task])
 
         # claim the next layer of tasks, should be all of layer two
         claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=2)
         assert set(claimed_task_sks) == set([layer_two_1, layer_two_2])
 
         # complete the layer two tasks
-        n4js.set_task_complete(layer_two_1)
-        n4js.set_task_complete(layer_two_2)
+        n4js.set_task_complete([layer_two_1, layer_two_2])
 
         # claim the next layer of tasks, should be all of layer three
         claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, "task handler", count=4)
@@ -1245,3 +1271,496 @@ class TestNeo4jStore(TestStateStore):
         scopes = n4js.list_scopes(user.identifier, credential_type)
         assert scope not in scopes
         assert not_removed in scopes
+
+    # status-setting function related tests.
+    # would be too much boilerplate to test all the functions individually
+    # so we parameterize over the methods
+
+    @pytest.fixture()
+    def f_set_task_waiting(self, n4js):
+        return n4js.set_task_waiting
+
+    @pytest.fixture()
+    def f_set_task_running(self, n4js):
+        return n4js.set_task_running
+
+    @pytest.fixture()
+    def f_set_task_complete(self, n4js):
+        return n4js.set_task_complete
+
+    @pytest.fixture()
+    def f_set_task_error(self, n4js):
+        return n4js.set_task_error
+
+    @pytest.fixture()
+    def f_set_task_invalid(self, n4js):
+        return n4js.set_task_invalid
+
+    @pytest.fixture()
+    def f_set_task_deleted(self, n4js):
+        return n4js.set_task_deleted
+
+    # allowed = [running, invalid, deleted]
+    # not allowed = [complete, error]
+    @pytest.mark.parametrize(
+        "status_func, result_status, allowed",
+        [
+            ("f_set_task_waiting", TaskStatusEnum.waiting, True),
+            ("f_set_task_running", TaskStatusEnum.running, True),
+            ("f_set_task_complete", TaskStatusEnum.waiting, False),
+            ("f_set_task_error", TaskStatusEnum.waiting, False),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, True),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, True),
+        ],
+    )
+    def test_set_task_status_from_waiting(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        status_func,
+        result_status,
+        allowed,
+        request,
+    ):
+        # request param fixture used to get function fixture.
+        neo4j_status_op = request.getfixturevalue(status_func)
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        if not allowed:
+            with pytest.raises(ValueError, match="Cannot set task"):
+                neo4j_status_op(task_sks, raise_error=True)
+
+        tasks_statused = neo4j_status_op(task_sks)
+        all_status = n4js.get_task_status(task_sks)
+
+        assert all(s == result_status for s in all_status)
+        if not allowed:
+            assert all(t is None for t in tasks_statused)
+        else:
+            assert tasks_statused == task_sks
+
+    # allowed = [waiting, complete, error, invalid, deleted]
+    @pytest.mark.parametrize(
+        "status_func, result_status, allowed",
+        [
+            ("f_set_task_waiting", TaskStatusEnum.waiting, True),
+            ("f_set_task_running", TaskStatusEnum.running, True),
+            ("f_set_task_complete", TaskStatusEnum.complete, True),
+            ("f_set_task_error", TaskStatusEnum.error, True),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, True),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, True),
+        ],
+    )
+    def test_set_task_status_from_running(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        status_func,
+        result_status,
+        allowed,
+        request,
+    ):
+        # request param fixture used to get function fixture.
+        neo4j_status_op = request.getfixturevalue(status_func)
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # set all the tasks to running
+        n4js.set_task_running(task_sks)
+
+        if not allowed:
+            with pytest.raises(ValueError, match="Cannot set task"):
+                neo4j_status_op(task_sks, raise_error=True)
+
+        tasks_statused = neo4j_status_op(task_sks)
+        all_status = n4js.get_task_status(task_sks)
+
+        assert all(s == result_status for s in all_status)
+        if not allowed:
+            assert all(t is None for t in tasks_statused)
+        else:
+            assert tasks_statused == task_sks
+
+    # allowed = [invalid, deleted]
+    # not allowed = [waiting, running, error]
+    @pytest.mark.parametrize(
+        "status_func, result_status, allowed",
+        [
+            ("f_set_task_waiting", TaskStatusEnum.complete, False),
+            ("f_set_task_running", TaskStatusEnum.complete, False),
+            ("f_set_task_complete", TaskStatusEnum.complete, True),
+            ("f_set_task_error", TaskStatusEnum.complete, False),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, True),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, True),
+        ],
+    )
+    def test_set_task_status_from_complete(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        status_func,
+        result_status,
+        allowed,
+        request,
+    ):
+        # request param fixture used to get function fixture.
+        neo4j_status_op = request.getfixturevalue(status_func)
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # set all the tasks to running
+        n4js.set_task_running(task_sks)
+
+        # set all the tasks to complete
+        n4js.set_task_complete(task_sks)
+
+        if not allowed:
+            with pytest.raises(ValueError, match="Cannot set task"):
+                neo4j_status_op(task_sks, raise_error=True)
+
+        tasks_statused = neo4j_status_op(task_sks)
+        all_status = n4js.get_task_status(task_sks)
+
+        assert all(s == result_status for s in all_status)
+        if not allowed:
+            assert all(t is None for t in tasks_statused)
+        else:
+            assert tasks_statused == task_sks
+
+    # allowed = [invalid, deleted, waiting]
+    # not allowed = [running, complete]
+    @pytest.mark.parametrize(
+        "status_func, result_status, allowed",
+        [
+            ("f_set_task_waiting", TaskStatusEnum.waiting, True),
+            ("f_set_task_running", TaskStatusEnum.error, False),
+            ("f_set_task_complete", TaskStatusEnum.error, False),
+            ("f_set_task_error", TaskStatusEnum.error, True),
+            ("f_set_task_invalid", TaskStatusEnum.invalid, True),
+            ("f_set_task_deleted", TaskStatusEnum.deleted, True),
+        ],
+    )
+    def test_set_task_status_from_error(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        status_func,
+        result_status,
+        allowed,
+        request,
+    ):
+        # request param fixture used to get function fixture.
+        neo4j_status_op = request.getfixturevalue(status_func)
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # set all the tasks to running
+        n4js.set_task_running(task_sks)
+
+        # set all the tasks to error
+        n4js.set_task_error(task_sks)
+
+        if not allowed:
+            with pytest.raises(ValueError, match="Cannot set task"):
+                neo4j_status_op(task_sks, raise_error=True)
+
+        tasks_statused = neo4j_status_op(task_sks)
+        all_status = n4js.get_task_status(task_sks)
+
+        assert all(s == result_status for s in all_status)
+        if not allowed:
+            assert all(t is None for t in tasks_statused)
+        else:
+            assert tasks_statused == task_sks
+
+    @pytest.mark.parametrize(
+        "terminal_status_func, terminal_status",
+        [
+            ("f_set_task_invalid", TaskStatusEnum.invalid),
+            ("f_set_task_deleted", TaskStatusEnum.deleted),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "status_func, allowed, result_status",
+        [
+            ("f_set_task_waiting", False, None),
+            ("f_set_task_running", False, None),
+            ("f_set_task_complete", False, None),
+            ("f_set_task_error", False, None),
+            ("f_set_task_invalid", True, TaskStatusEnum.invalid),
+            ("f_set_task_deleted", True, TaskStatusEnum.deleted),
+        ],
+    )
+    def test_set_task_status_from_terminals(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        terminal_status_func,
+        terminal_status,
+        status_func,
+        allowed,
+        result_status,
+        request,
+    ):
+        # request param fixture used to get function fixture.
+        neo4j_status_op = request.getfixturevalue(status_func)
+        neo4j_terminal_op = request.getfixturevalue(terminal_status_func)
+
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+
+        # move it to one of the terminal statuses
+        neo4j_terminal_op(task_sks)
+
+        if not allowed:
+            with pytest.raises(ValueError, match="Cannot set task"):
+                neo4j_status_op(task_sks, raise_error=True)
+
+        tasks_statused = neo4j_status_op(task_sks)
+        all_status = n4js.get_task_status(task_sks)
+
+        if not allowed:
+            assert all(s == terminal_status for s in all_status)
+            assert all(t is None for t in tasks_statused)
+        else:
+            assert tasks_statused == task_sks
+            assert all(s == result_status for s in all_status)
+
+    # check that setting complete, invalid or deleted removes the
+    # actions relationship with taskhub
+    def test_set_task_status_removes_actions_relationship(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 3 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+
+        n4js.action_tasks(task_sks, taskhub_sk)
+
+        # claim all the tasks
+        n4js.claim_taskhub_tasks(taskhub_sk, "claimer", count=3)
+
+        q = f"""
+        MATCH (taskhub:TaskHub {{_scoped_key: '{taskhub_sk}'}})
+        MATCH (taskhub)-[:ACTIONS]->(task:Task)
+        return task
+        """
+
+        result = n4js.graph.run(q).to_subgraph()
+        sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
+        assert set(sks) == set(task_sks)
+
+        # set one to invalid
+        n4js.set_task_invalid(task_sks[0:1])
+        # set one to deleted
+        n4js.set_task_deleted(task_sks[1:2])
+        # set one to complete
+        n4js.set_task_complete(task_sks[2:3])
+
+        result = n4js.graph.run(q).to_subgraph()
+        assert result == None
+
+    def test_set_task_status_removes_actions_relationship_extends(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+    ):
+        # tests the ability to action and claim a set of tasks in an
+        # EXTENDS chain
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 7 tasks that extend in a bifuricating  EXTENDS chain
+
+        first_task = n4js.create_task(transformation_sk)
+
+        layer_two_1 = n4js.create_task(transformation_sk, extends=first_task)
+        layer_two_2 = n4js.create_task(transformation_sk, extends=first_task)
+
+        layer_three_1 = n4js.create_task(transformation_sk, extends=layer_two_1)
+        layer_three_2 = n4js.create_task(transformation_sk, extends=layer_two_1)
+        layer_three_3 = n4js.create_task(transformation_sk, extends=layer_two_2)
+        layer_three_4 = n4js.create_task(transformation_sk, extends=layer_two_2)
+
+        collected_sks = [
+            first_task,
+            layer_two_1,
+            layer_two_2,
+            layer_three_1,
+            layer_three_2,
+            layer_three_3,
+            layer_three_4,
+        ]
+        # action the tasks
+        actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
+
+        q = f"""
+        MATCH (taskhub:TaskHub {{_scoped_key: '{taskhub_sk}'}})
+        MATCH (taskhub)-[:ACTIONS]->(task:Task)
+        return task
+        """
+
+        result = n4js.graph.run(q).to_subgraph()
+        sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
+        assert set(sks) == set(collected_sks)
+        assert len(sks) == 7
+
+        # set layer one to invalid, this should invalidate the entire chain
+        n4js.set_task_invalid([first_task])
+
+        result = n4js.graph.run(q).to_subgraph()
+        assert result == None
+
+        q = f"""
+        MATCH (task:Task)
+        WHERE task.status = 'invalid'
+        return task
+        """
+        result = n4js.graph.run(q).to_subgraph()
+        sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
+        assert set(sks) == set(collected_sks)
+        assert len(sks) == 7
+
+    # check that the status is set correctly through the generic method
+    # NOTE: a precondition operation is used for `complete`,`error` as these
+    # are not reachable from the default status of `waiting`
+    @pytest.mark.parametrize(
+        "status, precondition_op",
+        [
+            (TaskStatusEnum.waiting, None),
+            (TaskStatusEnum.running, None),
+            (TaskStatusEnum.error, "f_set_task_running"),
+            (TaskStatusEnum.complete, "f_set_task_running"),
+            (TaskStatusEnum.invalid, None),
+            (TaskStatusEnum.deleted, None),
+        ],
+    )
+    def test_set_task_status(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        status,
+        precondition_op,
+        request,
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create a single task
+        task_sk = n4js.create_task(transformation_sk)
+
+        # request param fixture used to get function fixture.
+        if precondition_op:
+            precondition_op = request.getfixturevalue(precondition_op)
+            precondition_op([task_sk])
+
+        # set the status
+        n4js.set_task_status([task_sk], status)
+
+        # check the status
+        assert n4js.get_task_status([task_sk])[0] == status
+
+    def test_get_task_status(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 6 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(6)]
+
+        # task 0 will remain waiting
+
+        # task 1 will be set to running
+        n4js.set_task_running(task_sks[1:2])
+
+        # task 2 will be set to error
+        n4js.set_task_running(task_sks[2:3])
+        n4js.set_task_error(task_sks[2:3])
+
+        # task 3 will be set to complete
+        n4js.set_task_running(task_sks[3:4])
+        n4js.set_task_complete(task_sks[3:4])
+
+        # task 4 will be set to invalid
+        n4js.set_task_invalid(task_sks[4:5])
+
+        # task 5 will be set to deleted
+        n4js.set_task_deleted(task_sks[5:6])
+
+        # now lets try get them back as a list of statuses
+        task_statuses = n4js.get_task_status(task_sks)
+
+        assert task_statuses[0] == TaskStatusEnum.waiting
+        assert task_statuses[1] == TaskStatusEnum.running
+        assert task_statuses[2] == TaskStatusEnum.error
+        assert task_statuses[3] == TaskStatusEnum.complete
+        assert task_statuses[4] == TaskStatusEnum.invalid
+        assert task_statuses[5] == TaskStatusEnum.deleted
