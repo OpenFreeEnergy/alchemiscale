@@ -1531,13 +1531,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             for t in tasks:
                 res = tx.run(q_func(t))
-                for i, record in enumerate(res):
-                    if i > 0:
-                        raise Neo4JStoreError(
-                            "More than one such object in database; this should not be possible"
-                        )
+                # we only need the first record to get the info we need
+                for record in res:
                     task_i = record["t"]
                     task_set = record["t_"]
+                    break
 
                 if task_set is None:
                     if raise_error:
@@ -1625,7 +1623,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             // if we changed the status to complete,
             // drop all ACTIONS relationships
             OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
-            DETACH DELETE ar
+            DELETE ar
 
             RETURN t, t_
             """
@@ -1687,8 +1685,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                 OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
                 OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
 
-                DETACH DELETE ar
-                DETACH DELETE are
+                DELETE ar
+                DELETE are
                 """
                 tx.run(q)
 
@@ -1721,8 +1719,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                 OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
                 OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
 
-                DETACH DELETE ar
-                DETACH DELETE are
+                DELETE ar
+                DELETE are
                 """
                 tx.run(q)
 
