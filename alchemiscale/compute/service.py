@@ -181,9 +181,6 @@ class SynchronousComputeService:
 
         return tasks
 
-    def unclaim_tasks(self):
-        self.client.unclaim_tasks()
-
     def task_to_protocoldag(
         self, task: ScopedKey
     ) -> Tuple[ProtocolDAG, Transformation, Optional[ProtocolDAGResult]]:
@@ -296,12 +293,13 @@ class SynchronousComputeService:
         self._stop = True
 
         # TODO: drop claims on tasks
-        self.unclaim_tasks()
+        #self.unclaim_tasks()
 
         # Interrupt the scheduler (will finish if in the middle of an update or
         # something, but will cancel running calculations)
         self.int_sleep.interrupt()
 
+        # remove ComputeServiceID, drop all claims
         self._deregister()
 
 

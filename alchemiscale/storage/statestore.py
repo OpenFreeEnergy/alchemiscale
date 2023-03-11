@@ -120,7 +120,6 @@ class Neo4jStore(AlchemiscaleStateStore):
     # with that label
     constraints = {
         "GufeTokenizable": {"name": "scoped_key", "property": "_scoped_key"},
-        "Settings": {"name": "settings_content", "property": "content"},
         "CredentialedUserIdentity": {
             "name": "user_identifier",
             "property": "identifier",
@@ -729,6 +728,50 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> ScopedKey:
         """Set the compute Strategy for the given AlchemicalNetwork."""
         ...
+
+    def register_computeservice(
+        self,
+        computeserviceid: ComputeServiceID
+    ):
+        """Register a ComputeServiceID uniquely identifying a running
+        ComputeService.
+
+        A ComputeServiceID node is used for CLAIMS relationships on Tasks to
+        avoid collisions in Task execution.
+
+        """
+
+        node = Node("ComputeServiceID", **computeserviceid.dict())
+
+        with self.transaction() as tx:
+            tx.merge(
+                node, primary_label="ComputeServiceID", primary_key="identifier"
+            )
+
+    def deregister_computeservice(
+        self,
+        computeserviceid: ComputeServiceID
+        ):
+        """Remove the given ComputeServiceID from the state store.
+
+        This wil remove the ComputeServiceID node, and all its CLAIMS
+        relationships to Tasks.
+
+        All Tasks with CLAIMS relationships to the ComputeServiceID and with
+        status `running` will have their status set to `waiting`.
+
+        """
+        q = f"""
+        MATCH (n:ComputeServiceID {{identifier: '{computeserviceid.identifier}'}})
+
+        OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: 'running'}})
+        SET t.status = 'waiting'
+
+        DETACH DELETE n
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)
 
     ## task hubs
 
@@ -1566,7 +1609,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
             WHERE t_.status IN ['waiting', 'running', 'error']
-            SET t_.status = '{TaskStatusEnum.waiting.value}', t_.claimant = null
+            SET t_.status = '{TaskStatusEnum.waiting.value}'
+
+            WITH t, t_
+
+            // if we changed the status to waiting,
+            // drop CLAIMS relationship
+            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csid:ComputeServiceID)
+            DELETE cl
 
             RETURN t, t_
             """
@@ -1625,6 +1675,11 @@ class Neo4jStore(AlchemiscaleStateStore):
             OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
             DELETE ar
 
+            // if we changed the status to complete,
+            // drop CLAIMS relationship
+            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csid:ComputeServiceID)
+            DELETE cl
+
             RETURN t, t_
             """
 
@@ -1649,6 +1704,13 @@ class Neo4jStore(AlchemiscaleStateStore):
             OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
             WHERE t_.status IN ['error', 'running']
             SET t_.status = '{TaskStatusEnum.error.value}'
+
+            WITH t, t_
+
+            // if we changed the status to error,
+            // drop CLAIMS relationship
+            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csid:ComputeServiceID)
+            DELETE cl
 
             RETURN t, t_
             """
@@ -1687,6 +1749,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
                 DELETE ar
                 DELETE are
+
+                // drop CLAIMS relationship if present
+                OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csid:ComputeServiceID)
+                DELETE cl
                 """
                 tx.run(q)
 
@@ -1721,6 +1787,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
                 DELETE ar
                 DELETE are
+
+                // drop CLAIMS relationship if present
+                OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csid:ComputeServiceID)
+                DELETE cl
                 """
                 tx.run(q)
 

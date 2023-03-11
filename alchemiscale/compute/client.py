@@ -76,10 +76,6 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]
 
-    def unclaim_tasks(self):
-        """Drop all `Task` claims."""
-        ...
-
     def get_task_transformation(
         self, task: ScopedKey
     ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:

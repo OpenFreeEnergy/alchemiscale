@@ -92,28 +92,20 @@ async def list_scopes(
     return [str(scope) for scope in scopes]
 
 
-@router.post("/computeservice/{identifier}/register")
+@router.post("/computeservice/{computeservice_identifier}/register")
 async def register_computeservice(
-    identifier,
+    computeservice_identifier,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    n4js.register_computeservice(identifier)
+    n4js.register_computeservice(computeservice_identifier)
 
 
-@router.post("/computeservice/{identifier}/deregister")
+@router.post("/computeservice/{computeservice_identifier}/deregister")
 async def deregister_computeservice(
-    identifier,
+    computeservice_identifier,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    n4js.deregister_computeservice(identifier)
-
-
-@router.post("/computeserviceid/{identifier}/unclaim")
-async def unclaim_tasks(
-    identifier,
-    n4js: Neo4jStore = Depends(get_n4js_depends),
-):
-    n4js.unclaim_tasks(identifier)
+    n4js.deregister_computeservice(computeservice_identifier)
 
 
 @router.get("/taskhubs")
