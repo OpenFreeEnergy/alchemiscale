@@ -24,6 +24,7 @@ from py2neo.errors import ClientError
 
 from .models import (
     ComputeServiceID,
+    ComputeServiceRegistration,
     Task,
     TaskHub,
     TaskArchive,
@@ -91,15 +92,15 @@ def _select_task_from_taskpool(taskpool: Subgraph) -> Union[ScopedKey, None]:
     return chosen_one[0]
 
 
-def _generate_claim_query(task_sk: ScopedKey, computeserviceid: ComputeServiceID) -> str:
+def _generate_claim_query(task_sk: ScopedKey, compute_service_id: ComputeServiceID) -> str:
     """
     Generate a query to claim a single Task.
     Parameters
     ----------
-    task_sk: ScopedKey
+    task_sk
         The ScopedKey of the Task to claim.
-    claimant: str
-        The name of the claimant.
+    compute_service_id
+        ComputeServiceID of the claiming service.
 
     Returns
     -------
@@ -107,8 +108,15 @@ def _generate_claim_query(task_sk: ScopedKey, computeserviceid: ComputeServiceID
         The Cypher query to claim the Task.
     """
     query = f"""
+    // only match the task if it doesn't have an existing CLAIMS relationship
     MATCH (t:Task {{_scoped_key: '{task_sk}'}})
-    SET t.status = 'running', t.claim = '{computeserviceid.identifier}'
+    WHERE NOT (t)<-[:CLAIMS]-(:ComputeServiceRegistration)
+    SET t.status = 'running'
+
+    // create CLAIMS relationship with given compute service
+    MATCH (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+    CREATE (t)<-[cl:CLAIMS {{claimed: datetime({datetime.utcnow()})}}]-(csreg)
+
     RETURN t
     """
     return query
@@ -128,6 +136,10 @@ class Neo4jStore(AlchemiscaleStateStore):
             "name": "compute_identifier",
             "property": "identifier",
         },
+        "ComputeServiceRegistration": {
+            "name": "compute_service_registration_identifier",
+            "property": "identifier"
+        }
     }
 
     def __init__(self, graph: "py2neo.Graph"):
@@ -731,38 +743,40 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def register_computeservice(
         self,
-        computeserviceid: ComputeServiceID
+        compute_service_registration: ComputeServiceRegistration
     ):
-        """Register a ComputeServiceID uniquely identifying a running
+        """Register a ComputeServiceRegistration uniquely identifying a running
         ComputeService.
 
-        A ComputeServiceID node is used for CLAIMS relationships on Tasks to
-        avoid collisions in Task execution.
+        A ComputeServiceRegistration node is used for CLAIMS relationships on
+        Tasks to avoid collisions in Task execution.
 
         """
 
-        node = Node("ComputeServiceID", **computeserviceid.dict())
+        node = Node("ComputeServiceRegistration",
+                    **compute_service_registration.dict())
 
         with self.transaction() as tx:
             tx.merge(
-                node, primary_label="ComputeServiceID", primary_key="identifier"
+                node, primary_label="ComputeServiceRegistration", primary_key="identifier"
             )
 
     def deregister_computeservice(
         self,
-        computeserviceid: ComputeServiceID
+        compute_service_id: ComputeServiceID
         ):
-        """Remove the given ComputeServiceID from the state store.
+        """Remove the registration for the given ComputeServiceID from the
+        state store.
 
-        This wil remove the ComputeServiceID node, and all its CLAIMS
+        This wil remove the ComputeServiceRegistration node, and all its CLAIMS
         relationships to Tasks.
 
-        All Tasks with CLAIMS relationships to the ComputeServiceID and with
-        status `running` will have their status set to `waiting`.
+        All Tasks with CLAIMS relationships to the ComputeServiceRegistration
+        and with status `running` will have their status set to `waiting`.
 
         """
         q = f"""
-        MATCH (n:ComputeServiceID {{identifier: '{computeserviceid.identifier}'}})
+        MATCH (n:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
 
         OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: 'running'}})
         SET t.status = 'waiting'
@@ -1133,7 +1147,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
     def claim_taskhub_tasks(
-        self, taskhub: ScopedKey, computeserviceid: ComputeServiceID, count: int = 1
+        self, taskhub: ScopedKey, compute_service_id: ComputeServiceID, count: int = 1
     ) -> List[Union[ScopedKey, None]]:
         """Claim a TaskHub Task.
 
@@ -1149,8 +1163,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Parameters
         ----------
-        claimant
-            Unique identifier for the entity claiming the Tasks for execution.
+        compute_service_id
+            Unique identifier for the compute service claiming the Tasks for execution.
         count
             Claim the given number of Tasks in a single transaction.
 
@@ -1200,7 +1214,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     tasks.append(None)
                 else:
                     chosen_one = _select_task_from_taskpool(taskpool)
-                    claim_query = _generate_claim_query(chosen_one, computeserviceid)
+                    claim_query = _generate_claim_query(chosen_one, compute_service_id)
                     tasks.append(tx.run(claim_query).to_subgraph())
 
             tx.run(
@@ -1615,7 +1629,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             // if we changed the status to waiting,
             // drop CLAIMS relationship
-            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csid:ComputeServiceID)
+            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
             DELETE cl
 
             RETURN t, t_
@@ -1677,7 +1691,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             // if we changed the status to complete,
             // drop CLAIMS relationship
-            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csid:ComputeServiceID)
+            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
             DELETE cl
 
             RETURN t, t_
@@ -1709,7 +1723,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             // if we changed the status to error,
             // drop CLAIMS relationship
-            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csid:ComputeServiceID)
+            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
             DELETE cl
 
             RETURN t, t_
@@ -1751,7 +1765,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 DELETE are
 
                 // drop CLAIMS relationship if present
-                OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csid:ComputeServiceID)
+                OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
                 DELETE cl
                 """
                 tx.run(q)
@@ -1789,7 +1803,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 DELETE are
 
                 // drop CLAIMS relationship if present
-                OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csid:ComputeServiceID)
+                OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
                 DELETE cl
                 """
                 tx.run(q)

@@ -8,6 +8,7 @@ AlchemiscaleComputeAPI --- :mod:`alchemiscale.compute.api`
 from typing import Any, Dict, List
 import os
 import json
+from datetime import datetime
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
@@ -29,7 +30,7 @@ from ..base.api import (
 from ..settings import get_base_api_settings, get_compute_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ProtocolDAGResultRef, ComputeServiceID, TaskStatusEnum
+from ..storage.models import ProtocolDAGResultRef, ComputeServiceID, ComputeServiceRegistration, TaskStatusEnum
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import (
@@ -92,21 +93,29 @@ async def list_scopes(
     return [str(scope) for scope in scopes]
 
 
-@router.post("/computeservice/{computeservice_identifier}/register")
+@router.post("/computeservice/{compute_service_id}/register")
 async def register_computeservice(
-    computeservice_identifier,
+    compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    n4js.register_computeservice(computeservice_identifier)
+    now = datetime.utcnow()
+    csid = ComputeServiceRegistration(identitfier=ComputeServiceID(compute_service_id),
+                            registered=now,
+                            heartbeat=now)
+
+    n4js.register_computeservice(csid)
+
+    return compute_service_id
 
 
-@router.post("/computeservice/{computeservice_identifier}/deregister")
+@router.post("/computeservice/{compute_service_id}/deregister")
 async def deregister_computeservice(
-    computeservice_identifier,
+    compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    n4js.deregister_computeservice(computeservice_identifier)
+    n4js.deregister_computeservice(ComputeServiceID(compute_service_id))
 
+    return compute_service_id
 
 @router.get("/taskhubs")
 async def query_taskhubs(
@@ -137,7 +146,7 @@ async def query_taskhubs(
 async def claim_taskhub_tasks(
     taskhub_scoped_key,
     *,
-    computeserviceid: ComputeServiceID ,
+    compute_service_id: str,
     count: int = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
@@ -146,7 +155,7 @@ async def claim_taskhub_tasks(
     validate_scopes(sk.scope, token)
 
     tasks = n4js.claim_taskhub_tasks(
-        taskhub=taskhub_scoped_key, computeserviceid=computeserviceid, count=count
+        taskhub=taskhub_scoped_key, compute_service_id=compute_service_id, count=count
     )
 
     return [str(t) if t is not None else None for t in tasks]

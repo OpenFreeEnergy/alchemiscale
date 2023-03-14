@@ -137,8 +137,7 @@ class SynchronousComputeService:
 
         self.counter = 0
 
-        self.computeserviceid = ComputeServiceID(
-                identifier=f"{self.name}-{uuid4()}")
+        self.compute_service_id = ComputeServiceID(f"{self.name}-{uuid4()}")
 
         self._stop = False
 
@@ -147,13 +146,13 @@ class SynchronousComputeService:
         """Register this compute service with the compute API.
 
         """
-        self.client.register(self.computeserviceid)
+        self.client.register(self.compute_service_id)
 
     def _deregister(self):
         """Deregister this compute service with the compute API.
 
         """
-        self.client.deregister(self.computeserviceid)
+        self.client.deregister(self.compute_service_id)
 
     def heartbeat(self):
         """Deliver a heartbeat to the compute API, indicating this service is still alive."""
@@ -176,7 +175,7 @@ class SynchronousComputeService:
 
         # claim tasks from the taskhub
         tasks = self.client.claim_taskhub_tasks(
-            taskhub, computeserviceid=self.computeserviceid, count=count
+            taskhub, compute_service_id=self.compute_service_id, count=count
         )
 
         return tasks

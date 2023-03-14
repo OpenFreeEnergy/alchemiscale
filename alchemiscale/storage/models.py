@@ -18,10 +18,16 @@ from gufe.tokenization import GufeTokenizable, GufeKey
 from ..models import ScopedKey, Scope
 
 
-class ComputeServiceID(BaseModel):
-    """Unique identifier for AlchemiscaleComputeService instances."""
+class ComputeServiceID(str):
+    ...
 
-    identifier: str
+
+class ComputeServiceRegistration(BaseModel):
+    """Registration for AlchemiscaleComputeService instances."""
+
+    identifier: ComputeServiceID
+    registered: datetime
+    heartbeat: datetime
 
     def __repr__(self):  # pragma: no cover
         return f"<ComputeServiceIdentity('{str(self)}')>"

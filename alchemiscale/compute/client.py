@@ -35,11 +35,11 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     _exception = AlchemiscaleComputeClientError
 
-    def register(self):
-        ...
+    def register(self, compute_service_id: ComputeServiceID):
+        return self._post_resource(f"computeservice/{compute_service_id}/register", {})
 
-    def deregister(self):
-        ...
+    def deregister(self, compute_service_id, ComputeServiceID):
+        return self._post_resource(f"computeservice/{compute_service_id}/deregister", {})
 
     def list_scopes(self) -> List[Scope]:
         scopes = self._get_resource(
@@ -68,10 +68,10 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         return taskhubs
 
     def claim_taskhub_tasks(
-        self, taskhub: ScopedKey, computeserviceid: ComputeServiceID, count: int = 1
+        self, taskhub: ScopedKey, compute_service_id: str, count: int = 1
     ) -> Task:
         """Claim a `Task` from the specified `TaskHub`"""
-        data = dict(computeserviceid=computeserviceid, count=count)
+        data = dict(compute_service_id=compute_service_id, count=count)
         tasks = self._post_resource(f"taskhubs/{taskhub}/claim", data)
 
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]
