@@ -54,6 +54,13 @@ dependencies:
   - lomap2>=2.1.0
   - openmmtools
   - openmmforcefields
+    
+  ## needed for perses
+  - openmoltools
+  - cloudpathlib
+  - dask
+  - distributed
+  - numba
 
   - pip:
     #- git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment
@@ -61,4 +68,5 @@ dependencies:
     - git+https://github.com/OpenFreeEnergy/openfe
     - git+https://github.com/OpenFreeEnergy/openfe-benchmarks
     - git+https://github.com/mikemhenry/openff-models.git@support_nested_models
+    - git+https://github.com/choderalab/perses.git@protocol-neqcyc
     #- git+https://github.com/openforcefield/protein-ligand-benchmark
