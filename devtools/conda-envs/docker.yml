@@ -56,11 +56,12 @@ dependencies:
   - openmmforcefields
     
   ## needed for perses
-  - openmoltools
+  - perses
+  #- openmoltools
   - cloudpathlib
-  - dask
-  - distributed
-  - numba
+  #- dask
+  #- distributed
+  #- numba
 
   - pip:
     #- git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment
