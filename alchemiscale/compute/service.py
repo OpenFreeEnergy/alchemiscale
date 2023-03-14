@@ -152,6 +152,7 @@ class SynchronousComputeService:
     def heartbeat(self):
         """Deliver a heartbeat to the compute API, indicating this service is still alive."""
         ...
+        self.client.heartbeat(self.compute_service_id)
 
     def claim_tasks(self, count=1) -> List[Optional[ScopedKey]]:
         """Get a Task to execute from compute API.

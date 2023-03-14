@@ -786,6 +786,19 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
+    def heartbeat_computeservice(self, compute_service_id: ComputeServiceID, heartbeat: datetime):
+        """Update the heartbeat for the given ComputeServiceID.
+
+        """
+        q = f"""
+        MATCH (n:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+        SET n.heartbeat = datetime({heartbeat})
+
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)
+
     ## task hubs
 
     def create_taskhub(

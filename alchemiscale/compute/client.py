@@ -38,9 +38,14 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
     def register(self, compute_service_id: ComputeServiceID):
         return self._post_resource(f"computeservice/{compute_service_id}/register", {})
 
-    def deregister(self, compute_service_id, ComputeServiceID):
+    def deregister(self, compute_service_id: ComputeServiceID):
         return self._post_resource(
             f"computeservice/{compute_service_id}/deregister", {}
+        )
+
+    def heartbeat(self, compute_service_id: ComputeServiceID):
+        return self._post_resource(
+            f"computeservice/{compute_service_id}/heartbeat", {}
         )
 
     def list_scopes(self) -> List[Scope]:

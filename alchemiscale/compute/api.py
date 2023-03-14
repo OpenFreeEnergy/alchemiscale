@@ -104,11 +104,11 @@ async def register_computeservice(
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     now = datetime.utcnow()
-    csid = ComputeServiceRegistration(
+    csreg = ComputeServiceRegistration(
         identitfier=ComputeServiceID(compute_service_id), registered=now, heartbeat=now
     )
 
-    n4js.register_computeservice(csid)
+    n4js.register_computeservice(csreg)
 
     return compute_service_id
 
@@ -119,6 +119,17 @@ async def deregister_computeservice(
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     n4js.deregister_computeservice(ComputeServiceID(compute_service_id))
+
+    return compute_service_id
+
+
+@router.post("/computeservice/{compute_service_id}/heartbeat")
+async def heartbeat_computeservice(
+    compute_service_id,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    now = datetime.utcnow()
+    n4js.heartbeat_computeservice(compute_service_id, now)
 
     return compute_service_id
 
