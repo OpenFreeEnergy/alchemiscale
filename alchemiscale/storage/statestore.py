@@ -92,7 +92,9 @@ def _select_task_from_taskpool(taskpool: Subgraph) -> Union[ScopedKey, None]:
     return chosen_one[0]
 
 
-def _generate_claim_query(task_sk: ScopedKey, compute_service_id: ComputeServiceID) -> str:
+def _generate_claim_query(
+    task_sk: ScopedKey, compute_service_id: ComputeServiceID
+) -> str:
     """
     Generate a query to claim a single Task.
     Parameters
@@ -138,8 +140,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         },
         "ComputeServiceRegistration": {
             "name": "compute_service_registration_identifier",
-            "property": "identifier"
-        }
+            "property": "identifier",
+        },
     }
 
     def __init__(self, graph: "py2neo.Graph"):
@@ -742,8 +744,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         ...
 
     def register_computeservice(
-        self,
-        compute_service_registration: ComputeServiceRegistration
+        self, compute_service_registration: ComputeServiceRegistration
     ):
         """Register a ComputeServiceRegistration uniquely identifying a running
         ComputeService.
@@ -753,18 +754,16 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        node = Node("ComputeServiceRegistration",
-                    **compute_service_registration.dict())
+        node = Node("ComputeServiceRegistration", **compute_service_registration.dict())
 
         with self.transaction() as tx:
             tx.merge(
-                node, primary_label="ComputeServiceRegistration", primary_key="identifier"
+                node,
+                primary_label="ComputeServiceRegistration",
+                primary_key="identifier",
             )
 
-    def deregister_computeservice(
-        self,
-        compute_service_id: ComputeServiceID
-        ):
+    def deregister_computeservice(self, compute_service_id: ComputeServiceID):
         """Remove the registration for the given ComputeServiceID from the
         state store.
 
@@ -1689,6 +1688,8 @@ class Neo4jStore(AlchemiscaleStateStore):
             OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
             DELETE ar
 
+            WITH t, t_
+
             // if we changed the status to complete,
             // drop CLAIMS relationship
             OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
@@ -1764,6 +1765,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                 DELETE ar
                 DELETE are
 
+                WITH t
+
                 // drop CLAIMS relationship if present
                 OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
                 DELETE cl
@@ -1801,6 +1804,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
                 DELETE ar
                 DELETE are
+
+                WITH t
 
                 // drop CLAIMS relationship if present
                 OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)

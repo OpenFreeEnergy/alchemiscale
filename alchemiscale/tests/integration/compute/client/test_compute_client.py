@@ -88,7 +88,9 @@ class TestComputeClient:
         taskhub_sks = compute_client.query_taskhubs([scope_test])
 
         # claim a single task; should get highest priority task
-        task_sks = compute_client.claim_taskhub_tasks(taskhub_sks[0], compute_service_id="me-123")
+        task_sks = compute_client.claim_taskhub_tasks(
+            taskhub_sks[0], compute_service_id="me-123"
+        )
         all_tasks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0], return_gufe=True)
 
         assert len(task_sks) == 1
@@ -119,7 +121,9 @@ class TestComputeClient:
         taskhub_sk = n4js_preloaded.get_taskhub(an_sk)
 
         # claim our first task
-        task_sks = compute_client.claim_taskhub_tasks(taskhub_sk, compute_service_id="me-123")
+        task_sks = compute_client.claim_taskhub_tasks(
+            taskhub_sk, compute_service_id="me-123"
+        )
 
         # get the transformation corresponding to this task
         (
@@ -223,7 +227,9 @@ class TestComputeClient:
         taskhub_sk = n4js_preloaded.get_taskhub(an_sk)
 
         # claim our first task
-        task_sks = compute_client.claim_taskhub_tasks(taskhub_sk, compute_service_id="me-123")
+        task_sks = compute_client.claim_taskhub_tasks(
+            taskhub_sk, compute_service_id="me-123"
+        )
 
         # get the transformation corresponding to this task
         (

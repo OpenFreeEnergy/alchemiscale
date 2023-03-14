@@ -30,7 +30,12 @@ from ..base.api import (
 from ..settings import get_base_api_settings, get_compute_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ProtocolDAGResultRef, ComputeServiceID, ComputeServiceRegistration, TaskStatusEnum
+from ..storage.models import (
+    ProtocolDAGResultRef,
+    ComputeServiceID,
+    ComputeServiceRegistration,
+    TaskStatusEnum,
+)
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import (
@@ -99,9 +104,9 @@ async def register_computeservice(
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     now = datetime.utcnow()
-    csid = ComputeServiceRegistration(identitfier=ComputeServiceID(compute_service_id),
-                            registered=now,
-                            heartbeat=now)
+    csid = ComputeServiceRegistration(
+        identitfier=ComputeServiceID(compute_service_id), registered=now, heartbeat=now
+    )
 
     n4js.register_computeservice(csid)
 
@@ -116,6 +121,7 @@ async def deregister_computeservice(
     n4js.deregister_computeservice(ComputeServiceID(compute_service_id))
 
     return compute_service_id
+
 
 @router.get("/taskhubs")
 async def query_taskhubs(

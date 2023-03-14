@@ -96,7 +96,7 @@ class SynchronousComputeService:
         name
             The name to give this compute service; used for Task provenance, so
             typically set to a distinct value to distinguish different compute
-            resources, e.g. different hosts or HPC clusters. 
+            resources, e.g. different hosts or HPC clusters.
         shared_basedir
             Filesystem path to use for `ProtocolDAG` `shared` space.
         scratch_basedir
@@ -141,17 +141,12 @@ class SynchronousComputeService:
 
         self._stop = False
 
-
     def _register(self):
-        """Register this compute service with the compute API.
-
-        """
+        """Register this compute service with the compute API."""
         self.client.register(self.compute_service_id)
 
     def _deregister(self):
-        """Deregister this compute service with the compute API.
-
-        """
+        """Deregister this compute service with the compute API."""
         self.client.deregister(self.compute_service_id)
 
     def heartbeat(self):
@@ -231,8 +226,8 @@ class SynchronousComputeService:
         protocoldagresult = execute_DAG(
             protocoldag,
             shared=shared,
-            scratch_basdir = self.scratch_basedir,
-            keep_scratch=self.keep_scratch
+            scratch_basdir=self.scratch_basedir,
+            keep_scratch=self.keep_scratch,
         )
 
         # push the result (or failure) back to the compute API
@@ -292,7 +287,7 @@ class SynchronousComputeService:
         self._stop = True
 
         # TODO: drop claims on tasks
-        #self.unclaim_tasks()
+        # self.unclaim_tasks()
 
         # Interrupt the scheduler (will finish if in the middle of an update or
         # something, but will cancel running calculations)
@@ -300,7 +295,6 @@ class SynchronousComputeService:
 
         # remove ComputeServiceID, drop all claims
         self._deregister()
-
 
 
 class AsynchronousComputeService(SynchronousComputeService):
