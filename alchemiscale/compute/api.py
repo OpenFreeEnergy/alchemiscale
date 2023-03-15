@@ -8,7 +8,7 @@ AlchemiscaleComputeAPI --- :mod:`alchemiscale.compute.api`
 from typing import Any, Dict, List
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
@@ -103,9 +103,9 @@ async def register_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     csreg = ComputeServiceRegistration(
-        identitfier=ComputeServiceID(compute_service_id), registered=now, heartbeat=now
+        identifier=compute_service_id, registered=now, heartbeat=now
     )
 
     n4js.register_computeservice(csreg)
@@ -128,7 +128,7 @@ async def heartbeat_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     n4js.heartbeat_computeservice(compute_service_id, now)
 
     return compute_service_id
@@ -163,7 +163,7 @@ async def query_taskhubs(
 async def claim_taskhub_tasks(
     taskhub_scoped_key,
     *,
-    compute_service_id: str,
+    compute_service_id: str = Body(),
     count: int = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
@@ -172,7 +172,7 @@ async def claim_taskhub_tasks(
     validate_scopes(sk.scope, token)
 
     tasks = n4js.claim_taskhub_tasks(
-        taskhub=taskhub_scoped_key, compute_service_id=compute_service_id, count=count
+        taskhub=taskhub_scoped_key, compute_service_id=ComputeServiceID(compute_service_id), count=count
     )
 
     return [str(t) if t is not None else None for t in tasks]
@@ -232,8 +232,12 @@ def set_task_result(
         task=task_sk, protocoldagresultref=protocoldagresultref
     )
 
-    # TODO: if success, set task complete, remove from all hubs
+    # if success, set task complete, remove from all hubs
     # otherwise, set as errored, leave in hubs
+    if protocoldagresultref.ok:
+        n4js.set_task_complete(tasks=[task_sk])
+    else:
+        n4js.set_task_error(tasks=[task_sk])
 
     return result_sk
 

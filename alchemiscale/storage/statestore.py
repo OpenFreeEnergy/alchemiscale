@@ -5,7 +5,7 @@ Node4js state storage --- :mod:`alchemiscale.storage.statestore`
 """
 
 import abc
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import contextmanager
 import json
 from functools import lru_cache
@@ -115,9 +115,11 @@ def _generate_claim_query(
     WHERE NOT (t)<-[:CLAIMS]-(:ComputeServiceRegistration)
     SET t.status = 'running'
 
+    WITH t
+
     // create CLAIMS relationship with given compute service
     MATCH (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
-    CREATE (t)<-[cl:CLAIMS {{claimed: datetime({datetime.utcnow()})}}]-(csreg)
+    CREATE (t)<-[cl:CLAIMS {{claimed: datetime('{datetime.now(timezone.utc).isoformat()}')}}]-(csreg)
 
     RETURN t
     """
@@ -792,7 +794,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Update the heartbeat for the given ComputeServiceID."""
         q = f"""
         MATCH (n:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
-        SET n.heartbeat = datetime({heartbeat})
+        SET n.heartbeat = datetime('{heartbeat.isoformat()}')
 
         """
 

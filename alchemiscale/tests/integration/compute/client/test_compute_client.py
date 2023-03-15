@@ -5,7 +5,7 @@ from gufe.tokenization import GufeTokenizable
 
 from alchemiscale.models import ScopedKey
 from alchemiscale.compute import client
-from alchemiscale.storage.models import TaskStatusEnum
+from alchemiscale.storage.models import TaskStatusEnum, ComputeServiceID
 
 from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
 
@@ -87,9 +87,13 @@ class TestComputeClient:
     ):
         taskhub_sks = compute_client.query_taskhubs([scope_test])
 
+        # register compute service id
+        compute_service_id = ComputeServiceID('me-123')
+        compute_client.register(compute_service_id)
+        
         # claim a single task; should get highest priority task
         task_sks = compute_client.claim_taskhub_tasks(
-            taskhub_sks[0], compute_service_id="me-123"
+            taskhub_sks[0], compute_service_id=compute_service_id
         )
         all_tasks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0], return_gufe=True)
 

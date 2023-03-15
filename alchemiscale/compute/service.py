@@ -221,13 +221,13 @@ class SynchronousComputeService:
 
         # execute the task; this looks the same whether the ProtocolDAG is a
         # success or failure
-        shared = self.shared_basedir / str(protocoldag.key) / self.counter
-        shared.mkdir()
+        shared = self.shared_basedir / str(protocoldag.key) / str(self.counter)
+        shared.mkdir(parents=True)
 
         protocoldagresult = execute_DAG(
             protocoldag,
             shared=shared,
-            scratch_basdir=self.scratch_basedir,
+            scratch_basedir=self.scratch_basedir,
             keep_scratch=self.keep_scratch,
         )
 
