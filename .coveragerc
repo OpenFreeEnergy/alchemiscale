@@ -1,7 +1,7 @@
 [run]
 omit =
     */_version.py
-    fah_alchemy/tests/*
+    alchemiscale/tests/*
 
 [report]
 exclude_lines =
