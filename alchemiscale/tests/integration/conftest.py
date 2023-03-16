@@ -26,6 +26,7 @@ from openfe_benchmarks import tyk2
 from alchemiscale.models import Scope
 from alchemiscale.settings import Neo4jStoreSettings, S3ObjectStoreSettings
 from alchemiscale.storage import Neo4jStore, S3ObjectStore, get_s3os
+from alchemiscale.storage.models import ComputeServiceID
 from alchemiscale.protocols import FAHOpenmmNonEquilibriumCyclingProtocol
 
 
@@ -342,3 +343,8 @@ def multiple_scopes(scope_test):
         ]
     )
     return scopes
+
+
+@fixture(scope="module")
+def compute_service_id():
+    return ComputeServiceID('compute-service-123')

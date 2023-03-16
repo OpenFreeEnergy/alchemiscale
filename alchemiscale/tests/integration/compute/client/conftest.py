@@ -8,6 +8,7 @@ import requests
 from alchemiscale.settings import get_base_api_settings
 from alchemiscale.base.api import get_n4js_depends, get_s3os_depends
 from alchemiscale.compute import api, client
+from alchemiscale.storage.models import ComputeServiceID
 
 from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
 from alchemiscale.tests.integration.utils import running_service
@@ -49,7 +50,7 @@ def uvicorn_server(compute_api):
 
 @pytest.fixture(scope="module")
 def compute_client(
-    uvicorn_server, compute_identity, single_scoped_credentialed_compute
+    uvicorn_server, compute_identity, single_scoped_credentialed_compute, compute_service_id
 ):
     return client.AlchemiscaleComputeClient(
         api_url="http://127.0.0.1:8000/",
@@ -58,6 +59,7 @@ def compute_client(
         # all the test users are based on compute_identity who use the same password
         key=compute_identity["key"],
     )
+
 
 
 @pytest.fixture(scope="module")

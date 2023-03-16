@@ -8,7 +8,7 @@ AlchemiscaleComputeAPI --- :mod:`alchemiscale.compute.api`
 from typing import Any, Dict, List
 import os
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
@@ -103,7 +103,7 @@ async def register_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     csreg = ComputeServiceRegistration(
         identifier=compute_service_id, registered=now, heartbeat=now
     )
@@ -128,7 +128,7 @@ async def heartbeat_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     n4js.heartbeat_computeservice(compute_service_id, now)
 
     return compute_service_id

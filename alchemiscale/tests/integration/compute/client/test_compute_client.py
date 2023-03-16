@@ -83,14 +83,14 @@ class TestComputeClient:
         scope_test,
         n4js_preloaded,
         compute_client: client.AlchemiscaleComputeClient,
+        compute_service_id,
         uvicorn_server,
     ):
+        # register compute service id
+        compute_client.register(compute_service_id)
+
         taskhub_sks = compute_client.query_taskhubs([scope_test])
 
-        # register compute service id
-        compute_service_id = ComputeServiceID('me-123')
-        compute_client.register(compute_service_id)
-        
         # claim a single task; should get highest priority task
         task_sks = compute_client.claim_taskhub_tasks(
             taskhub_sks[0], compute_service_id=compute_service_id
@@ -106,7 +106,7 @@ class TestComputeClient:
         remaining_tasks = n4js_preloaded.get_taskhub_unclaimed_tasks(taskhub_sks[0])
         # claim two more tasks
         task_sks2 = compute_client.claim_taskhub_tasks(
-            taskhub_sks[0], count=2, compute_service_id="me-123"
+            taskhub_sks[0], count=2, compute_service_id=compute_service_id
         )
         assert task_sks2[0] in remaining_tasks
         assert task_sks2[1] in remaining_tasks
@@ -116,17 +116,21 @@ class TestComputeClient:
         scope_test,
         n4js_preloaded,
         compute_client: client.AlchemiscaleComputeClient,
+        compute_service_id,
         network_tyk2,
         transformation,
         uvicorn_server,
     ):
+        # register compute service id
+        compute_client.register(compute_service_id)
+
         an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.dict())
 
         taskhub_sk = n4js_preloaded.get_taskhub(an_sk)
 
         # claim our first task
         task_sks = compute_client.claim_taskhub_tasks(
-            taskhub_sk, compute_service_id="me-123"
+            taskhub_sk, compute_service_id=compute_service_id
         )
 
         # get the transformation corresponding to this task
@@ -221,18 +225,22 @@ class TestComputeClient:
         scope_test,
         n4js_preloaded,
         compute_client: client.AlchemiscaleComputeClient,
+        compute_service_id,
         network_tyk2,
         transformation,
         protocoldagresults,
         uvicorn_server,
     ):
+        # register compute service id
+        compute_client.register(compute_service_id)
+
         an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.dict())
         tf_sk = ScopedKey(gufe_key=transformation.key, **scope_test.dict())
         taskhub_sk = n4js_preloaded.get_taskhub(an_sk)
 
         # claim our first task
         task_sks = compute_client.claim_taskhub_tasks(
-            taskhub_sk, compute_service_id="me-123"
+            taskhub_sk, compute_service_id=compute_service_id
         )
 
         # get the transformation corresponding to this task

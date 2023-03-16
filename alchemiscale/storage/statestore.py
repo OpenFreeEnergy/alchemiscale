@@ -5,7 +5,7 @@ Node4js state storage --- :mod:`alchemiscale.storage.statestore`
 """
 
 import abc
-from datetime import datetime, timezone
+from datetime import datetime
 from contextlib import contextmanager
 import json
 from functools import lru_cache
@@ -119,7 +119,7 @@ def _generate_claim_query(
 
     // create CLAIMS relationship with given compute service
     MATCH (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
-    CREATE (t)<-[cl:CLAIMS {{claimed: datetime('{datetime.now(timezone.utc).isoformat()}')}}]-(csreg)
+    CREATE (t)<-[cl:CLAIMS {{claimed: localdatetime('{datetime.utcnow().isoformat()}')}}]-(csreg)
 
     RETURN t
     """
@@ -756,7 +756,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        node = Node("ComputeServiceRegistration", **compute_service_registration.dict())
+        node = Node("ComputeServiceRegistration", **compute_service_registration.to_dict())
 
         with self.transaction() as tx:
             tx.merge(
@@ -794,7 +794,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Update the heartbeat for the given ComputeServiceID."""
         q = f"""
         MATCH (n:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
-        SET n.heartbeat = datetime('{heartbeat.isoformat()}')
+        SET n.heartbeat = localdatetime('{heartbeat.isoformat()}')
 
         """
 
@@ -1140,7 +1140,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         q = f"""
         // get list of all unclaimed tasks in the hub 
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task)
-        WHERE task.claim IS NULL
+        WHERE NOT (task)<-[:CLAIMS]-(:ComputeServiceRegistration)
         RETURN task
         """
         with self.transaction() as tx:
