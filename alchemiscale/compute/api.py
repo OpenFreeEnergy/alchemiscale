@@ -172,7 +172,9 @@ async def claim_taskhub_tasks(
     validate_scopes(sk.scope, token)
 
     tasks = n4js.claim_taskhub_tasks(
-        taskhub=taskhub_scoped_key, compute_service_id=ComputeServiceID(compute_service_id), count=count
+        taskhub=taskhub_scoped_key,
+        compute_service_id=ComputeServiceID(compute_service_id),
+        count=count,
     )
 
     return [str(t) if t is not None else None for t in tasks]

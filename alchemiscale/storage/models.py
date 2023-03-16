@@ -38,21 +38,18 @@ class ComputeServiceRegistration(BaseModel):
     @classmethod
     def from_now(cls, identifier: ComputeServiceID):
         now = datetime.utcnow()
-        return cls(identifier=identifier,
-                   registered=now,
-                   heartbeat=now)
-
+        return cls(identifier=identifier, registered=now, heartbeat=now)
 
     def to_dict(self):
         dct = self.dict()
-        dct['identifier'] =  str(self.identifier)
+        dct["identifier"] = str(self.identifier)
 
         return dct
 
     @classmethod
     def from_dict(cls, dct):
         dct_ = copy(dct)
-        dct_['identifier'] =  ComputeServiceID(dct_['identifier'])
+        dct_["identifier"] = ComputeServiceID(dct_["identifier"])
 
         return cls(**dct_)
 

@@ -756,7 +756,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        node = Node("ComputeServiceRegistration", **compute_service_registration.to_dict())
+        node = Node(
+            "ComputeServiceRegistration", **compute_service_registration.to_dict()
+        )
 
         with self.transaction() as tx:
             tx.merge(

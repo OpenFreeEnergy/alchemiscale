@@ -15,7 +15,7 @@ from alchemiscale.storage.models import (
     ProtocolDAGResultRef,
     TaskStatusEnum,
     ComputeServiceID,
-    ComputeServiceRegistration
+    ComputeServiceRegistration,
 )
 from alchemiscale.models import Scope, ScopedKey
 from alchemiscale.security.models import (
@@ -494,12 +494,16 @@ class TestNeo4jStore(TestStateStore):
         actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
         assert set(actioned_task_sks) == set(collected_sks)
 
-    def test_get_unclaimed_tasks(self, n4js: Neo4jStore, network_tyk2, scope_test, compute_service_id):
+    def test_get_unclaimed_tasks(
+        self, n4js: Neo4jStore, network_tyk2, scope_test, compute_service_id
+    ):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
         taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
-        n4js.register_computeservice(ComputeServiceRegistration.from_now(compute_service_id))
+        n4js.register_computeservice(
+            ComputeServiceRegistration.from_now(compute_service_id)
+        )
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
@@ -759,9 +763,7 @@ class TestNeo4jStore(TestStateStore):
         assert set(claimed_task_sks) == set([first_task] + extra_tasks)
 
         # claim the next 10 tasks
-        claimed_task_sks = n4js.claim_taskhub_tasks(
-            taskhub_sk, csid, count=10
-        )
+        claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=10)
         # oops the extends task is still running and there should be no other tasks to grab
         assert claimed_task_sks == [None] * 10
 
@@ -1612,7 +1614,7 @@ class TestNeo4jStore(TestStateStore):
         task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
 
         n4js.action_tasks(task_sks, taskhub_sk)
-        
+
         csid = ComputeServiceID("claimer")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 

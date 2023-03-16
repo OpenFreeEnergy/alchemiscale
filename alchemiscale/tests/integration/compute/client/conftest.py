@@ -50,7 +50,10 @@ def uvicorn_server(compute_api):
 
 @pytest.fixture(scope="module")
 def compute_client(
-    uvicorn_server, compute_identity, single_scoped_credentialed_compute, compute_service_id
+    uvicorn_server,
+    compute_identity,
+    single_scoped_credentialed_compute,
+    compute_service_id,
 ):
     return client.AlchemiscaleComputeClient(
         api_url="http://127.0.0.1:8000/",
@@ -59,7 +62,6 @@ def compute_client(
         # all the test users are based on compute_identity who use the same password
         key=compute_identity["key"],
     )
-
 
 
 @pytest.fixture(scope="module")
