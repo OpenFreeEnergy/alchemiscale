@@ -275,9 +275,9 @@ class TestNeo4jStore(TestStateStore):
 
     def test_register_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
-        registration = ComputeServiceRegistration(identifier=compute_service_id,
-                                                  registered=now,
-                                                  heartbeat=now)
+        registration = ComputeServiceRegistration(
+            identifier=compute_service_id, registered=now, heartbeat=now
+        )
 
         n4js.register_computeservice(registration)
 
@@ -288,15 +288,15 @@ class TestNeo4jStore(TestStateStore):
             """
         ).to_subgraph()
 
-        assert csreg['identifier'] == compute_service_id
-        assert csreg['registered'] == now
-        assert csreg['heartbeat'] == now
+        assert csreg["identifier"] == compute_service_id
+        assert csreg["registered"] == now
+        assert csreg["heartbeat"] == now
 
     def test_deregister(self, n4js, compute_service_id):
         now = datetime.utcnow()
-        registration = ComputeServiceRegistration(identifier=compute_service_id,
-                                                  registered=now,
-                                                  heartbeat=now)
+        registration = ComputeServiceRegistration(
+            identifier=compute_service_id, registered=now, heartbeat=now
+        )
 
         n4js.register_computeservice(registration)
 
@@ -314,9 +314,9 @@ class TestNeo4jStore(TestStateStore):
 
     def test_heartbeat(self, n4js, compute_service_id):
         now = datetime.utcnow()
-        registration = ComputeServiceRegistration(identifier=compute_service_id,
-                                                  registered=now,
-                                                  heartbeat=now)
+        registration = ComputeServiceRegistration(
+            identifier=compute_service_id, registered=now, heartbeat=now
+        )
 
         n4js.register_computeservice(registration)
 
@@ -331,8 +331,8 @@ class TestNeo4jStore(TestStateStore):
             """
         ).to_subgraph()
 
-        assert csreg['registered'] == now
-        assert csreg['heartbeat'] == tomorrow
+        assert csreg["registered"] == now
+        assert csreg["heartbeat"] == tomorrow
 
     def test_create_task(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try generating task
