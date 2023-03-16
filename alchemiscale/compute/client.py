@@ -36,13 +36,11 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
     _exception = AlchemiscaleComputeClientError
 
     def register(self, compute_service_id: ComputeServiceID):
-        res =  self._post_resource(f"computeservice/{compute_service_id}/register", {})
+        res = self._post_resource(f"computeservice/{compute_service_id}/register", {})
         return ComputeServiceID(res)
 
     def deregister(self, compute_service_id: ComputeServiceID):
-        res = self._post_resource(
-            f"computeservice/{compute_service_id}/deregister", {}
-        )
+        res = self._post_resource(f"computeservice/{compute_service_id}/deregister", {})
         return ComputeServiceID(res)
 
     def heartbeat(self, compute_service_id: ComputeServiceID):
