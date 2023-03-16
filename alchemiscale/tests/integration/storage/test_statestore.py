@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import random
 from time import sleep
 from typing import List, Dict
@@ -271,6 +272,67 @@ class TestNeo4jStore(TestStateStore):
         )
 
     ### compute
+
+    def test_register_computeservice(self, n4js, compute_service_id):
+        now = datetime.utcnow()
+        registration = ComputeServiceRegistration(identifier=compute_service_id,
+                                                  registered=now,
+                                                  heartbeat=now)
+
+        n4js.register_computeservice(registration)
+
+        csreg = n4js.graph.run(
+            f"""
+            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+            return csreg
+            """
+        ).to_subgraph()
+
+        assert csreg['identifier'] == compute_service_id
+        assert csreg['registered'] == now
+        assert csreg['heartbeat'] == now
+
+    def test_deregister(self, n4js, compute_service_id):
+        now = datetime.utcnow()
+        registration = ComputeServiceRegistration(identifier=compute_service_id,
+                                                  registered=now,
+                                                  heartbeat=now)
+
+        n4js.register_computeservice(registration)
+
+        # try deregistering
+        n4js.deregister_computeservice(compute_service_id)
+
+        csreg = n4js.graph.run(
+            f"""
+            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+            return csreg
+            """
+        ).to_subgraph()
+
+        assert csreg is None
+
+    def test_heartbeat(self, n4js, compute_service_id):
+        now = datetime.utcnow()
+        registration = ComputeServiceRegistration(identifier=compute_service_id,
+                                                  registered=now,
+                                                  heartbeat=now)
+
+        n4js.register_computeservice(registration)
+
+        # perform a heartbeat
+        tomorrow = now + timedelta(days=1)
+        n4js.heartbeat_computeservice(compute_service_id, tomorrow)
+
+        csreg = n4js.graph.run(
+            f"""
+            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+            return csreg
+            """
+        ).to_subgraph()
+
+        assert csreg['registered'] == now
+        assert csreg['heartbeat'] == tomorrow
 
     def test_create_task(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try generating task
