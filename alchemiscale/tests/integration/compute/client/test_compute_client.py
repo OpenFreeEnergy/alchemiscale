@@ -51,6 +51,70 @@ class TestComputeClient:
     ):
         compute_client._api_check()
 
+    def test_register(
+        self,
+        n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        uvicorn_server,
+        compute_service_id
+        ):
+        out = compute_client.register(compute_service_id)
+        assert out == compute_service_id
+
+        csreg = n4js_preloaded.graph.run(
+            f"""
+            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+            return csreg
+            """
+        ).to_subgraph()
+
+        assert csreg is not None
+        assert csreg['registered'] == csreg['heartbeat']
+
+    def test_deregister(
+        self,
+        n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        uvicorn_server,
+        compute_service_id
+        ):
+        out = compute_client.register(compute_service_id)
+        assert out == compute_service_id
+
+        out = compute_client.deregister(compute_service_id)
+        assert out == compute_service_id
+
+        csreg = n4js_preloaded.graph.run(
+            f"""
+            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+            return csreg
+            """
+        ).to_subgraph()
+
+        assert csreg is None
+
+    def test_heartbeat(
+        self,
+        n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        uvicorn_server,
+        compute_service_id
+        ):
+        compute_client.register(compute_service_id)
+
+        out = compute_client.heartbeat(compute_service_id)
+        assert out == compute_service_id
+
+        csreg = n4js_preloaded.graph.run(
+            f"""
+            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+            return csreg
+            """
+        ).to_subgraph()
+
+        assert csreg is not None
+        assert csreg['registered'] < csreg['heartbeat']
+
     def test_list_scope(
         self,
         n4js_preloaded,
