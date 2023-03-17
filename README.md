@@ -5,5 +5,4 @@
 [![docs](https://github.com/openforcefield/alchemiscale/actions/workflows/docs.yml/badge.svg)](https://docs.alchemiscale.org/)
 
 
-An alchemical free energy platform for exascale computing on Folding@Home.
-
+**alchemiscale**: a high-throughput alchemical free energy execution system for use with HPC, cloud, bare metal, and Folding@Home
