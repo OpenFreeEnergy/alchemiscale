@@ -4,9 +4,11 @@ AlchemiscaleComputeService --- :mod:`alchemiscale.compute.service`
 
 """
 
+import os
 import asyncio
 import sched
 import time
+import logging
 from uuid import uuid4
 import random
 import threading
@@ -75,20 +77,21 @@ class SynchronousComputeService:
         identifier: str,
         key: str,
         name: str,
-        shared_basedir: Path,
-        scratch_basedir: Path,
+        shared_basedir: os.PathLike,
+        scratch_basedir: os.PathLike,
         keep_scratch: bool = False,
         sleep_interval: int = 30,
         heartbeat_frequency: int = 30,
         scopes: Optional[List[Scope]] = None,
         limit: int = 1,
+        loglevel='WARN',
     ):
         """Create a `SynchronousComputeService` instance.
 
         Parameters
         ----------
         api_url
-            URL pointing to the compute API to execute Tasks for.
+            URL of the compute API to execute Tasks for.
         identifier
             Identifier for the compute identity used for authentication.
         key
@@ -125,11 +128,13 @@ class SynchronousComputeService:
 
         if scopes is None:
             self.scopes = [Scope()]
+        else:
+            self.scopes = scopes
 
-        self.shared_basedir = shared_basedir
+        self.shared_basedir = Path(shared_basedir)
         self.shared_basedir.mkdir(exist_ok=True)
 
-        self.scratch_basedir = scratch_basedir
+        self.scratch_basedir = Path(scratch_basedir)
         self.scratch_basedir.mkdir(exist_ok=True)
         self.keep_scratch = keep_scratch
 
@@ -139,7 +144,12 @@ class SynchronousComputeService:
 
         self.compute_service_id = ComputeServiceID(f"{self.name}-{uuid4()}")
 
-        self._stop = False
+        self.int_sleep = InterruptableSleep()
+        self.logger = logging.getLogger("AlchemiscaleSynchronousComputeService")
+        self.logger.setLevel(loglevel)
+
+        self.logger.addHandler(logging.StreamHandler())
+
 
     def _register(self):
         """Register this compute service with the compute API."""
@@ -163,6 +173,9 @@ class SynchronousComputeService:
         taskhubs: Dict[ScopedKey, TaskHub] = self.client.query_taskhubs(
             scopes=self.scopes, return_gufe=True
         )
+
+        if len(taskhubs) == 0:
+            return []
 
         # based on weights, choose taskhub to draw from
         taskhub: List[ScopedKey] = random.choices(
@@ -229,12 +242,42 @@ class SynchronousComputeService:
             shared=shared,
             scratch_basedir=self.scratch_basedir,
             keep_scratch=self.keep_scratch,
+            raise_error=False
         )
 
         # push the result (or failure) back to the compute API
         result_sk = self.push_result(task, protocoldagresult)
 
         return result_sk
+
+    def cycle(self, task_limit):
+        if task_limit is not None:
+            if self.counter >= task_limit:
+                self.logger.info("Performed %s tasks; beyond task limit %s", self.counter, task_limit)
+                return
+
+        # claim tasks from the compute API
+        self.logger.info("Claiming tasks")
+        tasks: List[ScopedKey] = self.claim_tasks(self.limit)
+        self.logger.info("Claimed %d tasks", len([t for t in tasks if t is not None]))
+
+        # if no tasks claimed, sleep
+        if all([task is None for task in tasks]):
+            self.logger.info("No tasks claimed; sleeping for %d seconds", self.sleep_interval)
+            time.sleep(self.sleep_interval)
+            return
+
+        # otherwise, process tasks
+        self.logger.info("Executing tasks...")
+        for task in tasks:
+            if task is None:
+                continue
+
+            # execute each task
+            self.logger.info("Executing task '%s'...", task)
+            self.execute(task)
+            self.logger.info("Completed task '%s'", task)
+            self.counter += 1
 
     def start(self, task_limit: Optional[int] = None):
         """Start the service.
@@ -246,56 +289,40 @@ class SynchronousComputeService:
             If `None`, the service will continue until told to stop.
 
         """
+        # add ComputeServiceRegistration
+        self.logger.info("Starting up service '%s'", self.name)
         self._register()
+        self.logger.info("Registered service with registration '%s'", 
+                         str(self.compute_service_id))
+
+        def scheduler_cycle():
+            self.cycle(task_limit)
+            self.scheduler.enter(0, 1, scheduler_cycle)
 
         def scheduler_heartbeat():
             self.heartbeat()
             self.scheduler.enter(self.heartbeat_frequency, 1, scheduler_heartbeat)
 
+        self.scheduler.enter(0, 1, scheduler_cycle)
         self.scheduler.enter(0, 2, scheduler_heartbeat)
 
-        while True:
-            if task_limit is not None:
-                if self.counter >= task_limit:
-                    break
-
-            if self._stop:
-                return
-
-            # claim tasks from the compute API
-            tasks: List[ScopedKey] = self.claim_tasks(self.limit)
-
-            # if no tasks claimed, sleep
-            if all([task is None for task in tasks]):
-                if self._stop:
-                    return
-                time.sleep(self.sleep_interval)
-                continue
-
-            # otherwise, process tasks
-            for task in tasks:
-                if self._stop:
-                    return
-
-                if task is None:
-                    continue
-
-                # execute each task
-                self.execute(task)
-                self.counter += 1
+        try:
+            self.logger.info("Starting main loop")
+            self.scheduler.run()
+        except KeyboardInterrupt:
+            self.logger.info("Caught SIGINT/Keyboard interrupt.")
+        except SleepInterrupted:
+            self.logger.info("Service stopping.")
+        finally:
+            # remove ComputeServiceRegistration, drop all claims
+            self._deregister()
+            self.logger.info("Deregistered service with registration '%s'", 
+                         str(self.compute_service_id))
 
     def stop(self):
-        self._stop = True
-
-        # TODO: drop claims on tasks
-        # self.unclaim_tasks()
-
         # Interrupt the scheduler (will finish if in the middle of an update or
         # something, but will cancel running calculations)
         self.int_sleep.interrupt()
-
-        # remove ComputeServiceID, drop all claims
-        self._deregister()
 
 
 class AsynchronousComputeService(SynchronousComputeService):

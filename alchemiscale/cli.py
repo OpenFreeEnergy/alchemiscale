@@ -5,11 +5,12 @@ Command line interface --- :mod:`alchemiscale.cli`
 """
 
 import click
+import yaml
+import signal
 import gunicorn.app.base
 from typing import Type
 
-from .models import Scope
-from .security.auth import hash_key, authenticate, AuthenticationError
+from .security.auth import hash_key
 from .security.models import (
     CredentialedEntity,
     CredentialedUserIdentity,
@@ -228,7 +229,7 @@ def cli():
     name="api",
     help="Start the user-facing API service",
 )
-@api_starting_params("FA_API_HOST", "FA_API_PORT", "FA_API_LOGLEVEL")
+@api_starting_params("ALCHEMISCALE_API_HOST", "ALCHEMISCALE_API_PORT", "ALCHEMISCALE_API_LOGLEVEL")
 @db_params
 @s3os_params
 @jwt_params
@@ -268,7 +269,7 @@ def api(
 
     app.dependency_overrides[get_base_api_settings] = get_settings_override
 
-    start_api(app, workers, host["FA_API_HOST"], port["FA_API_PORT"])
+    start_api(app, workers, host["ALCHEMISCALE_API_HOST"], port["ALCHEMISCALE_API_PORT"])
 
 
 @cli.group(help="Subcommands for the compute service")
@@ -278,7 +279,7 @@ def compute():
 
 @compute.command(help="Start the compute API service.")
 @api_starting_params(
-    "FA_COMPUTE_API_HOST", "FA_COMPUTE_API_PORT", "FA_COMPUTE_API_LOGLEVEL"
+    "ALCHEMISCALE_COMPUTE_API_HOST", "ALCHEMISCALE_COMPUTE_API_PORT", "ALCHEMISCALE_COMPUTE_API_LOGLEVEL"
 )
 @db_params
 @s3os_params
@@ -316,12 +317,41 @@ def api(
 
     app.dependency_overrides[get_base_api_settings] = get_settings_override
 
-    start_api(app, workers, host["FA_COMPUTE_API_HOST"], port["FA_COMPUTE_API_PORT"])
+    start_api(app, workers, host["ALCHEMISCALE_COMPUTE_API_HOST"], port["ALCHEMISCALE_COMPUTE_API_PORT"])
 
 
 @compute.command(help="Start the synchronous compute service.")
-def synchronous():
-    ...
+@click.option(
+        "--config-file", 
+        "-c",
+        type=click.File(),
+        help="YAML-based configuration file giving the settings for this service",
+        required=True
+        )
+def synchronous(config_file):
+    from alchemiscale.models import Scope
+    from alchemiscale.compute.service import SynchronousComputeService
+
+    params = yaml.load(config_file, Loader=yaml.Loader)
+
+    if 'scopes' in params:
+        params['scopes'] = [Scope.from_str(scope) for scope in params['scopes']]
+
+    service = SynchronousComputeService(**params)
+
+    # add signal handling
+    for signame in {"SIGHUP", "SIGINT", "SIGTERM"}:
+
+        def stop(*args, **kwargs):
+            service.stop()
+            raise KeyboardInterrupt()
+
+        signal.signal(getattr(signal, signame), stop)
+
+    try:
+        service.start()
+    except KeyboardInterrupt:
+        pass
 
 
 @cli.group(help="Subcommands for the database")
@@ -491,6 +521,7 @@ def remove(url, user, password, dbname, identity_type, identifier):
 @scope
 def add_scope(url, user, password, dbname, identity_type, identifier, scope):
     """Add a scope for the given identity."""
+    from .models import Scope
     from .storage.statestore import get_n4js
     from .settings import Neo4jStoreSettings
 
@@ -532,6 +563,7 @@ def list_scope(url, user, password, dbname, identity_type, identifier):
 @scope
 def remove_scope(url, user, password, dbname, identity_type, identifier, scope):
     """Remove a scope for the given identity(s)."""
+    from .models import Scope
     from .storage.statestore import get_n4js
     from .settings import Neo4jStoreSettings
 
