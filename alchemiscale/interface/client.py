@@ -265,12 +265,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def get_tasks_status(self, tasks: List[ScopedKey]) -> List[TaskStatusEnum]:
         """Get the status of multiple `Task`s.
-        
+
         Parameters
         ----------
         tasks: List[ScopedKey]
             The `Task`s to get the status of.
-        
+
         Returns
         -------
         List[TaskStatusEnum]
@@ -279,16 +279,18 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         statuses = [self.get_task_status(t) for t in tasks]
         return statuses
 
-    def set_tasks_status(self, task: ScopedKey, status: TaskStatusEnum) -> List[Optional[ScopedKey]]:
+    def set_tasks_status(
+        self, task: ScopedKey, status: TaskStatusEnum
+    ) -> List[Optional[ScopedKey]]:
         """Set the status of  multiple `Task`s.
-        
+
         Parameters
         ----------
         tasks: List[ScopedKey]
             The `Task`s to set the status of.
         status: TaskStatusEnum
             The status to set the `Task`s to.
-        
+
         Returns
         -------
         List[Optional[ScopedKey]]
@@ -296,10 +298,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         task_sks = [self.set_task_status(t, status) for t in tasks]
         return task_sks
-        
 
-
-    def set_task_status(self, task: ScopedKey, status: TaskStatusEnum) -> Optional[ScopedKey]:
+    def set_task_status(
+        self, task: ScopedKey, status: TaskStatusEnum
+    ) -> Optional[ScopedKey]:
         """Set the status of a `Task`."""
         task_sk = self._post_resource(f"tasks/{task}/status", status.value)
         return ScopedKey.from_str(task_sk) if task_sk is not None else None

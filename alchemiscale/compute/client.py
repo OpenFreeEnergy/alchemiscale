@@ -107,12 +107,12 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     def get_tasks_status(self, tasks: List[ScopedKey]) -> List[TaskStatusEnum]:
         """Get the status of multiple `Task`s.
-        
+
         Parameters
         ----------
         tasks: List[ScopedKey]
             The `Task`s to get the status of.
-        
+
         Returns
         -------
         List[TaskStatusEnum]
@@ -121,16 +121,18 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         statuses = [self.get_task_status(t) for t in tasks]
         return statuses
 
-    def set_tasks_status(self, task: ScopedKey, status: TaskStatusEnum) -> List[Optional[ScopedKey]]:
+    def set_tasks_status(
+        self, task: ScopedKey, status: TaskStatusEnum
+    ) -> List[Optional[ScopedKey]]:
         """Set the status of  multiple `Task`s.
-        
+
         Parameters
         ----------
         tasks: List[ScopedKey]
             The `Task`s to set the status of.
         status: TaskStatusEnum
             The status to set the `Task`s to.
-        
+
         Returns
         -------
         List[Optional[ScopedKey]]

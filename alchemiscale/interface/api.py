@@ -300,8 +300,14 @@ async def set_task_status(
     token: TokenData = Depends(get_token_data_depends),
 ):
     status = TaskStatusEnum(status)
-    if status not in (TaskStatusEnum.waiting, TaskStatusEnum.invalid, TaskStatusEnum.deleted):
-        raise ValueError(f"Cannot set status to '{status}', must be one of 'waiting', 'invalid', 'deleted'")
+    if status not in (
+        TaskStatusEnum.waiting,
+        TaskStatusEnum.invalid,
+        TaskStatusEnum.deleted,
+    ):
+        raise ValueError(
+            f"Cannot set status to '{status}', must be one of 'waiting', 'invalid', 'deleted'"
+        )
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
     tasks_statused = n4js.set_task_status([task_sk], status)
@@ -321,6 +327,7 @@ async def get_task_status(
     status = n4js.get_task_status([task_sk])
 
     return status[0].value
+
 
 ### results
 
