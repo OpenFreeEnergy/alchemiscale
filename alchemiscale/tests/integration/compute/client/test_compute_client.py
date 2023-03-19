@@ -131,32 +131,6 @@ class TestComputeClient:
         assert extends_protocoldagresult is None
 
     @pytest.mark.parametrize("status", [member for member in TaskStatusEnum])
-    def test_set_task_status(
-        self,
-        scope_test,
-        n4js_preloaded,
-        compute_client: client.AlchemiscaleComputeClient,
-        uvicorn_server,
-        status,
-    ):
-        taskhub_sks = compute_client.query_taskhubs([scope_test])
-
-        all_tasks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0], return_gufe=False)
-
-        # special case for "complete" and "error" statuses as they cannot be
-        # reached from "waiting" so we set to running first
-        if status in [TaskStatusEnum.complete, TaskStatusEnum.error]:
-            compute_client.set_task_status(all_tasks[0], TaskStatusEnum.running)
-
-        # set the status of a task
-        compute_client.set_task_status(all_tasks[0], status)
-
-        # check that the status has been set
-        # note must be list on n4js side
-        statuses = n4js_preloaded.get_task_status([all_tasks[0]])
-        assert statuses[0] == status
-
-    @pytest.mark.parametrize("status", [member for member in TaskStatusEnum])
     def test_set_tasks_status(
         self,
         scope_test,
@@ -181,30 +155,6 @@ class TestComputeClient:
         # note must be list on n4js side
         statuses = n4js_preloaded.get_task_status(all_tasks)
         assert all([s == status for s in statuses])
-
-    @pytest.mark.parametrize("status", [member for member in TaskStatusEnum])
-    def test_get_task_status(
-        self,
-        scope_test,
-        n4js_preloaded,
-        compute_client: client.AlchemiscaleComputeClient,
-        uvicorn_server,
-        status,
-    ):
-        taskhub_sks = compute_client.query_taskhubs([scope_test])
-
-        all_tasks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0], return_gufe=False)
-
-        # special case for "complete" and "error" statuses as they cannot be
-        # reached from "waiting" so we set to running first
-        if status in [TaskStatusEnum.complete, TaskStatusEnum.error]:
-            compute_client.set_task_status(all_tasks[0], TaskStatusEnum.running)
-
-        # set the status of a task
-        compute_client.set_task_status(all_tasks[0], status)
-
-        # check that the status has been set
-        assert compute_client.get_task_status(all_tasks[0]) == status
 
     @pytest.mark.parametrize("status", [member for member in TaskStatusEnum])
     def test_get_tasks_status(
