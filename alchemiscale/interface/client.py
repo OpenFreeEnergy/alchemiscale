@@ -20,7 +20,7 @@ from ..base.client import (
     json_to_gufe,
 )
 from ..models import Scope, ScopedKey
-from ..storage.models import Task, ProtocolDAGResultRef
+from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
 from ..strategies import Strategy
 from ..security.models import CredentialedUserIdentity
 
@@ -280,7 +280,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return statuses
 
     def set_tasks_status(
-        self, task: ScopedKey, status: TaskStatusEnum
+        self, tasks: List[ScopedKey], status: TaskStatusEnum
     ) -> List[Optional[ScopedKey]]:
         """Set the status of  multiple `Task`s.
 
