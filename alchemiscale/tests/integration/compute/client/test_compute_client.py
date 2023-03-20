@@ -197,7 +197,9 @@ class TestComputeClient:
         compute_client.set_tasks_status(all_tasks[0], TaskStatusEnum.complete)
 
         # check that the status has been set
-        assert compute_client.get_tasks_status(all_tasks[0]) == TaskStatusEnum.complete
+        assert (
+            compute_client.get_tasks_status(all_tasks[0])[0] == TaskStatusEnum.complete
+        )
 
         # test if we change the status to something else it preserves it
         # IE see that the raise_error=False behaviour is upheld
@@ -205,7 +207,9 @@ class TestComputeClient:
 
         compute_client.set_tasks_status(all_tasks[1], TaskStatusEnum.complete)
 
-        assert compute_client.get_tasks_status(all_tasks[1]) == TaskStatusEnum.invalid
+        assert (
+            compute_client.get_tasks_status(all_tasks[1])[0] == TaskStatusEnum.invalid
+        )
 
     ### results
 
