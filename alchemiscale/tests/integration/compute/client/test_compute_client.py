@@ -191,21 +191,21 @@ class TestComputeClient:
         taskhub_sks = compute_client.query_taskhubs([scope_test])
         all_tasks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0], return_gufe=False)
 
-        compute_client.set_task_status(all_tasks[0], TaskStatusEnum.running)
+        compute_client.set_tasks_status(all_tasks[0], TaskStatusEnum.running)
 
         # complete the task
-        compute_client.set_task_status(all_tasks[0], TaskStatusEnum.complete)
+        compute_client.set_tasks_status(all_tasks[0], TaskStatusEnum.complete)
 
         # check that the status has been set
-        assert compute_client.get_task_status(all_tasks[0]) == TaskStatusEnum.complete
+        assert compute_client.get_tasks_status(all_tasks[0]) == TaskStatusEnum.complete
 
         # test if we change the status to something else it preserves it
         # IE see that the raise_error=False behaviour is upheld
-        compute_client.set_task_status(all_tasks[1], TaskStatusEnum.invalid)
+        compute_client.set_tasks_status(all_tasks[1], TaskStatusEnum.invalid)
 
-        compute_client.set_task_status(all_tasks[1], TaskStatusEnum.complete)
+        compute_client.set_tasks_status(all_tasks[1], TaskStatusEnum.complete)
 
-        assert compute_client.get_task_status(all_tasks[1]) == TaskStatusEnum.invalid
+        assert compute_client.get_tasks_status(all_tasks[1]) == TaskStatusEnum.invalid
 
     ### results
 
