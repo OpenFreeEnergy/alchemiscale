@@ -61,6 +61,7 @@ dependencies:
   - dask
   - distributed
   - numba
+  - pymbar >=3.0.6,<4
 
   - pip:
     #- git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment

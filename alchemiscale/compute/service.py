@@ -170,6 +170,9 @@ class SynchronousComputeService:
         Returns `None` if no Task was available matching service configuration.
 
         """
+        # list of tasks to return
+        tasks = []
+
         taskhubs: Dict[ScopedKey, TaskHub] = self.client.query_taskhubs(
             scopes=self.scopes, return_gufe=True
         )
@@ -177,15 +180,24 @@ class SynchronousComputeService:
         if len(taskhubs) == 0:
             return []
 
-        # based on weights, choose taskhub to draw from
-        taskhub: List[ScopedKey] = random.choices(
-            list(taskhubs.keys()), weights=[tq.weight for tq in taskhubs.values()]
-        )[0]
+        while len(tasks) < count and len(taskhubs) > 0:
+            # based on weights, choose taskhub to draw from
+            taskhub: List[ScopedKey] = random.choices(
+                list(taskhubs.keys()), weights=[tq.weight for tq in taskhubs.values()]
+            )[0]
 
-        # claim tasks from the taskhub
-        tasks = self.client.claim_taskhub_tasks(
-            taskhub, compute_service_id=self.compute_service_id, count=count
-        )
+            # claim tasks from the taskhub
+            claimed_tasks = self.client.claim_taskhub_tasks(
+                taskhub, compute_service_id=self.compute_service_id, count=count
+            )
+
+            # gather up claimed tasks, if present
+            for t in claimed_tasks:
+                if t is not None:
+                    tasks.append(t)
+
+            # remove this taskhub from the options available; repeat
+            taskhubs.pop(taskhub)
 
         return tasks
 
