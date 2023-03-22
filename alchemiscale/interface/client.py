@@ -275,26 +275,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         status = self._get_resource(f"tasks/{task}/status")
         return TaskStatusEnum(status)
 
-    def get_tasks_status(
-        self, tasks: Union[ScopedKey, List[ScopedKey]]
-    ) -> List[TaskStatusEnum]:
-        """Get the status of one or multiple `Task`s.
-
-        Parameters
-        ----------
-        tasks: Union[ScopedKey, List[ScopedKey]]
-            The `Task` or `Task`s to get the status of.
-
-        Returns
-        -------
-        List[TaskStatusEnum]
-            The status of each `Task` in the same order as given in `tasks`.
-        """
-        if isinstance(tasks, ScopedKey):
-            tasks = [tasks]
-        statuses = [self._get_task_status(t) for t in tasks]
-        return statuses
-
     def set_tasks_status(
         self, tasks: Union[ScopedKey, List[ScopedKey]], status: TaskStatusEnum
     ) -> List[Optional[ScopedKey]]:
@@ -310,12 +290,37 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         Returns
         -------
         List[Optional[ScopedKey]]
-            The ScopedKeys of the `Task`s that were updated, in the same order as given in `tasks`.
+            The ScopedKeys of the `Task`s that were updated, in the same order
+            as given in `tasks`. If a given `Task` doesn't exist, `None` will
+            be returned in its place.
+
         """
         if isinstance(tasks, ScopedKey):
             tasks = [tasks]
         task_sks = [self._set_task_status(t, status) for t in tasks]
         return task_sks
+
+    def get_tasks_status(
+        self, tasks: Union[ScopedKey, List[ScopedKey]]
+    ) -> List[TaskStatusEnum]:
+        """Get the status of one or multiple `Task`s.
+
+        Parameters
+        ----------
+        tasks: Union[ScopedKey, List[ScopedKey]]
+            The `Task` or `Task`s to get the status of.
+
+        Returns
+        -------
+        List[TaskStatusEnum]
+            The status of each `Task` in the same order as given in `tasks`. If
+            a given `Task` doesn't exist, `None` will be returned in its place.
+
+        """
+        if isinstance(tasks, ScopedKey):
+            tasks = [tasks]
+        statuses = [self._get_task_status(t) for t in tasks]
+        return statuses
 
     def get_tasks_priority(
         self,
