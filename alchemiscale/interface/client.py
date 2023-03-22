@@ -280,12 +280,16 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     ) -> List[Optional[ScopedKey]]:
         """Set the status of one or multiple `Task`s.
 
+        Task status can be set to 'waiting' if currently 'error'.
+        Status can be set to 'invalid' or 'deleted' from any other status.
+
         Parameters
         ----------
         tasks: Union[ScopedKey, List[ScopedKey]]
             The `Task` or `Task`s to set the status of.
         status: TaskStatusEnum
-            The status to set the `Task`s to.
+            The status to set the `Task`s to. Can be one of
+            'waiting', 'invalid', or 'deleted'.
 
         Returns
         -------
