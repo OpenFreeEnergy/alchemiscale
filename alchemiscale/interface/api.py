@@ -256,8 +256,9 @@ def get_tasks(
         }
     else:
         raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"`return_as` takes 'list' or 'graph', not '{return_as}'")
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"`return_as` takes 'list' or 'graph', not '{return_as}'",
+        )
 
 
 @router.post("/networks/{network_scoped_key}/tasks/action")
@@ -309,7 +310,7 @@ async def set_task_status(
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot set status to '{status}', must be one of 'waiting', 'invalid', 'deleted'"
+            detail=f"Cannot set status to '{status}', must be one of 'waiting', 'invalid', 'deleted'",
         )
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
