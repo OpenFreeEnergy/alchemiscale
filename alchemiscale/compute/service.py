@@ -84,7 +84,7 @@ class SynchronousComputeService:
         heartbeat_frequency: int = 30,
         scopes: Optional[List[Scope]] = None,
         limit: int = 1,
-        loglevel='WARN',
+        loglevel="WARN",
     ):
         """Create a `SynchronousComputeService` instance.
 
@@ -150,7 +150,6 @@ class SynchronousComputeService:
 
         self.logger.addHandler(logging.StreamHandler())
 
-
     def _register(self):
         """Register this compute service with the compute API."""
         self.client.register(self.compute_service_id)
@@ -161,8 +160,8 @@ class SynchronousComputeService:
 
     def heartbeat(self):
         """Deliver a heartbeat to the compute API, indicating this service is still alive."""
-        ...
         self.client.heartbeat(self.compute_service_id)
+        self.logger.info("Updated heartbeat")
 
     def claim_tasks(self, count=1) -> List[Optional[ScopedKey]]:
         """Get a Task to execute from compute API.
@@ -180,6 +179,8 @@ class SynchronousComputeService:
         if len(taskhubs) == 0:
             return []
 
+        # claim tasks from taskhubs based on weight; keep going till we hit our
+        # total desired task count, or we run out of taskhubs to draw from
         while len(tasks) < count and len(taskhubs) > 0:
             # based on weights, choose taskhub to draw from
             taskhub: List[ScopedKey] = random.choices(
@@ -188,7 +189,9 @@ class SynchronousComputeService:
 
             # claim tasks from the taskhub
             claimed_tasks = self.client.claim_taskhub_tasks(
-                taskhub, compute_service_id=self.compute_service_id, count=count
+                taskhub,
+                compute_service_id=self.compute_service_id,
+                count=(count - len(tasks)),
             )
 
             # gather up claimed tasks, if present
@@ -254,7 +257,7 @@ class SynchronousComputeService:
             shared=shared,
             scratch_basedir=self.scratch_basedir,
             keep_scratch=self.keep_scratch,
-            raise_error=False
+            raise_error=False,
         )
 
         # push the result (or failure) back to the compute API
@@ -265,7 +268,9 @@ class SynchronousComputeService:
     def cycle(self, task_limit):
         if task_limit is not None:
             if self.counter >= task_limit:
-                self.logger.info("Performed %s tasks; beyond task limit %s", self.counter, task_limit)
+                self.logger.info(
+                    "Performed %s tasks; beyond task limit %s", self.counter, task_limit
+                )
                 return
 
         # claim tasks from the compute API
@@ -275,7 +280,9 @@ class SynchronousComputeService:
 
         # if no tasks claimed, sleep
         if all([task is None for task in tasks]):
-            self.logger.info("No tasks claimed; sleeping for %d seconds", self.sleep_interval)
+            self.logger.info(
+                "No tasks claimed; sleeping for %d seconds", self.sleep_interval
+            )
             time.sleep(self.sleep_interval)
             return
 
@@ -304,8 +311,9 @@ class SynchronousComputeService:
         # add ComputeServiceRegistration
         self.logger.info("Starting up service '%s'", self.name)
         self._register()
-        self.logger.info("Registered service with registration '%s'", 
-                         str(self.compute_service_id))
+        self.logger.info(
+            "Registered service with registration '%s'", str(self.compute_service_id)
+        )
 
         def scheduler_cycle():
             self.cycle(task_limit)
@@ -328,8 +336,10 @@ class SynchronousComputeService:
         finally:
             # remove ComputeServiceRegistration, drop all claims
             self._deregister()
-            self.logger.info("Deregistered service with registration '%s'", 
-                         str(self.compute_service_id))
+            self.logger.info(
+                "Deregistered service with registration '%s'",
+                str(self.compute_service_id),
+            )
 
     def stop(self):
         # Interrupt the scheduler (will finish if in the middle of an update or

@@ -1272,6 +1272,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         scope = transformation.scope
+        if "Transformation" not in transformation.qualname:
+            raise ValueError(
+                "`transformation` ScopedKey does not correspond to a `Transformation`"
+            )
+
+        if extends is not None and transformation.qualname != "Task":
+            raise ValueError("`extends` ScopedKey does not correspond to a `Task`")
+
         transformation_node = self._get_node(transformation)
 
         # create a new task for the supplied transformation

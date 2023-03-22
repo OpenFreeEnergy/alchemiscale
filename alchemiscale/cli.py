@@ -229,7 +229,9 @@ def cli():
     name="api",
     help="Start the user-facing API service",
 )
-@api_starting_params("ALCHEMISCALE_API_HOST", "ALCHEMISCALE_API_PORT", "ALCHEMISCALE_API_LOGLEVEL")
+@api_starting_params(
+    "ALCHEMISCALE_API_HOST", "ALCHEMISCALE_API_PORT", "ALCHEMISCALE_API_LOGLEVEL"
+)
 @db_params
 @s3os_params
 @jwt_params
@@ -269,17 +271,21 @@ def api(
 
     app.dependency_overrides[get_base_api_settings] = get_settings_override
 
-    start_api(app, workers, host["ALCHEMISCALE_API_HOST"], port["ALCHEMISCALE_API_PORT"])
+    start_api(
+        app, workers, host["ALCHEMISCALE_API_HOST"], port["ALCHEMISCALE_API_PORT"]
+    )
 
 
-@cli.group(help="Subcommands for the compute service")
+@cli.group(help="Subcommands for compute services")
 def compute():
     ...
 
 
 @compute.command(help="Start the compute API service.")
 @api_starting_params(
-    "ALCHEMISCALE_COMPUTE_API_HOST", "ALCHEMISCALE_COMPUTE_API_PORT", "ALCHEMISCALE_COMPUTE_API_LOGLEVEL"
+    "ALCHEMISCALE_COMPUTE_API_HOST",
+    "ALCHEMISCALE_COMPUTE_API_PORT",
+    "ALCHEMISCALE_COMPUTE_API_LOGLEVEL",
 )
 @db_params
 @s3os_params
@@ -317,25 +323,30 @@ def api(
 
     app.dependency_overrides[get_base_api_settings] = get_settings_override
 
-    start_api(app, workers, host["ALCHEMISCALE_COMPUTE_API_HOST"], port["ALCHEMISCALE_COMPUTE_API_PORT"])
+    start_api(
+        app,
+        workers,
+        host["ALCHEMISCALE_COMPUTE_API_HOST"],
+        port["ALCHEMISCALE_COMPUTE_API_PORT"],
+    )
 
 
 @compute.command(help="Start the synchronous compute service.")
 @click.option(
-        "--config-file", 
-        "-c",
-        type=click.File(),
-        help="YAML-based configuration file giving the settings for this service",
-        required=True
-        )
+    "--config-file",
+    "-c",
+    type=click.File(),
+    help="YAML-based configuration file giving the settings for this service",
+    required=True,
+)
 def synchronous(config_file):
     from alchemiscale.models import Scope
     from alchemiscale.compute.service import SynchronousComputeService
 
     params = yaml.load(config_file, Loader=yaml.Loader)
 
-    if 'scopes' in params:
-        params['scopes'] = [Scope.from_str(scope) for scope in params['scopes']]
+    if "scopes" in params:
+        params["scopes"] = [Scope.from_str(scope) for scope in params["scopes"]]
 
     service = SynchronousComputeService(**params)
 
