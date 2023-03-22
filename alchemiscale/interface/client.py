@@ -20,7 +20,7 @@ from ..base.client import (
     json_to_gufe,
 )
 from ..models import Scope, ScopedKey
-from ..storage.models import Task, ProtocolDAGResultRef
+from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
 from ..strategies import Strategy
 from ..security.models import CredentialedUserIdentity
 
@@ -262,6 +262,69 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         canceled_sks = self._post_resource(f"/networks/{network}/tasks/cancel", data)
 
         return [ScopedKey.from_str(i) if i is not None else None for i in canceled_sks]
+
+    def _set_task_status(
+        self, task: ScopedKey, status: TaskStatusEnum
+    ) -> Optional[ScopedKey]:
+        """Set the status of a `Task`."""
+        task_sk = self._post_resource(f"tasks/{task}/status", status.value)
+        return ScopedKey.from_str(task_sk) if task_sk is not None else None
+
+    def _get_task_status(self, task: ScopedKey) -> TaskStatusEnum:
+        """Get the status of a `Task`."""
+        status = self._get_resource(f"tasks/{task}/status")
+        return TaskStatusEnum(status)
+
+    def set_tasks_status(
+        self, tasks: Union[ScopedKey, List[ScopedKey]], status: TaskStatusEnum
+    ) -> List[Optional[ScopedKey]]:
+        """Set the status of one or multiple `Task`s.
+
+        Task status can be set to 'waiting' if currently 'error'.
+        Status can be set to 'invalid' or 'deleted' from any other status.
+
+        Parameters
+        ----------
+        tasks: Union[ScopedKey, List[ScopedKey]]
+            The `Task` or `Task`s to set the status of.
+        status: TaskStatusEnum
+            The status to set the `Task`s to. Can be one of
+            'waiting', 'invalid', or 'deleted'.
+
+        Returns
+        -------
+        List[Optional[ScopedKey]]
+            The ScopedKeys of the `Task`s that were updated, in the same order
+            as given in `tasks`. If a given `Task` doesn't exist, `None` will
+            be returned in its place.
+
+        """
+        if isinstance(tasks, ScopedKey):
+            tasks = [tasks]
+        task_sks = [self._set_task_status(t, status) for t in tasks]
+        return task_sks
+
+    def get_tasks_status(
+        self, tasks: Union[ScopedKey, List[ScopedKey]]
+    ) -> List[TaskStatusEnum]:
+        """Get the status of one or multiple `Task`s.
+
+        Parameters
+        ----------
+        tasks: Union[ScopedKey, List[ScopedKey]]
+            The `Task` or `Task`s to get the status of.
+
+        Returns
+        -------
+        List[TaskStatusEnum]
+            The status of each `Task` in the same order as given in `tasks`. If
+            a given `Task` doesn't exist, `None` will be returned in its place.
+
+        """
+        if isinstance(tasks, ScopedKey):
+            tasks = [tasks]
+        statuses = [self._get_task_status(t) for t in tasks]
+        return statuses
 
     def get_tasks_priority(
         self,
