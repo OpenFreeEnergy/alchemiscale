@@ -8,9 +8,10 @@ from gufe.tests.test_protocol import BrokenProtocol
 import networkx as nx
 
 from alchemiscale.models import ScopedKey
+from alchemiscale.storage.models import TaskStatusEnum
 from alchemiscale.interface import client
-
 from alchemiscale.tests.integration.interface.utils import get_user_settings_override
+from alchemiscale.interface.client import AlchemiscaleClientError
 
 
 class TestClient:
@@ -497,3 +498,84 @@ class TestClient:
 
         # TODO: can we mix in a success in here somewhere?
         # not possible with current BrokenProtocol, unfortunately
+
+    @pytest.mark.parametrize(
+        "status, should_raise",
+        [
+            (TaskStatusEnum.waiting, False),
+            (TaskStatusEnum.running, True),
+            (TaskStatusEnum.complete, True),
+            (TaskStatusEnum.error, True),
+            (TaskStatusEnum.invalid, False),
+            (TaskStatusEnum.deleted, False),
+        ],
+    )
+    def test_set_tasks_status(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+        uvicorn_server,
+        status,
+        should_raise,
+    ):
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        all_tasks = user_client.create_tasks(transformation_sk, count=5)
+
+        if should_raise:
+            with pytest.raises(AlchemiscaleClientError):
+                user_client.set_tasks_status(all_tasks, status)
+        else:
+            # set the status of a task
+            user_client.set_tasks_status(all_tasks, status)
+
+            # check that the status has been set
+            # note must be list on n4js side
+            statuses = n4js_preloaded.get_task_status(all_tasks)
+            assert all([s == status for s in statuses])
+
+    @pytest.mark.parametrize(
+        "status, should_raise",
+        [
+            (TaskStatusEnum.waiting, False),
+            (TaskStatusEnum.running, True),
+            (TaskStatusEnum.complete, True),
+            (TaskStatusEnum.error, True),
+            (TaskStatusEnum.invalid, False),
+            (TaskStatusEnum.deleted, False),
+        ],
+    )
+    def test_get_tasks_status(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+        uvicorn_server,
+        status,
+        should_raise,
+    ):
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        all_tasks = user_client.create_tasks(transformation_sk, count=5)
+
+        # set the status of a task
+        if should_raise:
+            with pytest.raises(AlchemiscaleClientError):
+                user_client.set_tasks_status(all_tasks, status)
+        else:
+            user_client.set_tasks_status(all_tasks, status)
+
+            # check that the status has been set
+            statuses = user_client.get_tasks_status(all_tasks)
+            assert all([s == status for s in statuses])

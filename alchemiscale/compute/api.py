@@ -255,41 +255,6 @@ def set_task_result(
     return result_sk
 
 
-@router.post("/tasks/{task_scoped_key}/status")
-async def set_task_status(
-    task_scoped_key,
-    status: str = Body(),
-    n4js: Neo4jStore = Depends(get_n4js_depends),
-    token: TokenData = Depends(get_token_data_depends),
-):
-    task_sk = ScopedKey.from_str(task_scoped_key)
-    validate_scopes(task_sk.scope, token)
-
-    status = TaskStatusEnum(status)
-    tasks_statused = n4js.set_task_status([task_sk], status)
-    return [str(t) if t is not None else None for t in tasks_statused][0]
-
-
-@router.get("/tasks/{task_scoped_key}/status")
-async def get_task_status(
-    task_scoped_key,
-    *,
-    n4js: Neo4jStore = Depends(get_n4js_depends),
-    token: TokenData = Depends(get_token_data_depends),
-):
-    task_sk = ScopedKey.from_str(task_scoped_key)
-    validate_scopes(task_sk.scope, token)
-
-    status = n4js.get_task_status([task_sk])
-
-    return status[0].value
-
-
-@router.get("/chemicalsystems")
-async def chemicalsystems():
-    return {"message": "nothing yet"}
-
-
 ### add router
 
 app.include_router(router)

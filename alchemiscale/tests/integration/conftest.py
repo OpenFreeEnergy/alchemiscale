@@ -27,7 +27,6 @@ from alchemiscale.models import Scope
 from alchemiscale.settings import Neo4jStoreSettings, S3ObjectStoreSettings
 from alchemiscale.storage import Neo4jStore, S3ObjectStore, get_s3os
 from alchemiscale.storage.models import ComputeServiceID
-from alchemiscale.protocols import FAHOpenmmNonEquilibriumCyclingProtocol
 
 
 NEO4J_PROCESS = {}

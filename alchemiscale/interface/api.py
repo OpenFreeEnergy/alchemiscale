@@ -33,7 +33,7 @@ from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ProtocolDAGResultRef
+from ..storage.models import ProtocolDAGResultRef, TaskStatusEnum
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedUserIdentity
@@ -255,7 +255,10 @@ def get_tasks(
             for sk, extends in task_sks.items()
         }
     else:
-        raise ValueError(f"`return_as` takes 'list' or 'graph', not '{return_as}'")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"`return_as` takes 'list' or 'graph', not '{return_as}'",
+        )
 
 
 @router.post("/networks/{network_scoped_key}/tasks/action")
@@ -290,6 +293,44 @@ def cancel_tasks(
     canceled_sks = n4js.cancel_tasks(tasks, taskhub_sk)
 
     return [str(sk) if sk is not None else None for sk in canceled_sks]
+
+
+@router.post("/tasks/{task_scoped_key}/status")
+async def set_task_status(
+    task_scoped_key,
+    status: str = Body(),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    status = TaskStatusEnum(status)
+    if status not in (
+        TaskStatusEnum.waiting,
+        TaskStatusEnum.invalid,
+        TaskStatusEnum.deleted,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot set status to '{status}', must be one of 'waiting', 'invalid', 'deleted'",
+        )
+    task_sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(task_sk.scope, token)
+    tasks_statused = n4js.set_task_status([task_sk], status)
+    return [str(t) if t is not None else None for t in tasks_statused][0]
+
+
+@router.get("/tasks/{task_scoped_key}/status")
+async def get_task_status(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    task_sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(task_sk.scope, token)
+
+    status = n4js.get_task_status([task_sk])
+
+    return status[0].value
 
 
 ### results
