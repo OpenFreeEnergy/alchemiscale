@@ -81,7 +81,7 @@ class SynchronousComputeService:
         scratch_basedir: os.PathLike,
         keep_scratch: bool = False,
         sleep_interval: int = 30,
-        heartbeat_frequency: int = 30,
+        heartbeat_interval: int = 30,
         scopes: Optional[List[Scope]] = None,
         limit: int = 1,
         loglevel="WARN",
@@ -109,7 +109,7 @@ class SynchronousComputeService:
             completion.
         sleep_interval
             Time in seconds to sleep if no Tasks claimed from compute API.
-        heartbeat_frequency
+        heartbeat_interval
             Frequency at which to send heartbeats to compute API.
         scopes
             Scopes to limit Task claiming to; defaults to all Scopes accessible
@@ -121,7 +121,7 @@ class SynchronousComputeService:
         self.api_url = api_url
         self.name = name
         self.sleep_interval = sleep_interval
-        self.heartbeat_frequency = heartbeat_frequency
+        self.heartbeat_interval = heartbeat_interval
         self.limit = limit
 
         self.client = AlchemiscaleComputeClient(api_url, identifier, key)
@@ -150,6 +150,8 @@ class SynchronousComputeService:
 
         self.logger.addHandler(logging.StreamHandler())
 
+        self._stop = False
+
     def _register(self):
         """Register this compute service with the compute API."""
         self.client.register(self.compute_service_id)
@@ -158,10 +160,18 @@ class SynchronousComputeService:
         """Deregister this compute service with the compute API."""
         self.client.deregister(self.compute_service_id)
 
-    def heartbeat(self):
+    def beat(self):
         """Deliver a heartbeat to the compute API, indicating this service is still alive."""
         self.client.heartbeat(self.compute_service_id)
         self.logger.info("Updated heartbeat")
+
+    def heartbeat(self):
+        """Start up the heartbeat, sleeping for `self.heartbeat_interval`"""
+        while True:
+            if self._stop:
+                break
+            self.beat()
+            time.sleep(self.heartbeat_interval)
 
     def claim_tasks(self, count=1) -> List[Optional[ScopedKey]]:
         """Get a Task to execute from compute API.
@@ -315,25 +325,29 @@ class SynchronousComputeService:
             "Registered service with registration '%s'", str(self.compute_service_id)
         )
 
-        def scheduler_cycle():
-            self.cycle(task_limit)
-            self.scheduler.enter(0, 1, scheduler_cycle)
-
-        def scheduler_heartbeat():
-            self.heartbeat()
-            self.scheduler.enter(self.heartbeat_frequency, 1, scheduler_heartbeat)
-
-        self.scheduler.enter(0, 1, scheduler_cycle)
-        self.scheduler.enter(0, 2, scheduler_heartbeat)
+        # start up heartbeat thread
+        self.heartbeat_thread = threading.Thread(target=self.heartbeat, daemon=True)
+        self.heartbeat_thread.run()
 
         try:
             self.logger.info("Starting main loop")
-            self.scheduler.run()
+            while True:
+                # check that heartbeat is still alive; if not, resurrect it
+                if not self.heartbeat_thread.is_alive():
+                    self.heartbeat_thread = threading.Thread(
+                        target=self.heartbeat, daemon=True
+                    )
+                    self.heartbeat_thread.run()
+
+                # perform main loop cycle
+                self.cycle(task_limit=task_limit)
         except KeyboardInterrupt:
             self.logger.info("Caught SIGINT/Keyboard interrupt.")
         except SleepInterrupted:
             self.logger.info("Service stopping.")
         finally:
+            self.heartbeat_thread.join()
+
             # remove ComputeServiceRegistration, drop all claims
             self._deregister()
             self.logger.info(
@@ -342,9 +356,8 @@ class SynchronousComputeService:
             )
 
     def stop(self):
-        # Interrupt the scheduler (will finish if in the middle of an update or
-        # something, but will cancel running calculations)
         self.int_sleep.interrupt()
+        self._stop = True
 
 
 class AsynchronousComputeService(SynchronousComputeService):
