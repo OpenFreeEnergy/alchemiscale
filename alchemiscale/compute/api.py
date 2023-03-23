@@ -60,7 +60,9 @@ async def expire_stale_compute_service_registrations() -> None:
     n4js = get_n4js(settings)
     while True:
         now = datetime.utcnow()
-        expire_delta = timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS)
+        expire_delta = timedelta(
+            seconds=settings.ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS
+        )
         expire_time = now - expire_delta
         n4js.expire_registrations(expire_time)
         asyncio.sleep(60)

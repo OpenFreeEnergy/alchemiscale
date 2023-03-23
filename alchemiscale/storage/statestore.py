@@ -804,12 +804,10 @@ class Neo4jStore(AlchemiscaleStateStore):
             tx.run(q)
 
     def expire_registrations(self, expire_time: datetime):
-        """Remove all registrations with last heartbeat prior to the given `expire_time`.
-
-        """
+        """Remove all registrations with last heartbeat prior to the given `expire_time`."""
         q = f"""
         MATCH (n:ComputeServiceRegistration)
-        WHERE n.heartbeat < localdatetime({expire_time})
+        WHERE n.heartbeat < localdatetime('{expire_time.isoformat()}')
 
         WITH n
 

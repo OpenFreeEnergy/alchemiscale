@@ -45,7 +45,9 @@ def get_settings_from_options(kwargs, settings_cls):
     return settings_cls(**update)
 
 
-def api_starting_params(envvar_host, envvar_port, envvar_loglevel, envvar_registration_expire_seconds):
+def api_starting_params(
+    envvar_host, envvar_port, envvar_loglevel, envvar_registration_expire_seconds
+):
     def inner(func):
         workers = click.option(
             "--workers", type=int, help="number of workers", default=1
