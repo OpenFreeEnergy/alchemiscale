@@ -45,7 +45,7 @@ def get_settings_from_options(kwargs, settings_cls):
     return settings_cls(**update)
 
 
-def api_starting_params(envvar_host, envvar_port, envvar_loglevel):
+def api_starting_params(envvar_host, envvar_port, envvar_loglevel, envvar_registration_expire_seconds):
     def inner(func):
         workers = click.option(
             "--workers", type=int, help="number of workers", default=1
@@ -72,7 +72,16 @@ def api_starting_params(envvar_host, envvar_port, envvar_loglevel):
             envvar=envvar_loglevel,
             **SETTINGS_OPTION_KWARGS,
         )
-        return workers(host(port(loglevel(func))))
+        registration_expire_seconds = click.option(
+            "--registration-expire-seconds",
+            type=int,
+            default=3600,
+            help="number of seconds since last heartbeat at which to expire a compute service registration",
+            envvar=envvar_registration_expire_seconds,
+            **SETTINGS_OPTION_KWARGS,
+        )
+
+        return workers(host(port(loglevel(registration_expire_seconds(func)))))
 
     return inner
 
@@ -286,12 +295,13 @@ def compute():
     "ALCHEMISCALE_COMPUTE_API_HOST",
     "ALCHEMISCALE_COMPUTE_API_PORT",
     "ALCHEMISCALE_COMPUTE_API_LOGLEVEL",
+    "ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS",
 )
 @db_params
 @s3os_params
 @jwt_params
 def api(
-    workers, host, port, loglevel,  # API
+    workers, host, port, loglevel, registration_expire_seconds, # API
     url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  #JWT
     access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
@@ -306,7 +316,7 @@ def api(
 
     def get_settings_override():
         # inject settings from CLI arguments
-        api_dict = host | port | loglevel
+        api_dict = host | port | loglevel | registration_expire_seconds
         jwt_dict = jwt_secret | jwt_expire_seconds | jwt_algorithm
         db_dict = url | user | password | dbname
         s3_dict = (

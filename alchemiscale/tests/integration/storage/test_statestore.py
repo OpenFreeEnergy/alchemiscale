@@ -334,6 +334,30 @@ class TestNeo4jStore(TestStateStore):
         assert csreg["registered"] == now
         assert csreg["heartbeat"] == tomorrow
 
+    def test_expire_registrations(self, n4js, compute_service_id):
+        now = datetime.utcnow()
+        yesterday = now - timedelta(days=1)
+        an_hour_ago = now - timedelta(hours=1)
+        registration = ComputeServiceRegistration(
+            identifier=compute_service_id, registered=yesterday, heartbeat=an_hour_ago
+        )
+
+        n4js.register_computeservice(registration)
+
+        # expire any compute service that had a heartbeat more than 30 mins ago
+        thirty_mins_ago = now - timedelta(minutes=30)
+
+        n4js.expire_registrations(expire_time=thirty_mins_ago)
+
+        csreg = n4js.graph.run(
+            f"""
+            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+            return csreg
+            """
+        ).to_subgraph()
+
+        assert csreg is None
+
     def test_create_task(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try generating task
         an = network_tyk2

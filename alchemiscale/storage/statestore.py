@@ -803,6 +803,24 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
+    def expire_registrations(self, expire_time: datetime):
+        """Remove all registrations with last heartbeat prior to the given `expire_time`.
+
+        """
+        q = f"""
+        MATCH (n:ComputeServiceRegistration)
+        WHERE n.heartbeat < localdatetime({expire_time})
+
+        WITH n
+
+        OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: 'running'}})
+        SET t.status = 'waiting'
+
+        DETACH DELETE n
+        """
+        with self.transaction() as tx:
+            tx.run(q)
+
     ## task hubs
 
     def create_taskhub(
