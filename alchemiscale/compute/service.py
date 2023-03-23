@@ -327,7 +327,7 @@ class SynchronousComputeService:
 
         # start up heartbeat thread
         self.heartbeat_thread = threading.Thread(target=self.heartbeat, daemon=True)
-        self.heartbeat_thread.run()
+        self.heartbeat_thread.start()
 
         try:
             self.logger.info("Starting main loop")
@@ -337,7 +337,7 @@ class SynchronousComputeService:
                     self.heartbeat_thread = threading.Thread(
                         target=self.heartbeat, daemon=True
                     )
-                    self.heartbeat_thread.run()
+                    self.heartbeat_thread.start()
 
                 # perform main loop cycle
                 self.cycle(task_limit=task_limit)
