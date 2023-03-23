@@ -27,7 +27,11 @@ from ..base.api import (
     _check_store_connectivity,
     gufe_to_json,
 )
-from ..settings import get_base_api_settings, get_compute_api_settings, ComputeAPISettings
+from ..settings import (
+    get_base_api_settings,
+    get_compute_api_settings,
+    ComputeAPISettings,
+)
 from ..storage.statestore import Neo4jStore, get_n4js
 from ..storage.objectstore import S3ObjectStore
 from ..storage.models import (

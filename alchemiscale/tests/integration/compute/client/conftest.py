@@ -43,7 +43,9 @@ def run_server(fastapi_app, settings):
 def uvicorn_server(compute_api):
     settings = get_compute_settings_override()
     with running_service(
-        run_server, port=settings.ALCHEMISCALE_COMPUTE_API_PORT, args=(compute_api, settings)
+        run_server,
+        port=settings.ALCHEMISCALE_COMPUTE_API_PORT,
+        args=(compute_api, settings),
     ):
         yield
 
