@@ -27,6 +27,8 @@ class TestSynchronousComputeService:
     def test_claim_tasks(self, n4js_preloaded, service):
         n4js: Neo4jStore = n4js_preloaded
 
+        service._register()
+
         task_sks: List[Optional[ScopedKey]] = service.claim_tasks(count=2)
 
         # should have 2 tasks

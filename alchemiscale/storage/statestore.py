@@ -1293,7 +1293,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 "`transformation` ScopedKey does not correspond to a `Transformation`"
             )
 
-        if extends is not None and transformation.qualname != "Task":
+        if extends is not None and extends.qualname != "Task":
             raise ValueError("`extends` ScopedKey does not correspond to a `Task`")
 
         transformation_node = self._get_node(transformation)

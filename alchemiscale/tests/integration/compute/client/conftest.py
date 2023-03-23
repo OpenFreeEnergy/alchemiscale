@@ -33,9 +33,9 @@ def compute_api(s3os_server):
 def run_server(fastapi_app, settings):
     uvicorn.run(
         fastapi_app,
-        host=settings.FA_COMPUTE_API_HOST,
-        port=settings.FA_COMPUTE_API_PORT,
-        log_level=settings.FA_COMPUTE_API_LOGLEVEL,
+        host=settings.ALCHEMISCALE_COMPUTE_API_HOST,
+        port=settings.ALCHEMISCALE_COMPUTE_API_PORT,
+        log_level=settings.ALCHEMISCALE_COMPUTE_API_LOGLEVEL,
     )
 
 
@@ -43,7 +43,7 @@ def run_server(fastapi_app, settings):
 def uvicorn_server(compute_api):
     settings = get_compute_settings_override()
     with running_service(
-        run_server, port=settings.FA_COMPUTE_API_PORT, args=(compute_api, settings)
+        run_server, port=settings.ALCHEMISCALE_COMPUTE_API_PORT, args=(compute_api, settings)
     ):
         yield
 

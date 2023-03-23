@@ -27,7 +27,7 @@ from ..base.api import (
     _check_store_connectivity,
     gufe_to_json,
 )
-from ..settings import get_base_api_settings, get_compute_api_settings
+from ..settings import get_base_api_settings, get_compute_api_settings, ComputeAPISettings
 from ..storage.statestore import Neo4jStore, get_n4js
 from ..storage.objectstore import S3ObjectStore
 from ..storage.models import (
@@ -48,24 +48,6 @@ from ..security.models import (
 app = FastAPI(title="AlchemiscaleComputeAPI")
 app.dependency_overrides[get_base_api_settings] = get_compute_api_settings
 app.include_router(base_router)
-
-
-# TODO:
-# - add periodic removal of task claims from compute services that are no longer alive
-#   - can be done with an asyncio.sleeping task added to event loop: https://stackoverflow.com/questions/67154839/fastapi-best-way-to-run-continuous-get-requests-in-the-background
-# - on startup,
-@app.on_event("startup")
-async def expire_stale_compute_service_registrations() -> None:
-    settings = get_compute_api_settings()
-    n4js = get_n4js(settings)
-    while True:
-        now = datetime.utcnow()
-        expire_delta = timedelta(
-            seconds=settings.ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS
-        )
-        expire_time = now - expire_delta
-        n4js.expire_registrations(expire_time)
-        asyncio.sleep(60)
 
 
 def get_cred_compute():
@@ -140,8 +122,17 @@ async def deregister_computeservice(
 async def heartbeat_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
 ):
     now = datetime.utcnow()
+
+    # expire any stale registrations, along with their claims
+    expire_delta = timedelta(
+        seconds=settings.ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS
+    )
+    expire_time = now - expire_delta
+    n4js.expire_registrations(expire_time)
+
     n4js.heartbeat_computeservice(compute_service_id, now)
 
     return compute_service_id

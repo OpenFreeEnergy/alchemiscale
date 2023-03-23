@@ -46,7 +46,7 @@ def get_settings_from_options(kwargs, settings_cls):
 
 
 def api_starting_params(
-    envvar_host, envvar_port, envvar_loglevel, envvar_registration_expire_seconds
+    envvar_host, envvar_port, envvar_loglevel
 ):
     def inner(func):
         workers = click.option(
@@ -74,16 +74,7 @@ def api_starting_params(
             envvar=envvar_loglevel,
             **SETTINGS_OPTION_KWARGS,
         )
-        registration_expire_seconds = click.option(
-            "--registration-expire-seconds",
-            type=int,
-            default=3600,
-            help="number of seconds since last heartbeat at which to expire a compute service registration",
-            envvar=envvar_registration_expire_seconds,
-            **SETTINGS_OPTION_KWARGS,
-        )
-
-        return workers(host(port(loglevel(registration_expire_seconds(func)))))
+        return workers(host(port(loglevel(func))))
 
     return inner
 
@@ -297,8 +288,15 @@ def compute():
     "ALCHEMISCALE_COMPUTE_API_HOST",
     "ALCHEMISCALE_COMPUTE_API_PORT",
     "ALCHEMISCALE_COMPUTE_API_LOGLEVEL",
-    "ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS",
 )
+@click.option(
+            "--registration-expire-seconds",
+            type=int,
+            default=3600,
+            help="number of seconds since last heartbeat at which to expire a compute service registration",
+            envvar="ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS",
+            **SETTINGS_OPTION_KWARGS,
+        )
 @db_params
 @s3os_params
 @jwt_params
