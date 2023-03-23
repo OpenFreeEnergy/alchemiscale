@@ -346,8 +346,6 @@ class SynchronousComputeService:
         except SleepInterrupted:
             self.logger.info("Service stopping.")
         finally:
-            self.heartbeat_thread.join()
-
             # remove ComputeServiceRegistration, drop all claims
             self._deregister()
             self.logger.info(
