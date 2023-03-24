@@ -30,7 +30,7 @@ class ComputeServiceRegistration(BaseModel):
     heartbeat: datetime
 
     def __repr__(self):  # pragma: no cover
-        return f"<ComputeServiceIdentity('{str(self)}')>"
+        return f"<ComputeServiceRegistration('{str(self)}')>"
 
     def __str__(self):
         return "-".join([self.identifier])
@@ -55,7 +55,7 @@ class ComputeServiceRegistration(BaseModel):
 
 
 class TaskProvenance(BaseModel):
-    computekey: ComputeServiceID
+    computeserviceid: ComputeServiceID
     datetime_start: datetime
     datetime_end: datetime
 

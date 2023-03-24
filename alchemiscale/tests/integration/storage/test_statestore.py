@@ -292,7 +292,7 @@ class TestNeo4jStore(TestStateStore):
         assert csreg["registered"] == now
         assert csreg["heartbeat"] == now
 
-    def test_deregister(self, n4js, compute_service_id):
+    def test_deregister_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
         registration = ComputeServiceRegistration(
             identifier=compute_service_id, registered=now, heartbeat=now
@@ -312,7 +312,7 @@ class TestNeo4jStore(TestStateStore):
 
         assert csreg is None
 
-    def test_heartbeat(self, n4js, compute_service_id):
+    def test_heartbeat_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
         registration = ComputeServiceRegistration(
             identifier=compute_service_id, registered=now, heartbeat=now
