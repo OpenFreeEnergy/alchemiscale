@@ -22,7 +22,7 @@ from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from .client import AlchemiscaleComputeClient
-from ..storage.models import Task, TaskHub, ComputeServiceID
+from ..storage.models import Task, TaskHub, ComputeServiceID, ObjectStoreRef
 from ..models import Scope, ScopedKey
 
 
@@ -235,18 +235,39 @@ class SynchronousComputeService:
         )
         return protocoldag, transformation, extends_protocoldagresult
 
+
+    def _paths_to_objectstorerefs(self, outputs, task, protocoldagresult):
+        if isinstance(outputs, dict):
+            return {key: self.paths_to_objectstorerefs(value, task, protocoldagresult) for key, value in outputs.items()}
+        elif isinstance(outputs, list):
+            return [self.paths_to_objectstorerefs(value, task, protocoldagresult) for value in outputs]
+        elif isinstance(outputs, Path):
+            return self.client.push_result_path(task, protocoldagresult, outputs)
+        else:
+            return outputs
+    
     def push_result(
         self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
     ) -> ScopedKey:
-        # TODO: this method should postprocess any paths,
-        # leaf nodes in DAG for blob results that should go to object store
+        
+        # for each terminal protocolunitresult, process Paths present
+        # push the file represented by each path to the object store, and replace
+        # the Path in the prototocolunitresult with an ObjectStoreRef
+        terminal_purs = protocoldagresult.terminal_protocol_unit_results
+        for terminal_pur in terminal_purs:
+            outputs = terminal_pur.outputs
+            processed_outputs = self._paths_to_objectstorerefs(outputs, task, protocoldagresult)
 
-        # TODO: ship paths to object store
+            # TODO: this is a little dirty; consider putting in a proper way to
+            # do this in gufe
+            terminal_pur._outputs = processed_outputs
 
         # finally, push ProtocolDAGResult
         sk: ScopedKey = self.client.set_task_result(task, protocoldagresult)
 
         return sk
+
+
 
     def execute(self, task: ScopedKey) -> ScopedKey:
         """Executes given Task.
@@ -383,29 +404,3 @@ class AsynchronousComputeService(SynchronousComputeService):
 
     def stop(self):
         self._stop = True
-
-
-class AlchemiscaleComputeService(AsynchronousComputeService):
-    """Folding@Home-based compute service.
-
-    This service is designed for production use with Folding@Home.
-
-    """
-
-    def __init__(self, object_store, fah_work_server):
-        self.scheduler = sched.scheduler(time.time, self.int_sleep)
-        self.loop = asyncio.get_event_loop()
-
-        self._stop = False
-
-    async def get_new_tasks(self):
-        ...
-
-    def start(self):
-        ...
-        while True:
-            if self._stop:
-                return
-
-    def stop(self):
-        ...

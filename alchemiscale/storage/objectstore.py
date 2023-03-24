@@ -141,16 +141,8 @@ class S3ObjectStore:
         For implementers: This should be blocking, even if the storage
         backend allows asynchronous storage.
         """
-        """
-        For implementers: This should be blocking, even if the storage
-        backend allows asynchronous storage.
-        """
         key = os.path.join(self.prefix, location)
-
-        with open(path, "rb") as f:
-            self.resource.Bucket(self.bucket).upload_fileobj(f, key)
-
-        b = self.resource.Bucket(self.bucket)
+        self.resource.Bucket(self.bucket).upload_file(path, key)
 
     def _exists(self, location) -> bool:
         from botocore.exceptions import ClientError
@@ -190,6 +182,53 @@ class S3ObjectStore:
         url = url.split("?")[0]
 
         return url
+
+    def push_result_artifact(
+        self,
+        protocoldagresult_key: GufeKey,
+        scope: Scope,
+    ) -> ProtocolDAGResultRef:
+        """Push given `ProtocolDAGResult` to this `ObjectStore`.
+
+        Parameters
+        ----------
+        protocoldagresult
+            ProtocolDAGResult to store.
+        scope
+            Scope to store ProtocolDAGResult under.
+
+        Returns
+        -------
+        ProtocolDAGResultRef
+            Reference to the serialized `ProtocolDAGResult` in the object store.
+
+        """
+        ok = protocoldagresult.ok()
+        route = "results" if ok else "failures"
+
+        # build `location` based on gufe key
+        location = os.path.join(
+            "protocoldagresult",
+            *scope.to_tuple(),
+            protocoldagresult.transformation_key,
+            route,
+            protocoldagresult.key,
+            "obj.json",
+        )
+
+        # TODO: add support for compute client-side compressed protocoldagresults
+        pdr_jb = json.dumps(
+            protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
+        ).encode("utf-8")
+        response = self._store_bytes(location, pdr_jb)
+
+        return ProtocolDAGResultRef(
+            location=location,
+            obj_key=protocoldagresult.key,
+            scope=scope,
+            ok=ok,
+        )
+
 
     def push_protocoldagresult(
         self,

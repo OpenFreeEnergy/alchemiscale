@@ -9,6 +9,7 @@ from typing import List, Tuple, Optional, Dict, Union
 import json
 from urllib.parse import urljoin
 from functools import wraps
+from pathlib import Path
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -96,6 +97,21 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     def set_task_result(
         self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
+    ) -> ScopedKey:
+        data = dict(
+            protocoldagresult=json.dumps(
+                protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
+            )
+        )
+
+        pdr_sk = self._post_resource(f"tasks/{task}/results", data)
+
+        return ScopedKey.from_dict(pdr_sk)
+
+    def push_result_path(
+        self, task: ScopedKey, 
+        protocoldagresult: ProtocolDAGResult,
+        path: Path
     ) -> ScopedKey:
         data = dict(
             protocoldagresult=json.dumps(
