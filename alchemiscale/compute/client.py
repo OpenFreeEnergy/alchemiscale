@@ -54,7 +54,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         return [Scope.from_str(s) for s in scopes]
 
     def query_taskhubs(
-        self, scopes: List[Scope], return_gufe=False, limit=None, skip=None
+        self, scopes: List[Scope], return_gufe=False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskHub]]:
         """Return all `TaskHub`s corresponding to given `Scope`."""
         if return_gufe:
@@ -64,7 +64,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
         for scope in scopes:
             params = dict(
-                return_gufe=return_gufe, limit=limit, skip=skip, **scope.dict()
+                return_gufe=return_gufe, **scope.dict()
             )
             if return_gufe:
                 taskhubs.update(self._query_resource("/taskhubs", params=params))

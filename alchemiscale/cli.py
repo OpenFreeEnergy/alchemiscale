@@ -290,7 +290,7 @@ def compute():
 @click.option(
     "--registration-expire-seconds",
     type=int,
-    default=3600,
+    default=1800,
     help="number of seconds since last heartbeat at which to expire a compute service registration",
     envvar="ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS",
     **SETTINGS_OPTION_KWARGS,

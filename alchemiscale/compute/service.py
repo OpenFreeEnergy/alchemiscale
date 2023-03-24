@@ -81,7 +81,7 @@ class SynchronousComputeService:
         scratch_basedir: os.PathLike,
         keep_scratch: bool = False,
         sleep_interval: int = 30,
-        heartbeat_interval: int = 30,
+        heartbeat_interval: int = 300,
         scopes: Optional[List[Scope]] = None,
         limit: int = 1,
         loglevel="WARN",
