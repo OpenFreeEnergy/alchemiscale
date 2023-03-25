@@ -264,8 +264,8 @@ class SynchronousComputeService:
         # execute the task; this looks the same whether the ProtocolDAG is a
         # success or failure
         shared_tmp = tempfile.TemporaryDirectory(
-                prefix=f"{str(protocoldag.key)}__",
-                dir=self.shared_basedir)
+            prefix=f"{str(protocoldag.key)}__", dir=self.shared_basedir
+        )
         shared = Path(shared_tmp.name)
 
         protocoldagresult = execute_DAG(
@@ -288,7 +288,9 @@ class SynchronousComputeService:
         if max_tasks is not None:
             if self._tasks_counter >= max_tasks:
                 self.logger.info(
-                    "Performed %s tasks; at or beyond max tasks = %s", self._tasks_counter, max_tasks 
+                    "Performed %s tasks; at or beyond max tasks = %s",
+                    self._tasks_counter,
+                    max_tasks,
                 )
                 self._stop = True
 
@@ -297,12 +299,13 @@ class SynchronousComputeService:
             run_time = time.time() - self._start_time
             if run_time >= max_time:
                 self.logger.info(
-                    "Ran for %s seconds; at or beyond max time = %s seconds", run_time, max_time
+                    "Ran for %s seconds; at or beyond max time = %s seconds",
+                    run_time,
+                    max_time,
                 )
                 self._stop = True
 
     def cycle(self, max_tasks, max_time):
-
         self._check_max_tasks(max_tasks)
         self._check_max_time(max_time)
 
@@ -338,9 +341,7 @@ class SynchronousComputeService:
         self._check_max_tasks(max_tasks)
         self._check_max_time(max_time)
 
-    def start(self, 
-              max_tasks: Optional[int] = None,
-              max_time: Optional[int] = None):
+    def start(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
         """Start the service.
 
         Limits to the maximum number of executed tasks or seconds to run for

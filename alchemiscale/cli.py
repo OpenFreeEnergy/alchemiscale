@@ -353,11 +353,13 @@ def synchronous(config_file):
 
     params = yaml.safe_load(config_file, Loader=yaml.Loader)
 
-    params_init = params['init']
-    params_start = params['start']
+    params_init = params["init"]
+    params_start = params["start"]
 
     if "scopes" in params_init:
-        params_init["scopes"] = [Scope.from_str(scope) for scope in params_init["scopes"]]
+        params_init["scopes"] = [
+            Scope.from_str(scope) for scope in params_init["scopes"]
+        ]
 
     service = SynchronousComputeService(**params_init)
 

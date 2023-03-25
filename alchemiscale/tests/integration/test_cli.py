@@ -149,19 +149,18 @@ def compute_api_args():
 def compute_service_config(compute_api_args):
     host, port, _ = compute_api_args
 
-    config = {'init': {
-        'api_url': f'http://{host}:{port}',
-        'identifier': 'test-compute-user',
-        'key': "test-comute-user-key",
-        'name': 'test-compute-service',
-        'shared_basedir': "./shared",
-        'scratch_basedir': "./scratch",
-        'loglevel': 'INFO'
+    config = {
+        "init": {
+            "api_url": f"http://{host}:{port}",
+            "identifier": "test-compute-user",
+            "key": "test-comute-user-key",
+            "name": "test-compute-service",
+            "shared_basedir": "./shared",
+            "scratch_basedir": "./scratch",
+            "loglevel": "INFO",
         },
-              'start': {
-                  'max_time': None
-                  }
-              }
+        "start": {"max_time": None},
+    }
 
     return config
 
@@ -172,23 +171,23 @@ def test_compute_api(n4js, s3os, compute_api_args):
     expected_ping = {"api": "AlchemiscaleComputeAPI"}
 
     runner = CliRunner()
-    with running_service(
-        runner.invoke, port, (cli, args)
-    ):
+    with running_service(runner.invoke, port, (cli, args)):
         response = requests.get(f"http://{host}:{port}/ping")
 
     assert response.status_code == 200
     assert response.json() == expected_ping
 
 
-def test_compute_synchronous(n4js_fresh, s3os, compute_api_args, compute_service_config, tmpdir):
+def test_compute_synchronous(
+    n4js_fresh, s3os, compute_api_args, compute_service_config, tmpdir
+):
     host, port, args = compute_api_args
     n4js = n4js_fresh
 
     # create compute identity; add all scope access
     identity = CredentialedComputeIdentity(
-        identifier=compute_service_config['init']['identifier'],
-        hashed_key=hash_key(compute_service_config['init']['key']),
+        identifier=compute_service_config["init"]["identifier"],
+        hashed_key=hash_key(compute_service_config["init"]["key"]),
     )
 
     n4js.create_credentialed_entity(identity)
@@ -196,21 +195,19 @@ def test_compute_synchronous(n4js_fresh, s3os, compute_api_args, compute_service
 
     # start up compute API
     runner = CliRunner()
-    with running_service(
-        runner.invoke, port, (cli, args)
-    ):
+    with running_service(runner.invoke, port, (cli, args)):
         # start up compute service
         with tmpdir.as_cwd():
             command = ["compute", "synchronous"]
-            opts = ["--config-file", 'config.yaml']
+            opts = ["--config-file", "config.yaml"]
 
-            with open('config.yaml', 'w') as f:
+            with open("config.yaml", "w") as f:
                 yaml.dump(compute_service_config, f)
-    
+
             multiprocessing.set_start_method("fork", force=True)
-            proc = multiprocessing.Process(target=runner.invoke, 
-                                           args=(cli, command + opts), 
-                                           daemon=True)
+            proc = multiprocessing.Process(
+                target=runner.invoke, args=(cli, command + opts), daemon=True
+            )
             proc.start()
 
             q = f"""
@@ -227,10 +224,11 @@ def test_compute_synchronous(n4js_fresh, s3os, compute_api_args, compute_service
                 else:
                     break
 
-            assert csreg['registered'] > datetime.utcnow() - timedelta(seconds=30)
+            assert csreg["registered"] > datetime.utcnow() - timedelta(seconds=30)
 
             proc.terminate()
             proc.join()
+
 
 @pytest.mark.parametrize(
     "cli_vars",
