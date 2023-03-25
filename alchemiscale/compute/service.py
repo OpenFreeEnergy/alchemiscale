@@ -15,6 +15,7 @@ import threading
 from typing import Union, Optional, List, Dict, Tuple
 from pathlib import Path
 from threading import Thread
+import tempfile
 
 import requests
 
@@ -79,11 +80,12 @@ class SynchronousComputeService:
         name: str,
         shared_basedir: os.PathLike,
         scratch_basedir: os.PathLike,
+        keep_shared: bool = False,
         keep_scratch: bool = False,
         sleep_interval: int = 30,
         heartbeat_interval: int = 300,
         scopes: Optional[List[Scope]] = None,
-        limit: int = 1,
+        claim_limit: int = 1,
         loglevel="WARN",
     ):
         """Create a `SynchronousComputeService` instance.
@@ -104,6 +106,9 @@ class SynchronousComputeService:
             Filesystem path to use for `ProtocolDAG` `shared` space.
         scratch_basedir
             Filesystem path to use for `ProtocolUnit` `scratch` space.
+        keep_shared
+            If True, don't remove shared directories for `ProtocolDAG`s after
+            completion.
         keep_scratch
             If True, don't remove scratch directories for `ProtocolUnit`s after
             completion.
@@ -114,7 +119,7 @@ class SynchronousComputeService:
         scopes
             Scopes to limit Task claiming to; defaults to all Scopes accessible
             by compute identity.
-        limit
+        claim_limit
             Maximum number of Tasks to claim at a time from a TaskHub.
 
         """
@@ -122,7 +127,7 @@ class SynchronousComputeService:
         self.name = name
         self.sleep_interval = sleep_interval
         self.heartbeat_interval = heartbeat_interval
-        self.limit = limit
+        self.claim_limit = claim_limit
 
         self.client = AlchemiscaleComputeClient(api_url, identifier, key)
 
@@ -133,14 +138,13 @@ class SynchronousComputeService:
 
         self.shared_basedir = Path(shared_basedir)
         self.shared_basedir.mkdir(exist_ok=True)
+        self.keep_shared = keep_shared
 
         self.scratch_basedir = Path(scratch_basedir)
         self.scratch_basedir.mkdir(exist_ok=True)
         self.keep_scratch = keep_scratch
 
         self.scheduler = sched.scheduler(time.monotonic, time.sleep)
-
-        self.counter = 0
 
         self.compute_service_id = ComputeServiceID(f"{self.name}-{uuid4()}")
 
@@ -259,8 +263,10 @@ class SynchronousComputeService:
 
         # execute the task; this looks the same whether the ProtocolDAG is a
         # success or failure
-        shared = self.shared_basedir / str(protocoldag.key) / str(self.counter)
-        shared.mkdir(parents=True)
+        shared_tmp = tempfile.TemporaryDirectory(
+                prefix=f"{str(protocoldag.key)}__",
+                dir=self.shared_basedir)
+        shared = Path(shared_tmp.name)
 
         protocoldagresult = execute_DAG(
             protocoldag,
@@ -270,22 +276,39 @@ class SynchronousComputeService:
             raise_error=False,
         )
 
+        if not self.keep_shared:
+            shared_tmp.cleanup()
+
         # push the result (or failure) back to the compute API
         result_sk = self.push_result(task, protocoldagresult)
 
         return result_sk
 
-    def cycle(self, task_limit):
-        if task_limit is not None:
-            if self.counter >= task_limit:
+    def _check_max_tasks(self, max_tasks):
+        if max_tasks is not None:
+            if self._tasks_counter >= max_tasks:
                 self.logger.info(
-                    "Performed %s tasks; beyond task limit %s", self.counter, task_limit
+                    "Performed %s tasks; at or beyond max tasks = %s", self._tasks_counter, max_tasks 
                 )
-                return
+                self._stop = True
+
+    def _check_max_time(self, max_time):
+        if max_time is not None:
+            run_time = time.time() - self._start_time
+            if run_time >= max_time:
+                self.logger.info(
+                    "Ran for %s seconds; at or beyond max time = %s seconds", run_time, max_time
+                )
+                self._stop = True
+
+    def cycle(self, max_tasks, max_time):
+
+        self._check_max_tasks(max_tasks)
+        self._check_max_time(max_time)
 
         # claim tasks from the compute API
         self.logger.info("Claiming tasks")
-        tasks: List[ScopedKey] = self.claim_tasks(self.limit)
+        tasks: List[ScopedKey] = self.claim_tasks(self.claim_limit)
         self.logger.info("Claimed %d tasks", len([t for t in tasks if t is not None]))
 
         # if no tasks claimed, sleep
@@ -306,16 +329,32 @@ class SynchronousComputeService:
             self.logger.info("Executing task '%s'...", task)
             self.execute(task)
             self.logger.info("Completed task '%s'", task)
-            self.counter += 1
+            self._tasks_counter += 1
 
-    def start(self, task_limit: Optional[int] = None):
+            # stop checks
+            self._check_max_tasks(max_tasks)
+            self._check_max_time(max_time)
+
+        self._check_max_tasks(max_tasks)
+        self._check_max_time(max_time)
+
+    def start(self, 
+              max_tasks: Optional[int] = None,
+              max_time: Optional[int] = None):
         """Start the service.
+
+        Limits to the maximum number of executed tasks or seconds to run for
+        can be set. The first maximum to be hit will trigger the service to
+        exit.
 
         Parameters
         ----------
-        task_limit
-            Number of Tasks to complete before exiting.
-            If `None`, the service will continue until told to stop.
+        max_tasks
+            Max number of Tasks to execute before exiting.
+            If `None`, the service will have no task limit.
+        max_time
+            Max number of seconds to run before exiting.
+            If `None`, the service will have no time limit.
 
         """
         # add ComputeServiceRegistration
@@ -329,9 +368,13 @@ class SynchronousComputeService:
         self.heartbeat_thread = threading.Thread(target=self.heartbeat, daemon=True)
         self.heartbeat_thread.start()
 
+        # stop conditions will use these
+        self._tasks_counter = 0
+        self._start_time = time.time()
+
         try:
             self.logger.info("Starting main loop")
-            while True:
+            while not self._stop:
                 # check that heartbeat is still alive; if not, resurrect it
                 if not self.heartbeat_thread.is_alive():
                     self.heartbeat_thread = threading.Thread(
@@ -340,7 +383,7 @@ class SynchronousComputeService:
                     self.heartbeat_thread.start()
 
                 # perform main loop cycle
-                self.cycle(task_limit=task_limit)
+                self.cycle(max_tasks, max_time)
         except KeyboardInterrupt:
             self.logger.info("Caught SIGINT/Keyboard interrupt.")
         except SleepInterrupted:
@@ -383,29 +426,3 @@ class AsynchronousComputeService(SynchronousComputeService):
 
     def stop(self):
         self._stop = True
-
-
-class AlchemiscaleComputeService(AsynchronousComputeService):
-    """Folding@Home-based compute service.
-
-    This service is designed for production use with Folding@Home.
-
-    """
-
-    def __init__(self, object_store, fah_work_server):
-        self.scheduler = sched.scheduler(time.time, self.int_sleep)
-        self.loop = asyncio.get_event_loop()
-
-        self._stop = False
-
-    async def get_new_tasks(self):
-        ...
-
-    def start(self):
-        ...
-        while True:
-            if self._stop:
-                return
-
-    def stop(self):
-        ...

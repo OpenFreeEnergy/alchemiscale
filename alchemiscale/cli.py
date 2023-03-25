@@ -353,10 +353,13 @@ def synchronous(config_file):
 
     params = yaml.safe_load(config_file, Loader=yaml.Loader)
 
-    if "scopes" in params:
-        params["scopes"] = [Scope.from_str(scope) for scope in params["scopes"]]
+    params_init = params['init']
+    params_start = params['start']
 
-    service = SynchronousComputeService(**params)
+    if "scopes" in params_init:
+        params_init["scopes"] = [Scope.from_str(scope) for scope in params_init["scopes"]]
+
+    service = SynchronousComputeService(**params_init)
 
     # add signal handling
     for signame in {"SIGHUP", "SIGINT", "SIGTERM"}:
@@ -368,7 +371,7 @@ def synchronous(config_file):
         signal.signal(getattr(signal, signame), stop)
 
     try:
-        service.start()
+        service.start(**params_start)
     except KeyboardInterrupt:
         pass
 

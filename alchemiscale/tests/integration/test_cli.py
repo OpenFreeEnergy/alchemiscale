@@ -1,9 +1,14 @@
 import pytest
 from click.testing import CliRunner
 
+import time
 import contextlib
 import os
 import traceback
+import multiprocessing
+from datetime import datetime, timedelta
+
+import yaml
 
 import requests
 from fastapi import FastAPI
@@ -106,7 +111,8 @@ def test_api(n4js, s3os):
     assert response.json() == expected_ping
 
 
-def test_compute_api(n4js, s3os):
+@pytest.fixture
+def compute_api_args():
     workers = 2
     host = "127.0.0.1"
     port = 50100
@@ -136,17 +142,95 @@ def test_compute_api(n4js, s3os):
     ]
     jwt_opts = []  # leaving empty, we have default behavior for these
 
+    return host, port, (command + api_opts + db_opts + s3_opts + jwt_opts)
+
+
+@pytest.fixture
+def compute_service_config(compute_api_args):
+    host, port, _ = compute_api_args
+
+    config = {'init': {
+        'api_url': f'http://{host}:{port}',
+        'identifier': 'test-compute-user',
+        'key': "test-comute-user-key",
+        'name': 'test-compute-service',
+        'shared_basedir': "./shared",
+        'scratch_basedir': "./scratch",
+        'loglevel': 'INFO'
+        },
+              'start': {
+                  'max_time': None
+                  }
+              }
+
+    return config
+
+
+def test_compute_api(n4js, s3os, compute_api_args):
+    host, port, args = compute_api_args
+
     expected_ping = {"api": "AlchemiscaleComputeAPI"}
 
     runner = CliRunner()
     with running_service(
-        runner.invoke, port, (cli, command + api_opts + db_opts + s3_opts + jwt_opts)
+        runner.invoke, port, (cli, args)
     ):
         response = requests.get(f"http://{host}:{port}/ping")
 
     assert response.status_code == 200
     assert response.json() == expected_ping
 
+
+def test_compute_synchronous(n4js_fresh, s3os, compute_api_args, compute_service_config, tmpdir):
+    host, port, args = compute_api_args
+    n4js = n4js_fresh
+
+    # create compute identity; add all scope access
+    identity = CredentialedComputeIdentity(
+        identifier=compute_service_config['init']['identifier'],
+        hashed_key=hash_key(compute_service_config['init']['key']),
+    )
+
+    n4js.create_credentialed_entity(identity)
+    n4js.add_scope(identity.identifier, CredentialedComputeIdentity, Scope())
+
+    # start up compute API
+    runner = CliRunner()
+    with running_service(
+        runner.invoke, port, (cli, args)
+    ):
+        # start up compute service
+        with tmpdir.as_cwd():
+            command = ["compute", "synchronous"]
+            opts = ["--config-file", 'config.yaml']
+
+            with open('config.yaml', 'w') as f:
+                yaml.dump(compute_service_config, f)
+    
+            multiprocessing.set_start_method("fork", force=True)
+            proc = multiprocessing.Process(target=runner.invoke, 
+                                           args=(cli, command + opts), 
+                                           daemon=True)
+            proc.start()
+
+            q = f"""
+            match (csreg:ComputeServiceRegistration)
+            where csreg.identifier =~ "{compute_service_config['init']['name']}.*"
+            return csreg
+            """
+            # try 5 times to be safe; depends on running host as to how fast
+            # process comes up
+            for i in range(5):
+                csreg = n4js.graph.run(q).to_subgraph()
+                if csreg is None:
+                    time.sleep(1)
+                else:
+                    break
+
+            assert csreg['registered'] > datetime.utcnow() - timedelta(seconds=30)
+
+            proc.terminate()
+            proc.join()
 
 @pytest.mark.parametrize(
     "cli_vars",
@@ -183,7 +267,8 @@ def test_get_settings_from_options(cli_vars):
         assert expected[key] == settings_dict[key]
 
 
-def test_database_init(n4js):
+def test_database_init(n4js_fresh):
+    n4js = n4js_fresh
     # ensure the database is empty
     n4js.graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
 
