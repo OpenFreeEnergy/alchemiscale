@@ -305,7 +305,7 @@ class SynchronousComputeService:
                 )
                 self._stop = True
 
-    def cycle(self, max_tasks, max_time):
+    def cycle(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
         self._check_max_tasks(max_tasks)
         self._check_max_time(max_time)
 
@@ -332,7 +332,9 @@ class SynchronousComputeService:
             self.logger.info("Executing task '%s'...", task)
             self.execute(task)
             self.logger.info("Completed task '%s'", task)
-            self._tasks_counter += 1
+
+            if max_tasks is not None:
+                self._tasks_counter += 1
 
             # stop checks
             self._check_max_tasks(max_tasks)
