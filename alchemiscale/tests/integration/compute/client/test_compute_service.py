@@ -27,7 +27,7 @@ class TestSynchronousComputeService:
                 shared_basedir=Path("shared").absolute(),
                 scratch_basedir=Path("scratch").absolute(),
                 heartbeat_interval=1,
-                sleep_interval=1
+                sleep_interval=1,
             )
 
     def test_heartbeat(self, n4js_preloaded, service):
@@ -40,7 +40,7 @@ class TestSynchronousComputeService:
         # start up heartbeat thread
         heartbeat_thread = threading.Thread(target=service.heartbeat, daemon=True)
         heartbeat_thread.start()
-        
+
         # give time for a heartbeat
         time.sleep(2)
 
@@ -66,13 +66,15 @@ class TestSynchronousComputeService:
         # should have 2 tasks
         assert len(task_sks) == 2
 
-        subgraph = n4js.graph.run(f"""
+        subgraph = n4js.graph.run(
+            f"""
         match (csreg:ComputeServiceRegistration {{identifier: '{service.compute_service_id}'}}),
               (csreg)-[:CLAIMS]->(t:Task)
         return csreg, t
-        """).to_subgraph()
+        """
+        ).to_subgraph()
 
-        assert len([node for node in subgraph.nodes if 'Task' in node.labels]) == 2
+        assert len([node for node in subgraph.nodes if "Task" in node.labels]) == 2
 
     def test_task_to_protocoldag(
         self, n4js_preloaded, service, network_tyk2, scope_test
@@ -132,12 +134,14 @@ class TestSynchronousComputeService:
         # postconditions
         protocoldagresultref = n4js.graph.run(q).to_subgraph()
         assert protocoldagresultref is not None
-        assert protocoldagresultref['ok'] == True
+        assert protocoldagresultref["ok"] == True
 
-        task = n4js.graph.run("""
+        task = n4js.graph.run(
+            """
         match (t:Task {status: 'complete'})
         return t
-        """).to_subgraph()
+        """
+        ).to_subgraph()
 
         assert task is not None
 
@@ -154,7 +158,7 @@ class TestSynchronousComputeService:
         # start up service in a thread; will register itself
         service_thread = threading.Thread(target=service.start, daemon=True)
         service_thread.start()
-        
+
         # give time for execution
         time.sleep(2)
 
@@ -173,10 +177,12 @@ class TestSynchronousComputeService:
             else:
                 break
 
-        task = n4js.graph.run("""
+        task = n4js.graph.run(
+            """
         match (t:Task {status: 'complete'})
         return t
-        """).to_subgraph()
+        """
+        ).to_subgraph()
 
         assert task is not None
 
@@ -199,4 +205,4 @@ class TestSynchronousComputeService:
 
     def test_kwarg_scopes(self):
         # TODO: add test here with alternative settings to `service` fixture
-        scope = Scope('totally', 'different', 'scope')
+        scope = Scope("totally", "different", "scope")
