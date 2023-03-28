@@ -117,7 +117,9 @@ async def deregister_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    compute_service_id_ = n4js.deregister_computeservice(ComputeServiceID(compute_service_id))
+    compute_service_id_ = n4js.deregister_computeservice(
+        ComputeServiceID(compute_service_id)
+    )
 
     return compute_service_id_
 

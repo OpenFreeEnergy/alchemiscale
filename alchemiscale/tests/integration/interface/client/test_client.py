@@ -252,7 +252,6 @@ class TestClient:
 
     @staticmethod
     def _execute_tasks(tasks, n4js, s3os_server):
-
         shared = Path("shared").absolute()
         shared.mkdir()
         scratch_basedir = Path("scratch").absolute()
@@ -274,7 +273,12 @@ class TestClient:
                 name=str(task_sk),
             )
 
-            protocoldagresult = execute_DAG(protocoldag, shared=shared, scratch_basedir=scratch_basedir, raise_error=False)
+            protocoldagresult = execute_DAG(
+                protocoldag,
+                shared=shared,
+                scratch_basedir=scratch_basedir,
+                raise_error=False,
+            )
 
             assert protocoldagresult.transformation_key == transformation.key
             if extends_protocoldagresult:

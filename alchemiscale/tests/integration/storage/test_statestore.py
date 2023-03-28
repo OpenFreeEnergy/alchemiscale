@@ -1030,7 +1030,9 @@ class TestNeo4jStore(TestStateStore):
             scratch_basedir = Path("scratch").absolute()
             scratch_basedir.mkdir()
 
-            protocoldagresult = execute_DAG(protocoldag, shared=shared, scratch_basedir=scratch_basedir)
+            protocoldagresult = execute_DAG(
+                protocoldag, shared=shared, scratch_basedir=scratch_basedir
+            )
 
         pdr_ref = ProtocolDAGResultRef(
             scope=task_sk.scope, obj_key=protocoldagresult.key, ok=True

@@ -831,7 +831,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             identities = set()
             for rec in res:
-                identities.add(rec['ident'])
+                identities.add(rec["ident"])
 
         return list(identities)
 

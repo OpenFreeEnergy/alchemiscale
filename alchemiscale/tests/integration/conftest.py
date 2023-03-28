@@ -282,7 +282,9 @@ def protocoldagresults(tmpdir_factory, transformation):
             scratch_basedir = Path("scratch").absolute()
             scratch_basedir.mkdir()
 
-            protocoldagresult = execute_DAG(protocoldag, shared=shared, scratch_basedir=scratch_basedir)
+            protocoldagresult = execute_DAG(
+                protocoldag, shared=shared, scratch_basedir=scratch_basedir
+            )
 
         pdrs.append(protocoldagresult)
     return pdrs
@@ -323,7 +325,12 @@ def protocoldagresults_failure(tmpdir_factory, transformation_failure):
             scratch_basedir = Path("scratch").absolute()
             scratch_basedir.mkdir()
 
-            protocoldagresult = execute_DAG(protocoldag, shared=shared, scratch_basedir=scratch_basedir, raise_error=False)
+            protocoldagresult = execute_DAG(
+                protocoldag,
+                shared=shared,
+                scratch_basedir=scratch_basedir,
+                raise_error=False,
+            )
 
         pdrs.append(protocoldagresult)
     return pdrs
