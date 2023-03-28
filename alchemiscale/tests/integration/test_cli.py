@@ -215,9 +215,7 @@ def test_compute_synchronous(
             where csreg.identifier =~ "{compute_service_config['init']['name']}.*"
             return csreg
             """
-            # try 5 times to be safe; depends on running host as to how fast
-            # process comes up
-            for i in range(5):
+            while True:
                 csreg = n4js.graph.run(q).to_subgraph()
                 if csreg is None:
                     time.sleep(1)
@@ -268,7 +266,7 @@ def test_get_settings_from_options(cli_vars):
 def test_database_init(n4js_fresh):
     n4js = n4js_fresh
     # ensure the database is empty
-    n4js.graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
+    n4js.reset()
 
     with pytest.raises(Neo4JStoreError):
         n4js.check()

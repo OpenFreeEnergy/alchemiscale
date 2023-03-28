@@ -107,9 +107,9 @@ async def register_computeservice(
         identifier=compute_service_id, registered=now, heartbeat=now
     )
 
-    n4js.register_computeservice(csreg)
+    compute_service_id_ = n4js.register_computeservice(csreg)
 
-    return compute_service_id
+    return compute_service_id_
 
 
 @router.post("/computeservice/{compute_service_id}/deregister")
@@ -117,9 +117,9 @@ async def deregister_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    n4js.deregister_computeservice(ComputeServiceID(compute_service_id))
+    compute_service_id_ = n4js.deregister_computeservice(ComputeServiceID(compute_service_id))
 
-    return compute_service_id
+    return compute_service_id_
 
 
 @router.post("/computeservice/{compute_service_id}/heartbeat")
@@ -137,9 +137,9 @@ async def heartbeat_computeservice(
     expire_time = now - expire_delta
     n4js.expire_registrations(expire_time)
 
-    n4js.heartbeat_computeservice(compute_service_id, now)
+    compute_service_id_ = n4js.heartbeat_computeservice(compute_service_id, now)
 
-    return compute_service_id
+    return compute_service_id_
 
 
 @router.get("/taskhubs")

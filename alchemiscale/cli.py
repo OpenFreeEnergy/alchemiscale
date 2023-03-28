@@ -351,10 +351,10 @@ def synchronous(config_file):
     from alchemiscale.models import Scope
     from alchemiscale.compute.service import SynchronousComputeService
 
-    params = yaml.safe_load(config_file, Loader=yaml.Loader)
+    params = yaml.safe_load(config_file)
 
-    params_init = params["init"]
-    params_start = params["start"]
+    params_init = params.get("init", {})
+    params_start = params.get("start", {})
 
     if "scopes" in params_init:
         params_init["scopes"] = [

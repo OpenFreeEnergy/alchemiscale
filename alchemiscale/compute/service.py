@@ -331,7 +331,7 @@ class SynchronousComputeService:
             # execute each task
             self.logger.info("Executing task '%s'...", task)
             self.execute(task)
-            self.logger.info("Completed task '%s'", task)
+            self.logger.info("Finished task '%s'", task)
 
             if max_tasks is not None:
                 self._tasks_counter += 1

@@ -767,6 +767,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                 primary_key="identifier",
             )
 
+        return compute_service_registration.identifier
+
     def deregister_computeservice(self, compute_service_id: ComputeServiceID):
         """Remove the registration for the given ComputeServiceID from the
         state store.
@@ -790,6 +792,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
+        return compute_service_id
+
     def heartbeat_computeservice(
         self, compute_service_id: ComputeServiceID, heartbeat: datetime
     ):
@@ -803,6 +807,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
+        return compute_service_id
+
     def expire_registrations(self, expire_time: datetime):
         """Remove all registrations with last heartbeat prior to the given `expire_time`."""
         q = f"""
@@ -814,10 +820,20 @@ class Neo4jStore(AlchemiscaleStateStore):
         OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: 'running'}})
         SET t.status = 'waiting'
 
+        WITH n, n.identifier as ident
+
         DETACH DELETE n
+
+        RETURN ident
         """
         with self.transaction() as tx:
-            tx.run(q)
+            res = tx.run(q)
+
+            identities = set()
+            for rec in res:
+                identities.add(rec['ident'])
+
+        return list(identities)
 
     ## task hubs
 

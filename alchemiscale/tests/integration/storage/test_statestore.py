@@ -347,7 +347,7 @@ class TestNeo4jStore(TestStateStore):
         # expire any compute service that had a heartbeat more than 30 mins ago
         thirty_mins_ago = now - timedelta(minutes=30)
 
-        n4js.expire_registrations(expire_time=thirty_mins_ago)
+        identities = n4js.expire_registrations(expire_time=thirty_mins_ago)
 
         csreg = n4js.graph.run(
             f"""
@@ -357,6 +357,7 @@ class TestNeo4jStore(TestStateStore):
         ).to_subgraph()
 
         assert csreg is None
+        assert compute_service_id in identities
 
     def test_create_task(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try generating task
@@ -1024,7 +1025,12 @@ class TestNeo4jStore(TestStateStore):
 
         # execute the task
         with tmpdir.as_cwd():
-            protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
+            shared = Path("shared").absolute()
+            shared.mkdir()
+            scratch_basedir = Path("scratch").absolute()
+            scratch_basedir.mkdir()
+
+            protocoldagresult = execute_DAG(protocoldag, shared=shared, scratch_basedir=scratch_basedir)
 
         pdr_ref = ProtocolDAGResultRef(
             scope=task_sk.scope, obj_key=protocoldagresult.key, ok=True
