@@ -198,7 +198,7 @@ class SynchronousComputeService:
         while len(tasks) < count and len(taskhubs) > 0:
             # based on weights, choose taskhub to draw from
             taskhub: List[ScopedKey] = random.choices(
-                list(taskhubs.keys()), weights=[tq.weight for tq in taskhubs.values()]
+                list(taskhubs.keys()), weights=[th.weight for th in taskhubs.values()]
             )[0]
 
             # claim tasks from the taskhub
