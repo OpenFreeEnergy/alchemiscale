@@ -7,13 +7,19 @@ Client for interacting with user-facing API. --- :mod:`alchemiscale.interface.cl
 
 from typing import Union, List, Dict, Optional, Tuple
 import json
-from rich.tree import Tree
+
 
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
+
+from rich.console import Console
+from rich.tree import Tree
+from rich.panel import Panel
+
+from collections import Counter
 
 from ..base.client import (
     AlchemiscaleBaseClient,
@@ -203,38 +209,77 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         transformation = self._get_resource(f"tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
 
-    def _create_node_tree(self, tree, nodes):
-        for node in nodes:
-            if node["status"] == TaskStatusEnum.complete:
-                tree.add(f"[bold green] {node} {node['status']}")
-            elif node["status"] == TaskStatusEnum.waiting:
-                tree.add(f"[bold blue] {node} {node['status']}")
-            elif node["status"] == TaskStatusEnum.running:
-                tree.add(f"[bold orange] {node} {node['status']}")
-            elif node["status"] == TaskStatusEnum.error:
-                tree.add(f"[bold red] {node} {node['status']}")
-            elif node["status"] == TaskStatusEnum.invalid:
-                tree.add(f"[bold magenta] {node} {node['status']}")
-            elif node["status"] == TaskStatusEnum.deleted:
-                tree.add(f"[bold grey] {node} {node['status']}")
+    def _create_node_tree(self, tree, g):
+        for node in g.nodes:
+            stat = g.nodes[node]["status"]
+            if stat == TaskStatusEnum.complete:
+                tree.add(f"[bold green] {node} : {stat.value}")
+            elif stat == TaskStatusEnum.waiting:
+                tree.add(f"[bold blue] {node} : {stat.value}")
+            elif stat == TaskStatusEnum.running:
+                tree.add(f"[bold orange3] {node} : {stat.value}")
+            elif stat == TaskStatusEnum.error:
+                tree.add(f"[bold red] {node} : {stat.value}")
+            elif stat == TaskStatusEnum.invalid:
+                tree.add(f"[bold magenta1] {node} : {stat.value}")
+            elif stat == TaskStatusEnum.deleted:
+                tree.add(f"[bold purple] {node} : {stat.value}")
             else:
                 pass
 
     def get_transformation_status(
         self, transformation: ScopedKey, visualize: Optional[bool] = True
     ) -> bool:
-        """Return the status of the given Transformation."""
+        """Return the status of the given Transformation.
+        If visualize is True, a tree of the Tasks in the Transformation will be
+        printed to the console.
+
+        """
         g = self.get_transformation_tasks(transformation, return_as="graph")
         all_tasks = list(g.nodes)
         statuses = self.get_tasks_status(all_tasks)
+        stat_dict = {}
         for stat, task in zip(statuses, all_tasks):
             g.nodes[task]["status"] = stat
+            stat_dict[task] = stat
+        # check if everything is finished
+        complete = all([i == TaskStatusEnum.complete for i in statuses])
         if visualize:
-            tree = Tree("Task Tree")
+            value_counts = Counter(stat_dict.values())
+            console = Console(highlight=True)
+            console.print(
+                f"[bold yellow]Alchemiscale Task Status for transformation: {transformation}\n"
+            )
+            console.print(
+                f"[bold green]Complete: {value_counts[TaskStatusEnum.complete]}"
+            )
+            console.print(
+                f"[bold blue]Waiting:  {value_counts[TaskStatusEnum.waiting]}"
+            )
+            console.print(
+                f"[bold orange3]Running:  {value_counts[TaskStatusEnum.running]}"
+            )
+            console.print(f"[bold red]Error:    {value_counts[TaskStatusEnum.error]}")
+            console.print(
+                f"[bold magenta1]Invalid:  {value_counts[TaskStatusEnum.invalid]}"
+            )
+            console.print(
+                f"[bold purple]Deleted:  {value_counts[TaskStatusEnum.deleted]}"
+            )
+            console.print(f"-----------")
+            console.print(f"[bold white]Total:    {sum(value_counts.values())}")
+            if complete:
+                console.print(f"\n[bold green]Transformation complete!")
+            else:
+                console.print(f"\n[bold red]Transformation incomplete!")
+            console.print(
+                f"\n[bold yellow]Alchemiscale Task Tree for transformation: {transformation}"
+            )
+            tree = Tree("")
             # walk the directed graph and create a tree
             self._create_node_tree(tree, g)
-            print(tree)
-        return all([i == TaskStatusEnum.complete for i in statuses])
+            console.print(tree)
+        return complete
 
     def action_tasks(
         self, tasks: List[ScopedKey], network: ScopedKey

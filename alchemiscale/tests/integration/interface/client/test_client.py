@@ -604,3 +604,6 @@ class TestClient:
 
         # set the status of a task
         user_client.get_transformation_status(transformation_sk)
+
+        user_client.set_tasks_status(all_tasks, TaskStatusEnum.invalid)
+        user_client.get_transformation_status(transformation_sk)
