@@ -7,6 +7,7 @@ Client for interacting with user-facing API. --- :mod:`alchemiscale.interface.cl
 
 from typing import Union, List, Dict, Optional, Tuple
 import json
+from rich.tree import Tree
 
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
@@ -154,7 +155,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
         return [ScopedKey.from_str(i) for i in task_sks]
 
-    def get_tasks(
+    def get_transformation_tasks(
         self,
         transformation: ScopedKey,
         extends: Optional[ScopedKey] = None,
@@ -201,6 +202,39 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_task_transformation(self, task: ScopedKey) -> ScopedKey:
         transformation = self._get_resource(f"tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
+
+    def _create_node_tree(self, tree, nodes):
+        for node in nodes:
+            if node["status"] == TaskStatusEnum.complete:
+                tree.add(f"[bold green] {node} {node['status']}")
+            elif node["status"] == TaskStatusEnum.waiting:
+                tree.add(f"[bold blue] {node} {node['status']}")
+            elif node["status"] == TaskStatusEnum.running:
+                tree.add(f"[bold orange] {node} {node['status']}")
+            elif node["status"] == TaskStatusEnum.error:
+                tree.add(f"[bold red] {node} {node['status']}")
+            elif node["status"] == TaskStatusEnum.invalid:
+                tree.add(f"[bold magenta] {node} {node['status']}")
+            elif node["status"] == TaskStatusEnum.deleted:
+                tree.add(f"[bold grey] {node} {node['status']}")
+            else:
+                pass
+
+    def get_transformation_status(
+        self, transformation: ScopedKey, visualize: Optional[bool] = True
+    ) -> bool:
+        """Return the status of the given Transformation."""
+        g = self.get_transformation_tasks(transformation, return_as="graph")
+        all_tasks = list(g.nodes)
+        statuses = self.get_tasks_status(all_tasks)
+        for stat, task in zip(statuses, all_tasks):
+            g.nodes[task]["status"] = stat
+        if visualize:
+            tree = Tree("Task Tree")
+            # walk the directed graph and create a tree
+            self._create_node_tree(tree, g)
+            print(tree)
+        return all([i == TaskStatusEnum.complete for i in statuses])
 
     def action_tasks(
         self, tasks: List[ScopedKey], network: ScopedKey
