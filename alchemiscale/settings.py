@@ -66,9 +66,9 @@ class APISettings(BaseAPISettings):
 
     """
 
-    FA_API_HOST: str = "127.0.0.1"
-    FA_API_PORT: int = 80
-    FA_API_LOGLEVEL: str = "info"
+    ALCHEMISCALE_API_HOST: str = "127.0.0.1"
+    ALCHEMISCALE_API_PORT: int = 80
+    ALCHEMISCALE_API_LOGLEVEL: str = "info"
 
 
 class ComputeAPISettings(BaseAPISettings):
@@ -77,9 +77,10 @@ class ComputeAPISettings(BaseAPISettings):
 
     """
 
-    FA_COMPUTE_API_HOST: str = "127.0.0.1"
-    FA_COMPUTE_API_PORT: int = 80
-    FA_COMPUTE_API_LOGLEVEL: str = "info"
+    ALCHEMISCALE_COMPUTE_API_HOST: str = "127.0.0.1"
+    ALCHEMISCALE_COMPUTE_API_PORT: int = 80
+    ALCHEMISCALE_COMPUTE_API_LOGLEVEL: str = "info"
+    ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS: int = 1800
 
 
 @lru_cache()

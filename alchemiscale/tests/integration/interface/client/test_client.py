@@ -1,5 +1,6 @@
 import pytest
 from time import sleep
+from pathlib import Path
 
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey
@@ -257,6 +258,11 @@ class TestClient:
 
     @staticmethod
     def _execute_tasks(tasks, n4js, s3os_server):
+        shared = Path("shared").absolute()
+        shared.mkdir()
+        scratch_basedir = Path("scratch").absolute()
+        scratch_basedir.mkdir()
+
         protocoldagresults = []
         for task_sk in tasks:
             if task_sk is None:
@@ -273,7 +279,12 @@ class TestClient:
                 name=str(task_sk),
             )
 
-            protocoldagresult = execute_DAG(protocoldag, raise_error=False)
+            protocoldagresult = execute_DAG(
+                protocoldag,
+                shared=shared,
+                scratch_basedir=scratch_basedir,
+                raise_error=False,
+            )
 
             assert protocoldagresult.transformation_key == transformation.key
             if extends_protocoldagresult:

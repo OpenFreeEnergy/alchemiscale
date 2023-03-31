@@ -23,7 +23,7 @@ from ..base.client import (
     json_to_gufe,
 )
 from ..models import Scope, ScopedKey
-from ..storage.models import TaskHub, Task, TaskStatusEnum
+from ..storage.models import TaskHub, Task, ComputeServiceID, TaskStatusEnum
 
 
 class AlchemiscaleComputeClientError(AlchemiscaleBaseClientError):
@@ -35,6 +35,18 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     _exception = AlchemiscaleComputeClientError
 
+    def register(self, compute_service_id: ComputeServiceID):
+        res = self._post_resource(f"computeservice/{compute_service_id}/register", {})
+        return ComputeServiceID(res)
+
+    def deregister(self, compute_service_id: ComputeServiceID):
+        res = self._post_resource(f"computeservice/{compute_service_id}/deregister", {})
+        return ComputeServiceID(res)
+
+    def heartbeat(self, compute_service_id: ComputeServiceID):
+        res = self._post_resource(f"computeservice/{compute_service_id}/heartbeat", {})
+        return ComputeServiceID(res)
+
     def list_scopes(self) -> List[Scope]:
         scopes = self._get_resource(
             f"/identities/{self.identifier}/scopes",
@@ -42,7 +54,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         return [Scope.from_str(s) for s in scopes]
 
     def query_taskhubs(
-        self, scopes: List[Scope], return_gufe=False, limit=None, skip=None
+        self, scopes: List[Scope], return_gufe=False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskHub]]:
         """Return all `TaskHub`s corresponding to given `Scope`."""
         if return_gufe:
@@ -51,9 +63,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
             taskhubs = []
 
         for scope in scopes:
-            params = dict(
-                return_gufe=return_gufe, limit=limit, skip=skip, **scope.dict()
-            )
+            params = dict(return_gufe=return_gufe, **scope.dict())
             if return_gufe:
                 taskhubs.update(self._query_resource("/taskhubs", params=params))
             else:
@@ -62,10 +72,10 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         return taskhubs
 
     def claim_taskhub_tasks(
-        self, taskhub: ScopedKey, claimant: str, count: int = 1
+        self, taskhub: ScopedKey, compute_service_id: ComputeServiceID, count: int = 1
     ) -> Task:
         """Claim a `Task` from the specified `TaskHub`"""
-        data = dict(claimant=claimant, count=count)
+        data = dict(compute_service_id=str(compute_service_id), count=count)
         tasks = self._post_resource(f"taskhubs/{taskhub}/claim", data)
 
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]

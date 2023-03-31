@@ -18,20 +18,44 @@ from gufe.tokenization import GufeTokenizable, GufeKey
 from ..models import ScopedKey, Scope
 
 
-class ComputeKey(BaseModel):
-    """Unique identifier for AlchemiscaleComputeService instances."""
+class ComputeServiceID(str):
+    ...
 
-    identifier: str
+
+class ComputeServiceRegistration(BaseModel):
+    """Registration for AlchemiscaleComputeService instances."""
+
+    identifier: ComputeServiceID
+    registered: datetime
+    heartbeat: datetime
 
     def __repr__(self):  # pragma: no cover
-        return f"<ComputeKey('{str(self)}')>"
+        return f"<ComputeServiceRegistration('{str(self)}')>"
 
     def __str__(self):
         return "-".join([self.identifier])
 
+    @classmethod
+    def from_now(cls, identifier: ComputeServiceID):
+        now = datetime.utcnow()
+        return cls(identifier=identifier, registered=now, heartbeat=now)
+
+    def to_dict(self):
+        dct = self.dict()
+        dct["identifier"] = str(self.identifier)
+
+        return dct
+
+    @classmethod
+    def from_dict(cls, dct):
+        dct_ = copy(dct)
+        dct_["identifier"] = ComputeServiceID(dct_["identifier"])
+
+        return cls(**dct_)
+
 
 class TaskProvenance(BaseModel):
-    computekey: ComputeKey
+    computeserviceid: ComputeServiceID
     datetime_start: datetime
     datetime_end: datetime
 

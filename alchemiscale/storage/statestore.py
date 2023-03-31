@@ -23,7 +23,8 @@ from py2neo.matching import NodeMatcher
 from py2neo.errors import ClientError
 
 from .models import (
-    ComputeKey,
+    ComputeServiceID,
+    ComputeServiceRegistration,
     Task,
     TaskHub,
     TaskArchive,
@@ -91,15 +92,17 @@ def _select_task_from_taskpool(taskpool: Subgraph) -> Union[ScopedKey, None]:
     return chosen_one[0]
 
 
-def _generate_claim_query(task_sk: ScopedKey, claimant: str) -> str:
+def _generate_claim_query(
+    task_sk: ScopedKey, compute_service_id: ComputeServiceID
+) -> str:
     """
     Generate a query to claim a single Task.
     Parameters
     ----------
-    task_sk: ScopedKey
+    task_sk
         The ScopedKey of the Task to claim.
-    claimant: str
-        The name of the claimant.
+    compute_service_id
+        ComputeServiceID of the claiming service.
 
     Returns
     -------
@@ -107,8 +110,17 @@ def _generate_claim_query(task_sk: ScopedKey, claimant: str) -> str:
         The Cypher query to claim the Task.
     """
     query = f"""
+    // only match the task if it doesn't have an existing CLAIMS relationship
     MATCH (t:Task {{_scoped_key: '{task_sk}'}})
-    SET t.status = 'running', t.claim = '{claimant}'
+    WHERE NOT (t)<-[:CLAIMS]-(:ComputeServiceRegistration)
+    SET t.status = 'running'
+
+    WITH t
+
+    // create CLAIMS relationship with given compute service
+    MATCH (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+    CREATE (t)<-[cl:CLAIMS {{claimed: localdatetime('{datetime.utcnow().isoformat()}')}}]-(csreg)
+
     RETURN t
     """
     return query
@@ -120,13 +132,16 @@ class Neo4jStore(AlchemiscaleStateStore):
     # with that label
     constraints = {
         "GufeTokenizable": {"name": "scoped_key", "property": "_scoped_key"},
-        "Settings": {"name": "settings_content", "property": "content"},
         "CredentialedUserIdentity": {
             "name": "user_identifier",
             "property": "identifier",
         },
         "CredentialedComputeIdentity": {
             "name": "compute_identifier",
+            "property": "identifier",
+        },
+        "ComputeServiceRegistration": {
+            "name": "compute_service_registration_identifier",
             "property": "identifier",
         },
     }
@@ -145,6 +160,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             self.graph.rollback(tx)
             if not ignore_exceptions:
                 raise
+
         else:
             self.graph.commit(tx)
 
@@ -362,7 +378,8 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> Dict[Node, GufeTokenizable]:
         """Get a Dict `GufeTokenizable` objects within the given subgraph.
 
-        Any `GufeTokenizable` that requires nodes or relationships missing from the subgraph will not be returned.
+        Any `GufeTokenizable` that requires nodes or relationships missing from
+        the subgraph will not be returned.
 
         """
         nxg = self._subgraph_to_networkx(subgraph)
@@ -728,7 +745,105 @@ class Neo4jStore(AlchemiscaleStateStore):
         network: ScopedKey,
     ) -> ScopedKey:
         """Set the compute Strategy for the given AlchemicalNetwork."""
-        ...
+
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+        raise NotImplementedError
+
+    def register_computeservice(
+        self, compute_service_registration: ComputeServiceRegistration
+    ):
+        """Register a ComputeServiceRegistration uniquely identifying a running
+        ComputeService.
+
+        A ComputeServiceRegistration node is used for CLAIMS relationships on
+        Tasks to avoid collisions in Task execution.
+
+        """
+
+        node = Node(
+            "ComputeServiceRegistration", **compute_service_registration.to_dict()
+        )
+
+        with self.transaction() as tx:
+            tx.create(node)
+
+        return compute_service_registration.identifier
+
+    def deregister_computeservice(self, compute_service_id: ComputeServiceID):
+        """Remove the registration for the given ComputeServiceID from the
+        state store.
+
+        This wil remove the ComputeServiceRegistration node, and all its CLAIMS
+        relationships to Tasks.
+
+        All Tasks with CLAIMS relationships to the ComputeServiceRegistration
+        and with status `running` will have their status set to `waiting`.
+
+        """
+
+        q = f"""
+        MATCH (n:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+
+        OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: 'running'}})
+        SET t.status = 'waiting'
+
+        WITH n, n.identifier as identifier
+
+        DETACH DELETE n
+
+        RETURN identifier
+        """
+
+        with self.transaction() as tx:
+            res = tx.run(q)
+            identifier = next(res)["identifier"]
+
+        return ComputeServiceID(identifier)
+
+    def heartbeat_computeservice(
+        self, compute_service_id: ComputeServiceID, heartbeat: datetime
+    ):
+        """Update the heartbeat for the given ComputeServiceID."""
+
+        q = f"""
+        MATCH (n:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+        SET n.heartbeat = localdatetime('{heartbeat.isoformat()}')
+
+        """
+
+        with self.transaction() as tx:
+            tx.run(q)
+
+        return compute_service_id
+
+    def expire_registrations(self, expire_time: datetime):
+        """Remove all registrations with last heartbeat prior to the given `expire_time`."""
+        q = f"""
+        MATCH (n:ComputeServiceRegistration)
+        WHERE n.heartbeat < localdatetime('{expire_time.isoformat()}')
+
+        WITH n
+
+        OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: 'running'}})
+        SET t.status = 'waiting'
+
+        WITH n, n.identifier as ident
+
+        DETACH DELETE n
+
+        RETURN ident
+        """
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+            identities = set()
+            for rec in res:
+                identities.add(rec["ident"])
+
+        return [ComputeServiceID(i) for i in identities]
 
     ## task hubs
 
@@ -746,6 +861,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         either way.
 
         """
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
         scope = network.scope
         network_node = self._get_node(network)
 
@@ -800,6 +920,11 @@ class Neo4jStore(AlchemiscaleStateStore):
             Otherwise, return a `ScopedKey`.
 
         """
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
         node = self.graph.run(
             f"""
                 match (th:TaskHub {{network: "{network}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
@@ -817,6 +942,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         network: ScopedKey,
     ) -> ScopedKey:
         """Delete a TaskHub for a given AlchemicalNetwork."""
+
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
         taskhub = self.get_taskhub(network)
 
         q = f"""
@@ -828,6 +959,16 @@ class Neo4jStore(AlchemiscaleStateStore):
         return taskhub
 
     def set_taskhub_weight(self, network: ScopedKey, weight: float):
+        """Set the weight for the TaskHub associated with the given
+        AlchemicalNetwork.
+
+        """
+
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
         q = f"""
         MATCH (th:TaskHub {{network: "{network}"}})
         SET th.weight = {weight}
@@ -1069,7 +1210,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         q = f"""
         // get list of all unclaimed tasks in the hub 
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task)
-        WHERE task.claim IS NULL
+        WHERE NOT (task)<-[:CLAIMS]-(:ComputeServiceRegistration)
         RETURN task
         """
         with self.transaction() as tx:
@@ -1090,7 +1231,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
     def claim_taskhub_tasks(
-        self, taskhub: ScopedKey, claimant: str, count: int = 1
+        self, taskhub: ScopedKey, compute_service_id: ComputeServiceID, count: int = 1
     ) -> List[Union[ScopedKey, None]]:
         """Claim a TaskHub Task.
 
@@ -1106,8 +1247,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Parameters
         ----------
-        claimant
-            Unique identifier for the entity claiming the Tasks for execution.
+        compute_service_id
+            Unique identifier for the compute service claiming the Tasks for execution.
         count
             Claim the given number of Tasks in a single transaction.
 
@@ -1157,7 +1298,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     tasks.append(None)
                 else:
                     chosen_one = _select_task_from_taskpool(taskpool)
-                    claim_query = _generate_claim_query(chosen_one, claimant)
+                    claim_query = _generate_claim_query(chosen_one, compute_service_id)
                     tasks.append(tx.run(claim_query).to_subgraph())
 
             tx.run(
@@ -1198,6 +1339,14 @@ class Neo4jStore(AlchemiscaleStateStore):
             `extends` input for the Task's eventual call to `Protocol.create`.
 
         """
+        if transformation.qualname not in ["Transformation", "NonTransformation"]:
+            raise ValueError(
+                "`transformation` ScopedKey does not correspond to a `Transformation`"
+            )
+
+        if extends is not None and extends.qualname != "Task":
+            raise ValueError("`extends` ScopedKey does not correspond to a `Task`")
+
         scope = transformation.scope
         transformation_node = self._get_node(transformation)
 
@@ -1424,6 +1573,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
     ) -> ScopedKey:
         """Set a `ProtocolDAGResultRef` pointing to a `ProtocolDAGResult` for the given `Task`."""
+
+        if task.qualname != "Task":
+            raise ValueError("`task` ScopedKey does not correspond to a `Task`")
+
         scope = task.scope
         task_node = self._get_node(task)
 
@@ -1566,7 +1719,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
             WHERE t_.status IN ['waiting', 'running', 'error']
-            SET t_.status = '{TaskStatusEnum.waiting.value}', t_.claimant = null
+            SET t_.status = '{TaskStatusEnum.waiting.value}'
+
+            WITH t, t_
+
+            // if we changed the status to waiting,
+            // drop CLAIMS relationship
+            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+            DELETE cl
 
             RETURN t, t_
             """
@@ -1625,6 +1785,13 @@ class Neo4jStore(AlchemiscaleStateStore):
             OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
             DELETE ar
 
+            WITH t, t_
+
+            // if we changed the status to complete,
+            // drop CLAIMS relationship
+            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+            DELETE cl
+
             RETURN t, t_
             """
 
@@ -1649,6 +1816,13 @@ class Neo4jStore(AlchemiscaleStateStore):
             OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
             WHERE t_.status IN ['error', 'running']
             SET t_.status = '{TaskStatusEnum.error.value}'
+
+            WITH t, t_
+
+            // if we changed the status to error,
+            // drop CLAIMS relationship
+            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+            DELETE cl
 
             RETURN t, t_
             """
@@ -1687,6 +1861,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
                 DELETE ar
                 DELETE are
+
+                WITH t
+
+                // drop CLAIMS relationship if present
+                OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+                DELETE cl
                 """
                 tx.run(q)
 
@@ -1721,6 +1901,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
                 DELETE ar
                 DELETE are
+
+                WITH t
+
+                // drop CLAIMS relationship if present
+                OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+                DELETE cl
                 """
                 tx.run(q)
 

@@ -176,6 +176,9 @@ services:
       - internal
       - web
       # Enables the web UI and tells Traefik to listen to docker
+    depends_on: 
+      - alchemiscale-client-API
+      - alchemiscale-compute-API
     command: 
       - "--log.level=DEBUG"
       - "--providers.docker"

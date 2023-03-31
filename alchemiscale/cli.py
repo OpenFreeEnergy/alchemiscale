@@ -5,11 +5,12 @@ Command line interface --- :mod:`alchemiscale.cli`
 """
 
 import click
+import yaml
+import signal
 import gunicorn.app.base
 from typing import Type
 
-from .models import Scope
-from .security.auth import hash_key, authenticate, AuthenticationError
+from .security.auth import hash_key
 from .security.models import (
     CredentialedEntity,
     CredentialedUserIdentity,
@@ -228,7 +229,9 @@ def cli():
     name="api",
     help="Start the user-facing API service",
 )
-@api_starting_params("FA_API_HOST", "FA_API_PORT", "FA_API_LOGLEVEL")
+@api_starting_params(
+    "ALCHEMISCALE_API_HOST", "ALCHEMISCALE_API_PORT", "ALCHEMISCALE_API_LOGLEVEL"
+)
 @db_params
 @s3os_params
 @jwt_params
@@ -268,23 +271,35 @@ def api(
 
     app.dependency_overrides[get_base_api_settings] = get_settings_override
 
-    start_api(app, workers, host["FA_API_HOST"], port["FA_API_PORT"])
+    start_api(
+        app, workers, host["ALCHEMISCALE_API_HOST"], port["ALCHEMISCALE_API_PORT"]
+    )
 
 
-@cli.group(help="Subcommands for the compute service")
+@cli.group(help="Subcommands for compute services")
 def compute():
     ...
 
 
 @compute.command(help="Start the compute API service.")
 @api_starting_params(
-    "FA_COMPUTE_API_HOST", "FA_COMPUTE_API_PORT", "FA_COMPUTE_API_LOGLEVEL"
+    "ALCHEMISCALE_COMPUTE_API_HOST",
+    "ALCHEMISCALE_COMPUTE_API_PORT",
+    "ALCHEMISCALE_COMPUTE_API_LOGLEVEL",
+)
+@click.option(
+    "--registration-expire-seconds",
+    type=int,
+    default=1800,
+    help="number of seconds since last heartbeat at which to expire a compute service registration",
+    envvar="ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS",
+    **SETTINGS_OPTION_KWARGS,
 )
 @db_params
 @s3os_params
 @jwt_params
 def api(
-    workers, host, port, loglevel,  # API
+    workers, host, port, loglevel, registration_expire_seconds, # API
     url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  #JWT
     access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
@@ -299,7 +314,7 @@ def api(
 
     def get_settings_override():
         # inject settings from CLI arguments
-        api_dict = host | port | loglevel
+        api_dict = host | port | loglevel | registration_expire_seconds
         jwt_dict = jwt_secret | jwt_expire_seconds | jwt_algorithm
         db_dict = url | user | password | dbname
         s3_dict = (
@@ -316,12 +331,51 @@ def api(
 
     app.dependency_overrides[get_base_api_settings] = get_settings_override
 
-    start_api(app, workers, host["FA_COMPUTE_API_HOST"], port["FA_COMPUTE_API_PORT"])
+    start_api(
+        app,
+        workers,
+        host["ALCHEMISCALE_COMPUTE_API_HOST"],
+        port["ALCHEMISCALE_COMPUTE_API_PORT"],
+    )
 
 
 @compute.command(help="Start the synchronous compute service.")
-def synchronous():
-    ...
+@click.option(
+    "--config-file",
+    "-c",
+    type=click.File(),
+    help="YAML-based configuration file giving the settings for this service",
+    required=True,
+)
+def synchronous(config_file):
+    from alchemiscale.models import Scope
+    from alchemiscale.compute.service import SynchronousComputeService
+
+    params = yaml.safe_load(config_file)
+
+    params_init = params.get("init", {})
+    params_start = params.get("start", {})
+
+    if "scopes" in params_init:
+        params_init["scopes"] = [
+            Scope.from_str(scope) for scope in params_init["scopes"]
+        ]
+
+    service = SynchronousComputeService(**params_init)
+
+    # add signal handling
+    for signame in {"SIGHUP", "SIGINT", "SIGTERM"}:
+
+        def stop(*args, **kwargs):
+            service.stop()
+            raise KeyboardInterrupt()
+
+        signal.signal(getattr(signal, signame), stop)
+
+    try:
+        service.start(**params_start)
+    except KeyboardInterrupt:
+        pass
 
 
 @cli.group(help="Subcommands for the database")
@@ -491,6 +545,7 @@ def remove(url, user, password, dbname, identity_type, identifier):
 @scope
 def add_scope(url, user, password, dbname, identity_type, identifier, scope):
     """Add a scope for the given identity."""
+    from .models import Scope
     from .storage.statestore import get_n4js
     from .settings import Neo4jStoreSettings
 
@@ -532,6 +587,7 @@ def list_scope(url, user, password, dbname, identity_type, identifier):
 @scope
 def remove_scope(url, user, password, dbname, identity_type, identifier, scope):
     """Remove a scope for the given identity(s)."""
+    from .models import Scope
     from .storage.statestore import get_n4js
     from .settings import Neo4jStoreSettings
 

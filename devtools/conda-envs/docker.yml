@@ -64,10 +64,11 @@ dependencies:
   - dask
   - distributed
   - numba
+  - pymbar >=3.0.6,<4
 
   - pip:
     #- git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment
-    - git+https://github.com/OpenFreeEnergy/gufe
+    - git+https://github.com/OpenFreeEnergy/gufe@alchemiscale-compute
     - git+https://github.com/OpenFreeEnergy/openfe
     - git+https://github.com/OpenFreeEnergy/openfe-benchmarks
     - git+https://github.com/mikemhenry/openff-models.git@support_nested_models

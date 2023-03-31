@@ -345,6 +345,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         if isinstance(tasks, ScopedKey):
             tasks = [tasks]
+
+        status = TaskStatusEnum(status)
+
         task_sks = [self._set_task_status(t, status) for t in tasks]
         return task_sks
 
