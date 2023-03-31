@@ -209,23 +209,54 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         transformation = self._get_resource(f"tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
 
-    def _create_node_tree(self, tree, g):
-        for node in g.nodes:
+    def _add_node_to_tree(self, tree, node, g):
+        try:
             stat = g.nodes[node]["status"]
             if stat == TaskStatusEnum.complete:
-                tree.add(f"[bold green] {node} : {stat.value}")
+                branch = tree.add(f"[bold green] {node} : {stat.value}")
             elif stat == TaskStatusEnum.waiting:
-                tree.add(f"[bold blue] {node} : {stat.value}")
+                branch = tree.add(f"[bold blue] {node} : {stat.value}")
             elif stat == TaskStatusEnum.running:
-                tree.add(f"[bold orange3] {node} : {stat.value}")
+                branch = tree.add(f"[bold orange3] {node} : {stat.value}")
             elif stat == TaskStatusEnum.error:
-                tree.add(f"[bold red] {node} : {stat.value}")
+                branch = tree.add(f"[bold red] {node} : {stat.value}")
             elif stat == TaskStatusEnum.invalid:
-                tree.add(f"[bold magenta1] {node} : {stat.value}")
-            elif stat == TaskStatusEnum.deleted:
-                tree.add(f"[bold purple] {node} : {stat.value}")
-            else:
-                pass
+                branch = tree.add(f"[bold magenta1] {node} : {stat.value}")
+            return branch
+
+        except:
+            return tree
+
+    # define a function to recursively walk the graph
+    def dfs_walk(self, graph, node, tree,  visited=None):
+        if visited is None:
+            visited = set()
+        visited.add(node)
+        for neighbor in graph.predecessors(node):
+            if neighbor not in visited:
+                self._add_node_to_tree(tree, node, graph)
+                self.dfs_walk(graph, neighbor, tree, visited)
+        return visited, tree
+
+    def bfs_walk(self, G, start_node, tree):
+        visited = set()
+        queue = [(start_node, 0)]
+        level = 0
+        while queue:
+            node, node_level  = queue.pop(0)
+            if node not in visited:
+
+                visited.add(node)
+                if node_level > level:
+                    level = node_level
+                    tree = tree.add(f"[bold green] Level {level}")
+                print(node)
+                self._add_node_to_tree(tree, node, G)
+
+                for neighbor in G.predecessors(node):
+                    queue.append((neighbor, node_level + 1))
+
+                
 
     def get_transformation_status(
         self, transformation: ScopedKey, visualize: Optional[bool] = True
@@ -244,7 +275,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             stat_dict[task] = stat
         # check if everything is finished
         complete = all([i == TaskStatusEnum.complete for i in statuses])
+
         if visualize:
+            # tasks status                
             value_counts = Counter(stat_dict.values())
             console = Console(highlight=True)
             console.print(
@@ -275,10 +308,22 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             console.print(
                 f"\n[bold yellow]Alchemiscale Task Tree for transformation: {transformation}"
             )
+
+            # task tree 
+            nodes_without_sucessors = [node for node in g.nodes() if len(list(g.successors(node))) == 0]
+            # connect all the nodes without sucessors to the root node
+            g.add_node("root")
+            for node in nodes_without_sucessors:
+                g.add_edge(node, "root")
             tree = Tree("")
             # walk the directed graph and create a tree
-            self._create_node_tree(tree, g)
+            self.bfs_walk(g, "root", tree)
             console.print(tree)
+            
+            import networkx as nx
+            import matplotlib.pyplot as plt 
+            nx.draw(g, with_labels=True)
+            plt.show()
         return complete
 
     def action_tasks(
