@@ -4,10 +4,11 @@ AlchemiscaleComputeAPI --- :mod:`alchemiscale.compute.api`
 
 """
 
-
+import asyncio
 from typing import Any, Dict, List
 import os
 import json
+from datetime import datetime, timedelta
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
@@ -26,10 +27,19 @@ from ..base.api import (
     _check_store_connectivity,
     gufe_to_json,
 )
-from ..settings import get_base_api_settings, get_compute_api_settings
-from ..storage.statestore import Neo4jStore
+from ..settings import (
+    get_base_api_settings,
+    get_compute_api_settings,
+    ComputeAPISettings,
+)
+from ..storage.statestore import Neo4jStore, get_n4js
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ProtocolDAGResultRef, TaskStatusEnum
+from ..storage.models import (
+    ProtocolDAGResultRef,
+    ComputeServiceID,
+    ComputeServiceRegistration,
+    TaskStatusEnum,
+)
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import (
@@ -38,11 +48,6 @@ from ..security.models import (
     CredentialedComputeIdentity,
 )
 
-
-# TODO:
-# - add periodic removal of task claims from compute services that are no longer alive
-#   - can be done with an asyncio.sleeping task added to event loop: https://stackoverflow.com/questions/67154839/fastapi-best-way-to-run-continuous-get-requests-in-the-background
-# - on startup,
 
 app = FastAPI(title="AlchemiscaleComputeAPI")
 app.dependency_overrides[get_base_api_settings] = get_compute_api_settings
@@ -92,6 +97,53 @@ async def list_scopes(
     return [str(scope) for scope in scopes]
 
 
+@router.post("/computeservice/{compute_service_id}/register")
+async def register_computeservice(
+    compute_service_id,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    now = datetime.utcnow()
+    csreg = ComputeServiceRegistration(
+        identifier=compute_service_id, registered=now, heartbeat=now
+    )
+
+    compute_service_id_ = n4js.register_computeservice(csreg)
+
+    return compute_service_id_
+
+
+@router.post("/computeservice/{compute_service_id}/deregister")
+async def deregister_computeservice(
+    compute_service_id,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    compute_service_id_ = n4js.deregister_computeservice(
+        ComputeServiceID(compute_service_id)
+    )
+
+    return compute_service_id_
+
+
+@router.post("/computeservice/{compute_service_id}/heartbeat")
+async def heartbeat_computeservice(
+    compute_service_id,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
+):
+    now = datetime.utcnow()
+
+    # expire any stale registrations, along with their claims
+    expire_delta = timedelta(
+        seconds=settings.ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS
+    )
+    expire_time = now - expire_delta
+    n4js.expire_registrations(expire_time)
+
+    compute_service_id_ = n4js.heartbeat_computeservice(compute_service_id, now)
+
+    return compute_service_id_
+
+
 @router.get("/taskhubs")
 async def query_taskhubs(
     *,
@@ -117,18 +169,11 @@ async def query_taskhubs(
     return taskhubs_handler.format_return()
 
 
-# @app.get("/taskhubs/{scoped_key}")
-# async def get_taskhub(scoped_key: str,
-#                        *,
-#                        n4js: Neo4jStore = Depends(get_n4js_depends)):
-#    return
-
-
 @router.post("/taskhubs/{taskhub_scoped_key}/claim")
 async def claim_taskhub_tasks(
     taskhub_scoped_key,
     *,
-    claimant: str = Body(),
+    compute_service_id: str = Body(),
     count: int = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
@@ -137,7 +182,9 @@ async def claim_taskhub_tasks(
     validate_scopes(sk.scope, token)
 
     tasks = n4js.claim_taskhub_tasks(
-        taskhub=taskhub_scoped_key, claimant=claimant, count=count
+        taskhub=taskhub_scoped_key,
+        compute_service_id=ComputeServiceID(compute_service_id),
+        count=count,
     )
 
     return [str(t) if t is not None else None for t in tasks]
@@ -197,8 +244,12 @@ def set_task_result(
         task=task_sk, protocoldagresultref=protocoldagresultref
     )
 
-    # TODO: if success, set task complete, remove from all hubs
+    # if success, set task complete, remove from all hubs
     # otherwise, set as errored, leave in hubs
+    if protocoldagresultref.ok:
+        n4js.set_task_complete(tasks=[task_sk])
+    else:
+        n4js.set_task_error(tasks=[task_sk])
 
     return result_sk
 

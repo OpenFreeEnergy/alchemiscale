@@ -8,6 +8,7 @@ import requests
 from alchemiscale.settings import get_base_api_settings
 from alchemiscale.base.api import get_n4js_depends, get_s3os_depends
 from alchemiscale.compute import api, client
+from alchemiscale.storage.models import ComputeServiceID
 
 from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
 from alchemiscale.tests.integration.utils import running_service
@@ -32,9 +33,9 @@ def compute_api(s3os_server):
 def run_server(fastapi_app, settings):
     uvicorn.run(
         fastapi_app,
-        host=settings.FA_COMPUTE_API_HOST,
-        port=settings.FA_COMPUTE_API_PORT,
-        log_level=settings.FA_COMPUTE_API_LOGLEVEL,
+        host=settings.ALCHEMISCALE_COMPUTE_API_HOST,
+        port=settings.ALCHEMISCALE_COMPUTE_API_PORT,
+        log_level=settings.ALCHEMISCALE_COMPUTE_API_LOGLEVEL,
     )
 
 
@@ -42,14 +43,19 @@ def run_server(fastapi_app, settings):
 def uvicorn_server(compute_api):
     settings = get_compute_settings_override()
     with running_service(
-        run_server, port=settings.FA_COMPUTE_API_PORT, args=(compute_api, settings)
+        run_server,
+        port=settings.ALCHEMISCALE_COMPUTE_API_PORT,
+        args=(compute_api, settings),
     ):
         yield
 
 
 @pytest.fixture(scope="module")
 def compute_client(
-    uvicorn_server, compute_identity, single_scoped_credentialed_compute
+    uvicorn_server,
+    compute_identity,
+    single_scoped_credentialed_compute,
+    compute_service_id,
 ):
     return client.AlchemiscaleComputeClient(
         api_url="http://127.0.0.1:8000/",

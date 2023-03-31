@@ -26,6 +26,7 @@ from openfe_benchmarks import tyk2
 from alchemiscale.models import Scope
 from alchemiscale.settings import Neo4jStoreSettings, S3ObjectStoreSettings
 from alchemiscale.storage import Neo4jStore, S3ObjectStore, get_s3os
+from alchemiscale.storage.models import ComputeServiceID
 
 
 NEO4J_PROCESS = {}
@@ -276,7 +277,14 @@ def protocoldagresults(tmpdir_factory, transformation):
 
         # execute the task
         with tmpdir_factory.mktemp("protocol_dag").as_cwd():
-            protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
+            shared = Path("shared").absolute()
+            shared.mkdir()
+            scratch_basedir = Path("scratch").absolute()
+            scratch_basedir.mkdir()
+
+            protocoldagresult = execute_DAG(
+                protocoldag, shared=shared, scratch_basedir=scratch_basedir
+            )
 
         pdrs.append(protocoldagresult)
     return pdrs
@@ -312,8 +320,16 @@ def protocoldagresults_failure(tmpdir_factory, transformation_failure):
 
         # execute the task
         with tmpdir_factory.mktemp("protocol_dag").as_cwd():
+            shared = Path("shared").absolute()
+            shared.mkdir()
+            scratch_basedir = Path("scratch").absolute()
+            scratch_basedir.mkdir()
+
             protocoldagresult = execute_DAG(
-                protocoldag, shared=Path(".").absolute(), raise_error=False
+                protocoldag,
+                shared=shared,
+                scratch_basedir=scratch_basedir,
+                raise_error=False,
             )
 
         pdrs.append(protocoldagresult)
@@ -341,3 +357,8 @@ def multiple_scopes(scope_test):
         ]
     )
     return scopes
+
+
+@fixture(scope="module")
+def compute_service_id():
+    return ComputeServiceID("compute-service-123")
