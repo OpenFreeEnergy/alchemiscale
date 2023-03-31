@@ -160,7 +160,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             self.graph.rollback(tx)
             if not ignore_exceptions:
                 raise
-        
+
         else:
             self.graph.commit(tx)
 
@@ -799,7 +799,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         with self.transaction() as tx:
             res = tx.run(q)
-            identifier = next(res)['identifier']
+            identifier = next(res)["identifier"]
 
         return ComputeServiceID(identifier)
 
@@ -1575,9 +1575,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Set a `ProtocolDAGResultRef` pointing to a `ProtocolDAGResult` for the given `Task`."""
 
         if task.qualname != "Task":
-            raise ValueError(
-                "`task` ScopedKey does not correspond to a `Task`"
-            )
+            raise ValueError("`task` ScopedKey does not correspond to a `Task`")
 
         scope = task.scope
         task_node = self._get_node(task)
