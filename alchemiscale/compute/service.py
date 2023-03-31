@@ -121,6 +121,9 @@ class SynchronousComputeService:
             by compute identity.
         claim_limit
             Maximum number of Tasks to claim at a time from a TaskHub.
+        loglevel
+            The loglevel at which to report via STDOUT; see the :mod:`logging`
+            docs for available levels.
 
         """
         self.api_url = api_url

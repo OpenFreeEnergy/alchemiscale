@@ -279,7 +279,9 @@ class TestNeo4jStore(TestStateStore):
             identifier=compute_service_id, registered=now, heartbeat=now
         )
 
-        n4js.register_computeservice(registration)
+        compute_service_id_ = n4js.register_computeservice(registration)
+
+        assert compute_service_id == compute_service_id_
 
         csreg = n4js.graph.run(
             f"""
@@ -301,7 +303,9 @@ class TestNeo4jStore(TestStateStore):
         n4js.register_computeservice(registration)
 
         # try deregistering
-        n4js.deregister_computeservice(compute_service_id)
+        compute_service_id_ = n4js.deregister_computeservice(compute_service_id)
+
+        assert compute_service_id == compute_service_id_
 
         csreg = n4js.graph.run(
             f"""

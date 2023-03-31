@@ -160,6 +160,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             self.graph.rollback(tx)
             if not ignore_exceptions:
                 raise
+        
         else:
             self.graph.commit(tx)
 
@@ -377,7 +378,8 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> Dict[Node, GufeTokenizable]:
         """Get a Dict `GufeTokenizable` objects within the given subgraph.
 
-        Any `GufeTokenizable` that requires nodes or relationships missing from the subgraph will not be returned.
+        Any `GufeTokenizable` that requires nodes or relationships missing from
+        the subgraph will not be returned.
 
         """
         nxg = self._subgraph_to_networkx(subgraph)
@@ -743,7 +745,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         network: ScopedKey,
     ) -> ScopedKey:
         """Set the compute Strategy for the given AlchemicalNetwork."""
-        ...
+
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+        raise NotImplementedError
 
     def register_computeservice(
         self, compute_service_registration: ComputeServiceRegistration
@@ -761,11 +768,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         with self.transaction() as tx:
-            tx.merge(
-                node,
-                primary_label="ComputeServiceRegistration",
-                primary_key="identifier",
-            )
+            tx.create(node)
 
         return compute_service_registration.identifier
 
@@ -780,24 +783,31 @@ class Neo4jStore(AlchemiscaleStateStore):
         and with status `running` will have their status set to `waiting`.
 
         """
+
         q = f"""
         MATCH (n:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
 
         OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: 'running'}})
         SET t.status = 'waiting'
 
+        WITH n, n.identifier as identifier
+
         DETACH DELETE n
+
+        RETURN identifier
         """
 
         with self.transaction() as tx:
-            tx.run(q)
+            res = tx.run(q)
+            identifier = next(res)['identifier']
 
-        return compute_service_id
+        return ComputeServiceID(identifier)
 
     def heartbeat_computeservice(
         self, compute_service_id: ComputeServiceID, heartbeat: datetime
     ):
         """Update the heartbeat for the given ComputeServiceID."""
+
         q = f"""
         MATCH (n:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
         SET n.heartbeat = localdatetime('{heartbeat.isoformat()}')
@@ -833,7 +843,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             for rec in res:
                 identities.add(rec["ident"])
 
-        return list(identities)
+        return [ComputeServiceID(i) for i in identities]
 
     ## task hubs
 
@@ -851,6 +861,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         either way.
 
         """
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
         scope = network.scope
         network_node = self._get_node(network)
 
@@ -905,6 +920,11 @@ class Neo4jStore(AlchemiscaleStateStore):
             Otherwise, return a `ScopedKey`.
 
         """
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
         node = self.graph.run(
             f"""
                 match (th:TaskHub {{network: "{network}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
@@ -922,6 +942,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         network: ScopedKey,
     ) -> ScopedKey:
         """Delete a TaskHub for a given AlchemicalNetwork."""
+
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
         taskhub = self.get_taskhub(network)
 
         q = f"""
@@ -933,6 +959,16 @@ class Neo4jStore(AlchemiscaleStateStore):
         return taskhub
 
     def set_taskhub_weight(self, network: ScopedKey, weight: float):
+        """Set the weight for the TaskHub associated with the given
+        AlchemicalNetwork.
+
+        """
+
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
         q = f"""
         MATCH (th:TaskHub {{network: "{network}"}})
         SET th.weight = {weight}
@@ -1303,8 +1339,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             `extends` input for the Task's eventual call to `Protocol.create`.
 
         """
-        scope = transformation.scope
-        if "Transformation" not in transformation.qualname:
+        if transformation.qualname not in ["Transformation", "NonTransformation"]:
             raise ValueError(
                 "`transformation` ScopedKey does not correspond to a `Transformation`"
             )
@@ -1312,6 +1347,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         if extends is not None and extends.qualname != "Task":
             raise ValueError("`extends` ScopedKey does not correspond to a `Task`")
 
+        scope = transformation.scope
         transformation_node = self._get_node(transformation)
 
         # create a new task for the supplied transformation
@@ -1537,6 +1573,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
     ) -> ScopedKey:
         """Set a `ProtocolDAGResultRef` pointing to a `ProtocolDAGResult` for the given `Task`."""
+
+        if task.qualname != "Task":
+            raise ValueError(
+                "`task` ScopedKey does not correspond to a `Task`"
+            )
+
         scope = task.scope
         task_node = self._get_node(task)
 
