@@ -15,9 +15,7 @@ from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 
-from rich.console import Console
-from rich.tree import Tree
-from rich.panel import Panel
+from rich import print as rprint
 
 from collections import Counter
 
@@ -209,7 +207,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         transformation = self._get_resource(f"tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
 
-
     def get_transformation_status(
         self, transformation: ScopedKey, visualize: Optional[bool] = True
     ) -> bool:
@@ -221,39 +218,32 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         g = self.get_transformation_tasks(transformation, return_as="graph")
         all_tasks = list(g.nodes)
         statuses = self.get_tasks_status(all_tasks)
-
+        stat_dict = {}
+        for stat, task in zip(statuses, all_tasks):
+            stat_dict[task] = stat
         # check if everything is finished
         complete = all([i == TaskStatusEnum.complete for i in statuses])
 
         if visualize:
-            # tasks status                
+            # tasks status
             value_counts = Counter(stat_dict.values())
-            console = Console(highlight=True)
-            console.print(
+            rprint(
                 f"[bold yellow]Alchemiscale Task Status for transformation: {transformation}\n"
             )
-            console.print(
-                f"[bold green]Complete: {value_counts[TaskStatusEnum.complete]}"
+            rprint(f"[bold green]Complete: {value_counts[TaskStatusEnum.complete]}")
+            rprint(f"[bold blue]Waiting:  {value_counts[TaskStatusEnum.waiting]}")
+            rprint(f"[bold orange3]Running:  {value_counts[TaskStatusEnum.running]}")
+            rprint(f"[bold red]Error:    {value_counts[TaskStatusEnum.error]}")
+            rprint(f"[bold magenta1]Invalid:  {value_counts[TaskStatusEnum.invalid]}")
+            rprint(f"[bold purple]Deleted:  {value_counts[TaskStatusEnum.deleted]}")
+            rprint(f"-----------")
+            rprint(
+                f"[bold white]Total Complete:  {value_counts[TaskStatusEnum.complete]}/{sum(value_counts.values())}"
             )
-            console.print(
-                f"[bold blue]Waiting:  {value_counts[TaskStatusEnum.waiting]}"
-            )
-            console.print(
-                f"[bold orange3]Running:  {value_counts[TaskStatusEnum.running]}"
-            )
-            console.print(f"[bold red]Error:    {value_counts[TaskStatusEnum.error]}")
-            console.print(
-                f"[bold magenta1]Invalid:  {value_counts[TaskStatusEnum.invalid]}"
-            )
-            console.print(
-                f"[bold purple]Deleted:  {value_counts[TaskStatusEnum.deleted]}"
-            )
-            console.print(f"-----------")
-            console.print(f"[bold white]Total Complete:  {value_counts[TaskStatusEnum.complete]}/{sum(value_counts.values())}")
             if complete:
-                console.print(f"\n[bold green]Transformation complete!")
+                rprint(f"\n[bold green]Transformation complete!")
             else:
-                console.print(f"\n[bold red]Transformation incomplete!")
+                rprint(f"\n[bold red]Transformation incomplete!")
         return complete
 
     def action_tasks(

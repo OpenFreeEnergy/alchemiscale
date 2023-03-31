@@ -24,6 +24,9 @@ dependencies:
   - monotonic    # needed by py2neo, but not pulled in
   #- docker-py    # for grolt
 
+  # printing 
+  - rich
+
   ## object store
   - boto3        # aws s3
 
