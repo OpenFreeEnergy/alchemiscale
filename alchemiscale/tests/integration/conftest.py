@@ -283,7 +283,9 @@ def protocoldagresults(tmpdir_factory, transformation):
             scratch_basedir.mkdir()
 
             protocoldagresult = execute_DAG(
-                protocoldag, shared_basedir=shared_basedir, scratch_basedir=scratch_basedir
+                protocoldag,
+                shared_basedir=shared_basedir,
+                scratch_basedir=scratch_basedir,
             )
 
         pdrs.append(protocoldagresult)
