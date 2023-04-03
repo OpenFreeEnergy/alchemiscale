@@ -16,7 +16,6 @@ from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 
 from rich import print as rprint
-
 from collections import Counter
 
 from ..base.client import (

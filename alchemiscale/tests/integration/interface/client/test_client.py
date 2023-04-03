@@ -614,50 +614,17 @@ class TestClient:
         all_tasks = user_client.create_tasks(transformation_sk, count=5)
 
         # set the status of a task
-        user_client.get_transformation_status(transformation_sk)
+        stat = user_client.get_transformation_status(transformation_sk)
+        assert not stat
 
-        user_client.set_tasks_status(all_tasks, TaskStatusEnum.invalid)
-        user_client.get_transformation_status(transformation_sk)
+        # cheat and set the status of all tasks to running
+        ret_task = n4js_preloaded.set_task_status(all_tasks, TaskStatusEnum.running)
+        assert set(ret_task) == set(all_tasks)
+        stat = user_client.get_transformation_status(transformation_sk)
+        assert not stat
 
-    def test_get_transformation_status_bifurication(
-        self,
-        scope_test,
-        n4js_preloaded,
-        network_tyk2,
-        user_client: client.AlchemiscaleClient,
-        uvicorn_server,
-    ):
-        an = network_tyk2
-        transformation = list(an.edges)[0]
-
-        network_sk = user_client.get_scoped_key(an, scope_test)
-        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
-
-        first_task = user_client.create_tasks(transformation_sk)[0]
-        layer_two_1 = user_client.create_tasks(transformation_sk, extends=first_task)[0]
-        layer_two_2 = user_client.create_tasks(transformation_sk, extends=first_task)[0]
-
-        layer_three_1 = user_client.create_tasks(
-            transformation_sk, extends=layer_two_1
-        )[0]
-        layer_three_2 = user_client.create_tasks(
-            transformation_sk, extends=layer_two_1
-        )[0]
-        layer_three_3 = user_client.create_tasks(
-            transformation_sk, extends=layer_two_2
-        )[0]
-        layer_three_4 = user_client.create_tasks(
-            transformation_sk, extends=layer_two_2
-        )[0]
-
-        collected_sks = [
-            first_task,
-            layer_two_1,
-            layer_two_2,
-            layer_three_1,
-            layer_three_2,
-            layer_three_3,
-            layer_three_4,
-        ]
-
-        user_client.get_transformation_status(transformation_sk)
+        # cheat and set the status of all tasks to complete
+        ret_task = n4js_preloaded.set_task_status(all_tasks, TaskStatusEnum.complete)
+        assert set(ret_task) == set(all_tasks)
+        stat = user_client.get_transformation_status(transformation_sk)
+        assert stat
