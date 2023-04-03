@@ -34,12 +34,13 @@ USER_ID=$(id -u) GROUP_ID=$(id -g) docker-compose up -d
 
 # AWS EC2 Setup
 
-The following series of commands are sufficient for setting up Docker on an AWS
-EC2 instance running Amazon Linux.
+The following series of commands are sufficient for setting up Docker on an AWS EC2 instance running Amazon Linux. 
+Updated for Amazon Linux 2023.
+However, please use the launch template XXXX to spin up a new instance as it will use an AMI that has all dependences installed (so you will not have to do the steps below).
 
 ```bash
 # Install docker
-sudo amazon-linux-extras install docker
+sudo dnf install -y docker
 # Start the docker daemon
 sudo service docker start
 # Add ec2-user to docker group
@@ -49,7 +50,7 @@ newgrp docker
 # Have docker daemon start on reboot
 sudo chkconfig docker on
 # Install handy tools
-sudo yum install -y git tmux
+sudo dnf install -y git tmux amazon-cloudwatch-agent
 # Install docker compose
 sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
 # Fix permissions
@@ -58,7 +59,12 @@ sudo chmod +x /usr/local/bin/docker-compose
 docker-compose version
 # check docker install
 docker info
+# This will start the daemon and download the config from the Systems Manager Parameter Store
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:alchemiscale-cloudwatch
 ```
+
+# AWS IAM Role
+Attach fah-alchemy-test-role to EC2 instance
 
 # AWS EC2 Admin
 
