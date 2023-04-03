@@ -201,4 +201,4 @@ services:
        options:
           awslogs-region: "${AWS_DEFAULT_REGION:?err}"
           awslogs-group: "alchemiscale"
-          tag: "{{.Name}}/{{.ID}}"
+          tag: "$HOST_DOMAIN-{{.Name}}/{{.ID}}"
