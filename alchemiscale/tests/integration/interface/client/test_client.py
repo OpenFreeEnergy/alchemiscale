@@ -453,6 +453,9 @@ class TestClient:
                 assert isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
                 assert pdr.ok()
 
+        import pdb
+        pdb.set_trace()
+
     def test_get_task_failures(
         self,
         scope_test,

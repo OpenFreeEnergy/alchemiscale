@@ -191,21 +191,6 @@ class TaskHub(GufeTokenizable):
         return super()._defaults()
 
 
-class TaskArchive(GufeTokenizable):
-    ...
-
-    def _to_dict(self):
-        return {}
-
-    @classmethod
-    def _from_dict(cls, d):
-        return cls(**d)
-
-    @classmethod
-    def _defaults(cls):
-        return super()._defaults()
-
-
 class ObjectStoreRef(GufeTokenizable):
     location: Optional[str]
     obj_key: Optional[GufeKey]
@@ -257,7 +242,3 @@ class ProtocolDAGResultRef(ObjectStoreRef):
             "scope": str(self.scope),
             "ok": self.ok,
         }
-
-
-class TaskArchive(GufeTokenizable):
-    ...
