@@ -86,7 +86,7 @@ The stuff below is not needed for deployment but useful to reference.
 
 The following series of commands are sufficient for setting up Docker on an AWS EC2 instance running Amazon Linux. 
 Updated for Amazon Linux 2023.
-However, please use the launch template XXXX to spin up a new instance as it will use an AMI that has all dependences installed (so you will not have to do the steps below).
+However, please use the launch `template alchemiscale-template` to spin up a new instance as it will use an AMI that has all dependences installed (so you will not have to do the steps below).
 
 ```bash
 # Install docker
