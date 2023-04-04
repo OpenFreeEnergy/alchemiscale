@@ -1236,6 +1236,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Claim a TaskHub Task.
 
         This method will claim Tasks from a TaskHub according to the following process:
+
         1. `waiting` Tasks with the highest priority are selected for consideration.
         2. Tasks with an `EXTENDS` relationship to an incomplete Task are dropped
            from consideration.
