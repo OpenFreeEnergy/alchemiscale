@@ -629,7 +629,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> ScopedKey:
         """Delete the given `AlchemicalNetwork` from the database.
 
-        This will not remove any `Transformation`s or `ChemicalSystem`s
+        This will not remove any `Transformation`\s or `ChemicalSystem`\s
         associated with the `AlchemicalNetwork`, since these may be associated
         with other `AlchemicalNetwork`s in the same `Scope`.
 
@@ -665,7 +665,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         scope: Optional[Scope] = Scope(),
         return_gufe: bool = False,
     ):
-        """Query for `AlchemicalNetwork`s matching given attributes."""
+        """Query for `AlchemicalNetwork`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="AlchemicalNetwork",
@@ -678,7 +678,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def query_transformations(
         self, *, name=None, key=None, scope: Scope = Scope(), chemical_systems=None
     ):
-        """Query for `Transformation`s matching given attributes."""
+        """Query for `Transformation`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="Transformation", additional=additional, key=key, scope=scope
@@ -687,7 +687,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def query_chemicalsystems(
         self, *, name=None, key=None, scope: Scope = Scope(), transformations=None
     ):
-        """Query for `ChemicalSystem`s matching given attributes."""
+        """Query for `ChemicalSystem`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="ChemicalSystem", additional=additional, key=key, scope=scope
@@ -897,13 +897,13 @@ class Neo4jStore(AlchemiscaleStateStore):
     def query_taskhubs(
         self, scope: Optional[Scope] = Scope(), return_gufe: bool = False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskHub]]:
-        """Query for `TaskHub`s matching the given criteria.
+        """Query for `TaskHub`\s matching the given criteria.
 
         Parameters
         ----------
         return_gufe
             If True, return a dict with `ScopedKey`s as keys, `TaskHub`
-            instances as values. Otherwise, return a list of `ScopedKey`s.
+            instances as values. Otherwise, return a list of `ScopedKey`\s.
 
         """
         return self._query(qualname="TaskHub", scope=scope, return_gufe=return_gufe)
@@ -1527,7 +1527,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         If `return_gufe` is `True`, returns actual `Transformation` and
         `ProtocolDAGResultRef` object (`None` if not present); if `False`, returns
-        `ScopedKey`s for these instead.
+        `ScopedKey`\s for these instead.
 
         """
         q = f"""
