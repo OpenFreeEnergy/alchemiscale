@@ -1,6 +1,6 @@
 """
 Node4js state storage --- :mod:`alchemiscale.storage.statestore`
-===============================================================
+================================================================
 
 """
 
@@ -174,7 +174,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         for label, values in self.constraints.items():
             self.graph.run(
                 f"""
-                CREATE CONSTRAINT {values['name']} IF NOT EXISTS 
+                CREATE CONSTRAINT {values['name']} IF NOT EXISTS
                 FOR (n:{label}) REQUIRE n.{values['property']} is unique
             """
             )
@@ -233,7 +233,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         for label, values in self.constraints.items():
             self.graph.run(
                 f"""
-                DROP CONSTRAINT {values['name']} IF EXISTS 
+                DROP CONSTRAINT {values['name']} IF EXISTS
             """
             )
 
@@ -479,7 +479,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         if return_subgraph:
             q += """
-            OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m) 
+            OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m)
             WHERE NOT (m)-[:DEPENDS_ON]->()
             RETURN n,p
             """
@@ -550,7 +550,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         if return_gufe:
             q += """
-            OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m) 
+            OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m)
             WHERE NOT (m)-[:DEPENDS_ON]->()
             RETURN n,p
             """
@@ -997,7 +997,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 q = f"""
                 // get our TaskHub
                 MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:PERFORMS]->(an:AlchemicalNetwork)
-                
+
                 // get the task we want to add to the hub; check that it connects to same network
                 MATCH (task:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
 
@@ -1208,7 +1208,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Get a list of unclaimed Tasks in the TaskHub."""
 
         q = f"""
-        // get list of all unclaimed tasks in the hub 
+        // get list of all unclaimed tasks in the hub
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task)
         WHERE NOT (task)<-[:CLAIMS]-(:ComputeServiceRegistration)
         RETURN task
@@ -1254,7 +1254,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         taskpool_q = f"""
-        // get list of all eligible 'waiting' tasks in the hub 
+        // get list of all eligible 'waiting' tasks in the hub
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
         WHERE task.status = 'waiting'
         AND actions.weight > 0
@@ -1851,7 +1851,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 MATCH (t:Task {{_scoped_key: '{t}'}})
 
                 // EXTENDS* used to get all tasks in the extends chain
-                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task) 
+                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task)
                 SET t.status = '{TaskStatusEnum.invalid.value}'
                 SET extends_task.status = '{TaskStatusEnum.invalid.value}'
                 WITH t, extends_task
@@ -1891,7 +1891,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 MATCH (t:Task {{_scoped_key: '{t}'}})
 
                 // EXTENDS* used to get all tasks in the extends chain
-                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task) 
+                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task)
                 SET t.status = '{TaskStatusEnum.deleted.value}'
                 SET extends_task.status = '{TaskStatusEnum.deleted.value}'
                 WITH t, extends_task
