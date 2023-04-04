@@ -16,6 +16,7 @@ from typing import Union, Optional, List, Dict, Tuple
 from pathlib import Path
 from threading import Thread
 import tempfile
+from datetime import datetime
 
 import requests
 
@@ -243,7 +244,8 @@ class SynchronousComputeService:
         return protocoldag, transformation, extends_protocoldagresult
 
     def push_result(
-        self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
+        self, task: ScopedKey, protocoldagresult: ProtocolDAGResult,
+        start: datetime, end: datetime
     ) -> ScopedKey:
         # TODO: this method should postprocess any paths,
         # leaf nodes in DAG for blob results that should go to object store
@@ -251,7 +253,10 @@ class SynchronousComputeService:
         # TODO: ship paths to object store
 
         # finally, push ProtocolDAGResult
-        sk: ScopedKey = self.client.set_task_result(task, protocoldagresult)
+        sk: ScopedKey = self.client.set_task_result(task, protocoldagresult, 
+                                                    compute_service_id=self.compute_service_id,
+                                                    start=start,
+                                                    end=end)
 
         return sk
 
@@ -271,6 +276,8 @@ class SynchronousComputeService:
         )
         shared = Path(shared_tmp.name)
 
+        start = datetime.utcnow()
+
         protocoldagresult = execute_DAG(
             protocoldag,
             shared=shared,
@@ -279,11 +286,17 @@ class SynchronousComputeService:
             raise_error=False,
         )
 
+        end = datetime.utcnow()
+
         if not self.keep_shared:
             shared_tmp.cleanup()
 
         # push the result (or failure) back to the compute API
-        result_sk = self.push_result(task, protocoldagresult)
+        result_sk = self.push_result(task, 
+                                     protocoldagresult,
+                                     start=start,
+                                     end=end
+                                     )
 
         return result_sk
 

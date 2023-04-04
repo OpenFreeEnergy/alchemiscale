@@ -9,6 +9,7 @@ from typing import List, Tuple, Optional, Dict, Union
 import json
 from urllib.parse import urljoin
 from functools import wraps
+from datetime import datetime
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -93,7 +94,12 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         )
 
     def set_task_result(
-        self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
+        self, 
+        task: ScopedKey,
+        protocoldagresult: ProtocolDAGResult,
+        compute_service_id: Optional[ComputeServiceID] = None,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
     ) -> ScopedKey:
         data = dict(
             protocoldagresult=json.dumps(

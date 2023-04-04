@@ -25,9 +25,9 @@ from py2neo.errors import ClientError
 from .models import (
     ComputeServiceID,
     ComputeServiceRegistration,
+    TaskProvenance,
     Task,
     TaskHub,
-    TaskArchive,
     TaskStatusEnum,
     ProtocolDAGResultRef,
 )
@@ -1570,9 +1570,17 @@ class Neo4jStore(AlchemiscaleStateStore):
         return transformation, protocoldagresultref
 
     def set_task_result(
-        self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
+            self, 
+            task: ScopedKey, 
+            protocoldagresultref: ProtocolDAGResultRef,
+            taskprovenance: Optional[TaskProvenance] = None
     ) -> ScopedKey:
-        """Set a `ProtocolDAGResultRef` pointing to a `ProtocolDAGResult` for the given `Task`."""
+        """Set a `ProtocolDAGResultRef` pointing to a `ProtocolDAGResult` for the given `Task`.
+
+        If a `TaskProvenance` is given, this will also be associated with the
+        `ProtocolDAGResultRef` via a RECORDS relationship.
+
+        """
 
         if task.qualname != "Task":
             raise ValueError("`task` ScopedKey does not correspond to a `Task`")
@@ -1589,6 +1597,18 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         subgraph = subgraph | Relationship.type("RESULTS_IN")(
             task_node,
+            protocoldagresultref_node,
+            _org=scope.org,
+            _campaign=scope.campaign,
+            _project=scope.project,
+        )
+
+        if taskprovenance is not None:
+            taskprovenance_node = Node(
+                "TaskProvenance", **taskprovenance.to_dict()
+            )
+            subgraph = subgraph | Relationship.type("RECORDS")(
+            taskprovenance_node,
             protocoldagresultref_node,
             _org=scope.org,
             _campaign=scope.campaign,
