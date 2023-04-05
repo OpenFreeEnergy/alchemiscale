@@ -15,7 +15,7 @@ import threading
 from typing import Union, Optional, List, Dict, Tuple
 from pathlib import Path
 from threading import Thread
-import tempfile
+import shutil
 
 import requests
 
@@ -266,21 +266,25 @@ class SynchronousComputeService:
 
         # execute the task; this looks the same whether the ProtocolDAG is a
         # success or failure
-        shared_tmp = tempfile.TemporaryDirectory(
-            prefix=f"{str(protocoldag.key)}__", dir=self.shared_basedir
-        )
-        shared = Path(shared_tmp.name)
+
+        shared = self.shared_basedir / str(protocoldag.key)
+        shared.mkdir()
+        scratch = self.scratch_basedir / str(protocoldag.key)
+        scratch.mkdir()
 
         protocoldagresult = execute_DAG(
             protocoldag,
-            shared=shared,
-            scratch_basedir=self.scratch_basedir,
+            shared_basedir=shared,
+            scratch_basedir=scratch,
             keep_scratch=self.keep_scratch,
             raise_error=False,
         )
 
         if not self.keep_shared:
-            shared_tmp.cleanup()
+            shutil.rmtree(shared)
+
+        if not self.keep_scratch:
+            shutil.rmtree(scratch)
 
         # push the result (or failure) back to the compute API
         result_sk = self.push_result(task, protocoldagresult)

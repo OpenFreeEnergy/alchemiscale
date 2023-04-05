@@ -252,8 +252,8 @@ class TestClient:
 
     @staticmethod
     def _execute_tasks(tasks, n4js, s3os_server):
-        shared = Path("shared").absolute()
-        shared.mkdir()
+        shared_basedir = Path("shared").absolute()
+        shared_basedir.mkdir()
         scratch_basedir = Path("scratch").absolute()
         scratch_basedir.mkdir()
 
@@ -273,10 +273,16 @@ class TestClient:
                 name=str(task_sk),
             )
 
+            shared = shared_basedir / str(protocoldag.key)
+            shared.mkdir()
+
+            scratch = scratch_basedir / str(protocoldag.key)
+            scratch.mkdir()
+
             protocoldagresult = execute_DAG(
                 protocoldag,
-                shared=shared,
-                scratch_basedir=scratch_basedir,
+                shared_basedir=shared,
+                scratch_basedir=scratch,
                 raise_error=False,
             )
 
