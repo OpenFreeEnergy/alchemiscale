@@ -7,7 +7,7 @@ dependencies:
   - python =3.9
 
   # gufe dependencies
-  - numpy
+  - numpy<1.24  # https://github.com/numba/numba/issues/8615#issuecomment-1360792615
   - networkx
   - rdkit
   - pip
