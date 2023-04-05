@@ -13,7 +13,8 @@ dependencies:
   - pip
   - pydantic
   - openff-toolkit
-  - openff-units
+  - openff-units >=0.2.0
+  - openff-models >=0.0.4
   - openeye-toolkits
   - typing-extensions
 
@@ -56,8 +57,8 @@ dependencies:
 
   - pip:
     - git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment
-    - git+https://github.com/OpenFreeEnergy/gufe@alchemiscale-compute
+    - git+https://github.com/OpenFreeEnergy/gufe
     - git+https://github.com/OpenFreeEnergy/openfe
-    - git+https://github.com/dotsdl/openfe-benchmarks@ligandnetwork
-    - git+https://github.com/mikemhenry/openff-models.git@support_nested_models
+    - git+https://github.com/dotsdl/openfe-benchmarks
+    #- git+https://github.com/mikemhenry/openff-models.git@support_nested_models
     #- git+https://github.com/openforcefield/protein-ligand-benchmark
