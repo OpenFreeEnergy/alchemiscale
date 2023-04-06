@@ -1029,13 +1029,15 @@ class TestNeo4jStore(TestStateStore):
 
         # execute the task
         with tmpdir.as_cwd():
-            shared = Path("shared").absolute()
-            shared.mkdir()
+            shared_basedir = Path("shared").absolute()
+            shared_basedir.mkdir()
             scratch_basedir = Path("scratch").absolute()
             scratch_basedir.mkdir()
 
             protocoldagresult = execute_DAG(
-                protocoldag, shared=shared, scratch_basedir=scratch_basedir
+                protocoldag,
+                shared_basedir=shared_basedir,
+                scratch_basedir=scratch_basedir,
             )
 
         pdr_ref = ProtocolDAGResultRef(
