@@ -9,7 +9,7 @@ from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
-from alchemiscale.storage import Neo4jStore
+from alchemiscale.storage.statestore import Neo4jStore
 from alchemiscale.storage.models import (
     Task,
     TaskHub,
