@@ -1,4 +1,4 @@
-FROM mambaorg/micromamba:1.1.0
+FROM mambaorg/micromamba:1.4.1
 
 LABEL org.opencontainers.image.source=https://github.com/openforcefield/alchemiscale
 LABEL org.opencontainers.image.description="An alchemical free energy platform for exascale computing on Folding@Home."
