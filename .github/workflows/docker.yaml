@@ -11,7 +11,7 @@ name: Create and publish Docker images
 
 on:
   push:
-    branches: ['release']
+    branches: ['release', 'deployment-envs']
   workflow_dispatch:
 
 env:
