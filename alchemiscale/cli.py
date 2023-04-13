@@ -9,7 +9,6 @@ import yaml
 import signal
 from typing import Type
 
-from .security.auth import hash_key
 from .security.models import (
     CredentialedEntity,
     CredentialedUserIdentity,
@@ -471,6 +470,7 @@ def identity():
 @key
 def add(url, user, password, dbname, identity_type, identifier, key):
     """Add a credentialed identity to the database."""
+    from .security.auth import hash_key
     from .storage.statestore import get_n4js
     from .settings import Neo4jStoreSettings
 
