@@ -1,5 +1,6 @@
 import gunicorn.app.base
 
+
 class ApiApplication(gunicorn.app.base.BaseApplication):
     def __init__(self, app, workers, bind):
         self.app = app
@@ -18,4 +19,3 @@ class ApiApplication(gunicorn.app.base.BaseApplication):
         self.cfg.set("workers", self.workers)
         self.cfg.set("bind", self.bind)
         self.cfg.set("worker_class", "uvicorn.workers.UvicornWorker")
-

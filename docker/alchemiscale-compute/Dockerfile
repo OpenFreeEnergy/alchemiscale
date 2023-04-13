@@ -18,4 +18,7 @@ RUN micromamba install -y -n base git -f /tmp/env.yaml && \
 # https://github.com/mamba-org/micromamba-docker#running-commands-in-dockerfile-within-the-conda-environment
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 RUN python -m pip install --no-deps -e .
+
+WORKDIR /home/mambauser
+
 ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "/opt/conda/bin/alchemiscale"]
