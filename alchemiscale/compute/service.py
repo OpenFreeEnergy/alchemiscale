@@ -139,11 +139,11 @@ class SynchronousComputeService:
         else:
             self.scopes = scopes
 
-        self.shared_basedir = Path(shared_basedir)
+        self.shared_basedir = Path(shared_basedir).absolute()
         self.shared_basedir.mkdir(exist_ok=True)
         self.keep_shared = keep_shared
 
-        self.scratch_basedir = Path(scratch_basedir)
+        self.scratch_basedir = Path(scratch_basedir).absolute()
         self.scratch_basedir.mkdir(exist_ok=True)
         self.keep_scratch = keep_scratch
 
