@@ -7,7 +7,6 @@ Command line interface --- :mod:`alchemiscale.cli`
 import click
 import yaml
 import signal
-import gunicorn.app.base
 from typing import Type
 
 from .security.auth import hash_key
@@ -192,27 +191,28 @@ def s3os_params(func):
     )
 
 
-class ApiApplication(gunicorn.app.base.BaseApplication):
-    def __init__(self, app, workers, bind):
-        self.app = app
-        self.workers = workers
-        self.bind = bind
-        super().__init__()
-
-    @classmethod
-    def from_parameters(cls, app, workers, host, port):
-        return cls(app, workers, bind=f"{host}:{port}")
-
-    def load(self):
-        return self.app
-
-    def load_config(self):
-        self.cfg.set("workers", self.workers)
-        self.cfg.set("bind", self.bind)
-        self.cfg.set("worker_class", "uvicorn.workers.UvicornWorker")
-
-
 def start_api(api_app, workers, host, port):
+    import gunicorn.app.base
+
+    class ApiApplication(gunicorn.app.base.BaseApplication):
+        def __init__(self, app, workers, bind):
+            self.app = app
+            self.workers = workers
+            self.bind = bind
+            super().__init__()
+
+        @classmethod
+        def from_parameters(cls, app, workers, host, port):
+            return cls(app, workers, bind=f"{host}:{port}")
+
+        def load(self):
+            return self.app
+
+        def load_config(self):
+            self.cfg.set("workers", self.workers)
+            self.cfg.set("bind", self.bind)
+            self.cfg.set("worker_class", "uvicorn.workers.UvicornWorker")
+
     gunicorn_app = ApiApplication(api_app, workers, bind=f"{host}:{port}")
     gunicorn_app.run()
 
