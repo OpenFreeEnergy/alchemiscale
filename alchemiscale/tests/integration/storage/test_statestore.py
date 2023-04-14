@@ -291,8 +291,14 @@ class TestNeo4jStore(TestStateStore):
         ).to_subgraph()
 
         assert csreg["identifier"] == compute_service_id
-        assert csreg["registered"] == now
-        assert csreg["heartbeat"] == now
+
+        # we round to integer seconds from epoch to avoid somewhat different
+        # floats on either side of comparison even if practically the same
+        # straight datetime comparisons would sometimes fail depending on timing
+        assert int(csreg["registered"].to_native().timestamp()) == int(now.timestamp())
+        assert int(csreg["heartbeat"].to_native().timestamp()) == int(
+            now.timestamp()
+        )
 
     def test_deregister_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
