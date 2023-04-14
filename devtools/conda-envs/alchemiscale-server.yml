@@ -12,7 +12,6 @@ dependencies:
   - openfe=0.7.1
   - py2neo
   - monotonic    # needed by py2neo, but not pulled in
-  #- docker-py    # for grolt
 
   ## object store
   - boto3        # aws s3
@@ -33,18 +32,6 @@ dependencies:
   ## cli
   - click
 
-  # testing
-  #- pytest
-  #- pytest-xdist
-  #- pytest-cov
-  #- coverage
-  #- moto
-
-  # needed for openfe-benchmark tests
-  #- lomap2>=2.1.0
-  #- openmmtools
-  #- openmmforcefields
-    
   # perses dependencies
   - openeye-toolkits
   - openmoltools
@@ -55,10 +42,4 @@ dependencies:
   - pymbar >=3.0.6,<4
 
   - pip:
-    #- git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment
-    #- git+https://github.com/OpenFreeEnergy/gufe
-    #- git+https://github.com/OpenFreeEnergy/openfe
-    #- git+https://github.com/OpenFreeEnergy/openfe-benchmarks
-    #- git+https://github.com/mikemhenry/openff-models.git@support_nested_models
     - git+https://github.com/choderalab/perses.git@protocol-neqcyc
-    #- git+https://github.com/openforcefield/protein-ligand-benchmark
