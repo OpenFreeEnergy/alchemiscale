@@ -1,0 +1,23 @@
+name: alchemiscale-compute
+channels:
+  - conda-forge
+  - openeye
+dependencies:
+  - python =3.9
+
+  # alchemiscale dependencies
+  - gufe=0.7.1
+  - openfe=0.7.1
+  - click
+
+  # perses dependencies
+  - openeye-toolkits
+  - openmoltools
+  - cloudpathlib
+  - dask
+  - distributed
+  - numba
+  - pymbar >=3.0.6,<4
+
+  - pip:
+    - git+https://github.com/choderalab/perses.git@protocol-neqcyc

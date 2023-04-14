@@ -25,7 +25,8 @@ from openfe_benchmarks import tyk2
 
 from alchemiscale.models import Scope
 from alchemiscale.settings import Neo4jStoreSettings, S3ObjectStoreSettings
-from alchemiscale.storage import Neo4jStore, S3ObjectStore, get_s3os
+from alchemiscale.storage.statestore import Neo4jStore
+from alchemiscale.storage.objectstore import S3ObjectStore, get_s3os
 from alchemiscale.storage.models import ComputeServiceID
 
 
