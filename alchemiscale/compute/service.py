@@ -195,7 +195,7 @@ class SynchronousComputeService:
         logger.addHandler(sh)
 
         if logfile is not None:
-            fh = logging.FileHandler()
+            fh = logging.FileHandler(logfile)
             fh.setFormatter(formatter)
             logger.addHandler(fh)
 
@@ -447,6 +447,8 @@ class SynchronousComputeService:
                 "Deregistered service with registration '%s'",
                 str(self.compute_service_id),
             )
+
+            # TODO: clean up scratch, shared
 
     def stop(self):
         self.int_sleep.interrupt()

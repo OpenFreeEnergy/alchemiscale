@@ -258,13 +258,13 @@ class ProtocolDAGResultRef(ObjectStoreRef):
             "obj_key": str(self.obj_key),
             "scope": str(self.scope),
             "ok": self.ok,
-            "received": self.received.isoformat(),
+            "received": self.received.isoformat() if self.received is not None else None,
         }
 
     @classmethod
     def _from_dict(cls, d):
         d_ = copy(d)
-        d_["received"] = datetime.fromisoformat(d["received"])
+        d_["received"] = datetime.fromisoformat(d["received"]) if d.get("received") is not None else None
 
         return super()._from_dict(d_)
 
