@@ -32,14 +32,15 @@ class AlchemiscaleBaseClient:
 
     _exception = AlchemiscaleBaseClientError
 
-    def __init__(self, 
-                 api_url: str,
-                 identifier: str,
-                 key: str,
-                 max_retries: int = 5,
-                 retry_base_seconds: float = 2.0,
-                 retry_max_seconds: float = 60.0,
-        ):
+    def __init__(
+        self,
+        api_url: str,
+        identifier: str,
+        key: str,
+        max_retries: int = 5,
+        retry_base_seconds: float = 2.0,
+        retry_max_seconds: float = 60.0,
+    ):
         """Client class for interfacing with an alchemiscale API service.
 
         Parameters
@@ -58,7 +59,7 @@ class AlchemiscaleBaseClient:
             continue indefinitely until success.
         retry_base_seconds
             The base number of seconds to use for exponential backoff.
-            Must be greater than 1.0. 
+            Must be greater than 1.0.
         retry_max_seconds
             Maximum number of seconds to sleep between retries; avoids runaway
             exponential backoff while allowing for many retries.
@@ -68,7 +69,7 @@ class AlchemiscaleBaseClient:
         self.identifier = identifier
         self.key = key
         self.max_retries = max_retries
-        
+
         if retry_base_seconds <= 1.0:
             raise ValueError("'retry_base_seconds' must be greater than 1.0")
 
@@ -91,6 +92,7 @@ class AlchemiscaleBaseClient:
         gives an upper bound to the time between retries.
 
         """
+
         @wraps(f)
         def _wrapper(self, *args, **kwargs):
             retries = 0
@@ -104,8 +106,11 @@ class AlchemiscaleBaseClient:
 
                     # apply exponential backoff with random jitter
                     sleep_time = min(
-                            self.retry_max_seconds + self.retry_base_seconds * random.random(),
-                            self.retry_base_seconds ** retries + self.retry_base_seconds * random.random())
+                        self.retry_max_seconds
+                        + self.retry_base_seconds * random.random(),
+                        self.retry_base_seconds**retries
+                        + self.retry_base_seconds * random.random(),
+                    )
                     time.sleep(sleep_time)
 
         return _wrapper

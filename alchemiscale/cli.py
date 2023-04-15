@@ -199,7 +199,9 @@ def s3os_params(func):
 def start_api(api_app, workers, host, port, options):
     from .cli_utils import ApiApplication
 
-    gunicorn_app = ApiApplication(api_app, workers, bind=f"{host}:{port}", options=options)
+    gunicorn_app = ApiApplication(
+        api_app, workers, bind=f"{host}:{port}", options=options
+    )
     gunicorn_app.run()
 
 
@@ -216,7 +218,7 @@ def cli():
     help="Start the user-facing API service",
 )
 @api_starting_params(
-    "ALCHEMISCALE_API_HOST", "ALCHEMISCALE_API_PORT", "ALCHEMISCALE_API_LOGLEVEL" 
+    "ALCHEMISCALE_API_HOST", "ALCHEMISCALE_API_PORT", "ALCHEMISCALE_API_LOGLEVEL"
 )
 @db_params
 @s3os_params
@@ -261,7 +263,11 @@ def api(
     app.dependency_overrides[get_base_api_settings] = get_settings_override
 
     start_api(
-        app, workers, host["ALCHEMISCALE_API_HOST"], port["ALCHEMISCALE_API_PORT"], options=options
+        app,
+        workers,
+        host["ALCHEMISCALE_API_HOST"],
+        port["ALCHEMISCALE_API_PORT"],
+        options=options,
     )
 
 
@@ -328,7 +334,7 @@ def api(
         workers,
         host["ALCHEMISCALE_COMPUTE_API_HOST"],
         port["ALCHEMISCALE_COMPUTE_API_PORT"],
-        options=options
+        options=options,
     )
 
 

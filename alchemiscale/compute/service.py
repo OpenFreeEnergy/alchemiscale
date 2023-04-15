@@ -89,7 +89,7 @@ class SynchronousComputeService:
         loglevel="WARN",
         client_max_retries=5,
         client_retry_base_seconds=2.0,
-        client_retry_max_seconds=60.0
+        client_retry_max_seconds=60.0,
     ):
         """Create a `SynchronousComputeService` instance.
 
@@ -134,11 +134,11 @@ class SynchronousComputeService:
             continue indefinitely until success.
         client_retry_base_seconds
             The base number of seconds to use for exponential backoff.
-            Must be greater than 1.0. 
+            Must be greater than 1.0.
         client_retry_max_seconds
             Maximum number of seconds to sleep between retries; avoids runaway
             exponential backoff while allowing for many retries.
-            
+
         """
         self.api_url = api_url
         self.name = name
@@ -146,10 +146,14 @@ class SynchronousComputeService:
         self.heartbeat_interval = heartbeat_interval
         self.claim_limit = claim_limit
 
-        self.client = AlchemiscaleComputeClient(api_url, identifier, key,
-                                                client_max_retries,
-                                                client_retry_base_seconds,
-                                                client_retry_max_seconds)
+        self.client = AlchemiscaleComputeClient(
+            api_url,
+            identifier,
+            key,
+            client_max_retries,
+            client_retry_base_seconds,
+            client_retry_max_seconds,
+        )
 
         if scopes is None:
             self.scopes = [Scope()]
