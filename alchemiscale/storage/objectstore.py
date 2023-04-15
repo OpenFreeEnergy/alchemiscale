@@ -236,7 +236,7 @@ class S3ObjectStore:
             obj_key=protocoldagresult.key,
             scope=scope,
             ok=ok,
-            received=datetime.utcnow()
+            received=datetime.utcnow(),
         )
 
     def pull_protocoldagresult(

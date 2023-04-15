@@ -244,7 +244,7 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         obj_key: GufeKey,
         scope: Scope,
         ok: bool,
-        received: Optional[datetime] = None
+        received: Optional[datetime] = None,
     ):
         self.location = location
         self.obj_key = GufeKey(obj_key)
@@ -267,6 +267,7 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         d_["received"] = datetime.fromisoformat(d["received"])
 
         return super()._from_dict(d_)
+
 
 class TaskArchive(GufeTokenizable):
     ...
