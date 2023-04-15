@@ -188,7 +188,7 @@ class SynchronousComputeService:
         formatter = logging.Formatter(
             "[%(asctime)s] [%(compute_service_id)s] [%(levelname)s] %(message)s"
         )
-        formatter.converter = time.gmtime # use utc time for logging timestamps
+        formatter.converter = time.gmtime  # use utc time for logging timestamps
 
         sh = logging.StreamHandler()
         sh.setFormatter(formatter)
