@@ -173,13 +173,22 @@ class SynchronousComputeService:
         self.compute_service_id = ComputeServiceID(f"{self.name}-{uuid4()}")
 
         self.int_sleep = InterruptableSleep()
-        self.logger = logging.getLogger("AlchemiscaleSynchronousComputeService")
-        self.logger.setLevel(loglevel)
-
-        self.logger.addHandler(logging.StreamHandler())
-        # TODO: add formatter to streamhandler that includes "[timestamp] [compute_service_id] [loglevel of message] message"
 
         self._stop = False
+
+        # logging
+        extra = {"compute_service_id": str(self.compute_service_id)}
+        logger = logging.getLogger("AlchemiscaleSynchronousComputeService")
+        logger.setLevel(loglevel)
+
+        ch = logging.StreamHandler()
+        formatter = logging.Formatter(
+            "[%(asctime)s] [%(compute_service_id)s] [%(levelname)s] %(message)s"
+        )
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
+
+        self.logger = logging.LoggerAdapter(logger, extra)
 
     def _register(self):
         """Register this compute service with the compute API."""
