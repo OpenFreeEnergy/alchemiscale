@@ -240,15 +240,17 @@ class ProtocolDAGResultRef(ObjectStoreRef):
     def __init__(
         self,
         *,
-        location: str = None,
+        location: Optional[str] = None,
         obj_key: GufeKey,
         scope: Scope,
         ok: bool,
+        received: Optional[datetime] = None
     ):
         self.location = location
         self.obj_key = GufeKey(obj_key)
         self.scope = scope
         self.ok = ok
+        self.received = received
 
     def _to_dict(self):
         return {
@@ -256,8 +258,15 @@ class ProtocolDAGResultRef(ObjectStoreRef):
             "obj_key": str(self.obj_key),
             "scope": str(self.scope),
             "ok": self.ok,
+            "received": self.received.isoformat(),
         }
 
+    @classmethod
+    def _from_dict(cls, d):
+        d_ = copy(d)
+        d_["received"] = datetime.fromisoformat(d["received"])
+
+        return super()._from_dict(d_)
 
 class TaskArchive(GufeTokenizable):
     ...

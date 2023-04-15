@@ -33,7 +33,7 @@ class AlchemiscaleBaseClient:
     """Base class for Alchemiscale API clients."""
 
     _exception = AlchemiscaleBaseClientError
-    _retry_status_codes = [502, 503, 504]
+    _retry_status_codes = [404, 502, 503, 504]
 
     def __init__(
         self,
