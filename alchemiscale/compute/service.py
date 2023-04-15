@@ -87,6 +87,9 @@ class SynchronousComputeService:
         scopes: Optional[List[Scope]] = None,
         claim_limit: int = 1,
         loglevel="WARN",
+        client_max_retries=5,
+        client_retry_base_seconds=2.0,
+        client_retry_max_seconds=60.0
     ):
         """Create a `SynchronousComputeService` instance.
 
@@ -124,7 +127,18 @@ class SynchronousComputeService:
         loglevel
             The loglevel at which to report via STDOUT; see the :mod:`logging`
             docs for available levels.
-
+        client_max_retries
+            Maximum number of times to retry a request. In the case the API
+            service is unresponsive an expoenential backoff is applied with
+            retries until this number is reached. If set to -1, retries will
+            continue indefinitely until success.
+        client_retry_base_seconds
+            The base number of seconds to use for exponential backoff.
+            Must be greater than 1.0. 
+        client_retry_max_seconds
+            Maximum number of seconds to sleep between retries; avoids runaway
+            exponential backoff while allowing for many retries.
+            
         """
         self.api_url = api_url
         self.name = name
@@ -132,7 +146,10 @@ class SynchronousComputeService:
         self.heartbeat_interval = heartbeat_interval
         self.claim_limit = claim_limit
 
-        self.client = AlchemiscaleComputeClient(api_url, identifier, key)
+        self.client = AlchemiscaleComputeClient(api_url, identifier, key,
+                                                client_max_retries,
+                                                client_retry_base_seconds,
+                                                client_retry_max_seconds)
 
         if scopes is None:
             self.scopes = [Scope()]
@@ -156,6 +173,7 @@ class SynchronousComputeService:
         self.logger.setLevel(loglevel)
 
         self.logger.addHandler(logging.StreamHandler())
+        # TODO: add formatter to streamhandler that includes "[timestamp] [compute_service_id] [loglevel of message] message"
 
         self._stop = False
 

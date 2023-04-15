@@ -219,7 +219,7 @@ async def get_task_transformation(
 
 # TODO: support compression performed client-side
 @router.post("/tasks/{task_scoped_key}/results", response_model=ScopedKey)
-def set_task_result(
+async def set_task_result(
     task_scoped_key,
     *,
     protocoldagresult: str = Body(embed=True),

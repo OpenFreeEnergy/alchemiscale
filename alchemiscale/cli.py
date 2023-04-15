@@ -70,7 +70,13 @@ def api_starting_params(envvar_host, envvar_port, envvar_loglevel):
             envvar=envvar_loglevel,
             **SETTINGS_OPTION_KWARGS,
         )
-        return workers(host(port(loglevel(func))))
+        config_file = click.option(
+            "--config-file",
+            "-c",
+            type=click.File(),
+            help="YAML-based configuration file giving additional settings for gunicorn",
+        )
+        return workers(host(port(loglevel(config_file(func)))))
 
     return inner
 
@@ -190,10 +196,10 @@ def s3os_params(func):
     )
 
 
-def start_api(api_app, workers, host, port):
+def start_api(api_app, workers, host, port, options):
     from .cli_utils import ApiApplication
 
-    gunicorn_app = ApiApplication(api_app, workers, bind=f"{host}:{port}")
+    gunicorn_app = ApiApplication(api_app, workers, bind=f"{host}:{port}", options=options)
     gunicorn_app.run()
 
 
@@ -210,13 +216,13 @@ def cli():
     help="Start the user-facing API service",
 )
 @api_starting_params(
-    "ALCHEMISCALE_API_HOST", "ALCHEMISCALE_API_PORT", "ALCHEMISCALE_API_LOGLEVEL"
+    "ALCHEMISCALE_API_HOST", "ALCHEMISCALE_API_PORT", "ALCHEMISCALE_API_LOGLEVEL" 
 )
 @db_params
 @s3os_params
 @jwt_params
 def api(
-    workers, host, port, loglevel,  # API
+    workers, host, port, loglevel, config_file,  # API
     url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  # JWT
     access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
@@ -231,6 +237,9 @@ def api(
     # HOW-TO: modify the callback in jwt_secret (defined in jwt_params) to
     # do this. See comment there. Use that instead of the callback in
     # SETTINGS_OPTION_KWARGS
+
+    if config_file is not None:
+        options = yaml.safe_load(config_file)
 
     def get_settings_override():
         # inject settings from CLI arguments
@@ -252,7 +261,7 @@ def api(
     app.dependency_overrides[get_base_api_settings] = get_settings_override
 
     start_api(
-        app, workers, host["ALCHEMISCALE_API_HOST"], port["ALCHEMISCALE_API_PORT"]
+        app, workers, host["ALCHEMISCALE_API_HOST"], port["ALCHEMISCALE_API_PORT"], options=options
     )
 
 
@@ -279,7 +288,7 @@ def compute():
 @s3os_params
 @jwt_params
 def api(
-    workers, host, port, loglevel, registration_expire_seconds, # API
+    workers, host, port, loglevel, config_file, registration_expire_seconds, # API
     url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  #JWT
     access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
@@ -291,6 +300,9 @@ def api(
     # CONSIDER GENERATING A JWT_SECRET_KEY if none provided with
     # key = generate_secret_key()
     # CONVENIENT FOR THE SINGLE-SERVER CASE HERE
+
+    if config_file is not None:
+        options = yaml.safe_load(config_file)
 
     def get_settings_override():
         # inject settings from CLI arguments
@@ -316,6 +328,7 @@ def api(
         workers,
         host["ALCHEMISCALE_COMPUTE_API_HOST"],
         port["ALCHEMISCALE_COMPUTE_API_PORT"],
+        options=options
     )
 
 
