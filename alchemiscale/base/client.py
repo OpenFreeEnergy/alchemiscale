@@ -24,13 +24,16 @@ def json_to_gufe(jsondata):
 
 
 class AlchemiscaleBaseClientError(Exception):
-    ...
+    def __init__(self, message, status_code):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class AlchemiscaleBaseClient:
     """Base class for Alchemiscale API clients."""
 
     _exception = AlchemiscaleBaseClientError
+    _retry_status_codes = [502, 503, 504]
 
     def __init__(
         self,
@@ -99,7 +102,12 @@ class AlchemiscaleBaseClient:
             while True:
                 try:
                     return f(self, *args, **kwargs)
-                except self._exception:
+                except self._exception as e:
+                    # if the exception status code is not one of those we want
+                    # to retry on, just raise
+                    if e.status_code not in self._retry_status_codes:
+                        raise
+
                     if (self.max_retries != -1) and retries >= self.max_retries:
                         raise
                     retries += 1
@@ -115,7 +123,6 @@ class AlchemiscaleBaseClient:
 
         return _wrapper
 
-    @_retry
     def _get_token(self):
         data = {"username": self.identifier, "password": self.key}
 
@@ -123,7 +130,10 @@ class AlchemiscaleBaseClient:
         resp = requests.post(url, data=data)
 
         if not 200 <= resp.status_code < 300:
-            raise self._exception(f"Status Code {resp.status_code} : {resp.reason}")
+            raise self._exception(
+                f"Status Code {resp.status_code} : {resp.reason}",
+                status_code=resp.status_code,
+            )
 
         self._jwtoken = resp.json()["access_token"]
         self._headers = {
@@ -134,18 +144,25 @@ class AlchemiscaleBaseClient:
     def _use_token(f):
         @wraps(f)
         def _wrapper(self, *args, **kwargs):
+            # if we don't have a token at all, get one
             if self._jwtoken is None:
                 self._get_token()
 
-            retries = 0
-            while True:
-                try:
-                    return f(self, *args, **kwargs)
-                except self._exception:
+            # execute our function
+            # if we get an unauthorized exception, it may be that our token is
+            # stale; get a new one if so
+            # if it's any other status code, raise it
+            try:
+                return f(self, *args, **kwargs)
+            except self._exception as e:
+                if e.status_code == 401:
                     self._get_token()
-                    if retries >= self.max_retries:
-                        raise
-                    retries += 1
+                else:
+                    raise
+
+            # if we made it here, it means we got a fresh token;
+            # try the function again with the token in place
+            return f(self, *args, **kwargs)
 
         return _wrapper
 
@@ -156,7 +173,10 @@ class AlchemiscaleBaseClient:
         resp = requests.get(url, params=params, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise self._exception(f"Status Code {resp.status_code} : {resp.reason}")
+            raise self._exception(
+                f"Status Code {resp.status_code} : {resp.reason}",
+                status_code=resp.status_code,
+            )
 
         if params.get("return_gufe"):
             return {
@@ -176,7 +196,8 @@ class AlchemiscaleBaseClient:
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason} : Details {resp.json()['detail']}"
+                f"Status Code {resp.status_code} : {resp.reason} : Details {resp.json()['detail']}",
+                status_code=resp.status_code,
             )
         content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
         return content
@@ -190,7 +211,10 @@ class AlchemiscaleBaseClient:
         resp = requests.post(url, data=jsondata, headers=self._headers)
 
         if not 200 <= resp.status_code < 300:
-            raise self._exception(f"Status Code {resp.status_code} : {resp.reason}")
+            raise self._exception(
+                f"Status Code {resp.status_code} : {resp.reason}",
+                status_code=resp.status_code,
+            )
 
         return resp.json()
 
