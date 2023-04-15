@@ -87,6 +87,7 @@ class SynchronousComputeService:
         scopes: Optional[List[Scope]] = None,
         claim_limit: int = 1,
         loglevel="WARN",
+        logfile: Optional[Path] = None,
         client_max_retries=5,
         client_retry_base_seconds=2.0,
         client_retry_max_seconds=60.0,
@@ -127,6 +128,9 @@ class SynchronousComputeService:
         loglevel
             The loglevel at which to report via STDOUT; see the :mod:`logging`
             docs for available levels.
+        logfile
+            Path to file for logging output; if not set, logging will only go
+            to STDOUT.
         client_max_retries
             Maximum number of times to retry a request. In the case the API
             service is unresponsive an expoenential backoff is applied with
@@ -181,12 +185,19 @@ class SynchronousComputeService:
         logger = logging.getLogger("AlchemiscaleSynchronousComputeService")
         logger.setLevel(loglevel)
 
-        ch = logging.StreamHandler()
         formatter = logging.Formatter(
             "[%(asctime)s] [%(compute_service_id)s] [%(levelname)s] %(message)s"
         )
-        ch.setFormatter(formatter)
-        logger.addHandler(ch)
+        formatter.converter = time.gmtime # use utc time for logging timestamps
+
+        sh = logging.StreamHandler()
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
+
+        if logfile is not None:
+            fh = logging.FileHandler()
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
 
         self.logger = logging.LoggerAdapter(logger, extra)
 
