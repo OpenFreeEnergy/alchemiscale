@@ -6,6 +6,7 @@ Command line interface --- :mod:`alchemiscale.cli`
 
 import click
 import yaml
+import json
 import signal
 from typing import Type
 
@@ -76,7 +77,13 @@ def api_starting_params(envvar_host, envvar_port, envvar_loglevel):
             type=click.File(),
             help="YAML-based configuration file giving additional settings for gunicorn",
         )
-        return workers(host(port(loglevel(config_file(func)))))
+        config_json = click.option(
+            "--config-json",
+            "-j",
+            type=str,
+            help="inline JSON giving additional settings for gunicorn; these take precedence over options given with `--config-file`",
+        )
+        return workers(host(port(loglevel(config_file(config_json(func))))))
 
     return inner
 
@@ -224,7 +231,7 @@ def cli():
 @s3os_params
 @jwt_params
 def api(
-    workers, host, port, loglevel, config_file,  # API
+    workers, host, port, loglevel, config_file, config_json,  # API
     url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  # JWT
     access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
@@ -240,8 +247,12 @@ def api(
     # do this. See comment there. Use that instead of the callback in
     # SETTINGS_OPTION_KWARGS
 
+    options = {}
     if config_file is not None:
-        options = yaml.safe_load(config_file)
+        options.update(yaml.safe_load(config_file))
+
+    if config_json is not None:
+        options.update(json.loads(config_json))
 
     def get_settings_override():
         # inject settings from CLI arguments
@@ -294,7 +305,7 @@ def compute():
 @s3os_params
 @jwt_params
 def api(
-    workers, host, port, loglevel, config_file, registration_expire_seconds, # API
+    workers, host, port, loglevel, config_file, config_json, registration_expire_seconds, # API
     url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  #JWT
     access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
@@ -307,8 +318,12 @@ def api(
     # key = generate_secret_key()
     # CONVENIENT FOR THE SINGLE-SERVER CASE HERE
 
+    options = {}
     if config_file is not None:
-        options = yaml.safe_load(config_file)
+        options.update(yaml.safe_load(config_file))
+
+    if config_json is not None:
+        options.update(json.loads(config_json))
 
     def get_settings_override():
         # inject settings from CLI arguments
