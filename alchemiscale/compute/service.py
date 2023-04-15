@@ -314,19 +314,20 @@ class SynchronousComputeService:
         scratch = self.scratch_basedir / str(protocoldag.key)
         scratch.mkdir()
 
-        protocoldagresult = execute_DAG(
-            protocoldag,
-            shared_basedir=shared,
-            scratch_basedir=scratch,
-            keep_scratch=self.keep_scratch,
-            raise_error=False,
-        )
+        try:
+            protocoldagresult = execute_DAG(
+                protocoldag,
+                shared_basedir=shared,
+                scratch_basedir=scratch,
+                keep_scratch=self.keep_scratch,
+                raise_error=False,
+            )
+        finally:
+            if not self.keep_shared:
+                shutil.rmtree(shared)
 
-        if not self.keep_shared:
-            shutil.rmtree(shared)
-
-        if not self.keep_scratch:
-            shutil.rmtree(scratch)
+            if not self.keep_scratch:
+                shutil.rmtree(scratch)
 
         # push the result (or failure) back to the compute API
         result_sk = self.push_result(task, protocoldagresult)
