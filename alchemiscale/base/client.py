@@ -25,7 +25,7 @@ def json_to_gufe(jsondata):
 
 class AlchemiscaleBaseClientError(Exception):
     def __init__(self, *args, **kwargs):
-        self.status_code = kwargs.pop('status_code', None)
+        self.status_code = kwargs.pop("status_code", None)
         super().__init__(*args, **kwargs)
 
 

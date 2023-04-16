@@ -258,7 +258,9 @@ class ProtocolDAGResultRef(ObjectStoreRef):
             "obj_key": str(self.obj_key),
             "scope": str(self.scope),
             "ok": self.ok,
-            "datetime_created": self.datetime_created.isoformat() if self.datetime_created is not None else None
+            "datetime_created": self.datetime_created.isoformat()
+            if self.datetime_created is not None
+            else None,
         }
 
     @classmethod
