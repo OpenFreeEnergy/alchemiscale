@@ -7,6 +7,7 @@ Client for interacting with user-facing API. --- :mod:`alchemiscale.interface.cl
 
 from typing import Union, List, Dict, Optional, Tuple
 import json
+from collections import Counter
 
 
 import networkx as nx
@@ -14,9 +15,6 @@ from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
-
-from rich import print as rprint
-from collections import Counter
 
 from ..base.client import (
     AlchemiscaleBaseClient,
@@ -210,8 +208,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self, transformation: ScopedKey, visualize: Optional[bool] = True
     ) -> bool:
         """Return the status of the given Transformation.
-        If visualize is True, a tree of the Tasks in the Transformation will be
-        printed to the console.
+
+        If visualize is True, counts of Task statuses for the Transformation
+        will be printed to the console.
 
         """
         g = self.get_transformation_tasks(transformation, return_as="graph")
@@ -220,10 +219,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         stat_dict = {}
         for stat, task in zip(statuses, all_tasks):
             stat_dict[task] = stat
+
         # check if everything is finished
         complete = all([i == TaskStatusEnum.complete for i in statuses])
 
         if visualize:
+            from rich import print as rprint
+
             # tasks status
             value_counts = Counter(stat_dict.values())
             rprint(
