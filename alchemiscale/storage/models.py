@@ -244,13 +244,13 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         obj_key: GufeKey,
         scope: Scope,
         ok: bool,
-        received: Optional[datetime] = None,
+        datetime_created: Optional[datetime] = None,
     ):
         self.location = location
         self.obj_key = GufeKey(obj_key)
         self.scope = scope
         self.ok = ok
-        self.received = received
+        self.datetime_created = datetime_created
 
     def _to_dict(self):
         return {
@@ -258,16 +258,14 @@ class ProtocolDAGResultRef(ObjectStoreRef):
             "obj_key": str(self.obj_key),
             "scope": str(self.scope),
             "ok": self.ok,
-            "received": self.received.isoformat()
-            if self.received is not None
-            else None,
+            "datetime_created": self.datetime_created.isoformat() if self.datetime_created is not None else None
         }
 
     @classmethod
     def _from_dict(cls, d):
         d_ = copy(d)
-        d_["received"] = (
-            datetime.fromisoformat(d["received"])
+        d_["datetime_created"] = (
+            datetime.fromisoformat(d["datetime_created"])
             if d.get("received") is not None
             else None
         )

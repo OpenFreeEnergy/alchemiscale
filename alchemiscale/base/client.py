@@ -24,15 +24,13 @@ def json_to_gufe(jsondata):
 
 
 class AlchemiscaleBaseClientError(Exception):
-    def __init__(self, message, status_code):
-        super().__init__(message)
-        self.status_code = status_code
+    def __init__(self, *args, **kwargs):
+        self.status_code = kwargs.pop('status_code', None)
+        super().__init__(*args, **kwargs)
 
 
 class AlchemiscaleConnectionError(Exception):
-    def __init__(self, message, status_code):
-        super().__init__(message)
-        self.status_code = status_code
+    ...
 
 
 class AlchemiscaleBaseClient:
@@ -179,8 +177,8 @@ class AlchemiscaleBaseClient:
         url = urljoin(self.api_url, resource)
         try:
             resp = requests.get(url, params=params, headers=self._headers)
-        except requests.exceptions.ConnectionError as e:
-            raise AlchemiscaleConnectionError(e.strerror, e.errno)
+        except requests.exceptions.RequestException as e:
+            raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
@@ -204,12 +202,12 @@ class AlchemiscaleBaseClient:
         url = urljoin(self.api_url, resource)
         try:
             resp = requests.get(url, params=params, headers=self._headers)
-        except requests.exceptions.ConnectionError as e:
-            raise AlchemiscaleConnectionError(e.strerror, e.errno)
+        except requests.exceptions.RequestException as e:
+            raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason} : Details {resp.json()['detail']}",
+                f"Status Code {resp.status_code} : {resp.reason} : {resp.text}",
                 status_code=resp.status_code,
             )
         content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
@@ -223,8 +221,8 @@ class AlchemiscaleBaseClient:
         jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
         try:
             resp = requests.post(url, data=jsondata, headers=self._headers)
-        except requests.exceptions.ConnectionError as e:
-            raise AlchemiscaleConnectionError(e.strerror, e.errno)
+        except requests.exceptions.RequestException as e:
+            raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
