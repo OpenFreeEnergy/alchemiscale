@@ -132,7 +132,10 @@ class AlchemiscaleBaseClient:
         data = {"username": self.identifier, "password": self.key}
 
         url = urljoin(self.api_url, "/token")
-        resp = requests.post(url, data=data)
+        try:
+            resp = requests.post(url, data=data)
+        except requests.exceptions.RequestException as e:
+            raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
