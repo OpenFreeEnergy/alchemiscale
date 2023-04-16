@@ -4,7 +4,7 @@ import os
 import pytest
 
 from alchemiscale.models import ScopedKey
-from alchemiscale.storage import S3ObjectStore
+from alchemiscale.storage.objectstore import S3ObjectStore
 from alchemiscale.storage.models import ProtocolDAGResultRef
 
 

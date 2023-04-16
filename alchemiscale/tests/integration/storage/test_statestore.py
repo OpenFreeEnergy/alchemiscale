@@ -9,7 +9,7 @@ from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
-from alchemiscale.storage import Neo4jStore
+from alchemiscale.storage.statestore import Neo4jStore
 from alchemiscale.storage.models import (
     Task,
     TaskHub,
@@ -291,8 +291,12 @@ class TestNeo4jStore(TestStateStore):
         ).to_subgraph()
 
         assert csreg["identifier"] == compute_service_id
-        assert csreg["registered"] == now
-        assert csreg["heartbeat"] == now
+
+        # we round to integer seconds from epoch to avoid somewhat different
+        # floats on either side of comparison even if practically the same
+        # straight datetime comparisons would sometimes fail depending on timing
+        assert int(csreg["registered"].to_native().timestamp()) == int(now.timestamp())
+        assert int(csreg["heartbeat"].to_native().timestamp()) == int(now.timestamp())
 
     def test_deregister_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
@@ -335,8 +339,13 @@ class TestNeo4jStore(TestStateStore):
             """
         ).to_subgraph()
 
-        assert csreg["registered"] == now
-        assert csreg["heartbeat"] == tomorrow
+        # we round to integer seconds from epoch to avoid somewhat different
+        # floats on either side of comparison even if practically the same
+        # straight datetime comparisons would sometimes fail depending on timing
+        assert int(csreg["registered"].to_native().timestamp()) == int(now.timestamp())
+        assert int(csreg["heartbeat"].to_native().timestamp()) == int(
+            tomorrow.timestamp()
+        )
 
     def test_expire_registrations(self, n4js, compute_service_id):
         now = datetime.utcnow()

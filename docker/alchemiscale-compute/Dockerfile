@@ -1,14 +1,14 @@
-FROM mambaorg/micromamba:1.1.0
+FROM mambaorg/micromamba:1.4.1
 
-LABEL org.opencontainers.image.source=https://github.com/openforcefield/alchemiscale
-LABEL org.opencontainers.image.description="An alchemical free energy platform for exascale computing on Folding@Home."
+LABEL org.opencontainers.image.source=https://github.com/openforcefield/alchemiscale-compute
+LABEL org.opencontainers.image.description="deployable compute services for an alchemiscale server"
 LABEL org.opencontainers.image.licenses=MIT
 
 # Don't buffer stdout & stderr streams, so if there is a crash no partial buffer output is lost
 # https://docs.python.org/3/using/cmdline.html#cmdoption-u
 ENV PYTHONUNBUFFERED=1
 
-COPY --chown=$MAMBA_USER:$MAMBA_USER devtools/conda-envs/docker.yml /tmp/env.yaml
+COPY --chown=$MAMBA_USER:$MAMBA_USER devtools/conda-envs/alchemiscale-compute.yml /tmp/env.yaml
 COPY --chown=$MAMBA_USER:$MAMBA_USER alchemiscale /tmp/alchemiscale
 COPY --chown=$MAMBA_USER:$MAMBA_USER LICENSE MANIFEST.in README.md setup.cfg setup.py versioneer.py /tmp/
 RUN micromamba install -y -n base git -f /tmp/env.yaml && \
@@ -18,4 +18,7 @@ RUN micromamba install -y -n base git -f /tmp/env.yaml && \
 # https://github.com/mamba-org/micromamba-docker#running-commands-in-dockerfile-within-the-conda-environment
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 RUN python -m pip install --no-deps -e .
+
+WORKDIR /home/mambauser
+
 ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "/opt/conda/bin/alchemiscale"]

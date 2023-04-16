@@ -14,7 +14,8 @@ import requests
 from fastapi import FastAPI
 from alchemiscale.tests.integration.utils import running_service
 
-from alchemiscale.cli import get_settings_from_options, cli, ApiApplication
+from alchemiscale.cli import get_settings_from_options, cli
+from alchemiscale.cli_utils import ApiApplication
 from alchemiscale.models import Scope
 from alchemiscale.security.auth import hash_key, authenticate, AuthenticationError
 from alchemiscale.security.models import (
