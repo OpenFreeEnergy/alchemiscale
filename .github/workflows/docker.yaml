@@ -7,20 +7,29 @@
 # To get a newer version, you will need to update the SHA.
 # You can also reference a tag or branch, but the action may change without warning.
 
-name: Create and publish a Docker image
+name: Create and publish Docker images
 
 on:
   push:
-    branches: ['release']
+    branches: ['release', 'deployment-envs']
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  NAMESPACE: openforcefield
 
 jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['alchemiscale-server', 'alchemiscale-compute']
+        include:
+          - image: 'alchemiscale-server'
+            dockerfile: 'docker/alchemiscale-server/Dockerfile'
+          - image: 'alchemiscale-compute'
+            dockerfile: 'docker/alchemiscale-compute/Dockerfile'
     permissions:
       contents: read
       packages: write
@@ -40,7 +49,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}
           tags: |
             type=schedule,pattern=nightly,enable=true,priority=1000
             type=ref,event=branch,enable=true,priority=600
@@ -54,7 +63,7 @@ jobs:
         uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
         with:
           context: .
-          file: docker/Dockerfile
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

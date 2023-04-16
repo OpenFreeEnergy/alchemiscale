@@ -41,6 +41,9 @@ init:
   scopes:
     - '*-*-*'
 
+  # Maximum number of Tasks to claim at a time from a TaskHub.
+  claim_limit: 1
+
   # The loglevel at which to report via STDOUT; see the :mod:`logging` docs for
   # available levels.
   loglevel: 'WARN'

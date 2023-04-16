@@ -2,7 +2,8 @@
 *
 
 # Only allow
-!devtools/conda-envs/docker.yml
+!devtools/conda-envs/alchemiscale-server.yml
+!devtools/conda-envs/alchemiscale-compute.yml
 !alchemiscale/*
 !LICENSE 
 !MANIFEST.in 
