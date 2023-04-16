@@ -138,7 +138,7 @@ class TestClient:
         assert set(task_sks_e) == set(n4js.get_tasks(sk, extends=task_sks[0]))
         assert set() == set(n4js.get_tasks(sk, extends=task_sks[1]))
 
-    def test_get_tasks(
+    def test_get_transformation_tasks(
         self,
         scope_test,
         n4js_preloaded,
@@ -154,20 +154,26 @@ class TestClient:
 
         task_sks = user_client.create_tasks(sk, count=3)
 
-        assert set(task_sks) == set(user_client.get_tasks(sk))
+        assert set(task_sks) == set(user_client.get_transformation_tasks(sk))
 
         # try creating tasks that extend one of those we just created
         task_sks_e = user_client.create_tasks(sk, count=4, extends=task_sks[0])
 
         # check that we now get additional tasks
-        assert set(task_sks + task_sks_e) == set(user_client.get_tasks(sk))
+        assert set(task_sks + task_sks_e) == set(
+            user_client.get_transformation_tasks(sk)
+        )
 
         # check that tasks are structured as we expect
-        assert set(task_sks_e) == set(user_client.get_tasks(sk, extends=task_sks[0]))
-        assert set() == set(user_client.get_tasks(sk, extends=task_sks[1]))
+        assert set(task_sks_e) == set(
+            user_client.get_transformation_tasks(sk, extends=task_sks[0])
+        )
+        assert set() == set(
+            user_client.get_transformation_tasks(sk, extends=task_sks[1])
+        )
 
         # check graph form of output
-        graph: nx.DiGraph = user_client.get_tasks(sk, return_as="graph")
+        graph: nx.DiGraph = user_client.get_transformation_tasks(sk, return_as="graph")
 
         for task_sk in task_sks:
             assert len(list(graph.successors(task_sk))) == 0
@@ -324,7 +330,7 @@ class TestClient:
         tasks = user_client.create_tasks(transformation_sk, count=3)
 
         # user client : action the tasks for execution
-        all_tasks = user_client.get_tasks(transformation_sk)
+        all_tasks = user_client.get_transformation_tasks(transformation_sk)
         actioned_tasks = user_client.action_tasks(all_tasks, network_sk)
 
         # execute the actioned tasks and push results directly using statestore and object store
@@ -596,3 +602,35 @@ class TestClient:
             # check that the status has been set
             statuses = user_client.get_tasks_status(all_tasks)
             assert all([s == status for s in statuses])
+
+    def test_get_transformation_status(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+        uvicorn_server,
+    ):
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        all_tasks = user_client.create_tasks(transformation_sk, count=5)
+
+        # set the status of a task
+        stat = user_client.get_transformation_status(transformation_sk)
+        assert not stat
+
+        # cheat and set the status of all tasks to running
+        ret_task = n4js_preloaded.set_task_status(all_tasks, TaskStatusEnum.running)
+        assert set(ret_task) == set(all_tasks)
+        stat = user_client.get_transformation_status(transformation_sk)
+        assert not stat
+
+        # cheat and set the status of all tasks to complete
+        ret_task = n4js_preloaded.set_task_status(all_tasks, TaskStatusEnum.complete)
+        assert set(ret_task) == set(all_tasks)
+        stat = user_client.get_transformation_status(transformation_sk)
+        assert stat
