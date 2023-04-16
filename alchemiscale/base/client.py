@@ -177,7 +177,10 @@ class AlchemiscaleBaseClient:
     @_use_token
     def _query_resource(self, resource, params):
         url = urljoin(self.api_url, resource)
-        resp = requests.get(url, params=params, headers=self._headers)
+        try:
+            resp = requests.get(url, params=params, headers=self._headers)
+        except requests.exceptions.ConnectionError as e:
+            raise AlchemiscaleConnectionError(e.strerror, e.errno)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
@@ -199,7 +202,10 @@ class AlchemiscaleBaseClient:
             params = {}
 
         url = urljoin(self.api_url, resource)
-        resp = requests.get(url, params=params, headers=self._headers)
+        try:
+            resp = requests.get(url, params=params, headers=self._headers)
+        except requests.exceptions.ConnectionError as e:
+            raise AlchemiscaleConnectionError(e.strerror, e.errno)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
