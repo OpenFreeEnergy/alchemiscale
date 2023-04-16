@@ -56,17 +56,17 @@ router = APIRouter(
 
 
 @app.get("/ping")
-async def ping():
+def ping():
     return {"api": "AlchemiscaleAPI"}
 
 
 @router.get("/info")
-async def info():
+def info():
     return {"message": "nothing yet"}
 
 
 @router.get("/check")
-async def check(
+def check(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
 ):
@@ -76,7 +76,7 @@ async def check(
 
 
 @router.get("/identities/{identity_identifier}/scopes")
-async def list_scopes(
+def list_scopes(
     *,
     identity_identifier,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -90,7 +90,7 @@ async def list_scopes(
 
 
 @router.get("/exists/{scoped_key}", response_class=GufeJSONResponse)
-async def check_existence(
+def check_existence(
     scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -103,7 +103,7 @@ async def check_existence(
 
 
 @router.get("/networks", response_class=GufeJSONResponse)
-async def query_networks(
+def query_networks(
     *,
     name: str = None,
     return_gufe: bool = False,
@@ -129,7 +129,7 @@ async def query_networks(
 
 
 @router.get("/networks/{network_scoped_key}", response_class=GufeJSONResponse)
-async def get_network(
+def get_network(
     network_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -144,7 +144,7 @@ async def get_network(
 
 
 @router.post("/networks", response_model=ScopedKey)
-async def create_network(
+def create_network(
     *,
     network: Dict = Body(...),
     scope: Scope,
@@ -163,14 +163,14 @@ async def create_network(
 
 
 @router.get("/transformations")
-async def query_transformations():
+def query_transformations():
     return {"message": "nothing yet"}
 
 
 @router.get(
     "/transformations/{transformation_scoped_key}", response_class=GufeJSONResponse
 )
-async def get_transformation(
+def get_transformation(
     transformation_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -184,14 +184,14 @@ async def get_transformation(
 
 
 @router.get("/chemicalsystems")
-async def query_chemicalsystems():
+def query_chemicalsystems():
     return {"message": "nothing yet"}
 
 
 @router.get(
     "/chemicalsystems/{chemicalsystem_scoped_key}", response_class=GufeJSONResponse
 )
-async def get_chemicalsystem(
+def get_chemicalsystem(
     chemicalsystem_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -208,12 +208,12 @@ async def get_chemicalsystem(
 
 
 @router.post("/networks/{scoped_key}/strategy")
-async def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
+def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
     ...
 
 
 @router.post("/transformations/{transformation_scoped_key}/tasks")
-async def create_tasks(
+def create_tasks(
     transformation_scoped_key,
     *,
     extends: Optional[ScopedKey] = None,
@@ -234,7 +234,7 @@ async def create_tasks(
 
 
 @router.get("/transformations/{transformation_scoped_key}/tasks")
-async def get_tasks(
+def get_tasks(
     transformation_scoped_key,
     *,
     extends: str = None,
@@ -262,7 +262,7 @@ async def get_tasks(
 
 
 @router.post("/networks/{network_scoped_key}/tasks/action")
-async def action_tasks(
+def action_tasks(
     network_scoped_key,
     *,
     tasks: List[ScopedKey] = Body(embed=True),
@@ -279,7 +279,7 @@ async def action_tasks(
 
 
 @router.post("/networks/{network_scoped_key}/tasks/cancel")
-async def cancel_tasks(
+def cancel_tasks(
     network_scoped_key,
     *,
     tasks: List[ScopedKey] = Body(embed=True),
@@ -296,7 +296,7 @@ async def cancel_tasks(
 
 
 @router.post("/tasks/{task_scoped_key}/status")
-async def set_task_status(
+def set_task_status(
     task_scoped_key,
     status: str = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -319,7 +319,7 @@ async def set_task_status(
 
 
 @router.get("/tasks/{task_scoped_key}/status")
-async def get_task_status(
+def get_task_status(
     task_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -340,7 +340,7 @@ async def get_task_status(
     "/transformations/{transformation_scoped_key}/results",
     response_class=GufeJSONResponse,
 )
-async def get_transformation_results(
+def get_transformation_results(
     transformation_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -359,7 +359,7 @@ async def get_transformation_results(
     "/transformations/{transformation_scoped_key}/failures",
     response_class=GufeJSONResponse,
 )
-async def get_transformation_failures(
+def get_transformation_failures(
     transformation_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -378,7 +378,7 @@ async def get_transformation_failures(
     "/transformations/{transformation_scoped_key}/results/{protocoldagresult_scoped_key}",
     response_class=GufeJSONResponse,
 )
-async def get_protocoldagresult(
+def get_protocoldagresult(
     protocoldagresult_scoped_key,
     transformation_scoped_key,
     *,
@@ -402,7 +402,7 @@ async def get_protocoldagresult(
     "/transformations/{transformation_scoped_key}/failures/{protocoldagresult_scoped_key}",
     response_class=GufeJSONResponse,
 )
-async def get_protocoldagresult_failure(
+def get_protocoldagresult_failure(
     protocoldagresult_scoped_key,
     transformation_scoped_key,
     *,
@@ -423,7 +423,7 @@ async def get_protocoldagresult_failure(
 
 
 @router.get("/tasks/{task_scoped_key}/transformation", response_class=GufeJSONResponse)
-async def get_task_transformation(
+def get_task_transformation(
     task_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -446,7 +446,7 @@ async def get_task_transformation(
     "/tasks/{task_scoped_key}/results",
     response_class=GufeJSONResponse,
 )
-async def get_task_results(
+def get_task_results(
     task_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -465,7 +465,7 @@ async def get_task_results(
     "/tasks/{task_scoped_key}/failures",
     response_class=GufeJSONResponse,
 )
-async def get_task_failures(
+def get_task_failures(
     task_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
