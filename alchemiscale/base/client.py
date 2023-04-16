@@ -29,6 +29,12 @@ class AlchemiscaleBaseClientError(Exception):
         self.status_code = status_code
 
 
+class AlchemiscaleConnectionError(Exception):
+    def __init__(self, message, status_code):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 class AlchemiscaleBaseClient:
     """Base class for Alchemiscale API clients."""
 
@@ -102,11 +108,12 @@ class AlchemiscaleBaseClient:
             while True:
                 try:
                     return f(self, *args, **kwargs)
-                except self._exception as e:
-                    # if the exception status code is not one of those we want
-                    # to retry on, just raise
-                    if e.status_code not in self._retry_status_codes:
-                        raise
+                except (self._exception, AlchemiscaleConnectionError) as e:
+                    # if we are getting back HTTP errors and the status code is not
+                    # one of those we want to retry on, just raise
+                    if isinstance(e, self._exception):
+                        if e.status_code not in self._retry_status_codes:
+                            raise
 
                     if (self.max_retries != -1) and retries >= self.max_retries:
                         raise
@@ -208,7 +215,10 @@ class AlchemiscaleBaseClient:
         url = urljoin(self.api_url, resource)
 
         jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
-        resp = requests.post(url, data=jsondata, headers=self._headers)
+        try:
+            resp = requests.post(url, data=jsondata, headers=self._headers)
+        except requests.exceptions.ConnectionError as e:
+            raise AlchemiscaleConnectionError(e.strerror, e.errno)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
