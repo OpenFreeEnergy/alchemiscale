@@ -6,6 +6,8 @@ Client for interacting with user-facing API. --- :mod:`alchemiscale.interface.cl
 
 from typing import Union, List, Dict, Optional, Tuple
 import json
+from collections import Counter
+
 
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
@@ -153,7 +155,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
         return [ScopedKey.from_str(i) for i in task_sks]
 
-    def get_tasks(
+    def get_transformation_tasks(
         self,
         transformation: ScopedKey,
         extends: Optional[ScopedKey] = None,
@@ -200,6 +202,49 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_task_transformation(self, task: ScopedKey) -> ScopedKey:
         transformation = self._get_resource(f"tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
+
+    def get_transformation_status(
+        self, transformation: ScopedKey, visualize: Optional[bool] = True
+    ) -> bool:
+        """Return the status of the given Transformation.
+
+        If visualize is True, counts of Task statuses for the Transformation
+        will be printed to the console.
+
+        """
+        g = self.get_transformation_tasks(transformation, return_as="graph")
+        all_tasks = list(g.nodes)
+        statuses = self.get_tasks_status(all_tasks)
+        stat_dict = {}
+        for stat, task in zip(statuses, all_tasks):
+            stat_dict[task] = stat
+
+        # check if everything is finished
+        complete = all([i == TaskStatusEnum.complete for i in statuses])
+
+        if visualize:
+            from rich import print as rprint
+
+            # tasks status
+            value_counts = Counter(stat_dict.values())
+            rprint(
+                f"[bold yellow]Alchemiscale Task Status for transformation: {transformation}\n"
+            )
+            rprint(f"[bold green]Complete: {value_counts[TaskStatusEnum.complete]}")
+            rprint(f"[bold blue]Waiting:  {value_counts[TaskStatusEnum.waiting]}")
+            rprint(f"[bold orange3]Running:  {value_counts[TaskStatusEnum.running]}")
+            rprint(f"[bold red]Error:    {value_counts[TaskStatusEnum.error]}")
+            rprint(f"[bold magenta1]Invalid:  {value_counts[TaskStatusEnum.invalid]}")
+            rprint(f"[bold purple]Deleted:  {value_counts[TaskStatusEnum.deleted]}")
+            rprint(f"-----------")
+            rprint(
+                f"[bold white]Total Complete:  {value_counts[TaskStatusEnum.complete]}/{sum(value_counts.values())}"
+            )
+            if complete:
+                rprint(f"\n[bold green]Transformation complete!")
+            else:
+                rprint(f"\n[bold red]Transformation incomplete!")
+        return complete
 
     def action_tasks(
         self, tasks: List[ScopedKey], network: ScopedKey
