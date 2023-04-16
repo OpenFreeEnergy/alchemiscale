@@ -1,6 +1,6 @@
 """
 Data models --- :mod:`alchemiscale.models`
-=========================================
+==========================================
 
 """
 from typing import Optional, Union

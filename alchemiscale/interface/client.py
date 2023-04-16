@@ -1,7 +1,6 @@
 """
 Client for interacting with user-facing API. --- :mod:`alchemiscale.interface.client`
-====================================================================================
-
+=====================================================================================
 
 """
 
@@ -323,7 +322,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def set_tasks_status(
         self, tasks: Union[ScopedKey, List[ScopedKey]], status: TaskStatusEnum
     ) -> List[Optional[ScopedKey]]:
-        """Set the status of one or multiple `Task`s.
+        """Set the status of one or multiple `Task`\s.
 
         Task status can be set to 'waiting' if currently 'error'.
         Status can be set to 'invalid' or 'deleted' from any other status.
@@ -331,15 +330,15 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         Parameters
         ----------
         tasks: Union[ScopedKey, List[ScopedKey]]
-            The `Task` or `Task`s to set the status of.
+            The `Task` or `Task`\s to set the status of.
         status: TaskStatusEnum
-            The status to set the `Task`s to. Can be one of
+            The status to set the `Task`\s to. Can be one of
             'waiting', 'invalid', or 'deleted'.
 
         Returns
         -------
         List[Optional[ScopedKey]]
-            The ScopedKeys of the `Task`s that were updated, in the same order
+            The ScopedKeys of the `Task`\s that were updated, in the same order
             as given in `tasks`. If a given `Task` doesn't exist, `None` will
             be returned in its place.
 
@@ -355,12 +354,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_tasks_status(
         self, tasks: Union[ScopedKey, List[ScopedKey]]
     ) -> List[TaskStatusEnum]:
-        """Get the status of one or multiple `Task`s.
+        """Get the status of one or multiple `Task`\s.
 
         Parameters
         ----------
         tasks: Union[ScopedKey, List[ScopedKey]]
-            The `Task` or `Task`s to get the status of.
+            The `Task` or `Task`\s to get the status of.
 
         Returns
         -------
@@ -431,7 +430,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The `ScopedKey` of the `Transformation` to retrieve results for.
         return_protocoldagresults
             If `True`, return the raw `ProtocolDAGResult`s instead of returning
-            a processed `ProtocolResult`. Only successful `ProtocolDAGResult`s
+            a processed `ProtocolResult`. Only successful `ProtocolDAGResult`\s
             are returned.
 
         """
@@ -458,7 +457,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         transformation: ScopedKey,
     ) -> Union[ProtocolResult, List[ProtocolDAGResult]]:
-        """Get failed `ProtocolDAGResult`s for the given `Transformation`.
+        """Get failed `ProtocolDAGResult`\s for the given `Transformation`.
 
         Parameters
         ----------
