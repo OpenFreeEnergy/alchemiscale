@@ -60,7 +60,7 @@ class AlchemiscaleBaseClient:
             Credential for the identity used for authentication.
         max_retries
             Maximum number of times to retry a request. In the case the API
-            service is unresponsive an expoenential backoff is applied with
+            service is unresponsive an exponential backoff is applied with
             retries until this number is reached. A ``self._exception`` is
             raised if retries are exhausted. If set to -1, retries will
             continue indefinitely until success.
