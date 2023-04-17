@@ -316,7 +316,7 @@ class SynchronousComputeService:
         scratch = self.scratch_basedir / str(protocoldag.key)
         scratch.mkdir()
 
-        self.logger.info("Executing '%s'", protocoldag)
+        self.logger.info("Executing '%s'...", protocoldag)
         try:
             protocoldagresult = execute_DAG(
                 protocoldag,
