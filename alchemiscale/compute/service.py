@@ -357,7 +357,7 @@ class SynchronousComputeService:
                     self._tasks_counter,
                     max_tasks,
                 )
-                self._stop = True
+                raise KeyboardInterrupt
 
     def _check_max_time(self, max_time):
         if max_time is not None:
@@ -368,7 +368,7 @@ class SynchronousComputeService:
                     run_time,
                     max_time,
                 )
-                self._stop = True
+                raise KeyboardInterrupt
 
     def cycle(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
         self._check_max_tasks(max_tasks)
