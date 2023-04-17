@@ -329,8 +329,15 @@ class SynchronousComputeService:
             if not self.keep_scratch:
                 shutil.rmtree(scratch)
 
+        if protocoldagresult.ok:
+            self.logger.info("'%s' : SUCCESS", protocoldagresult)
+        else:
+            for failure in protocoldagresult.protocol_unit_failures:
+                self.logger.info("'%s' : FAILURE : '%s' : %s", protocoldagresult, failure, failure.exception)
+
         # push the result (or failure) back to the compute API
         result_sk = self.push_result(task, protocoldagresult)
+        self.logger.info("Pushed result `%s'", protocoldagresult)
 
         return result_sk
 
@@ -448,8 +455,6 @@ class SynchronousComputeService:
                 "Deregistered service with registration '%s'",
                 str(self.compute_service_id),
             )
-
-            # TODO: clean up scratch, shared
 
     def stop(self):
         self.int_sleep.interrupt()
