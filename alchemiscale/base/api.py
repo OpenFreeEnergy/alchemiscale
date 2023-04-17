@@ -161,7 +161,7 @@ def _check_store_connectivity(n4js: Neo4jStore, s3os: S3ObjectStore) -> dict:
         return True
 
 
-async def get_token_data_depends(
+def get_token_data_depends(
     token: str = Depends(oauth2_scheme),
     settings: JWTSettings = Depends(get_base_api_settings),
 ) -> TokenData:
@@ -186,7 +186,7 @@ def get_s3os_depends(
     return get_s3os(settings)
 
 
-async def get_cred_entity():
+def get_cred_entity():
     return CredentialedEntity
 
 
@@ -194,7 +194,7 @@ base_router = APIRouter()
 
 
 @base_router.post("/token", response_model=Token)
-async def get_access_token(
+def get_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     settings: JWTSettings = Depends(get_base_api_settings),
     n4js: Neo4jStore = Depends(get_n4js_depends),

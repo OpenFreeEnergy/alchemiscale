@@ -87,6 +87,10 @@ class SynchronousComputeService:
         scopes: Optional[List[Scope]] = None,
         claim_limit: int = 1,
         loglevel="WARN",
+        logfile: Optional[Path] = None,
+        client_max_retries=5,
+        client_retry_base_seconds=2.0,
+        client_retry_max_seconds=60.0,
     ):
         """Create a `SynchronousComputeService` instance.
 
@@ -122,8 +126,22 @@ class SynchronousComputeService:
         claim_limit
             Maximum number of Tasks to claim at a time from a TaskHub.
         loglevel
-            The loglevel at which to report via STDOUT; see the :mod:`logging`
-            docs for available levels.
+            The loglevel at which to report; see the :mod:`logging` docs for
+            available levels.
+        logfile
+            Path to file for logging output; if not set, logging will only go
+            to STDOUT.
+        client_max_retries
+            Maximum number of times to retry a request. In the case the API
+            service is unresponsive an expoenential backoff is applied with
+            retries until this number is reached. If set to -1, retries will
+            continue indefinitely until success.
+        client_retry_base_seconds
+            The base number of seconds to use for exponential backoff.
+            Must be greater than 1.0.
+        client_retry_max_seconds
+            Maximum number of seconds to sleep between retries; avoids runaway
+            exponential backoff while allowing for many retries.
 
         """
         self.api_url = api_url
@@ -132,7 +150,14 @@ class SynchronousComputeService:
         self.heartbeat_interval = heartbeat_interval
         self.claim_limit = claim_limit
 
-        self.client = AlchemiscaleComputeClient(api_url, identifier, key)
+        self.client = AlchemiscaleComputeClient(
+            api_url,
+            identifier,
+            key,
+            client_max_retries,
+            client_retry_base_seconds,
+            client_retry_max_seconds,
+        )
 
         if scopes is None:
             self.scopes = [Scope()]
@@ -152,12 +177,29 @@ class SynchronousComputeService:
         self.compute_service_id = ComputeServiceID(f"{self.name}-{uuid4()}")
 
         self.int_sleep = InterruptableSleep()
-        self.logger = logging.getLogger("AlchemiscaleSynchronousComputeService")
-        self.logger.setLevel(loglevel)
-
-        self.logger.addHandler(logging.StreamHandler())
 
         self._stop = False
+
+        # logging
+        extra = {"compute_service_id": str(self.compute_service_id)}
+        logger = logging.getLogger("AlchemiscaleSynchronousComputeService")
+        logger.setLevel(loglevel)
+
+        formatter = logging.Formatter(
+            "[%(asctime)s] [%(compute_service_id)s] [%(levelname)s] %(message)s"
+        )
+        formatter.converter = time.gmtime  # use utc time for logging timestamps
+
+        sh = logging.StreamHandler()
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
+
+        if logfile is not None:
+            fh = logging.FileHandler(logfile)
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
+
+        self.logger = logging.LoggerAdapter(logger, extra)
 
     def _register(self):
         """Register this compute service with the compute API."""
@@ -262,7 +304,9 @@ class SynchronousComputeService:
 
         """
         # obtain a ProtocolDAG from the task
+        self.logger.info("Creating ProtocolDAG from task '%s'...", task)
         protocoldag, transformation, extends = self.task_to_protocoldag(task)
+        self.logger.info("Created '%s' from task '%s'", protocoldag, task)
 
         # execute the task; this looks the same whether the ProtocolDAG is a
         # success or failure
@@ -272,22 +316,36 @@ class SynchronousComputeService:
         scratch = self.scratch_basedir / str(protocoldag.key)
         scratch.mkdir()
 
-        protocoldagresult = execute_DAG(
-            protocoldag,
-            shared_basedir=shared,
-            scratch_basedir=scratch,
-            keep_scratch=self.keep_scratch,
-            raise_error=False,
-        )
+        self.logger.info("Executing '%s'...", protocoldag)
+        try:
+            protocoldagresult = execute_DAG(
+                protocoldag,
+                shared_basedir=shared,
+                scratch_basedir=scratch,
+                keep_scratch=self.keep_scratch,
+                raise_error=False,
+            )
+        finally:
+            if not self.keep_shared:
+                shutil.rmtree(shared)
 
-        if not self.keep_shared:
-            shutil.rmtree(shared)
+            if not self.keep_scratch:
+                shutil.rmtree(scratch)
 
-        if not self.keep_scratch:
-            shutil.rmtree(scratch)
+        if protocoldagresult.ok:
+            self.logger.info("'%s' : SUCCESS", protocoldagresult)
+        else:
+            for failure in protocoldagresult.protocol_unit_failures:
+                self.logger.info(
+                    "'%s' : FAILURE : '%s' : %s",
+                    protocoldagresult,
+                    failure,
+                    failure.exception,
+                )
 
         # push the result (or failure) back to the compute API
         result_sk = self.push_result(task, protocoldagresult)
+        self.logger.info("Pushed result `%s'", protocoldagresult)
 
         return result_sk
 
@@ -299,7 +357,7 @@ class SynchronousComputeService:
                     self._tasks_counter,
                     max_tasks,
                 )
-                self._stop = True
+                raise KeyboardInterrupt
 
     def _check_max_time(self, max_time):
         if max_time is not None:
@@ -310,7 +368,7 @@ class SynchronousComputeService:
                     run_time,
                     max_time,
                 )
-                self._stop = True
+                raise KeyboardInterrupt
 
     def cycle(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
         self._check_max_tasks(max_tasks)

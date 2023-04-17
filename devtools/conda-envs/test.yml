@@ -4,13 +4,13 @@ channels:
   - conda-forge
   - openeye
 dependencies:
+  - pip
   - python =3.9
 
   # gufe dependencies
   - numpy<1.24  # https://github.com/numba/numba/issues/8615#issuecomment-1360792615
   - networkx
   - rdkit
-  - pip
   - pydantic
   - openff-toolkit
   - openff-units >=0.2.0

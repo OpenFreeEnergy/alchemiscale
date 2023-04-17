@@ -48,6 +48,24 @@ init:
   # available levels.
   loglevel: 'WARN'
 
+  # Path to file for logging output; if not set, logging will only go to
+  # STDOUT.
+  logfile: null
+
+  # Maximum number of times to retry a request. In the case the API service is
+  # unresponsive an expoenential backoff is applied with retries until this
+  # number is reached. If set to -1, retries will continue indefinitely until
+  # success.
+  client_max_retries: 5
+
+  # The base number of seconds to use for exponential backoff. Must be greater
+  # than 1.0. 
+  client_retry_base_seconds: 2.0
+ 
+  # Maximum number of seconds to sleep between retries; avoids runaway
+  # exponential backoff while allowing for many retries.
+  client_retry_max_seconds: 60.0
+
 # options for service execution
 start:
 

@@ -7,6 +7,7 @@ S3 Object storage --- :mod:`alchemiscale.storage.objectstore`
 import os
 import io
 import json
+from datetime import datetime
 from typing import Union
 from boto3.session import Session
 from functools import lru_cache
@@ -235,6 +236,7 @@ class S3ObjectStore:
             obj_key=protocoldagresult.key,
             scope=scope,
             ok=ok,
+            datetime_created=datetime.utcnow(),
         )
 
     def pull_protocoldagresult(

@@ -4,7 +4,6 @@ AlchemiscaleComputeAPI --- :mod:`alchemiscale.compute.api`
 
 """
 
-import asyncio
 from typing import Any, Dict, List
 import os
 import json
@@ -67,17 +66,17 @@ router = APIRouter(
 
 
 @app.get("/ping")
-async def ping():
+def ping():
     return {"api": "AlchemiscaleComputeAPI"}
 
 
 @router.get("/info")
-async def info():
+def info():
     return {"message": "nothing yet"}
 
 
 @router.get("/check")
-async def check(
+def check(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
 ):
@@ -87,7 +86,7 @@ async def check(
 
 
 @router.get("/identities/{identity_identifier}/scopes")
-async def list_scopes(
+def list_scopes(
     *,
     identity_identifier,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -98,7 +97,7 @@ async def list_scopes(
 
 
 @router.post("/computeservice/{compute_service_id}/register")
-async def register_computeservice(
+def register_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
@@ -113,7 +112,7 @@ async def register_computeservice(
 
 
 @router.post("/computeservice/{compute_service_id}/deregister")
-async def deregister_computeservice(
+def deregister_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
@@ -125,7 +124,7 @@ async def deregister_computeservice(
 
 
 @router.post("/computeservice/{compute_service_id}/heartbeat")
-async def heartbeat_computeservice(
+def heartbeat_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     settings: ComputeAPISettings = Depends(get_base_api_settings),
@@ -145,7 +144,7 @@ async def heartbeat_computeservice(
 
 
 @router.get("/taskhubs")
-async def query_taskhubs(
+def query_taskhubs(
     *,
     return_gufe: bool = False,
     scope: Scope = Depends(scope_params),
@@ -170,7 +169,7 @@ async def query_taskhubs(
 
 
 @router.post("/taskhubs/{taskhub_scoped_key}/claim")
-async def claim_taskhub_tasks(
+def claim_taskhub_tasks(
     taskhub_scoped_key,
     *,
     compute_service_id: str = Body(),
@@ -191,7 +190,7 @@ async def claim_taskhub_tasks(
 
 
 @router.get("/tasks/{task_scoped_key}/transformation", response_class=GufeJSONResponse)
-async def get_task_transformation(
+def get_task_transformation(
     task_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
