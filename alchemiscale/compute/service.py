@@ -126,8 +126,8 @@ class SynchronousComputeService:
         claim_limit
             Maximum number of Tasks to claim at a time from a TaskHub.
         loglevel
-            The loglevel at which to report via STDOUT; see the :mod:`logging`
-            docs for available levels.
+            The loglevel at which to report; see the :mod:`logging` docs for
+            available levels.
         logfile
             Path to file for logging output; if not set, logging will only go
             to STDOUT.
