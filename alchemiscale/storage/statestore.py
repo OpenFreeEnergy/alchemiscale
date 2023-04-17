@@ -1,6 +1,6 @@
 """
 Node4js state storage --- :mod:`alchemiscale.storage.statestore`
-===============================================================
+================================================================
 
 """
 
@@ -174,7 +174,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         for label, values in self.constraints.items():
             self.graph.run(
                 f"""
-                CREATE CONSTRAINT {values['name']} IF NOT EXISTS 
+                CREATE CONSTRAINT {values['name']} IF NOT EXISTS
                 FOR (n:{label}) REQUIRE n.{values['property']} is unique
             """
             )
@@ -233,7 +233,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         for label, values in self.constraints.items():
             self.graph.run(
                 f"""
-                DROP CONSTRAINT {values['name']} IF EXISTS 
+                DROP CONSTRAINT {values['name']} IF EXISTS
             """
             )
 
@@ -479,7 +479,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         if return_subgraph:
             q += """
-            OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m) 
+            OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m)
             WHERE NOT (m)-[:DEPENDS_ON]->()
             RETURN n,p
             """
@@ -550,7 +550,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         if return_gufe:
             q += """
-            OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m) 
+            OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m)
             WHERE NOT (m)-[:DEPENDS_ON]->()
             RETURN n,p
             """
@@ -629,7 +629,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> ScopedKey:
         """Delete the given `AlchemicalNetwork` from the database.
 
-        This will not remove any `Transformation`s or `ChemicalSystem`s
+        This will not remove any `Transformation`\s or `ChemicalSystem`\s
         associated with the `AlchemicalNetwork`, since these may be associated
         with other `AlchemicalNetwork`s in the same `Scope`.
 
@@ -665,7 +665,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         scope: Optional[Scope] = Scope(),
         return_gufe: bool = False,
     ):
-        """Query for `AlchemicalNetwork`s matching given attributes."""
+        """Query for `AlchemicalNetwork`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="AlchemicalNetwork",
@@ -678,7 +678,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def query_transformations(
         self, *, name=None, key=None, scope: Scope = Scope(), chemical_systems=None
     ):
-        """Query for `Transformation`s matching given attributes."""
+        """Query for `Transformation`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="Transformation", additional=additional, key=key, scope=scope
@@ -687,7 +687,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def query_chemicalsystems(
         self, *, name=None, key=None, scope: Scope = Scope(), transformations=None
     ):
-        """Query for `ChemicalSystem`s matching given attributes."""
+        """Query for `ChemicalSystem`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="ChemicalSystem", additional=additional, key=key, scope=scope
@@ -897,13 +897,13 @@ class Neo4jStore(AlchemiscaleStateStore):
     def query_taskhubs(
         self, scope: Optional[Scope] = Scope(), return_gufe: bool = False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskHub]]:
-        """Query for `TaskHub`s matching the given criteria.
+        """Query for `TaskHub`\s matching the given criteria.
 
         Parameters
         ----------
         return_gufe
             If True, return a dict with `ScopedKey`s as keys, `TaskHub`
-            instances as values. Otherwise, return a list of `ScopedKey`s.
+            instances as values. Otherwise, return a list of `ScopedKey`\s.
 
         """
         return self._query(qualname="TaskHub", scope=scope, return_gufe=return_gufe)
@@ -997,7 +997,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 q = f"""
                 // get our TaskHub
                 MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:PERFORMS]->(an:AlchemicalNetwork)
-                
+
                 // get the task we want to add to the hub; check that it connects to same network
                 MATCH (task:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
 
@@ -1208,7 +1208,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Get a list of unclaimed Tasks in the TaskHub."""
 
         q = f"""
-        // get list of all unclaimed tasks in the hub 
+        // get list of all unclaimed tasks in the hub
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task)
         WHERE NOT (task)<-[:CLAIMS]-(:ComputeServiceRegistration)
         RETURN task
@@ -1236,6 +1236,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Claim a TaskHub Task.
 
         This method will claim Tasks from a TaskHub according to the following process:
+
         1. `waiting` Tasks with the highest priority are selected for consideration.
         2. Tasks with an `EXTENDS` relationship to an incomplete Task are dropped
            from consideration.
@@ -1254,7 +1255,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         taskpool_q = f"""
-        // get list of all eligible 'waiting' tasks in the hub 
+        // get list of all eligible 'waiting' tasks in the hub
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
         WHERE task.status = 'waiting'
         AND actions.weight > 0
@@ -1526,7 +1527,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         If `return_gufe` is `True`, returns actual `Transformation` and
         `ProtocolDAGResultRef` object (`None` if not present); if `False`, returns
-        `ScopedKey`s for these instead.
+        `ScopedKey`\s for these instead.
 
         """
         q = f"""
@@ -1851,7 +1852,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 MATCH (t:Task {{_scoped_key: '{t}'}})
 
                 // EXTENDS* used to get all tasks in the extends chain
-                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task) 
+                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task)
                 SET t.status = '{TaskStatusEnum.invalid.value}'
                 SET extends_task.status = '{TaskStatusEnum.invalid.value}'
                 WITH t, extends_task
@@ -1891,7 +1892,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 MATCH (t:Task {{_scoped_key: '{t}'}})
 
                 // EXTENDS* used to get all tasks in the extends chain
-                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task) 
+                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task)
                 SET t.status = '{TaskStatusEnum.deleted.value}'
                 SET extends_task.status = '{TaskStatusEnum.deleted.value}'
                 WITH t, extends_task

@@ -4,7 +4,7 @@
    contain the root `toctree` directive.
 
 Welcome to alchemiscale's documentation!
-=======================================
+========================================
 
 
 **alchemiscale** is a package for running large scale free energy campaigns

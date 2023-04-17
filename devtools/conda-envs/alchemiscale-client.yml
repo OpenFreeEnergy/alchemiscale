@@ -13,6 +13,9 @@ dependencies:
   - requests
   - click
 
+  # user client printing 
+  - rich
+
   # perses dependencies
   - openeye-toolkits
   - openmoltools
