@@ -333,7 +333,12 @@ class SynchronousComputeService:
             self.logger.info("'%s' : SUCCESS", protocoldagresult)
         else:
             for failure in protocoldagresult.protocol_unit_failures:
-                self.logger.info("'%s' : FAILURE : '%s' : %s", protocoldagresult, failure, failure.exception)
+                self.logger.info(
+                    "'%s' : FAILURE : '%s' : %s",
+                    protocoldagresult,
+                    failure,
+                    failure.exception,
+                )
 
         # push the result (or failure) back to the compute API
         result_sk = self.push_result(task, protocoldagresult)
