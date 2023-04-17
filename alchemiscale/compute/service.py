@@ -306,7 +306,7 @@ class SynchronousComputeService:
         # obtain a ProtocolDAG from the task
         self.logger.info("Creating ProtocolDAG from task '%s'...", task)
         protocoldag, transformation, extends = self.task_to_protocoldag(task)
-        self.logger.info("Created ProtocolDAG '%s' from task '%s'", protocoldag, task)
+        self.logger.info("Created '%s' from task '%s'", protocoldag, task)
 
         # execute the task; this looks the same whether the ProtocolDAG is a
         # success or failure
@@ -316,6 +316,7 @@ class SynchronousComputeService:
         scratch = self.scratch_basedir / str(protocoldag.key)
         scratch.mkdir()
 
+        self.logger.info("Executing '%s'", protocoldag)
         try:
             protocoldagresult = execute_DAG(
                 protocoldag,
