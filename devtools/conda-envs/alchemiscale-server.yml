@@ -10,7 +10,7 @@ dependencies:
   # alchemiscale dependencies
   ## state store
   - gufe=0.7.1
-  - openfe=0.7.1
+  #- openfe=0.7.2
   - py2neo
   - monotonic    # needed by py2neo, but not pulled in
 
@@ -43,4 +43,6 @@ dependencies:
   - pymbar >=3.0.6,<4
 
   - pip:
+    - git+https://github.com/openforcefield/alchemiscale.git@v0.1.0
     - git+https://github.com/choderalab/perses.git@protocol-neqcyc
+    - git+https://github.com/OpenFreeEnergy/openfe.git@main
