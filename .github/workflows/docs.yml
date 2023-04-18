@@ -1,4 +1,4 @@
-name: "Docs build and deploy"
+name: "Docs - build and deploy"
 on:
   push:
     branches:
