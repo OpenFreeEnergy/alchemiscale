@@ -7,8 +7,8 @@ dependencies:
   - python =3.9
 
   # alchemiscale dependencies
-  - gufe=0.7.1
-  #- openfe=0.7.2
+  - gufe=0.7.2
+  - openfe=0.7.2
   - click
 
   # perses dependencies
@@ -23,4 +23,4 @@ dependencies:
   - pip:
     - git+https://github.com/openforcefield/alchemiscale.git@v0.1.1
     - git+https://github.com/choderalab/perses.git@protocol-neqcyc
-    - git+https://github.com/OpenFreeEnergy/openfe.git@main
+    #- git+https://github.com/OpenFreeEnergy/openfe.git@main
