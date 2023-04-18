@@ -1,4 +1,4 @@
-name: alchemiscale-server
+name: alchemiscale-client
 channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
