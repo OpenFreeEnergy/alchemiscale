@@ -39,7 +39,7 @@ jobs:
           path: ~/conda_pkgs_dir
           key:
             ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{
-            hashFiles('devtools/prod-envs/${{ matrix.env-name }}.yaml') }}
+            hashFiles('devtools/conda-envs/${{ matrix.env-name }}.yml') }}
 
       - name: Additional info about the build
         shell: bash
