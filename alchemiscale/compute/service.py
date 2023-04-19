@@ -293,7 +293,9 @@ class SynchronousComputeService:
         # TODO: ship paths to object store
 
         # finally, push ProtocolDAGResult
-        sk: ScopedKey = self.client.set_task_result(task, protocoldagresult, self.compute_service_id)
+        sk: ScopedKey = self.client.set_task_result(
+            task, protocoldagresult, self.compute_service_id
+        )
 
         return sk
 
