@@ -245,12 +245,14 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         scope: Scope,
         ok: bool,
         datetime_created: Optional[datetime] = None,
+        created_by: Optional[str] = None
     ):
         self.location = location
         self.obj_key = GufeKey(obj_key)
         self.scope = scope
         self.ok = ok
         self.datetime_created = datetime_created
+        self.created_by = created_by
 
     def _to_dict(self):
         return {
@@ -261,6 +263,7 @@ class ProtocolDAGResultRef(ObjectStoreRef):
             "datetime_created": self.datetime_created.isoformat()
             if self.datetime_created is not None
             else None,
+            "created_by": self.created_by
         }
 
     @classmethod

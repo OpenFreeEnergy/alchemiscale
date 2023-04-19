@@ -8,7 +8,7 @@ import os
 import io
 import json
 from datetime import datetime
-from typing import Union
+from typing import Union, Optional
 from boto3.session import Session
 from functools import lru_cache
 
@@ -196,6 +196,7 @@ class S3ObjectStore:
         self,
         protocoldagresult: ProtocolDAGResult,
         scope: Scope,
+        created_by: Optional[str] = None
     ) -> ProtocolDAGResultRef:
         """Push given `ProtocolDAGResult` to this `ObjectStore`.
 
@@ -237,6 +238,7 @@ class S3ObjectStore:
             scope=scope,
             ok=ok,
             datetime_created=datetime.utcnow(),
+            created_by=created_by
         )
 
     def pull_protocoldagresult(

@@ -93,12 +93,14 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         )
 
     def set_task_result(
-        self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
+        self, task: ScopedKey, protocoldagresult: ProtocolDAGResult,
+        compute_service_id=Optional[ComputeServiceID]
     ) -> ScopedKey:
         data = dict(
             protocoldagresult=json.dumps(
                 protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
-            )
+            ),
+            compute_service_id=str(compute_service_id)
         )
 
         pdr_sk = self._post_resource(f"tasks/{task}/results", data)

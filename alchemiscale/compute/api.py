@@ -4,7 +4,7 @@ AlchemiscaleComputeAPI --- :mod:`alchemiscale.compute.api`
 
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import os
 import json
 from datetime import datetime, timedelta
@@ -222,6 +222,7 @@ def set_task_result(
     task_scoped_key,
     *,
     protocoldagresult: str = Body(embed=True),
+    compute_service_id: Optional[str] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
@@ -236,6 +237,7 @@ def set_task_result(
     protocoldagresultref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
         pdr,
         scope=task_sk.scope,
+        created_by=compute_service_id
     )
 
     # push the reference to the state store

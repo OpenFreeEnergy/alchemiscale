@@ -293,7 +293,7 @@ class SynchronousComputeService:
         # TODO: ship paths to object store
 
         # finally, push ProtocolDAGResult
-        sk: ScopedKey = self.client.set_task_result(task, protocoldagresult)
+        sk: ScopedKey = self.client.set_task_result(task, protocoldagresult, self.compute_service_id)
 
         return sk
 
@@ -332,12 +332,13 @@ class SynchronousComputeService:
             if not self.keep_scratch:
                 shutil.rmtree(scratch)
 
-        if protocoldagresult.ok:
-            self.logger.info("'%s' : SUCCESS", protocoldagresult)
+        if protocoldagresult.ok():
+            self.logger.info("'%s' : '%s' : SUCCESS", protocoldag, protocoldagresult)
         else:
             for failure in protocoldagresult.protocol_unit_failures:
                 self.logger.info(
-                    "'%s' : FAILURE : '%s' : %s",
+                    "'%s' : '%s' : FAILURE : '%s' : %s",
+                    protocoldag,
                     protocoldagresult,
                     failure,
                     failure.exception,
