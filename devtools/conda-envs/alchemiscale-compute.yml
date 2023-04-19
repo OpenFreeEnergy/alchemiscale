@@ -22,5 +22,4 @@ dependencies:
 
   - pip:
     - git+https://github.com/openforcefield/alchemiscale.git@v0.1.1
-    - git+https://github.com/choderalab/perses.git@protocol-neqcyc
-    #- git+https://github.com/OpenFreeEnergy/openfe.git@main
+    - git+https://github.com/choderalab/perses.git@protocol-neqcyc-test-evaluation
