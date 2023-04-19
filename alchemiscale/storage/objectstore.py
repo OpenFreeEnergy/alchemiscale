@@ -196,7 +196,7 @@ class S3ObjectStore:
         self,
         protocoldagresult: ProtocolDAGResult,
         scope: Scope,
-        created_by: Optional[str] = None,
+        creator: Optional[str] = None,
     ) -> ProtocolDAGResultRef:
         """Push given `ProtocolDAGResult` to this `ObjectStore`.
 
@@ -238,7 +238,7 @@ class S3ObjectStore:
             scope=scope,
             ok=ok,
             datetime_created=datetime.utcnow(),
-            created_by=created_by,
+            creator=creator,
         )
 
     def pull_protocoldagresult(

@@ -235,7 +235,7 @@ def set_task_result(
 
     # push the ProtocolDAGResult to the object store
     protocoldagresultref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
-        pdr, scope=task_sk.scope, created_by=compute_service_id
+        pdr, scope=task_sk.scope, creator=compute_service_id
     )
 
     # push the reference to the state store
