@@ -421,8 +421,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         transformation: ScopedKey,
         return_protocoldagresults: bool = False,
-    ) -> Union[ProtocolResult, List[ProtocolDAGResult]]:
+    ) -> Union[Optional[ProtocolResult], List[ProtocolDAGResult]]:
         """Get a `ProtocolResult` for the given `Transformation`.
+
+        A `ProtocolResult` object corresponding to the `Protocol` used for this
+        `Transformation`. This is constructed from the available
+        `ProtocolDAGResult`\s for this `Transformation`. If no
+        `ProtocolDAGResult`\s exist for this `Transformation`, ``None`` is
+        returned.
+
+        If `return_protocoldagresults` is ``True``, then a list of the
+        `ProtocolDAGResult`\s themselves are returned instead.
 
         Parameters
         ----------
@@ -451,7 +460,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if return_protocoldagresults:
             return pdrs
         else:
-            return tf.gather(pdrs)
+            if len(pdrs) != 0:
+                return tf.gather(pdrs)
+            else:
+                return None
 
     def get_transformation_failures(
         self,
