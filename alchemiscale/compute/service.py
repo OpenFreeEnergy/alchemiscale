@@ -5,6 +5,7 @@ AlchemiscaleComputeService --- :mod:`alchemiscale.compute.service`
 """
 
 import os
+import gc
 import asyncio
 import sched
 import time
@@ -460,6 +461,9 @@ class SynchronousComputeService:
 
                 # perform main loop cycle
                 self.cycle(max_tasks, max_time)
+
+                # force a garbage collection to avoid consuming too much memory
+                gc.collect()
         except KeyboardInterrupt:
             self.logger.info("Caught SIGINT/Keyboard interrupt.")
         except SleepInterrupted:
