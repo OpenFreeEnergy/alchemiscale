@@ -212,7 +212,7 @@ class SynchronousComputeService:
     def beat(self):
         """Deliver a heartbeat to the compute API, indicating this service is still alive."""
         self.client.heartbeat(self.compute_service_id)
-        self.logger.info("Updated heartbeat")
+        self.logger.debug("Updated heartbeat")
 
     def heartbeat(self):
         """Start up the heartbeat, sleeping for `self.heartbeat_interval`"""

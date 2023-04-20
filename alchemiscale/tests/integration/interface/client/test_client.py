@@ -404,7 +404,7 @@ class TestClient:
 
         # with the way BrokenProtocol.gather constructs its output, we expect
         # this to be empty
-        assert len(protocolresult.data) == 0
+        assert protocolresult is None
 
         # user client : instead, pull failures
         protocoldagresults_r = user_client.get_transformation_failures(
