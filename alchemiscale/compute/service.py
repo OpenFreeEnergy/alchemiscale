@@ -308,7 +308,12 @@ class SynchronousComputeService:
         # obtain a ProtocolDAG from the task
         self.logger.info("Creating ProtocolDAG from '%s'...", task)
         protocoldag, transformation, extends = self.task_to_protocoldag(task)
-        self.logger.info("Created '%s' from '%s' performing '%s'", protocoldag, task, transformation.protocol)
+        self.logger.info(
+            "Created '%s' from '%s' performing '%s'",
+            protocoldag,
+            task,
+            transformation.protocol,
+        )
 
         # execute the task; this looks the same whether the ProtocolDAG is a
         # success or failure
