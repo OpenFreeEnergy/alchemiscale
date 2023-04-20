@@ -335,11 +335,11 @@ class SynchronousComputeService:
                 shutil.rmtree(scratch)
 
         if protocoldagresult.ok():
-            self.logger.info("'%s' : '%s' : SUCCESS", protocoldag, protocoldagresult)
+            self.logger.info("'%s' -> '%s' : SUCCESS", protocoldag, protocoldagresult)
         else:
             for failure in protocoldagresult.protocol_unit_failures:
                 self.logger.info(
-                    "'%s' : '%s' : FAILURE : '%s' : %s",
+                    "'%s' -> '%s' : FAILURE :: '%s' : %s",
                     protocoldag,
                     protocoldagresult,
                     failure,
