@@ -22,6 +22,7 @@ import requests
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
+from gufe.tokenization import TOKENIZABLE_REGISTRY
 
 from .client import AlchemiscaleComputeClient
 from ..storage.models import Task, TaskHub, ComputeServiceID
@@ -462,7 +463,10 @@ class SynchronousComputeService:
                 # perform main loop cycle
                 self.cycle(max_tasks, max_time)
 
+                # clear the gufe registry of `GufeTokenizable`s
                 # force a garbage collection to avoid consuming too much memory
+                # over time
+                TOKENIZABLE_REGISTRY.clear()
                 gc.collect()
         except KeyboardInterrupt:
             self.logger.info("Caught SIGINT/Keyboard interrupt.")
