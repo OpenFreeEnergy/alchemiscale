@@ -8,9 +8,12 @@ dependencies:
   - python =3.9
 
   # alchemiscale dependencies
-  ## state store
   - gufe=0.7.2
-  - openfe=0.7.2
+  - openfe=0.7.3
+  - requests
+  - click
+
+  ## state store
   - py2neo
   - monotonic    # needed by py2neo, but not pulled in
 
@@ -28,10 +31,6 @@ dependencies:
   - starlette
   - httpx
   - cryptography
-  - requests
-
-  ## cli
-  - click
 
   # perses dependencies
   - openeye-toolkits
@@ -44,4 +43,4 @@ dependencies:
 
   - pip:
     - git+https://github.com/openforcefield/alchemiscale.git@main
-    - git+https://github.com/choderalab/perses.git@protocol-neqcyc-test-evaluation
+    - git+https://github.com/choderalab/perses.git@protocol-neqcyc

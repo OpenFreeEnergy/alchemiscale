@@ -9,11 +9,11 @@ dependencies:
 
   # alchemiscale dependencies
   - gufe=0.7.2
-  - openfe=0.7.2
+  - openfe=0.7.3
   - requests
   - click
 
-  # user client printing 
+  ## user client printing
   - rich
 
   # perses dependencies
@@ -27,4 +27,4 @@ dependencies:
 
   - pip:
     - git+https://github.com/openforcefield/alchemiscale.git@main
-    - git+https://github.com/choderalab/perses.git@protocol-neqcyc-test-evaluation
+    - git+https://github.com/choderalab/perses.git@protocol-neqcyc
