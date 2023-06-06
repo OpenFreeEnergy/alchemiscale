@@ -2,7 +2,6 @@ from pathlib import Path
 import os
 
 import pytest
-from gufe.protocols.protocoldag import execute_DAG
 
 from alchemiscale.models import ScopedKey
 from alchemiscale.storage import S3ObjectStore
