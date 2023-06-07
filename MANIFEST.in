@@ -1,2 +1,0 @@
-include versioneer.py
-include alchemiscale/_version.py
