@@ -163,8 +163,28 @@ def create_network(
 
 
 @router.get("/transformations")
-def query_transformations():
-    return {"message": "nothing yet"}
+def query_transformations(
+    *,
+    name: str = None,
+    scope: Scope = Depends(scope_params),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    # Intersect query scopes with accessible scopes in the token
+    query_scopes = validate_scopes_query(scope, token)
+
+    # query each scope
+    # loop might be removable in the future with a Union like operator on scopes
+    results = []
+    for single_query_scope in query_scopes:
+        # add new networks
+        results.extend(
+            n4js.query_transformations(
+                name=name, scope=single_query_scope
+            )
+        )
+
+    return [str(sk) for sk in results]
 
 
 @router.get(
@@ -184,8 +204,28 @@ def get_transformation(
 
 
 @router.get("/chemicalsystems")
-def query_chemicalsystems():
-    return {"message": "nothing yet"}
+def query_chemicalsystems(
+    *,
+    name: str = None,
+    scope: Scope = Depends(scope_params),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    # Intersect query scopes with accessible scopes in the token
+    query_scopes = validate_scopes_query(scope, token)
+
+    # query each scope
+    # loop might be removable in the future with a Union like operator on scopes
+    results = []
+    for single_query_scope in query_scopes:
+        # add new networks
+        results.extend(
+            n4js.query_chemicalsystems(
+                name=name, scope=single_query_scope
+            )
+        )
+
+    return [str(sk) for sk in results]
 
 
 @router.get(

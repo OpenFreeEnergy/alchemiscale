@@ -676,7 +676,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
     def query_transformations(
-        self, *, name=None, key=None, scope: Scope = Scope(), chemical_systems=None
+        self, *, name=None, key=None, scope: Scope = Scope()
     ):
         """Query for `Transformation`\s matching given attributes."""
         additional = {"name": name}
@@ -685,7 +685,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
     def query_chemicalsystems(
-        self, *, name=None, key=None, scope: Scope = Scope(), transformations=None
+        self, *, name=None, key=None, scope: Scope = Scope()
     ):
         """Query for `ChemicalSystem`\s matching given attributes."""
         additional = {"name": name}

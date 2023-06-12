@@ -101,12 +101,92 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return networks
 
+    def query_transformations(
+        self,
+        name: Optional[str] = None,
+        scope: Optional[Scope] = None,
+        limit: Optional[int] = None,
+        skip: Optional[int] = None,
+    ) -> List[ScopedKey]:
+        """Query for Transformations, optionally by name or Scope.
+
+        Calling this method with no query arguments will return ScopedKeys for
+        all Transformations that are within the Scopes this user has access to.
+
+        """
+        if scope is None:
+            scope = Scope()
+
+        params = dict(
+            name=name, limit=limit, skip=skip, **scope.dict()
+        )
+
+        return self._query_resource("/transformations", params=params)
+
+    def query_chemicalsystems(
+        self,
+        name: Optional[str] = None,
+        scope: Optional[Scope] = None,
+        limit: Optional[int] = None,
+        skip: Optional[int] = None,
+    ) -> List[ScopedKey]:
+        """Query for ChemicalSystems, optionally by name or Scope.
+
+        Calling this method with no query arguments will return ScopedKeys for
+        all Transformations that are within the Scopes this user has access to.
+
+        """
+        if scope is None:
+            scope = Scope()
+
+        params = dict(
+            name=name, limit=limit, skip=skip, **scope.dict()
+        )
+
+        return self._query_resource("/chemicalsystems", params=params)
+
+    def get_network_transformations(self, network: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for Transformations associated with the given AlchemicalNetwork.
+
+        """
+        return self._query_resource("/networks/{network}/transformations")
+
+    def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
+        """List AlchemicalNetworks associated with the given Transformation.
+
+        """
+        return self._query_resource("/transformations/{transformation}/networks")
+
+    def get_transformation_chemicalsystems():
+        ...
+
+    def get_chemicalsystem_transformations():
+        ...
+
+    def get_network_chemicalsystems(self, network: ScopedKey) -> List[ScopedKey]:
+        """List ChemicalSystems associated with the given AlchemicalNetwork.
+
+        """
+        return self._query_resource("/networks/{network}/chemicalsystems")
+
+    def get_chemicalsystem_networks(self, chemicalsystem: ScopedKey) -> List[ScopedKey]:
+        """List AlchemicalNetworks associated with the given ChemicalSystem.
+
+        """
+        return self._query_resource("/chemicalsystems/{chemicalsystem}/networks")
+
     def get_network(self, network: Union[ScopedKey, str]) -> AlchemicalNetwork:
+        """Get back an `AlchemicalNetwork`
+
+        """
         return json_to_gufe(self._get_resource(f"/networks/{network}"))
 
     def get_transformation(
         self, transformation: Union[ScopedKey, str]
     ) -> Transformation:
+        """
+
+        """
         return json_to_gufe(self._get_resource(f"/transformations/{transformation}"))
 
     def get_chemicalsystem(
@@ -155,6 +235,15 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
         return [ScopedKey.from_str(i) for i in task_sks]
 
+    def get_scope_tasks():
+        ...
+
+    def get_network_tasks():
+        ...
+
+    def get_task_networks():
+        ...
+
     def get_transformation_tasks(
         self,
         transformation: ScopedKey,
@@ -202,6 +291,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_task_transformation(self, task: ScopedKey) -> ScopedKey:
         transformation = self._get_resource(f"tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
+
+    def get_scope_status():
+        ...
+
+    def get_network_status():
+        ...
 
     def get_transformation_status(
         self, transformation: ScopedKey, visualize: Optional[bool] = True
