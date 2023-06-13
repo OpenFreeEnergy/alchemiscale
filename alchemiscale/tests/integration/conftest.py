@@ -247,7 +247,7 @@ def network_tyk2():
             stateA=complexes[edge[0]],
             stateB=complexes[edge[1]],
             protocol=DummyProtocol(settings=DummyProtocol.default_settings()),
-            name=f"{edge[0]}_to_{edge[1]}_complex"
+            name=f"{edge[0]}_to_{edge[1]}_complex",
         )
         for edge in tyk2s.connections
     ]
@@ -256,7 +256,7 @@ def network_tyk2():
             stateA=solvated[edge[0]],
             stateB=solvated[edge[1]],
             protocol=DummyProtocol(settings=DummyProtocol.default_settings()),
-            name=f"{edge[0]}_to_{edge[1]}_solvent"
+            name=f"{edge[0]}_to_{edge[1]}_solvent",
         )
         for edge in tyk2s.connections
     ]

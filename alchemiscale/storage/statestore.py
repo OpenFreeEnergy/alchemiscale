@@ -689,10 +689,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             qualname="ChemicalSystem", additional=additional, key=key, scope=scope
         )
 
-    def get_network_transformations(
-        self,
-        network: ScopedKey
-    ) -> List[ScopedKey]:
+    def get_network_transformations(self, network: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
         q = f"""
         MATCH (n:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(t:Transformation)
@@ -703,14 +700,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             res = tx.run(q)
             for rec in res:
-                sks.append(rec['sk'])
+                sks.append(rec["sk"])
 
         return [ScopedKey.from_str(sk) for sk in sks]
 
-    def get_transformation_networks(
-        self,
-        transformation: ScopedKey
-    ) -> List[ScopedKey]:
+    def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
         q = f"""
         MATCH (t:Transformation {{_scoped_key: '{transformation}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
@@ -721,14 +715,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             res = tx.run(q)
             for rec in res:
-                sks.append(rec['sk'])
+                sks.append(rec["sk"])
 
         return [ScopedKey.from_str(sk) for sk in sks]
 
-    def get_network_chemicalsystems(
-        self,
-        network: ScopedKey
-    ) -> List[ScopedKey]:
+    def get_network_chemicalsystems(self, network: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for ChemicalSystems associated with the given AlchemicalNetwork."""
         q = f"""
         MATCH (n:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
@@ -739,14 +730,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             res = tx.run(q)
             for rec in res:
-                sks.append(rec['sk'])
+                sks.append(rec["sk"])
 
         return [ScopedKey.from_str(sk) for sk in sks]
 
-    def get_chemicalsystem_networks(
-        self,
-        chemicalsystem: ScopedKey
-    ) -> List[ScopedKey]:
+    def get_chemicalsystem_networks(self, chemicalsystem: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given ChemicalSystem."""
         q = f"""
         MATCH (cs:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
@@ -757,13 +745,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             res = tx.run(q)
             for rec in res:
-                sks.append(rec['sk'])
+                sks.append(rec["sk"])
 
         return [ScopedKey.from_str(sk) for sk in sks]
 
     def get_transformation_chemicalsystems(
-        self,
-        transformation: ScopedKey
+        self, transformation: ScopedKey
     ) -> List[ScopedKey]:
         """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
         q = f"""
@@ -775,13 +762,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             res = tx.run(q)
             for rec in res:
-                sks.append(rec['sk'])
+                sks.append(rec["sk"])
 
         return [ScopedKey.from_str(sk) for sk in sks]
 
     def get_chemicalsystem_transformations(
-        self,
-        chemicalsystem: ScopedKey
+        self, chemicalsystem: ScopedKey
     ) -> List[ScopedKey]:
         """List ScopedKeys for the Transformations associated with the given ChemicalSystem."""
         q = f"""
@@ -793,7 +779,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             res = tx.run(q)
             for rec in res:
-                sks.append(rec['sk'])
+                sks.append(rec["sk"])
 
         return [ScopedKey.from_str(sk) for sk in sks]
 

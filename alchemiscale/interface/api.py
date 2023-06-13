@@ -256,7 +256,9 @@ def get_transformation_chemicalsystems(
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    return [str(sk) for sk in n4js.get_transformation_chemicalsystems(transformation=sk)]
+    return [
+        str(sk) for sk in n4js.get_transformation_chemicalsystems(transformation=sk)
+    ]
 
 
 @router.get("/chemicalsystems/{chemicalsystem_scoped_key}/transformations")
@@ -270,7 +272,9 @@ def get_chemicalsystem_transformations(
     sk = ScopedKey.from_str(chemicalsystem_scoped_key)
     validate_scopes(sk.scope, token)
 
-    return [str(sk) for sk in n4js.get_chemicalsystem_transformations(chemicalsystem=sk)]
+    return [
+        str(sk) for sk in n4js.get_chemicalsystem_transformations(chemicalsystem=sk)
+    ]
 
 
 @router.get("/networks/{network_scoped_key}", response_class=GufeJSONResponse)

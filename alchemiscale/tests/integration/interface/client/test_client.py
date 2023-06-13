@@ -112,11 +112,25 @@ class TestClient:
         transformation_sks = user_client.query_transformations()
 
         assert len(transformation_sks) == len(network_tyk2.edges) * 3
-        assert len(user_client.query_transformations(scope=scope_test)) == len(network_tyk2.edges)
-        assert len(user_client.query_transformations(name="lig_ejm_31_to_lig_ejm_50_complex")) == 3
-        assert len(user_client.query_transformations(
-            scope=scope_test,
-            name="lig_ejm_31_to_lig_ejm_50_complex")) == 1
+        assert len(user_client.query_transformations(scope=scope_test)) == len(
+            network_tyk2.edges
+        )
+        assert (
+            len(
+                user_client.query_transformations(
+                    name="lig_ejm_31_to_lig_ejm_50_complex"
+                )
+            )
+            == 3
+        )
+        assert (
+            len(
+                user_client.query_transformations(
+                    scope=scope_test, name="lig_ejm_31_to_lig_ejm_50_complex"
+                )
+            )
+            == 1
+        )
 
     def test_query_chemicalsystems(
         self,
@@ -128,11 +142,18 @@ class TestClient:
         chemicalsystem_sks = user_client.query_chemicalsystems()
 
         assert len(chemicalsystem_sks) == len(network_tyk2.nodes) * 3
-        assert len(user_client.query_chemicalsystems(scope=scope_test)) == len(network_tyk2.nodes)
+        assert len(user_client.query_chemicalsystems(scope=scope_test)) == len(
+            network_tyk2.nodes
+        )
         assert len(user_client.query_chemicalsystems(name="lig_ejm_31_complex")) == 3
-        assert len(user_client.query_chemicalsystems(
-            scope=scope_test,
-            name="lig_ejm_31_complex")) == 1
+        assert (
+            len(
+                user_client.query_chemicalsystems(
+                    scope=scope_test, name="lig_ejm_31_complex"
+                )
+            )
+            == 1
+        )
 
     def test_get_network_transformations(
         self,
@@ -145,7 +166,9 @@ class TestClient:
         tf_sks = user_client.get_network_transformations(n_sk)
 
         assert len(tf_sks) == len(network_tyk2.edges)
-        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(t.key for t in network_tyk2.edges)
+        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(
+            t.key for t in network_tyk2.edges
+        )
 
     def test_get_transformation_networks(
         self,
@@ -170,7 +193,9 @@ class TestClient:
         cs_sks = user_client.get_network_chemicalsystems(n_sk)
 
         assert len(cs_sks) == len(network_tyk2.nodes)
-        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(cs.key for cs in network_tyk2.nodes)
+        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(
+            cs.key for cs in network_tyk2.nodes
+        )
 
     def test_get_chemicalsystem_networks(
         self,
@@ -195,8 +220,9 @@ class TestClient:
         cs_sks = user_client.get_transformation_chemicalsystems(tf_sk)
 
         assert len(cs_sks) == 2
-        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set([transformation.stateA.key, 
-                                                               transformation.stateB.key])
+        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(
+            [transformation.stateA.key, transformation.stateB.key]
+        )
 
     def test_get_chemicalsystem_transformations(
         self,

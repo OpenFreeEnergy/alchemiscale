@@ -157,13 +157,21 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """List ScopedKeys for the AlchemicalNetworks associated with the given ChemicalSystem."""
         return self._query_resource(f"/chemicalsystems/{chemicalsystem}/networks")
 
-    def get_transformation_chemicalsystems(self, transformation: ScopedKey) -> List[ScopedKey]:
+    def get_transformation_chemicalsystems(
+        self, transformation: ScopedKey
+    ) -> List[ScopedKey]:
         """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
-        return self._query_resource(f"/transformations/{transformation}/chemicalsystems")
+        return self._query_resource(
+            f"/transformations/{transformation}/chemicalsystems"
+        )
 
-    def get_chemicalsystem_transformations(self, chemicalsystem: ScopedKey) -> List[ScopedKey]:
+    def get_chemicalsystem_transformations(
+        self, chemicalsystem: ScopedKey
+    ) -> List[ScopedKey]:
         """List ScopedKeys for the Transformations associated with the given ChemicalSystem."""
-        return self._query_resource(f"/chemicalsystems/{chemicalsystem}/transformations")
+        return self._query_resource(
+            f"/chemicalsystems/{chemicalsystem}/transformations"
+        )
 
     def get_network(self, network: Union[ScopedKey, str]) -> AlchemicalNetwork:
         """Retrieve an AlchemicalNetwork given its ScopedKey."""

@@ -156,7 +156,9 @@ class TestNeo4jStore(TestStateStore):
         tf_sks = n4js.get_network_transformations(sk)
 
         assert len(tf_sks) == len(network_tyk2.edges)
-        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(t.key for t in network_tyk2.edges)
+        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(
+            t.key for t in network_tyk2.edges
+        )
 
     def test_get_transformation_networks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -175,7 +177,9 @@ class TestNeo4jStore(TestStateStore):
         cs_sks = n4js.get_network_chemicalsystems(sk)
 
         assert len(cs_sks) == len(network_tyk2.nodes)
-        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(cs.key for cs in network_tyk2.nodes)
+        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(
+            cs.key for cs in network_tyk2.nodes
+        )
 
     def test_get_chemicalsystem_networks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -187,7 +191,9 @@ class TestNeo4jStore(TestStateStore):
         assert sk in an_sks
         assert len(an_sks) == 1
 
-    def test_get_transformation_chemicalsystems(self, n4js, network_tyk2, scope_test, transformation):
+    def test_get_transformation_chemicalsystems(
+        self, n4js, network_tyk2, scope_test, transformation
+    ):
         an = network_tyk2
         sk: ScopedKey = n4js.create_network(an, scope_test)
 
@@ -196,10 +202,13 @@ class TestNeo4jStore(TestStateStore):
         cs_sks = n4js.get_transformation_chemicalsystems(tf_sk)
 
         assert len(cs_sks) == 2
-        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set([transformation.stateA.key,
-                                                               transformation.stateB.key])
+        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(
+            [transformation.stateA.key, transformation.stateB.key]
+        )
 
-    def test_get_chemicalsystem_transformations(self, n4js, network_tyk2, scope_test, chemicalsystem):
+    def test_get_chemicalsystem_transformations(
+        self, n4js, network_tyk2, scope_test, chemicalsystem
+    ):
         an = network_tyk2
         sk: ScopedKey = n4js.create_network(an, scope_test)
 
