@@ -117,9 +117,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        params = dict(
-            name=name, limit=limit, skip=skip, **scope.dict()
-        )
+        params = dict(name=name, limit=limit, skip=skip, **scope.dict())
 
         return self._query_resource("/transformations", params=params)
 
@@ -139,59 +137,48 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        params = dict(
-            name=name, limit=limit, skip=skip, **scope.dict()
-        )
+        params = dict(name=name, limit=limit, skip=skip, **scope.dict())
 
         return self._query_resource("/chemicalsystems", params=params)
 
     def get_network_transformations(self, network: ScopedKey) -> List[ScopedKey]:
-        """List ScopedKeys for Transformations associated with the given AlchemicalNetwork.
-
-        """
-        return self._query_resource("/networks/{network}/transformations")
+        """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
+        return self._query_resource(f"/networks/{network}/transformations")
 
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
-        """List AlchemicalNetworks associated with the given Transformation.
-
-        """
-        return self._query_resource("/transformations/{transformation}/networks")
-
-    def get_transformation_chemicalsystems():
-        ...
-
-    def get_chemicalsystem_transformations():
-        ...
+        """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
+        return self._query_resource(f"/transformations/{transformation}/networks")
 
     def get_network_chemicalsystems(self, network: ScopedKey) -> List[ScopedKey]:
-        """List ChemicalSystems associated with the given AlchemicalNetwork.
-
-        """
-        return self._query_resource("/networks/{network}/chemicalsystems")
+        """List ScopedKeys for the ChemicalSystems associated with the given AlchemicalNetwork."""
+        return self._query_resource(f"/networks/{network}/chemicalsystems")
 
     def get_chemicalsystem_networks(self, chemicalsystem: ScopedKey) -> List[ScopedKey]:
-        """List AlchemicalNetworks associated with the given ChemicalSystem.
+        """List ScopedKeys for the AlchemicalNetworks associated with the given ChemicalSystem."""
+        return self._query_resource(f"/chemicalsystems/{chemicalsystem}/networks")
 
-        """
-        return self._query_resource("/chemicalsystems/{chemicalsystem}/networks")
+    def get_transformation_chemicalsystems(self, transformation: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
+        return self._query_resource(f"/transformations/{transformation}/chemicalsystems")
+
+    def get_chemicalsystem_transformations(self, chemicalsystem: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for the Transformations associated with the given ChemicalSystem."""
+        return self._query_resource(f"/chemicalsystems/{chemicalsystem}/transformations")
 
     def get_network(self, network: Union[ScopedKey, str]) -> AlchemicalNetwork:
-        """Get back an `AlchemicalNetwork`
-
-        """
+        """Retrieve an AlchemicalNetwork given its ScopedKey."""
         return json_to_gufe(self._get_resource(f"/networks/{network}"))
 
     def get_transformation(
         self, transformation: Union[ScopedKey, str]
     ) -> Transformation:
-        """
-
-        """
+        """Retrieve a Transformation given its ScopedKey."""
         return json_to_gufe(self._get_resource(f"/transformations/{transformation}"))
 
     def get_chemicalsystem(
         self, chemicalsystem: Union[ScopedKey, str]
     ) -> ChemicalSystem:
+        """Retrieve a Transformation given its ScopedKey."""
         return json_to_gufe(self._get_resource(f"/chemicalsystems/{chemicalsystem}"))
 
     ### compute
@@ -479,7 +466,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     ### results
 
-    def _get_prototocoldagresults(
+    def _get_protocoldagresults(
         self,
         protocoldagresultrefs: List[Dict],
         transformation: ScopedKey,
@@ -548,7 +535,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/transformations/{transformation}/results",
         )
 
-        pdrs = self._get_prototocoldagresults(
+        pdrs = self._get_protocoldagresults(
             protocoldagresultrefs, transformation, ok=True
         )
 
@@ -577,7 +564,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/transformations/{transformation}/failures",
         )
 
-        pdrs = self._get_prototocoldagresults(
+        pdrs = self._get_protocoldagresults(
             protocoldagresultrefs, transformation, ok=False
         )
 
@@ -593,7 +580,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/tasks/{task}/results",
         )
 
-        pdrs = self._get_prototocoldagresults(
+        pdrs = self._get_protocoldagresults(
             protocoldagresultrefs, transformation, ok=True
         )
 
@@ -609,7 +596,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/tasks/{task}/failures",
         )
 
-        pdrs = self._get_prototocoldagresults(
+        pdrs = self._get_protocoldagresults(
             protocoldagresultrefs, transformation, ok=False
         )
 

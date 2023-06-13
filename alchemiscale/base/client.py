@@ -176,7 +176,10 @@ class AlchemiscaleBaseClient:
 
     @_retry
     @_use_token
-    def _query_resource(self, resource, params):
+    def _query_resource(self, resource, params=None):
+        if params is None:
+            params = {}
+
         url = urljoin(self.api_url, resource)
         try:
             resp = requests.get(url, params=params, headers=self._headers)

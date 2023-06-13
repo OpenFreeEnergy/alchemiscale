@@ -8,7 +8,7 @@ from gufe.protocols.protocoldag import execute_DAG
 from gufe.tests.test_protocol import BrokenProtocol
 import networkx as nx
 
-from alchemiscale.models import ScopedKey
+from alchemiscale.models import ScopedKey, Scope
 from alchemiscale.storage.models import TaskStatusEnum
 from alchemiscale.interface import client
 from alchemiscale.tests.integration.interface.utils import get_user_settings_override
@@ -48,15 +48,6 @@ class TestClient:
         user_client.get_info()
         assert token != user_client._jwtoken
 
-    def test_create_network(
-        self,
-        scope_test,
-        n4js_preloaded,
-        user_client: client.AlchemiscaleClient,
-        uvicorn_server,
-    ):
-        ...
-
     def test_api_check(
         self,
         n4js_preloaded,
@@ -65,7 +56,7 @@ class TestClient:
     ):
         user_client._api_check()
 
-    def test_list_scope(
+    def test_list_scopes(
         self,
         n4js_preloaded,
         user_client: client.AlchemiscaleClient,
@@ -96,8 +87,134 @@ class TestClient:
         # common with an existing network
         # user_client.create_network(
 
-    def test_query_networks(self):
-        ...
+    def test_query_networks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        network_sks = user_client.query_networks()
+
+        assert len(network_sks) == 6
+        assert scope_test in [n_sk.scope for n_sk in network_sks]
+
+        assert len(user_client.query_networks(scope=scope_test)) == 2
+        assert len(user_client.query_networks(name=network_tyk2.name)) == 3
+
+    def test_query_transformations(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        transformation_sks = user_client.query_transformations()
+
+        assert len(transformation_sks) == len(network_tyk2.edges) * 3
+        assert len(user_client.query_transformations(scope=scope_test)) == len(network_tyk2.edges)
+        assert len(user_client.query_transformations(name="lig_ejm_31_to_lig_ejm_50_complex")) == 3
+        assert len(user_client.query_transformations(
+            scope=scope_test,
+            name="lig_ejm_31_to_lig_ejm_50_complex")) == 1
+
+    def test_query_chemicalsystems(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        chemicalsystem_sks = user_client.query_chemicalsystems()
+
+        assert len(chemicalsystem_sks) == len(network_tyk2.nodes) * 3
+        assert len(user_client.query_chemicalsystems(scope=scope_test)) == len(network_tyk2.nodes)
+        assert len(user_client.query_chemicalsystems(name="lig_ejm_31_complex")) == 3
+        assert len(user_client.query_chemicalsystems(
+            scope=scope_test,
+            name="lig_ejm_31_complex")) == 1
+
+    def test_get_network_transformations(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        n_sk = user_client.get_scoped_key(network_tyk2, scope_test)
+        tf_sks = user_client.get_network_transformations(n_sk)
+
+        assert len(tf_sks) == len(network_tyk2.edges)
+        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(t.key for t in network_tyk2.edges)
+
+    def test_get_transformation_networks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        transformation,
+        user_client: client.AlchemiscaleClient,
+    ):
+        tf_sk = user_client.get_scoped_key(transformation, scope_test)
+        n_sks = user_client.get_transformation_networks(tf_sk)
+
+        assert len(n_sks) == 2
+
+    def test_get_network_chemicalsystems(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        n_sk = user_client.get_scoped_key(network_tyk2, scope_test)
+        cs_sks = user_client.get_network_chemicalsystems(n_sk)
+
+        assert len(cs_sks) == len(network_tyk2.nodes)
+        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(cs.key for cs in network_tyk2.nodes)
+
+    def test_get_chemicalsystem_networks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        chemicalsystem,
+        user_client: client.AlchemiscaleClient,
+    ):
+        cs_sk = user_client.get_scoped_key(chemicalsystem, scope_test)
+        n_sks = user_client.get_chemicalsystem_networks(cs_sk)
+
+        assert len(n_sks) == 2
+
+    def test_get_transformation_chemicalsystems(
+        self,
+        scope_test,
+        n4js_preloaded,
+        transformation,
+        user_client: client.AlchemiscaleClient,
+    ):
+        tf_sk = user_client.get_scoped_key(transformation, scope_test)
+        cs_sks = user_client.get_transformation_chemicalsystems(tf_sk)
+
+        assert len(cs_sks) == 2
+        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set([transformation.stateA.key, 
+                                                               transformation.stateB.key])
+
+    def test_get_chemicalsystem_transformations(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        chemicalsystem,
+        user_client: client.AlchemiscaleClient,
+    ):
+        cs_sk = user_client.get_scoped_key(chemicalsystem, scope_test)
+        tf_sks = user_client.get_chemicalsystem_transformations(cs_sk)
+
+        tfs = []
+        for tf in network_tyk2.edges:
+            if chemicalsystem in (tf.stateA, tf.stateB):
+                tfs.append(tf)
+
+        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(t.key for t in tfs)
 
     def test_get_network(self):
         ...
@@ -137,6 +254,15 @@ class TestClient:
         # check that tasks are structured as we expect
         assert set(task_sks_e) == set(n4js.get_tasks(sk, extends=task_sks[0]))
         assert set() == set(n4js.get_tasks(sk, extends=task_sks[1]))
+
+    def test_scope_tasks():
+        ...
+
+    def test_network_tasks():
+        ...
+
+    def get_task_networks():
+        ...
 
     def test_get_transformation_tasks(
         self,
@@ -180,6 +306,18 @@ class TestClient:
 
         for task_sk in task_sks_e:
             assert graph.has_edge(task_sk, task_sks[0])
+
+    def test_get_task_transformation():
+        ...
+
+    def test_get_scope_status():
+        ...
+
+    def test_get_network_status():
+        ...
+
+    def test_get_transformation_status():
+        ...
 
     def test_action_tasks(
         self,
@@ -253,6 +391,18 @@ class TestClient:
         canceled_sks_2 = user_client.cancel_tasks(task_sks[1:2], network_sk)
 
         assert canceled_sks_2 == [None]
+
+    def test_get_tasks_status():
+        ...
+
+    def test_set_tasks_status():
+        ...
+
+    def test_get_tasks_priority():
+        ...
+
+    def test_set_tasks_priority():
+        ...
 
     ### results
 

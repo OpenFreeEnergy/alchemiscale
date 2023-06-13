@@ -675,29 +675,127 @@ class Neo4jStore(AlchemiscaleStateStore):
             return_gufe=return_gufe,
         )
 
-    def query_transformations(
-        self, *, name=None, key=None, scope: Scope = Scope()
-    ):
+    def query_transformations(self, *, name=None, key=None, scope: Scope = Scope()):
         """Query for `Transformation`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="Transformation", additional=additional, key=key, scope=scope
         )
 
-    def query_chemicalsystems(
-        self, *, name=None, key=None, scope: Scope = Scope()
-    ):
+    def query_chemicalsystems(self, *, name=None, key=None, scope: Scope = Scope()):
         """Query for `ChemicalSystem`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="ChemicalSystem", additional=additional, key=key, scope=scope
         )
 
-    def get_transformations_for_chemicalsystem(self):
-        ...
+    def get_network_transformations(
+        self,
+        network: ScopedKey
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
+        q = f"""
+        MATCH (n:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(t:Transformation)
+        WITH t._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec['sk'])
 
-    def get_networks_for_transformation(self):
-        ...
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_transformation_networks(
+        self,
+        transformation: ScopedKey
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
+        q = f"""
+        MATCH (t:Transformation {{_scoped_key: '{transformation}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        WITH an._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec['sk'])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_network_chemicalsystems(
+        self,
+        network: ScopedKey
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for ChemicalSystems associated with the given AlchemicalNetwork."""
+        q = f"""
+        MATCH (n:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        WITH cs._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec['sk'])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_chemicalsystem_networks(
+        self,
+        chemicalsystem: ScopedKey
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for AlchemicalNetworks associated with the given ChemicalSystem."""
+        q = f"""
+        MATCH (cs:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        WITH an._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec['sk'])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_transformation_chemicalsystems(
+        self,
+        transformation: ScopedKey
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
+        q = f"""
+        MATCH (t:Transformation {{_scoped_key: '{transformation}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        WITH cs._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec['sk'])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_chemicalsystem_transformations(
+        self,
+        chemicalsystem: ScopedKey
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for the Transformations associated with the given ChemicalSystem."""
+        q = f"""
+        MATCH (cs:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(t:Transformation)
+        WITH t._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec['sk'])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
 
     def _get_protocoldagresultrefs(self, q):
         with self.transaction() as tx:

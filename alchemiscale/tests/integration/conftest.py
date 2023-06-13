@@ -247,6 +247,7 @@ def network_tyk2():
             stateA=complexes[edge[0]],
             stateB=complexes[edge[1]],
             protocol=DummyProtocol(settings=DummyProtocol.default_settings()),
+            name=f"{edge[0]}_to_{edge[1]}_complex"
         )
         for edge in tyk2s.connections
     ]
@@ -255,6 +256,7 @@ def network_tyk2():
             stateA=solvated[edge[0]],
             stateB=solvated[edge[1]],
             protocol=DummyProtocol(settings=DummyProtocol.default_settings()),
+            name=f"{edge[0]}_to_{edge[1]}_solvent"
         )
         for edge in tyk2s.connections
     ]
@@ -267,6 +269,11 @@ def network_tyk2():
 @fixture(scope="session")
 def transformation(network_tyk2):
     return list(network_tyk2.edges)[0]
+
+
+@fixture(scope="session")
+def chemicalsystem(network_tyk2):
+    return list(network_tyk2.nodes)[0]
 
 
 @fixture(scope="session")
