@@ -29,6 +29,7 @@ and is built on top of `OpenMM`_, `OpenForceField`_ and `OpenFreeEnergy`_.
 
    ./overview
    ./API_docs
+   ./deployment
 
 
 Indices and tables
