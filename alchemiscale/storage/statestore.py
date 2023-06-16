@@ -1654,6 +1654,43 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return transformation, protocoldagresultref
 
+    def get_scope_status(self, scope: Scope) -> Dict[str, int]:
+        """Return status counts for all Tasks within the given Scope."""
+
+        properties = {
+            "_org": scope.org,
+            "_campaign": scope.campaign,
+            "_project": scope.project,
+        }
+        
+        prop_string = ", ".join(
+            "{}: '{}'".format(key, value)
+            for key, value in properties.items() if value is not None
+        )
+
+        q = f"""
+        MATCH (n:Task {{{prop_string}}})
+        RETURN n.status AS status, count(n) as counts
+        """
+        with self.transaction() as tx:
+            res = tx.run(q)
+            counts = {rec['status']: rec['counts'] for rec in res}
+
+        return counts
+
+    def get_network_status(self, network: ScopedKey) -> Dict[str, int]:
+        """Return status counts for all Tasks associated with the given AlchemicalNetwork."""
+        q = f"""
+        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
+              (tf)<-[:PERFORMS]-(t:Task)
+        RETURN t.status AS status, count(t) as counts
+        """
+        with self.transaction() as tx:
+            res = tx.run(q)
+            counts = {rec['status']: rec['counts'] for rec in res}
+
+        return counts
+
     def set_task_result(
         self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
     ) -> ScopedKey:

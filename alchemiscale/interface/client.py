@@ -39,7 +39,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         scopes = self._get_resource(
             f"/identities/{self.identifier}/scopes",
         )
-        return [Scope.from_str(s) for s in scopes]
+        return sorted([Scope.from_str(s) for s in scopes])
 
     ### inputs
 
@@ -230,13 +230,16 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
         return [ScopedKey.from_str(i) for i in task_sks]
 
-    def get_scope_tasks():
+    def get_scope_tasks(scope: Scope, status=None):
+        """List ScopedKeys for all Tasks within the given Scope."""
         ...
 
-    def get_network_tasks():
+    def get_network_tasks(network: ScopedKey, status=None):
+        """List ScopedKeys for all Tasks associated with the given AlchemicalNetwork."""
         ...
 
-    def get_task_networks():
+    def get_task_networks(task: ScopedKey):
+        """List ScopedKeys for all AlchemicalNetworks associated with the given Task."""
         ...
 
     def get_transformation_tasks(
@@ -284,23 +287,68 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             raise ValueError(f"`return_as` takes 'list' or 'graph', not '{return_as}'")
 
     def get_task_transformation(self, task: ScopedKey) -> ScopedKey:
+        """Get the Transformation associated with the given Task."""
         transformation = self._get_resource(f"tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
 
-    def get_scope_status():
+    def _visualize_status(self):
         ...
 
-    def get_network_status():
-        ...
+    def get_scope_status(self, scope: Optional[Scope] = None) -> Dict[str,int]:
+        """Return status counts for all Tasks within the given Scope.
+
+        Parameters
+        ----------
+        scope
+            Scope to use for querying status. Non-specific Scopes are allowed,
+            and will give back counts for all Tasks within that this user has
+            Scope access to. Defaults to all Scopes.
+
+        Returns
+        -------
+        status_counts
+            Dict giving statuses as keys, Task counts as values.
+        """
+        if scope is None:
+            scope = Scope()
+
+        return self._get_resource(f"/scopes/{scope}/status")
+
+    def get_network_status(self, network: ScopedKey) -> Dict[str,int]:
+        """Return status counts for all Tasks associated with the given AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network
+            ScopedKey for the Alchemicalnetwork to obtain status counts for.
+
+        Returns
+        -------
+        status_counts
+            Dict giving statuses as keys, Task counts as values.
+        """
+        return self._get_resource(f"/networks/{network}/status")
 
     def get_transformation_status(
-        self, transformation: ScopedKey, visualize: Optional[bool] = True
-    ) -> bool:
-        """Return the status of the given Transformation.
+        self, 
+        transformation: ScopedKey, 
+        visualize: Optional[bool] = True,
+
+    ) -> Dict[str, int]:
+        """Return status counts for all Tasks associated with the given Transformation.
 
         If visualize is True, counts of Task statuses for the Transformation
         will be printed to the console.
 
+        Parameters
+        ----------
+        transformation
+            ScopedKey for the Transformation to obtain status counts for.
+
+        Returns
+        -------
+        status_counts
+            Dict giving statuses as keys, Task counts as values.
         """
         g = self.get_transformation_tasks(transformation, return_as="graph")
         all_tasks = list(g.nodes)
@@ -318,23 +366,19 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             # tasks status
             value_counts = Counter(stat_dict.values())
             rprint(
-                f"[bold yellow]Alchemiscale Task Status for transformation: {transformation}\n"
+                f"[bold]Task status for: {transformation}\n"
             )
-            rprint(f"[bold green]Complete: {value_counts[TaskStatusEnum.complete]}")
-            rprint(f"[bold blue]Waiting:  {value_counts[TaskStatusEnum.waiting]}")
-            rprint(f"[bold orange3]Running:  {value_counts[TaskStatusEnum.running]}")
-            rprint(f"[bold red]Error:    {value_counts[TaskStatusEnum.error]}")
-            rprint(f"[bold magenta1]Invalid:  {value_counts[TaskStatusEnum.invalid]}")
-            rprint(f"[bold purple]Deleted:  {value_counts[TaskStatusEnum.deleted]}")
+            rprint(f"[bold green]complete: {value_counts[TaskStatusEnum.complete]}")
+            rprint(f"[bold orange3]running:  {value_counts[TaskStatusEnum.running]}")
+            rprint(f"[bold blue]waiting:  {value_counts[TaskStatusEnum.waiting]}")
+            rprint(f"[bold red]error:    {value_counts[TaskStatusEnum.error]}")
+            rprint(f"[bold magenta1]invalid:  {value_counts[TaskStatusEnum.invalid]}")
+            rprint(f"[bold purple]deleted:  {value_counts[TaskStatusEnum.deleted]}")
             rprint(f"-----------")
             rprint(
-                f"[bold white]Total Complete:  {value_counts[TaskStatusEnum.complete]}/{sum(value_counts.values())}"
+                f"[bold]% complete:  {value_counts[TaskStatusEnum.complete]}/{sum(value_counts.values())}"
             )
-            if complete:
-                rprint(f"\n[bold green]Transformation complete!")
-            else:
-                rprint(f"\n[bold red]Transformation incomplete!")
-        return complete
+        return dict(value_counts)
 
     def action_tasks(
         self, tasks: List[ScopedKey], network: ScopedKey
@@ -407,7 +451,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def _get_task_status(self, task: ScopedKey) -> TaskStatusEnum:
         """Get the status of a `Task`."""
         status = self._get_resource(f"tasks/{task}/status")
-        return TaskStatusEnum(status)
+        return status
 
     def set_tasks_status(
         self, tasks: Union[ScopedKey, List[ScopedKey]], status: TaskStatusEnum

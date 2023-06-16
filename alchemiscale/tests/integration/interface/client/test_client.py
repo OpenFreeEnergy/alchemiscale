@@ -242,14 +242,47 @@ class TestClient:
 
         assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(t.key for t in tfs)
 
-    def test_get_network(self):
-        ...
+    def test_get_network(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
 
-    def test_get_transformation(self):
-        ...
+    ):
+        an_sk = user_client.get_scoped_key(network_tyk2, scope_test)
+        an = user_client.get_network(an_sk)
 
-    def test_get_chemicalsystem(self):
-        ...
+        assert an == network_tyk2
+        assert an is network_tyk2
+
+    def test_get_transformation(
+        self,
+        scope_test,
+        n4js_preloaded,
+        transformation,
+        user_client: client.AlchemiscaleClient,
+
+    ):
+        tf_sk = user_client.get_scoped_key(transformation, scope_test)
+        tf = user_client.get_transformation(tf_sk)
+
+        assert tf == transformation
+        assert tf is transformation
+
+    def test_get_chemicalsystem(
+        self,
+        scope_test,
+        n4js_preloaded,
+        chemicalsystem,
+        user_client: client.AlchemiscaleClient,
+
+    ):
+        cs_sk = user_client.get_scoped_key(chemicalsystem, scope_test)
+        cs = user_client.get_chemicalsystem(cs_sk)
+
+        assert cs == chemicalsystem
+        assert cs is chemicalsystem
 
     ### compute
 
@@ -281,13 +314,13 @@ class TestClient:
         assert set(task_sks_e) == set(n4js.get_tasks(sk, extends=task_sks[0]))
         assert set() == set(n4js.get_tasks(sk, extends=task_sks[1]))
 
-    def test_scope_tasks():
+    def test_scope_tasks(self):
         ...
 
-    def test_network_tasks():
+    def test_network_tasks(self):
         ...
 
-    def get_task_networks():
+    def get_task_networks(self):
         ...
 
     def test_get_transformation_tasks(
@@ -333,16 +366,78 @@ class TestClient:
         for task_sk in task_sks_e:
             assert graph.has_edge(task_sk, task_sks[0])
 
-    def test_get_task_transformation():
+    def test_get_task_transformation(self):
         ...
 
-    def test_get_scope_status():
-        ...
+    def test_get_scope_status(
+        self,
+        multiple_scopes,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        # for each of the following scopes, create tasks for a single random
+        # transformation
+        for scope in multiple_scopes:
+            tf_sks = user_client.query_transformations(scope=scope)
+            user_client.create_tasks(tf_sks[0], count=3)
 
-    def test_get_network_status():
-        ...
+        # now, get status for each scope; check that we are filtering down
+        # properly
+        for scope in multiple_scopes:
+            status_counts = user_client.get_scope_status(scope)
 
-    def test_get_transformation_status():
+            for status in status_counts:
+                if status == 'waiting':
+                    assert status_counts[status] == 3
+                else:
+                    assert status_counts[status] == 0
+
+        # create tasks in a scope we don't have access to
+        other_scope = Scope('other_org', 'other_campaign', 'other_project')
+        n4js_preloaded.create_network(network_tyk2, other_scope)
+        other_tf_sk = n4js_preloaded.query_transformations(scope=other_scope)[0]
+        task_sk = n4js_preloaded.create_task(other_tf_sk)
+
+        # ask for the scope that we don't have access to
+        status_counts = user_client.get_scope_status(other_scope)
+        assert status_counts == {}
+
+        # try a more general scope
+        status_counts = user_client.get_scope_status(Scope())
+        for status in status_counts:
+            if status == 'waiting':
+                assert status_counts[status] == 3 * len(multiple_scopes)
+            else:
+                assert status_counts[status] == 0
+
+    def test_get_network_status(
+        self,
+        n4js_preloaded,
+        multiple_scopes,
+        user_client: client.AlchemiscaleClient,
+    ):
+        # for each of the following scopes, get one of the networks present,
+        # create tasks for a single random transformation
+        an_sks = []
+        for scope in multiple_scopes:
+            an_sk = user_client.query_networks(scope=scope)[0]
+            tf_sks = user_client.get_network_transformations(an_sk)
+            user_client.create_tasks(tf_sks[0], count=3)
+
+            an_sks.append(an_sk)
+
+        # now, get status for each network
+        for an_sk in an_sks:
+            status_counts = user_client.get_network_status(an_sk)
+
+            for status in status_counts:
+                if status == 'waiting':
+                    assert status_counts[status] == 3
+                else:
+                    assert status_counts[status] == 0
+
+    def test_get_transformation_status(self):
         ...
 
     def test_action_tasks(
@@ -418,16 +513,16 @@ class TestClient:
 
         assert canceled_sks_2 == [None]
 
-    def test_get_tasks_status():
+    def test_get_tasks_status(self):
         ...
 
-    def test_set_tasks_status():
+    def test_set_tasks_status(self):
         ...
 
-    def test_get_tasks_priority():
+    def test_get_tasks_priority(self):
         ...
 
-    def test_set_tasks_priority():
+    def test_set_tasks_priority(self):
         ...
 
     ### results
