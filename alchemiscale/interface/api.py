@@ -382,26 +382,6 @@ def get_tasks(
         )
 
 
-@router.get("/tasks/{task_scoped_key}/transformation", response_class=GufeJSONResponse)
-def get_task_transformation(
-    task_scoped_key,
-    *,
-    n4js: Neo4jStore = Depends(get_n4js_depends),
-    token: TokenData = Depends(get_token_data_depends),
-):
-    sk = ScopedKey.from_str(task_scoped_key)
-    validate_scopes(sk.scope, token)
-
-    transformation: ScopedKey
-
-    transformation, protocoldagresultref = n4js.get_task_transformation(
-        task=task_scoped_key,
-        return_gufe=False,
-    )
-
-    return str(transformation)
-
-
 @router.get("/scopes/{scope}/status")
 def get_scope_status(
     scope,
@@ -483,6 +463,11 @@ def cancel_tasks(
     return [str(sk) if sk is not None else None for sk in canceled_sks]
 
 
+@router.get("/tasks/status")
+def get_tasks_status():
+    ...
+
+
 @router.post("/tasks/{task_scoped_key}/status")
 def set_task_status(
     task_scoped_key,
@@ -519,6 +504,26 @@ def get_task_status(
     status = n4js.get_task_status([task_sk])
 
     return status[0].value
+
+
+@router.get("/tasks/{task_scoped_key}/transformation", response_class=GufeJSONResponse)
+def get_task_transformation(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    transformation: ScopedKey
+
+    transformation, protocoldagresultref = n4js.get_task_transformation(
+        task=task_scoped_key,
+        return_gufe=False,
+    )
+
+    return str(transformation)
 
 
 ### results

@@ -463,10 +463,6 @@ class TestClient:
         stat = user_client.get_transformation_status(transformation_sk)
         assert stat == {"complete": 5}
 
-        import pdb
-
-        pdb.set_trace()
-
     def test_action_tasks(
         self,
         scope_test,
