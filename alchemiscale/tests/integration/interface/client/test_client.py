@@ -449,21 +449,22 @@ class TestClient:
 
         # check the status of the tasks; should all be waiting
         stat = user_client.get_transformation_status(transformation_sk)
-        assert stat == {'waiting': 5}
+        assert stat == {"waiting": 5}
 
         # cheat and set the status of all tasks to running
         ret_task = n4js_preloaded.set_task_status(all_tasks, TaskStatusEnum.running)
         assert set(ret_task) == set(all_tasks)
         stat = user_client.get_transformation_status(transformation_sk)
-        assert stat == {'running': 5}
+        assert stat == {"running": 5}
 
         # cheat and set the status of all tasks to complete
         ret_task = n4js_preloaded.set_task_status(all_tasks, TaskStatusEnum.complete)
         assert set(ret_task) == set(all_tasks)
         stat = user_client.get_transformation_status(transformation_sk)
-        assert stat == {'complete': 5}
-        
+        assert stat == {"complete": 5}
+
         import pdb
+
         pdb.set_trace()
 
     def test_action_tasks(
