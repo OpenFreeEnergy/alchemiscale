@@ -1692,6 +1692,18 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return counts
 
+    def get_transformation_status(self, transformation: ScopedKey) -> Dict[str, int]:
+        """Return status counts for all Tasks associated with the given Transformation."""
+        q = f"""
+        MATCH (tf:Transformation {{_scoped_key: "{transformation}"}})<-[:PERFORMS]-(t:Task)
+        RETURN t.status AS status, count(t) as counts
+        """
+        with self.transaction() as tx:
+            res = tx.run(q)
+            counts = {rec["status"]: rec["counts"] for rec in res}
+
+        return counts
+
     def set_task_result(
         self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
     ) -> ScopedKey:

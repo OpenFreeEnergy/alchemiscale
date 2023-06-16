@@ -35,11 +35,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     _exception = AlchemiscaleClientError
 
-    def list_scopes(self) -> List[Scope]:
+    def get_scopes(self) -> List[Scope]:
         scopes = self._get_resource(
             f"/identities/{self.identifier}/scopes",
         )
         return sorted([Scope.from_str(s) for s in scopes])
+
+    def list_scopes(self) -> List[Scope]:
+        return self.get_scopes()
 
     ### inputs
 
@@ -291,10 +294,32 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         transformation = self._get_resource(f"tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
 
-    def _visualize_status(self):
-        ...
+    def _visualize_status(self, status_counts, status_object):
+        from rich import print as rprint
 
-    def get_scope_status(self, scope: Optional[Scope] = None) -> Dict[str, int]:
+        from rich.table import Table
+        
+        title = f"{status_object}"
+        table = Table(title=title, title_justify='left', expand=True)
+        #table = Table()
+        
+        table.add_column("status", justify="left", no_wrap=True)
+        table.add_column("count", justify="right")
+        
+        table.add_row("complete", f"{status_counts.get('complete', 0)}", style='green')
+        table.add_row("running", f"{status_counts.get('running', 0)}", style='orange3')
+        table.add_row("waiting", f"{status_counts.get('waiting', 0)}", style='blue')
+        table.add_row("error", f"{status_counts.get('error', 0)}", style='red')
+        table.add_row("invalid", f"{status_counts.get('invalid', 0)}", style='magenta1')
+        table.add_row("deleted", f"{status_counts.get('deleted', 0)}", style='purple')
+        
+        rprint(table)
+
+    def get_scope_status(
+        self,
+        scope: Optional[Scope] = None,
+        visualize: Optional[bool] = True,
+    ) -> Dict[str, int]:
         """Return status counts for all Tasks within the given Scope.
 
         Parameters
@@ -303,6 +328,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             Scope to use for querying status. Non-specific Scopes are allowed,
             and will give back counts for all Tasks within that this user has
             Scope access to. Defaults to all Scopes.
+        visualize
+            If ``True``, print a table of status counts.
 
         Returns
         -------
@@ -312,70 +339,65 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        return self._get_resource(f"/scopes/{scope}/status")
+        status_counts = self._get_resource(f"/scopes/{scope}/status")
 
-    def get_network_status(self, network: ScopedKey) -> Dict[str, int]:
+        if visualize:
+            self._visualize_status(status_counts, scope)
+            
+        return status_counts
+
+    def get_network_status(
+        self, 
+        network: ScopedKey,
+        visualize: Optional[bool] = True,
+    ) -> Dict[str, int]:
         """Return status counts for all Tasks associated with the given AlchemicalNetwork.
 
         Parameters
         ----------
         network
             ScopedKey for the Alchemicalnetwork to obtain status counts for.
+        visualize
+            If ``True``, print a table of status counts.
 
         Returns
         -------
         status_counts
             Dict giving statuses as keys, Task counts as values.
         """
-        return self._get_resource(f"/networks/{network}/status")
+        status_counts = self._get_resource(f"/networks/{network}/status")
+
+        if visualize:
+            self._visualize_status(status_counts, network)
+
+        return status_counts
 
     def get_transformation_status(
         self,
         transformation: ScopedKey,
         visualize: Optional[bool] = True,
     ) -> Dict[str, int]:
-        """Return status counts for all Tasks associated with the given Transformation.
-
-        If visualize is True, counts of Task statuses for the Transformation
-        will be printed to the console.
+        """Return status counts for all Tasks associated with the given
+        Transformation.
 
         Parameters
         ----------
         transformation
             ScopedKey for the Transformation to obtain status counts for.
+        visualize
+            If ``True``, print a table of status counts.
 
         Returns
         -------
         status_counts
             Dict giving statuses as keys, Task counts as values.
         """
-        g = self.get_transformation_tasks(transformation, return_as="graph")
-        all_tasks = list(g.nodes)
-        statuses = self.get_tasks_status(all_tasks)
-        stat_dict = {}
-        for stat, task in zip(statuses, all_tasks):
-            stat_dict[task] = stat
-
-        # check if everything is finished
-        complete = all([i == TaskStatusEnum.complete for i in statuses])
+        status_counts = self._get_resource(f"/transformations/{transformation}/status")
 
         if visualize:
-            from rich import print as rprint
+            self._visualize_status(status_counts, transformation)
 
-            # tasks status
-            value_counts = Counter(stat_dict.values())
-            rprint(f"[bold]Task status for: {transformation}\n")
-            rprint(f"[bold green]complete: {value_counts[TaskStatusEnum.complete]}")
-            rprint(f"[bold orange3]running:  {value_counts[TaskStatusEnum.running]}")
-            rprint(f"[bold blue]waiting:  {value_counts[TaskStatusEnum.waiting]}")
-            rprint(f"[bold red]error:    {value_counts[TaskStatusEnum.error]}")
-            rprint(f"[bold magenta1]invalid:  {value_counts[TaskStatusEnum.invalid]}")
-            rprint(f"[bold purple]deleted:  {value_counts[TaskStatusEnum.deleted]}")
-            rprint(f"-----------")
-            rprint(
-                f"[bold]% complete:  {value_counts[TaskStatusEnum.complete]}/{sum(value_counts.values())}"
-            )
-        return dict(value_counts)
+        return status_counts
 
     def action_tasks(
         self, tasks: List[ScopedKey], network: ScopedKey

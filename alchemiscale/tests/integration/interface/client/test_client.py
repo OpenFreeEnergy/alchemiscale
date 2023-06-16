@@ -434,8 +434,37 @@ class TestClient:
                 else:
                     assert status_counts[status] == 0
 
-    def test_get_transformation_status(self):
-        ...
+    def test_get_transformation_status(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+        uvicorn_server,
+    ):
+        network_sk = user_client.get_scoped_key(network_tyk2, scope_test)
+        transformation_sk = user_client.get_network_transformations(network_sk)[0]
+
+        all_tasks = user_client.create_tasks(transformation_sk, count=5)
+
+        # check the status of the tasks; should all be waiting
+        stat = user_client.get_transformation_status(transformation_sk)
+        assert stat == {'waiting': 5}
+
+        # cheat and set the status of all tasks to running
+        ret_task = n4js_preloaded.set_task_status(all_tasks, TaskStatusEnum.running)
+        assert set(ret_task) == set(all_tasks)
+        stat = user_client.get_transformation_status(transformation_sk)
+        assert stat == {'running': 5}
+
+        # cheat and set the status of all tasks to complete
+        ret_task = n4js_preloaded.set_task_status(all_tasks, TaskStatusEnum.complete)
+        assert set(ret_task) == set(all_tasks)
+        stat = user_client.get_transformation_status(transformation_sk)
+        assert stat == {'complete': 5}
+        
+        import pdb
+        pdb.set_trace()
 
     def test_action_tasks(
         self,
@@ -869,36 +898,4 @@ class TestClient:
 
             # check that the status has been set
             statuses = user_client.get_tasks_status(all_tasks)
-            assert all([s == status for s in statuses])
-
-    def test_get_transformation_status(
-        self,
-        scope_test,
-        n4js_preloaded,
-        network_tyk2,
-        user_client: client.AlchemiscaleClient,
-        uvicorn_server,
-    ):
-        an = network_tyk2
-        transformation = list(an.edges)[0]
-
-        network_sk = user_client.get_scoped_key(an, scope_test)
-        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
-
-        all_tasks = user_client.create_tasks(transformation_sk, count=5)
-
-        # set the status of a task
-        stat = user_client.get_transformation_status(transformation_sk)
-        assert not stat
-
-        # cheat and set the status of all tasks to running
-        ret_task = n4js_preloaded.set_task_status(all_tasks, TaskStatusEnum.running)
-        assert set(ret_task) == set(all_tasks)
-        stat = user_client.get_transformation_status(transformation_sk)
-        assert not stat
-
-        # cheat and set the status of all tasks to complete
-        ret_task = n4js_preloaded.set_task_status(all_tasks, TaskStatusEnum.complete)
-        assert set(ret_task) == set(all_tasks)
-        stat = user_client.get_transformation_status(transformation_sk)
-        assert stat
+            assert all([s == status.value for s in statuses])
