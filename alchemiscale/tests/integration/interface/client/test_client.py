@@ -248,7 +248,6 @@ class TestClient:
         n4js_preloaded,
         network_tyk2,
         user_client: client.AlchemiscaleClient,
-
     ):
         an_sk = user_client.get_scoped_key(network_tyk2, scope_test)
         an = user_client.get_network(an_sk)
@@ -262,7 +261,6 @@ class TestClient:
         n4js_preloaded,
         transformation,
         user_client: client.AlchemiscaleClient,
-
     ):
         tf_sk = user_client.get_scoped_key(transformation, scope_test)
         tf = user_client.get_transformation(tf_sk)
@@ -276,7 +274,6 @@ class TestClient:
         n4js_preloaded,
         chemicalsystem,
         user_client: client.AlchemiscaleClient,
-
     ):
         cs_sk = user_client.get_scoped_key(chemicalsystem, scope_test)
         cs = user_client.get_chemicalsystem(cs_sk)
@@ -388,13 +385,13 @@ class TestClient:
             status_counts = user_client.get_scope_status(scope)
 
             for status in status_counts:
-                if status == 'waiting':
+                if status == "waiting":
                     assert status_counts[status] == 3
                 else:
                     assert status_counts[status] == 0
 
         # create tasks in a scope we don't have access to
-        other_scope = Scope('other_org', 'other_campaign', 'other_project')
+        other_scope = Scope("other_org", "other_campaign", "other_project")
         n4js_preloaded.create_network(network_tyk2, other_scope)
         other_tf_sk = n4js_preloaded.query_transformations(scope=other_scope)[0]
         task_sk = n4js_preloaded.create_task(other_tf_sk)
@@ -406,7 +403,7 @@ class TestClient:
         # try a more general scope
         status_counts = user_client.get_scope_status(Scope())
         for status in status_counts:
-            if status == 'waiting':
+            if status == "waiting":
                 assert status_counts[status] == 3 * len(multiple_scopes)
             else:
                 assert status_counts[status] == 0
@@ -432,7 +429,7 @@ class TestClient:
             status_counts = user_client.get_network_status(an_sk)
 
             for status in status_counts:
-                if status == 'waiting':
+                if status == "waiting":
                     assert status_counts[status] == 3
                 else:
                     assert status_counts[status] == 0

@@ -294,7 +294,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def _visualize_status(self):
         ...
 
-    def get_scope_status(self, scope: Optional[Scope] = None) -> Dict[str,int]:
+    def get_scope_status(self, scope: Optional[Scope] = None) -> Dict[str, int]:
         """Return status counts for all Tasks within the given Scope.
 
         Parameters
@@ -314,7 +314,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return self._get_resource(f"/scopes/{scope}/status")
 
-    def get_network_status(self, network: ScopedKey) -> Dict[str,int]:
+    def get_network_status(self, network: ScopedKey) -> Dict[str, int]:
         """Return status counts for all Tasks associated with the given AlchemicalNetwork.
 
         Parameters
@@ -330,10 +330,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return self._get_resource(f"/networks/{network}/status")
 
     def get_transformation_status(
-        self, 
-        transformation: ScopedKey, 
+        self,
+        transformation: ScopedKey,
         visualize: Optional[bool] = True,
-
     ) -> Dict[str, int]:
         """Return status counts for all Tasks associated with the given Transformation.
 
@@ -365,9 +364,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             # tasks status
             value_counts = Counter(stat_dict.values())
-            rprint(
-                f"[bold]Task status for: {transformation}\n"
-            )
+            rprint(f"[bold]Task status for: {transformation}\n")
             rprint(f"[bold green]complete: {value_counts[TaskStatusEnum.complete]}")
             rprint(f"[bold orange3]running:  {value_counts[TaskStatusEnum.running]}")
             rprint(f"[bold blue]waiting:  {value_counts[TaskStatusEnum.waiting]}")

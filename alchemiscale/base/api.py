@@ -53,15 +53,16 @@ def validate_scopes(scope: Scope, token: TokenData) -> None:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-def minimize_scope_space(scopes: List[Scope]):
-    """Remove redundant Scopes from a list of Scopes.
 
-    """
+def minimize_scope_space(scopes: List[Scope]):
+    """Remove redundant Scopes from a list of Scopes."""
     scopes = sorted(scopes)
 
     minimal_scope_space = []
     for scope in scopes:
-        if not any(other_scope.is_superset(scope) for other_scope in minimal_scope_space):
+        if not any(
+            other_scope.is_superset(scope) for other_scope in minimal_scope_space
+        ):
             minimal_scope_space.append(scope)
 
     return minimal_scope_space
@@ -89,7 +90,9 @@ def validate_scopes_query(
     else:
         # otherwise, we want to return all (and only) authorized token scopes
         # that fall within the query_scope
-        scope_space = [scope for scope in token_scope_space if query_scope.is_superset(scope)]
+        scope_space = [
+            scope for scope in token_scope_space if query_scope.is_superset(scope)
+        ]
 
     if as_str:
         scope_space = [str(s) for s in scope_space]

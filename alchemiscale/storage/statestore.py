@@ -1662,10 +1662,11 @@ class Neo4jStore(AlchemiscaleStateStore):
             "_campaign": scope.campaign,
             "_project": scope.project,
         }
-        
+
         prop_string = ", ".join(
             "{}: '{}'".format(key, value)
-            for key, value in properties.items() if value is not None
+            for key, value in properties.items()
+            if value is not None
         )
 
         q = f"""
@@ -1674,7 +1675,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         with self.transaction() as tx:
             res = tx.run(q)
-            counts = {rec['status']: rec['counts'] for rec in res}
+            counts = {rec["status"]: rec["counts"] for rec in res}
 
         return counts
 
@@ -1687,7 +1688,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         with self.transaction() as tx:
             res = tx.run(q)
-            counts = {rec['status']: rec['counts'] for rec in res}
+            counts = {rec["status"]: rec["counts"] for rec in res}
 
         return counts
 
