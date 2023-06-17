@@ -1803,14 +1803,10 @@ class Neo4jStore(AlchemiscaleStateStore):
             for t in tasks:
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                RETURN t
+                RETURN t.status
                 """
-                task = tx.run(q).to_subgraph()
-                if task is None:
-                    statuses.append(None)
-                else:
-                    status = task.get("status")
-                    statuses.append(TaskStatusEnum(status))
+                status = tx.run(q).evaluate()
+                statuses.append(TaskStatusEnum(status) if status is not None else None)
 
         return statuses
 
