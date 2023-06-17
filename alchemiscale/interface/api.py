@@ -463,9 +463,54 @@ def cancel_tasks(
     return [str(sk) if sk is not None else None for sk in canceled_sks]
 
 
-@router.get("/tasks/status")
-def get_tasks_status():
-    ...
+@router.post("/tasks/status/get")
+def tasks_status_get(
+    *,
+    tasks: List[ScopedKey] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Union[str, None]]:
+    statuses = []
+    for task_sk in tasks:
+        try:
+            validate_scopes(task_sk.scope, token)
+        except HTTPException:
+            statuses.append(None)
+        else:
+            statuses.extend(n4js.get_task_status([task_sk]))
+
+    return [status.value if status is not None else None for status in statuses]
+
+
+@router.post("/tasks/status/set")
+def tasks_status_set(
+    *,
+    tasks: List[ScopedKey] = Body(),
+    status: Optional[str] = Body(),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Union[str, None]]:
+    status = TaskStatusEnum(status)
+    if status not in (
+        TaskStatusEnum.waiting,
+        TaskStatusEnum.invalid,
+        TaskStatusEnum.deleted,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot set status to '{status}', must be one of 'waiting', 'invalid', 'deleted'",
+        )
+
+    tasks_updated = []
+    for task_sk in tasks:
+        try:
+            validate_scopes(task_sk.scope, token)
+        except HTTPException:
+            tasks_updated.append(None)
+        else:
+            tasks_updated.extend(n4js.set_task_status([task_sk], status))
+
+    return [str(t) if t is not None else None for t in tasks_updated]
 
 
 @router.post("/tasks/{task_scoped_key}/status")
