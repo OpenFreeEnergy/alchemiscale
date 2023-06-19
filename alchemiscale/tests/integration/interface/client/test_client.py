@@ -884,7 +884,10 @@ class TestClient:
         network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
-        all_tasks = user_client.create_tasks(transformation_sk, count=5)
+        all_tasks = user_client.create_tasks(transformation_sk, count=1000)
+
+        import pdb
+        pdb.set_trace()
 
         # set the status of a task
         if should_raise:

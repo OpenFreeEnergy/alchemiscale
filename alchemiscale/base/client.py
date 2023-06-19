@@ -11,7 +11,7 @@ import json
 from urllib.parse import urljoin
 from functools import wraps
 
-import requests
+import httpx
 
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
@@ -31,6 +31,17 @@ class AlchemiscaleBaseClientError(Exception):
 
 class AlchemiscaleConnectionError(Exception):
     ...
+
+async def use_session(f):
+    async def _wrapper(self, *args, **kwargs):
+        self._session = httpx.AsyncClient()
+        try:
+            return f(self, *args, **kwargs)
+        finally:
+            await self._session.aclose()
+            self._session = None
+
+    return _wrapper
 
 
 class AlchemiscaleBaseClient:
@@ -86,6 +97,8 @@ class AlchemiscaleBaseClient:
         self._jwtoken = None
         self._headers = None
 
+        self._session = None
+
     def __repr__(self):
         return f"{self.__class__.__name__}('{self.api_url}')"
 
@@ -128,18 +141,55 @@ class AlchemiscaleBaseClient:
 
         return _wrapper
 
+    def _retry_async(f):
+        """Automatically retry with exponential backoff if API service is
+        unreachable or unable to service request.
+
+        Will retry up to ``self.max_retries``, with the time between retries
+        increasing by ``self.retry_base_seconds`` ** retries plus a random
+        jitter scaled to ``self.retry_base_seconds``. ``self.retry_max_seconds`
+        gives an upper bound to the time between retries.
+
+        """
+        async def _wrapper(self, *args, **kwargs):
+            retries = 0
+            while True:
+                try:
+                    return await f(self, *args, **kwargs)
+                except (self._exception, AlchemiscaleConnectionError) as e:
+                    # if we are getting back HTTP errors and the status code is not
+                    # one of those we want to retry on, just raise
+                    if isinstance(e, self._exception):
+                        if e.status_code not in self._retry_status_codes:
+                            raise
+
+                    if (self.max_retries != -1) and retries >= self.max_retries:
+                        raise
+                    retries += 1
+
+                    # apply exponential backoff with random jitter
+                    sleep_time = min(
+                        self.retry_max_seconds
+                        + self.retry_base_seconds * random.random(),
+                        self.retry_base_seconds**retries
+                        + self.retry_base_seconds * random.random(),
+                    )
+                    time.sleep(sleep_time)
+
+        return _wrapper
+
     def _get_token(self):
         data = {"username": self.identifier, "password": self.key}
 
         url = urljoin(self.api_url, "/token")
         try:
-            resp = requests.post(url, data=data)
-        except requests.exceptions.RequestException as e:
+            resp = httpx.post(url, data=data, timeout=None)
+        except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason}",
+                f"Status Code {resp.status_code} : {resp.reason_phrase}",
                 status_code=resp.status_code,
             )
 
@@ -174,21 +224,71 @@ class AlchemiscaleBaseClient:
 
         return _wrapper
 
+    async def _get_token_async(self):
+        data = {"username": self.identifier, "password": self.key}
+
+        url = urljoin(self.api_url, "/token")
+        try:
+            resp = await self._session.post(url, data=data, timeout=None)
+        except httpx.RequestError as e:
+            raise AlchemiscaleConnectionError(*e.args)
+
+        if not 200 <= resp.status_code < 300:
+            raise self._exception(
+                f"Status Code {resp.status_code} : {resp.reason_phrase}",
+                status_code=resp.status_code,
+            )
+
+        self._jwtoken = resp.json()["access_token"]
+        self._headers = {
+            "Authorization": f"Bearer {self._jwtoken}",
+            "Content-type": "application/json",
+        }
+
+    def _use_token_async(f):
+        async def _wrapper(self, *args, **kwargs):
+            # if we don't have a token at all, get one
+            if self._jwtoken is None:
+                await self._get_token_async()
+
+            # execute our function
+            # if we get an unauthorized exception, it may be that our token is
+            # stale; get a new one if so
+            # if it's any other status code, raise it
+            try:
+                return await f(self, *args, **kwargs)
+            except self._exception as e:
+                if e.status_code == 401:
+                    await self._get_token_async()
+                else:
+                    raise
+
+            # if we made it here, it means we got a fresh token;
+            # try the function again with the token in place
+            return await f(self, *args, **kwargs)
+
+        return _wrapper
+
     @_retry
     @_use_token
     def _query_resource(self, resource, params=None):
         if params is None:
             params = {}
+        else:
+            # drop params that are None
+            params = {k: v for k, v in params.items() if v is not None}
+
+        get = self._session.get if self._session is not None else httpx.get
 
         url = urljoin(self.api_url, resource)
         try:
-            resp = requests.get(url, params=params, headers=self._headers)
-        except requests.exceptions.RequestException as e:
+            resp = get(url, params=params, headers=self._headers, timeout=None)
+        except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason}",
+                f"Status Code {resp.status_code} : {resp.reason_phrase}",
                 status_code=resp.status_code,
             )
 
@@ -199,21 +299,43 @@ class AlchemiscaleBaseClient:
         else:
             return [ScopedKey.from_str(i) for i in resp.json()]
 
+    @_retry_async
+    @_use_token_async
+    async def _get_resource_async(self, resource, params=None):
+        if params is None:
+            params = {}
+
+        url = urljoin(self.api_url, resource)
+        try:
+            resp = await self._session.get(url, params=params, headers=self._headers, timeout=None)
+        except httpx.RequestError as e:
+            raise AlchemiscaleConnectionError(*e.args)
+
+        if not 200 <= resp.status_code < 300:
+            raise self._exception(
+                f"Status Code {resp.status_code} : {resp.reason_phrase} : {resp.text}",
+                status_code=resp.status_code,
+            )
+        content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
+        return content
+
     @_retry
     @_use_token
     def _get_resource(self, resource, params=None):
         if params is None:
             params = {}
 
+        get = self._session.get if self._session is not None else httpx.get
+
         url = urljoin(self.api_url, resource)
         try:
-            resp = requests.get(url, params=params, headers=self._headers)
-        except requests.exceptions.RequestException as e:
+            resp = get(url, params=params, headers=self._headers, timeout=None)
+        except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason} : {resp.text}",
+                f"Status Code {resp.status_code} : {resp.reason_phrase} : {resp.text}",
                 status_code=resp.status_code,
             )
         content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
@@ -223,16 +345,15 @@ class AlchemiscaleBaseClient:
     @_use_token
     def _post_resource(self, resource, data):
         url = urljoin(self.api_url, resource)
-
         jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
         try:
-            resp = requests.post(url, data=jsondata, headers=self._headers)
-        except requests.exceptions.RequestException as e:
+            resp = httpx.post(url, data=jsondata, headers=self._headers, timeout=None)
+        except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason}",
+                f"Status Code {resp.status_code} : {resp.reason_phrase}",
                 status_code=resp.status_code,
             )
 

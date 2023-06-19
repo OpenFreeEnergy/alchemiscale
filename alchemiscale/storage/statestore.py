@@ -1805,7 +1805,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 MATCH (t:Task {{_scoped_key: '{t}'}})
                 RETURN t.status
                 """
-                status = tx.run(q).evaluate()
+                status = tx.evaluate(q)
                 statuses.append(TaskStatusEnum(status) if status is not None else None)
 
         return statuses

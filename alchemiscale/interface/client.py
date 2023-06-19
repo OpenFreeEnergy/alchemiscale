@@ -4,11 +4,12 @@ Client for interacting with user-facing API. --- :mod:`alchemiscale.interface.cl
 
 """
 
+import asyncio
 from typing import Union, List, Dict, Optional, Tuple
 import json
 from collections import Counter
 
-
+import httpx
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
@@ -19,6 +20,7 @@ from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
     json_to_gufe,
+    use_session,
 )
 from ..models import Scope, ScopedKey
 from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
@@ -467,9 +469,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sk = self._post_resource(f"tasks/{task}/status", status.value)
         return ScopedKey.from_str(task_sk) if task_sk is not None else None
 
-    def _get_task_status(self, task: ScopedKey) -> TaskStatusEnum:
+    async def _get_task_status(self, task: ScopedKey) -> TaskStatusEnum:
         """Get the status of a `Task`."""
-        status = self._get_resource(f"tasks/{task}/status")
+        status = await self._get_resource_async(f"tasks/{task}/status")
         return status
 
     def set_tasks_status(
@@ -521,9 +523,19 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             a given `Task` doesn't exist, `None` will be returned in its place.
 
         """
-        if isinstance(tasks, ScopedKey):
-            tasks = [tasks]
-        statuses = [self._get_task_status(t) for t in tasks]
+        # TODO: consider forcing a token refresh here to avoid issues
+
+        async def async_request():
+            self._session = httpx.AsyncClient()
+            try:
+                statuses = await asyncio.gather(*[self._get_task_status(t) for t in tasks])
+            finally:
+                await self._session.aclose()
+                self._session = None
+
+            return statuses
+
+        statuses = asyncio.run(async_request())
         return statuses
 
     def get_tasks_priority(
