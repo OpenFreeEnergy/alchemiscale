@@ -1483,11 +1483,11 @@ class Neo4jStore(AlchemiscaleStateStore):
     def query_tasks(self, *, status=None, key=None, scope: Scope = Scope()):
         """Query for `Task`\s matching given attributes."""
         additional = {"status": status}
-        return self._query(
-            qualname="Task", additional=additional, key=key, scope=scope
-        )
+        return self._query(qualname="Task", additional=additional, key=key, scope=scope)
 
-    def get_network_tasks(self, network: ScopedKey, status: Optional[TaskStatusEnum] = None) -> List[ScopedKey]:
+    def get_network_tasks(
+        self, network: ScopedKey, status: Optional[TaskStatusEnum] = None
+    ) -> List[ScopedKey]:
         """List ScopedKeys for all Tasks associated with the given AlchemicalNetwork."""
         q = f"""
         MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
@@ -1586,7 +1586,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                 else None
                 for t in tasks
             }
-
 
     def set_tasks(
         self,

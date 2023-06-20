@@ -411,7 +411,9 @@ def get_transformation_tasks(
     if status is not None:
         status = TaskStatusEnum(status)
 
-    task_sks = n4js.get_transformation_tasks(sk, extends=extends, return_as=return_as, status=status)
+    task_sks = n4js.get_transformation_tasks(
+        sk, extends=extends, return_as=return_as, status=status
+    )
 
     if return_as == "list":
         return [str(sk) for sk in task_sks]

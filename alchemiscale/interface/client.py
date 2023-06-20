@@ -92,9 +92,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        params = dict(
-            name=name, return_gufe=return_gufe, **scope.dict()
-        )
+        params = dict(name=name, return_gufe=return_gufe, **scope.dict())
         if return_gufe:
             networks.update(self._query_resource("/networks", params=params))
         else:
@@ -247,7 +245,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def get_network_tasks(self, network: ScopedKey, status: Optional[str] = None):
         """List ScopedKeys for all Tasks associated with the given AlchemicalNetwork."""
-        params = {'status': status}
+        params = {"status": status}
         return self._query_resource(f"/networks/{network}/tasks", params=params)
 
     def get_task_networks(self, task: ScopedKey):

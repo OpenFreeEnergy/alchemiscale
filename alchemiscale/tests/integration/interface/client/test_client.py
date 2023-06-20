@@ -328,7 +328,7 @@ class TestClient:
 
         task_sks = user_client.query_tasks()
         assert len(task_sks) == 10 * 3
-        
+
         task_sks = user_client.query_tasks(scope=scope_test)
         assert len(task_sks) == 10 * 3
 
@@ -337,15 +337,15 @@ class TestClient:
 
         # check that we can query by status
         task_sks = user_client.query_tasks()
-        user_client.set_tasks_status(task_sks[:10], 'invalid')
+        user_client.set_tasks_status(task_sks[:10], "invalid")
 
-        task_sks = user_client.query_tasks(status='waiting')
+        task_sks = user_client.query_tasks(status="waiting")
         assert len(task_sks) == 10 * 3 - 10
 
-        task_sks = user_client.query_tasks(status='invalid')
+        task_sks = user_client.query_tasks(status="invalid")
         assert len(task_sks) == 10
 
-        task_sks = user_client.query_tasks(status='complete')
+        task_sks = user_client.query_tasks(status="complete")
         assert len(task_sks) == 0
 
     def test_get_network_tasks(
@@ -365,15 +365,15 @@ class TestClient:
         assert set(task_sks_network) == set(task_sks)
         assert len(task_sks_network) == len(task_sks)
 
-        user_client.set_tasks_status(task_sks[:10], 'invalid')
+        user_client.set_tasks_status(task_sks[:10], "invalid")
 
-        task_sks = user_client.get_network_tasks(an_sk, status='waiting')
+        task_sks = user_client.get_network_tasks(an_sk, status="waiting")
         assert len(task_sks) == len(task_sks_network) - 10
 
-        task_sks = user_client.get_network_tasks(an_sk, status='invalid')
+        task_sks = user_client.get_network_tasks(an_sk, status="invalid")
         assert len(task_sks) == 10
 
-        task_sks = user_client.get_network_tasks(an_sk, status='complete')
+        task_sks = user_client.get_network_tasks(an_sk, status="complete")
         assert len(task_sks) == 0
 
     def test_get_task_networks(
@@ -439,12 +439,16 @@ class TestClient:
 
         # try filtering on status
         # check that tasks are structured as we expect
-        user_client.set_tasks_status(task_sks_e[:2], 'invalid')
+        user_client.set_tasks_status(task_sks_e[:2], "invalid")
         assert set(task_sks_e[2:]) == set(
-            user_client.get_transformation_tasks(sk, extends=task_sks[0], status='waiting')
+            user_client.get_transformation_tasks(
+                sk, extends=task_sks[0], status="waiting"
+            )
         )
         assert set(task_sks_e[:2]) == set(
-            user_client.get_transformation_tasks(sk, extends=task_sks[0], status='invalid')
+            user_client.get_transformation_tasks(
+                sk, extends=task_sks[0], status="invalid"
+            )
         )
         assert set(task_sks_e) == set(
             user_client.get_transformation_tasks(sk, extends=task_sks[0])
