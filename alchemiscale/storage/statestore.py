@@ -557,6 +557,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         else:
             q += """
             RETURN n
+            ORDER BY n._org, n._campaign, n._project, n._gufe_key
             """
         with self.transaction() as tx:
             res = tx.run(q)
@@ -1479,6 +1480,114 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return scoped_key
 
+    def query_tasks(self, *, status=None, key=None, scope: Scope = Scope()):
+        """Query for `Task`\s matching given attributes."""
+        additional = {"status": status}
+        return self._query(
+            qualname="Task", additional=additional, key=key, scope=scope
+        )
+
+    def get_network_tasks(self, network: ScopedKey, status: Optional[TaskStatusEnum] = None) -> List[ScopedKey]:
+        """List ScopedKeys for all Tasks associated with the given AlchemicalNetwork."""
+        q = f"""
+        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
+              (tf)<-[:PERFORMS]-(t:Task)
+        """
+
+        if status is not None:
+            q += f"""
+            WHERE t.status = '{status.value}'
+            """
+
+        q += """
+        WITH t._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_task_networks(self, task: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for AlchemicalNetworks associated with the given Task."""
+        q = f"""
+        MATCH (t:Task {{_scoped_key: '{task}'}})-[:PERFORMS]->(tf:Transformation),
+              (tf)<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        WITH an._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_transformation_tasks(
+        self,
+        transformation: ScopedKey,
+        extends: Optional[ScopedKey] = None,
+        return_as: str = "list",
+        status: Optional[TaskStatusEnum] = None,
+    ) -> Union[List[ScopedKey], Dict[ScopedKey, Optional[ScopedKey]]]:
+        """Get all Tasks that perform the given Transformation.
+
+        If a Task ScopedKey is given for `extends`, then only those Tasks
+        that follow via any number of EXTENDS relationships will be returned.
+
+        `return_as` takes either `list` or `graph` as input.
+        `graph` will yield a dict mapping each Task's ScopedKey (as keys) to
+        the Task ScopedKey it extends (as values).
+
+        Parameters
+        ----------
+        transformation
+            ScopedKey of the Transformation to retrieve Tasks for.
+        extends
+
+        """
+        q = f"""
+        MATCH (trans:Transformation {{_scoped_key: '{transformation}'}})<-[:PERFORMS]-(task:Task)
+        """
+
+        if status is not None:
+            q += f"""
+            WHERE task.status = '{status.value}'
+            """
+
+        if extends:
+            q += f"""
+            MATCH (trans)<-[:PERFORMS]-(extends:Task {{_scoped_key: '{extends}'}})
+            WHERE (task)-[:EXTENDS*]->(extends)
+            RETURN task
+            """
+        else:
+            q += f"""
+            RETURN task
+            """
+
+        with self.transaction() as tx:
+            res = tx.run(q)
+
+        tasks = []
+        for record in res:
+            tasks.append(record["task"])
+
+        if return_as == "list":
+            return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
+        elif return_as == "graph":
+            return {
+                ScopedKey.from_str(t["_scoped_key"]): ScopedKey.from_str(t["extends"])
+                if t["extends"] is not None
+                else None
+                for t in tasks
+            }
+
+
     def set_tasks(
         self,
         transformation: ScopedKey,
@@ -1519,70 +1628,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         with self.transaction() as tx:
             tx.run(q)
-
-    def get_tasks(
-        self,
-        transformation: ScopedKey,
-        extends: Optional[ScopedKey] = None,
-        return_as: str = "list",
-    ) -> Union[List[ScopedKey], Dict[ScopedKey, Optional[ScopedKey]]]:
-        """Get all Tasks that perform the given Transformation.
-
-        If a Task ScopedKey is given for `extends`, then only those Tasks
-        that follow via any number of EXTENDS relationships will be returned.
-
-        `return_as` takes either `list` or `graph` as input.
-        `graph` will yield a dict mapping each Task's ScopedKey (as keys) to
-        the Task ScopedKey it extends (as values).
-
-        Parameters
-        ----------
-        transformation
-            ScopedKey of the Transformation to retrieve Tasks for.
-        extends
-
-        """
-        q = f"""
-        MATCH (trans:Transformation {{_scoped_key: '{transformation}'}})<-[:PERFORMS]-(task:Task)
-        """
-
-        if extends:
-            q += f"""
-            MATCH (trans)<-[:PERFORMS]-(extends:Task {{_scoped_key: '{extends}'}})
-            WHERE (task)-[:EXTENDS*]->(extends)
-            RETURN task
-            """
-        else:
-            q += f"""
-            RETURN task
-            """
-
-        with self.transaction() as tx:
-            res = tx.run(q)
-
-        tasks = []
-        for record in res:
-            tasks.append(record["task"])
-
-        if return_as == "list":
-            return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
-        elif return_as == "graph":
-            return {
-                ScopedKey.from_str(t["_scoped_key"]): ScopedKey.from_str(t["extends"])
-                if t["extends"] is not None
-                else None
-                for t in tasks
-            }
-
-    def query_tasks(
-        self,
-        scope: Optional[Scope] = None,
-        network: Optional[ScopedKey] = None,
-        transformation: Optional[ScopedKey] = None,
-        extends: Optional[ScopedKey] = None,
-        status: Optional[List[TaskStatusEnum]] = None,
-    ):
-        raise NotImplementedError
 
     def delete_task(
         self,
