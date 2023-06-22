@@ -1587,61 +1587,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                 for t in tasks
             }
 
-    def set_tasks(
-        self,
-        transformation: ScopedKey,
-        extends: Optional[Task] = None,
-        count: int = 1,
-    ) -> ScopedKey:
-        """Set a fixed number of Tasks against the given Transformation if not
-        already present.
-
-        Note: Tasks created by this method are not added to any TaskHubs.
-
-        Parameters
-        ----------
-        transformation
-            The Transformation to compute.
-        scope
-            The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
-        extends
-            The Task to use as a starting point for this Task.
-            Will use the `ProtocolDAGResult` from the given Task as the
-            `extends` input for the Task's eventual call to `Protocol.create`.
-        count
-            The total number of tasks that should exist corresponding to the
-            specified `transformation`, `scope`, and `extends`.
-        """
-        raise NotImplementedError
-        # TODO: finish this one out when we have a reasonable approach to locking
-        # too hard to perform in a single Cypher query; unclear how to create many nodes in a loop
-        transformation_node = self._get_node_from_obj_or_sk(
-            transformation, Transformation, scope
-        )
-
-    def set_task_priority(self, task: ScopedKey, priority: int):
-        q = f"""
-        MATCH (t:Task {{_scoped_key: "{task}"}})
-        SET t.priority = {priority}
-        RETURN t
-        """
-        with self.transaction() as tx:
-            tx.run(q)
-
-    def delete_task(
-        self,
-        task: ScopedKey,
-    ) -> Task:
-        """Remove a compute Task from a Transformation.
-
-        This will also remove the Task from all TaskHubs it is a part of.
-
-        This method is intended for administrator use; generally Tasks should
-        instead have their tasks set to 'deleted' and retained.
-
-        """
-        raise NotImplementedError
-
     def get_task_transformation(
         self,
         task: ScopedKey,
@@ -1697,6 +1642,61 @@ class Neo4jStore(AlchemiscaleStateStore):
             )
 
         return transformation, protocoldagresultref
+
+    def set_tasks(
+        self,
+        transformation: ScopedKey,
+        extends: Optional[Task] = None,
+        count: int = 1,
+    ) -> ScopedKey:
+        """Set a fixed number of Tasks against the given Transformation if not
+        already present.
+
+        Note: Tasks created by this method are not added to any TaskHubs.
+
+        Parameters
+        ----------
+        transformation
+            The Transformation to compute.
+        scope
+            The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
+        extends
+            The Task to use as a starting point for this Task.
+            Will use the `ProtocolDAGResult` from the given Task as the
+            `extends` input for the Task's eventual call to `Protocol.create`.
+        count
+            The total number of tasks that should exist corresponding to the
+            specified `transformation`, `scope`, and `extends`.
+        """
+        raise NotImplementedError
+        # TODO: finish this one out when we have a reasonable approach to locking
+        # too hard to perform in a single Cypher query; unclear how to create many nodes in a loop
+        transformation_node = self._get_node_from_obj_or_sk(
+            transformation, Transformation, scope
+        )
+
+    def set_task_priority(self, task: ScopedKey, priority: int):
+        q = f"""
+        MATCH (t:Task {{_scoped_key: "{task}"}})
+        SET t.priority = {priority}
+        RETURN t
+        """
+        with self.transaction() as tx:
+            tx.run(q)
+
+    def delete_task(
+        self,
+        task: ScopedKey,
+    ) -> Task:
+        """Remove a compute Task from a Transformation.
+
+        This will also remove the Task from all TaskHubs it is a part of.
+
+        This method is intended for administrator use; generally Tasks should
+        instead have their tasks set to 'deleted' and retained.
+
+        """
+        raise NotImplementedError
 
     def get_scope_status(self, scope: Scope) -> Dict[str, int]:
         """Return status counts for all Tasks within the given Scope."""
