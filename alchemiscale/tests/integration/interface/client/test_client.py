@@ -299,26 +299,102 @@ class TestClient:
 
         task_sks = user_client.create_tasks(sk, count=3)
 
-        assert set(task_sks) == set(n4js.get_tasks(sk))
+        assert set(task_sks) == set(n4js.get_transformation_tasks(sk))
 
         # try creating tasks that extend one of those we just created
         task_sks_e = user_client.create_tasks(sk, count=4, extends=task_sks[0])
 
         # check that we now get additional tasks
-        assert set(task_sks + task_sks_e) == set(n4js.get_tasks(sk))
+        assert set(task_sks + task_sks_e) == set(n4js.get_transformation_tasks(sk))
 
         # check that tasks are structured as we expect
-        assert set(task_sks_e) == set(n4js.get_tasks(sk, extends=task_sks[0]))
-        assert set() == set(n4js.get_tasks(sk, extends=task_sks[1]))
+        assert set(task_sks_e) == set(
+            n4js.get_transformation_tasks(sk, extends=task_sks[0])
+        )
+        assert set() == set(n4js.get_transformation_tasks(sk, extends=task_sks[1]))
 
-    def test_scope_tasks(self):
-        ...
+    def test_query_tasks(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        task_sks = user_client.query_tasks()
+        assert len(task_sks) == 0
 
-    def test_network_tasks(self):
-        ...
+        tf_sks = user_client.query_transformations(scope=scope_test)
 
-    def get_task_networks(self):
-        ...
+        for tf_sk in tf_sks[:10]:
+            user_client.create_tasks(tf_sk, count=3)
+
+        task_sks = user_client.query_tasks()
+        assert len(task_sks) == 10 * 3
+
+        task_sks = user_client.query_tasks(scope=scope_test)
+        assert len(task_sks) == 10 * 3
+
+        task_sks = user_client.query_tasks(scope=multiple_scopes[1])
+        assert len(task_sks) == 0
+
+        # check that we can query by status
+        task_sks = user_client.query_tasks()
+        user_client.set_tasks_status(task_sks[:10], "invalid")
+
+        task_sks = user_client.query_tasks(status="waiting")
+        assert len(task_sks) == 10 * 3 - 10
+
+        task_sks = user_client.query_tasks(status="invalid")
+        assert len(task_sks) == 10
+
+        task_sks = user_client.query_tasks(status="complete")
+        assert len(task_sks) == 0
+
+    def test_get_network_tasks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        an_sk = user_client.query_networks(scope=scope_test)[0]
+        tf_sks = user_client.get_network_transformations(an_sk)
+
+        task_sks = []
+        for tf_sk in tf_sks[:10]:
+            task_sks.extend(user_client.create_tasks(tf_sk, count=3))
+
+        task_sks_network = user_client.get_network_tasks(an_sk)
+        assert set(task_sks_network) == set(task_sks)
+        assert len(task_sks_network) == len(task_sks)
+
+        user_client.set_tasks_status(task_sks[:10], "invalid")
+
+        task_sks = user_client.get_network_tasks(an_sk, status="waiting")
+        assert len(task_sks) == len(task_sks_network) - 10
+
+        task_sks = user_client.get_network_tasks(an_sk, status="invalid")
+        assert len(task_sks) == 10
+
+        task_sks = user_client.get_network_tasks(an_sk, status="complete")
+        assert len(task_sks) == 0
+
+    def test_get_task_networks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        an_sk = user_client.query_networks(scope=scope_test)[0]
+        tf_sks = user_client.get_network_transformations(an_sk)
+
+        task_sks = []
+        for tf_sk in tf_sks[:10]:
+            task_sks.extend(user_client.create_tasks(tf_sk, count=3))
+
+        for task_sk in task_sks:
+            an_sks = user_client.get_task_networks(task_sk)
+            assert an_sk in an_sks
+            assert len(an_sks) == 2
 
     def test_get_transformation_tasks(
         self,
@@ -363,8 +439,37 @@ class TestClient:
         for task_sk in task_sks_e:
             assert graph.has_edge(task_sk, task_sks[0])
 
-    def test_get_task_transformation(self):
-        ...
+        # try filtering on status
+        # check that tasks are structured as we expect
+        user_client.set_tasks_status(task_sks_e[:2], "invalid")
+        assert set(task_sks_e[2:]) == set(
+            user_client.get_transformation_tasks(
+                sk, extends=task_sks[0], status="waiting"
+            )
+        )
+        assert set(task_sks_e[:2]) == set(
+            user_client.get_transformation_tasks(
+                sk, extends=task_sks[0], status="invalid"
+            )
+        )
+        assert set(task_sks_e) == set(
+            user_client.get_transformation_tasks(sk, extends=task_sks[0])
+        )
+
+    def test_get_task_transformation(
+        self,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        tf_sks = user_client.query_transformations()
+
+        task_sks = []
+        for tf_sk in tf_sks[:10]:
+            task_sks.append(user_client.create_tasks(tf_sk, count=3))
+
+        for tf_sk, tf_task_sks in zip(tf_sks, task_sks):
+            for task_sk in tf_task_sks:
+                assert user_client.get_task_transformation(task_sk) == tf_sk
 
     def test_get_scope_status(
         self,
@@ -536,11 +641,86 @@ class TestClient:
 
         assert canceled_sks_2 == [None]
 
-    def test_get_tasks_status(self):
-        ...
+    @pytest.mark.parametrize(
+        "status, should_raise",
+        [
+            (TaskStatusEnum.waiting, False),
+            (TaskStatusEnum.running, True),
+            (TaskStatusEnum.complete, True),
+            (TaskStatusEnum.error, True),
+            (TaskStatusEnum.invalid, False),
+            (TaskStatusEnum.deleted, False),
+        ],
+    )
+    def test_set_tasks_status(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+        uvicorn_server,
+        status,
+        should_raise,
+    ):
+        an = network_tyk2
+        transformation = list(an.edges)[0]
 
-    def test_set_tasks_status(self):
-        ...
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        all_tasks = user_client.create_tasks(transformation_sk, count=5)
+
+        if should_raise:
+            with pytest.raises(AlchemiscaleClientError):
+                user_client.set_tasks_status(all_tasks, status)
+        else:
+            # set the status of a task
+            user_client.set_tasks_status(all_tasks, status)
+
+            # check that the status has been set
+            # note must be list on n4js side
+            statuses = n4js_preloaded.get_task_status(all_tasks)
+            assert all([s == status for s in statuses])
+
+    @pytest.mark.parametrize(
+        "status, should_raise",
+        [
+            (TaskStatusEnum.waiting, False),
+            (TaskStatusEnum.running, True),
+            (TaskStatusEnum.complete, True),
+            (TaskStatusEnum.error, True),
+            (TaskStatusEnum.invalid, False),
+            (TaskStatusEnum.deleted, False),
+        ],
+    )
+    def test_get_tasks_status(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+        uvicorn_server,
+        status,
+        should_raise,
+    ):
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        all_tasks = user_client.create_tasks(transformation_sk, count=5)
+
+        # set the status of a task
+        if should_raise:
+            with pytest.raises(AlchemiscaleClientError):
+                user_client.set_tasks_status(all_tasks, status)
+        else:
+            user_client.set_tasks_status(all_tasks, status)
+
+            # check that the status has been set
+            statuses = user_client.get_tasks_status(all_tasks)
+            assert all([s == status.value for s in statuses])
 
     def test_get_tasks_priority(self):
         ...
@@ -815,84 +995,3 @@ class TestClient:
 
         # TODO: can we mix in a success in here somewhere?
         # not possible with current BrokenProtocol, unfortunately
-
-    @pytest.mark.parametrize(
-        "status, should_raise",
-        [
-            (TaskStatusEnum.waiting, False),
-            (TaskStatusEnum.running, True),
-            (TaskStatusEnum.complete, True),
-            (TaskStatusEnum.error, True),
-            (TaskStatusEnum.invalid, False),
-            (TaskStatusEnum.deleted, False),
-        ],
-    )
-    def test_set_tasks_status(
-        self,
-        scope_test,
-        n4js_preloaded,
-        network_tyk2,
-        user_client: client.AlchemiscaleClient,
-        uvicorn_server,
-        status,
-        should_raise,
-    ):
-        an = network_tyk2
-        transformation = list(an.edges)[0]
-
-        network_sk = user_client.get_scoped_key(an, scope_test)
-        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
-
-        all_tasks = user_client.create_tasks(transformation_sk, count=5)
-
-        if should_raise:
-            with pytest.raises(AlchemiscaleClientError):
-                user_client.set_tasks_status(all_tasks, status)
-        else:
-            # set the status of a task
-            user_client.set_tasks_status(all_tasks, status)
-
-            # check that the status has been set
-            # note must be list on n4js side
-            statuses = n4js_preloaded.get_task_status(all_tasks)
-            assert all([s == status for s in statuses])
-
-    @pytest.mark.parametrize(
-        "status, should_raise",
-        [
-            (TaskStatusEnum.waiting, False),
-            (TaskStatusEnum.running, True),
-            (TaskStatusEnum.complete, True),
-            (TaskStatusEnum.error, True),
-            (TaskStatusEnum.invalid, False),
-            (TaskStatusEnum.deleted, False),
-        ],
-    )
-    def test_get_tasks_status(
-        self,
-        scope_test,
-        n4js_preloaded,
-        network_tyk2,
-        user_client: client.AlchemiscaleClient,
-        uvicorn_server,
-        status,
-        should_raise,
-    ):
-        an = network_tyk2
-        transformation = list(an.edges)[0]
-
-        network_sk = user_client.get_scoped_key(an, scope_test)
-        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
-
-        all_tasks = user_client.create_tasks(transformation_sk, count=5)
-
-        # set the status of a task
-        if should_raise:
-            with pytest.raises(AlchemiscaleClientError):
-                user_client.set_tasks_status(all_tasks, status)
-        else:
-            user_client.set_tasks_status(all_tasks, status)
-
-            # check that the status has been set
-            statuses = user_client.get_tasks_status(all_tasks)
-            assert all([s == status.value for s in statuses])

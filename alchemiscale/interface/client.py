@@ -76,8 +76,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         name: Optional[str] = None,
         scope: Optional[Scope] = None,
         return_gufe=False,
-        limit=None,
-        skip=None,
     ) -> Union[List[ScopedKey], Dict[ScopedKey, AlchemicalNetwork]]:
         """Query for AlchemicalNetworks, optionally by name or Scope.
 
@@ -94,9 +92,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        params = dict(
-            name=name, return_gufe=return_gufe, limit=limit, skip=skip, **scope.dict()
-        )
+        params = dict(name=name, return_gufe=return_gufe, **scope.dict())
         if return_gufe:
             networks.update(self._query_resource("/networks", params=params))
         else:
@@ -108,8 +104,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         name: Optional[str] = None,
         scope: Optional[Scope] = None,
-        limit: Optional[int] = None,
-        skip: Optional[int] = None,
     ) -> List[ScopedKey]:
         """Query for Transformations, optionally by name or Scope.
 
@@ -120,7 +114,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        params = dict(name=name, limit=limit, skip=skip, **scope.dict())
+        params = dict(name=name, **scope.dict())
 
         return self._query_resource("/transformations", params=params)
 
@@ -128,19 +122,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         name: Optional[str] = None,
         scope: Optional[Scope] = None,
-        limit: Optional[int] = None,
-        skip: Optional[int] = None,
     ) -> List[ScopedKey]:
         """Query for ChemicalSystems, optionally by name or Scope.
 
         Calling this method with no query arguments will return ScopedKeys for
-        all Transformations that are within the Scopes this user has access to.
+        all ChemicalSystems that are within the Scopes this user has access to.
 
         """
         if scope is None:
             scope = Scope()
 
-        params = dict(name=name, limit=limit, skip=skip, **scope.dict())
+        params = dict(name=name, **scope.dict())
 
         return self._query_resource("/chemicalsystems", params=params)
 
@@ -233,23 +225,39 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
         return [ScopedKey.from_str(i) for i in task_sks]
 
-    def get_scope_tasks(scope: Scope, status=None):
-        """List ScopedKeys for all Tasks within the given Scope."""
-        ...
+    def query_tasks(
+        self,
+        scope: Optional[Scope] = None,
+        status: Optional[str] = None,
+    ) -> List[ScopedKey]:
+        """Query for Tasks, optionally by status or Scope.
 
-    def get_network_tasks(network: ScopedKey, status=None):
+        Calling this method with no query arguments will return ScopedKeys for
+        all Tasks that are within the Scopes this user has access to.
+
+        """
+        if scope is None:
+            scope = Scope()
+
+        params = dict(status=status, **scope.dict())
+
+        return self._query_resource("/tasks", params=params)
+
+    def get_network_tasks(self, network: ScopedKey, status: Optional[str] = None):
         """List ScopedKeys for all Tasks associated with the given AlchemicalNetwork."""
-        ...
+        params = {"status": status}
+        return self._query_resource(f"/networks/{network}/tasks", params=params)
 
-    def get_task_networks(task: ScopedKey):
+    def get_task_networks(self, task: ScopedKey):
         """List ScopedKeys for all AlchemicalNetworks associated with the given Task."""
-        ...
+        return self._query_resource(f"/tasks/{task}/networks")
 
     def get_transformation_tasks(
         self,
         transformation: ScopedKey,
         extends: Optional[ScopedKey] = None,
         return_as: str = "list",
+        status: Optional[str] = None,
     ) -> Union[List[ScopedKey], nx.DiGraph]:
         """Return the Tasks associated with the given Transformation.
 
@@ -271,7 +279,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if extends:
             extends = str(extends)
 
-        params = dict(extends=extends, return_as=return_as)
+        params = dict(extends=extends, return_as=return_as, status=status)
         task_sks = self._get_resource(
             f"/transformations/{transformation}/tasks", params
         )
