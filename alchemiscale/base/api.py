@@ -54,7 +54,7 @@ def validate_scopes(scope: Scope, token: TokenData) -> None:
         )
 
 
-def minimize_scope_space(scopes: List[Scope]):
+def minimize_scope_space(scopes: List[Scope]) -> List[Scope]:
     """Remove redundant Scopes from a list of Scopes."""
     scopes = sorted(scopes)
 

@@ -138,7 +138,6 @@ def query_networks(
     # query each scope
     # loop might be removable in the future with a Union like operator on scopes
     for single_query_scope in query_scopes:
-        # add new networks
         networks_handler.update_results(
             n4js.query_networks(
                 name=name, scope=single_query_scope, return_gufe=return_gufe
@@ -163,7 +162,6 @@ def query_transformations(
     # loop might be removable in the future with a Union like operator on scopes
     results = []
     for single_query_scope in query_scopes:
-        # add new networks
         results.extend(n4js.query_transformations(name=name, scope=single_query_scope))
 
     return [str(sk) for sk in results]
@@ -184,7 +182,6 @@ def query_chemicalsystems(
     # loop might be removable in the future with a Union like operator on scopes
     results = []
     for single_query_scope in query_scopes:
-        # add new networks
         results.extend(n4js.query_chemicalsystems(name=name, scope=single_query_scope))
 
     return [str(sk) for sk in results]
@@ -197,7 +194,6 @@ def get_network_transformations(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    # Get scope from scoped key provided by user, uniquely identifying the network
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
@@ -211,7 +207,6 @@ def get_transformation_networks(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    # Get scope from scoped key provided by user, uniquely identifying the network
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
@@ -225,7 +220,6 @@ def get_network_chemicalsystems(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    # Get scope from scoped key provided by user, uniquely identifying the network
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
@@ -239,7 +233,6 @@ def get_chemicalsystem_networks(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    # Get scope from scoped key provided by user, uniquely identifying the network
     sk = ScopedKey.from_str(chemicalsystem_scoped_key)
     validate_scopes(sk.scope, token)
 
@@ -253,7 +246,6 @@ def get_transformation_chemicalsystems(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    # Get scope from scoped key provided by user, uniquely identifying the network
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
@@ -269,7 +261,6 @@ def get_chemicalsystem_transformations(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    # Get scope from scoped key provided by user, uniquely identifying the network
     sk = ScopedKey.from_str(chemicalsystem_scoped_key)
     validate_scopes(sk.scope, token)
 
@@ -285,7 +276,6 @@ def get_network(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    # Get scope from scoped key provided by user, uniquely identifying the network
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
@@ -354,19 +344,76 @@ def create_tasks(
     return [str(sk) for sk in task_sks]
 
 
+@router.get("/tasks")
+def query_tasks(
+    *,
+    status: str = None,
+    scope: Scope = Depends(scope_params),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    # Intersect query scopes with accessible scopes in the token
+    query_scopes = validate_scopes_query(scope, token)
+
+    # query each scope
+    # loop might be removable in the future with a Union like operator on scopes
+    results = []
+    for single_query_scope in query_scopes:
+        results.extend(n4js.query_tasks(status=status, scope=single_query_scope))
+
+    return [str(sk) for sk in results]
+
+
+@router.get("/networks/{network_scoped_key}/tasks")
+def get_network_tasks(
+    network_scoped_key,
+    *,
+    status: str = None,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    # Get scope from scoped key provided by user, uniquely identifying the network
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    if status is not None:
+        status = TaskStatusEnum(status)
+
+    return [str(sk) for sk in n4js.get_network_tasks(network=sk, status=status)]
+
+
+@router.get("/tasks/{task_scoped_key}/networks")
+def get_task_networks(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return [str(sk) for sk in n4js.get_task_networks(task=sk)]
+
+
 @router.get("/transformations/{transformation_scoped_key}/tasks")
-def get_tasks(
+def get_transformation_tasks(
     transformation_scoped_key,
     *,
     extends: str = None,
     return_as: str = "list",
+    status: str = None,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    task_sks = n4js.get_tasks(sk, extends=extends, return_as=return_as)
+    if status is not None:
+        status = TaskStatusEnum(status)
+
+    task_sks = n4js.get_transformation_tasks(
+        sk, extends=extends, return_as=return_as, status=status
+    )
 
     if return_as == "list":
         return [str(sk) for sk in task_sks]
@@ -461,11 +508,6 @@ def cancel_tasks(
     canceled_sks = n4js.cancel_tasks(tasks, taskhub_sk)
 
     return [str(sk) if sk is not None else None for sk in canceled_sks]
-
-
-@router.get("/tasks/status")
-def get_tasks_status():
-    ...
 
 
 @router.post("/tasks/{task_scoped_key}/status")
