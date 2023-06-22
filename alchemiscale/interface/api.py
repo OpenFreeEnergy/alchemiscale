@@ -517,14 +517,15 @@ def tasks_status_get(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> List[Union[str, None]]:
-    statuses = []
+    valid_tasks = []
     for task_sk in tasks:
         try:
             validate_scopes(task_sk.scope, token)
+            valid_tasks.append(task_sk)
         except HTTPException:
-            statuses.append(None)
-        else:
-            statuses.extend(n4js.get_task_status([task_sk]))
+            valid_tasks.append(None)
+
+    statuses = n4js.get_task_status(valid_tasks)
 
     return [status.value if status is not None else None for status in statuses]
 

@@ -1841,15 +1841,19 @@ class Neo4jStore(AlchemiscaleStateStore):
         Dict[ScopedKey,TaskStatusEnum]
             A dictionary of Tasks and their statuses.
         """
-
         statuses = []
         with self.transaction() as tx:
-            for t in tasks:
-                q = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
-                RETURN t.status
-                """
-                status = tx.run(q).evaluate()
+            q = """
+            WITH $scoped_keys AS batch
+            UNWIND batch as sk
+            OPTIONAL MATCH (t:Task)
+            WHERE t._scoped_key = sk
+            RETURN t.status as status
+            """
+            res = tx.run(q, scoped_keys=[str(t) for t in tasks])
+
+            for rec in res:
+                status = rec['status']
                 statuses.append(TaskStatusEnum(status) if status is not None else None)
 
         return statuses
