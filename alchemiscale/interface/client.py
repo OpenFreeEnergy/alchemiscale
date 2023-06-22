@@ -536,7 +536,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         async def async_request():
             self._session = httpx.AsyncClient()
             try:
-                statuses = await asyncio.gather(*[self._get_task_status(t) for t in tasks])
+                statuses = await asyncio.gather(
+                    *[self._get_task_status(t) for t in tasks]
+                )
             finally:
                 await self._session.aclose()
                 self._session = None

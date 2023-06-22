@@ -32,6 +32,7 @@ class AlchemiscaleBaseClientError(Exception):
 class AlchemiscaleConnectionError(Exception):
     ...
 
+
 async def use_session(f):
     async def _wrapper(self, *args, **kwargs):
         self._session = httpx.AsyncClient()
@@ -151,6 +152,7 @@ class AlchemiscaleBaseClient:
         gives an upper bound to the time between retries.
 
         """
+
         async def _wrapper(self, *args, **kwargs):
             retries = 0
             while True:
@@ -307,7 +309,9 @@ class AlchemiscaleBaseClient:
 
         url = urljoin(self.api_url, resource)
         try:
-            resp = await self._session.get(url, params=params, headers=self._headers, timeout=None)
+            resp = await self._session.get(
+                url, params=params, headers=self._headers, timeout=None
+            )
         except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)
 
