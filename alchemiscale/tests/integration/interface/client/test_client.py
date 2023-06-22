@@ -299,17 +299,19 @@ class TestClient:
 
         task_sks = user_client.create_tasks(sk, count=3)
 
-        assert set(task_sks) == set(n4js.get_tasks(sk))
+        assert set(task_sks) == set(n4js.get_transformation_tasks(sk))
 
         # try creating tasks that extend one of those we just created
         task_sks_e = user_client.create_tasks(sk, count=4, extends=task_sks[0])
 
         # check that we now get additional tasks
-        assert set(task_sks + task_sks_e) == set(n4js.get_tasks(sk))
+        assert set(task_sks + task_sks_e) == set(n4js.get_transformation_tasks(sk))
 
         # check that tasks are structured as we expect
-        assert set(task_sks_e) == set(n4js.get_tasks(sk, extends=task_sks[0]))
-        assert set() == set(n4js.get_tasks(sk, extends=task_sks[1]))
+        assert set(task_sks_e) == set(
+            n4js.get_transformation_tasks(sk, extends=task_sks[0])
+        )
+        assert set() == set(n4js.get_transformation_tasks(sk, extends=task_sks[1]))
 
     def test_query_tasks(
         self,
