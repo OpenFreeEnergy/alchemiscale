@@ -708,7 +708,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
         q = f"""
-        MATCH (t:Transformation {{_scoped_key: '{transformation}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        MATCH (:Transformation {{_scoped_key: '{transformation}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
         WITH an._scoped_key as sk
         RETURN sk
         """
