@@ -251,7 +251,7 @@ class AlchemiscaleBaseClient:
         async def _wrapper(self, *args, **kwargs):
             # if we don't have a token at all, get one
             if self._jwtoken is None:
-                await self._get_token_async()
+                self._get_token()
 
             # execute our function
             # if we get an unauthorized exception, it may be that our token is
@@ -261,7 +261,7 @@ class AlchemiscaleBaseClient:
                 return await f(self, *args, **kwargs)
             except self._exception as e:
                 if e.status_code == 401:
-                    await self._get_token_async()
+                    self._get_token()
                 else:
                     raise
 

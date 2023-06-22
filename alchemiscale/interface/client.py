@@ -531,7 +531,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             a given `Task` doesn't exist, `None` will be returned in its place.
 
         """
-        # TODO: consider forcing a token refresh here to avoid issues
+        # force refresh of token to avoid refresh storm
+        self._get_token()
 
         async def async_request():
             self._session = httpx.AsyncClient()
