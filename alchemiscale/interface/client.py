@@ -35,11 +35,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     _exception = AlchemiscaleClientError
 
-    def list_scopes(self) -> List[Scope]:
+    def get_scopes(self) -> List[Scope]:
         scopes = self._get_resource(
             f"/identities/{self.identifier}/scopes",
         )
-        return [Scope.from_str(s) for s in scopes]
+        return sorted([Scope.from_str(s) for s in scopes])
+
+    def list_scopes(self) -> List[Scope]:
+        return self.get_scopes()
 
     ### inputs
 
@@ -73,8 +76,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         name: Optional[str] = None,
         scope: Optional[Scope] = None,
         return_gufe=False,
-        limit=None,
-        skip=None,
     ) -> Union[List[ScopedKey], Dict[ScopedKey, AlchemicalNetwork]]:
         """Query for AlchemicalNetworks, optionally by name or Scope.
 
@@ -91,9 +92,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        params = dict(
-            name=name, return_gufe=return_gufe, limit=limit, skip=skip, **scope.dict()
-        )
+        params = dict(name=name, return_gufe=return_gufe, **scope.dict())
         if return_gufe:
             networks.update(self._query_resource("/networks", params=params))
         else:
@@ -101,17 +100,88 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return networks
 
+    def query_transformations(
+        self,
+        name: Optional[str] = None,
+        scope: Optional[Scope] = None,
+    ) -> List[ScopedKey]:
+        """Query for Transformations, optionally by name or Scope.
+
+        Calling this method with no query arguments will return ScopedKeys for
+        all Transformations that are within the Scopes this user has access to.
+
+        """
+        if scope is None:
+            scope = Scope()
+
+        params = dict(name=name, **scope.dict())
+
+        return self._query_resource("/transformations", params=params)
+
+    def query_chemicalsystems(
+        self,
+        name: Optional[str] = None,
+        scope: Optional[Scope] = None,
+    ) -> List[ScopedKey]:
+        """Query for ChemicalSystems, optionally by name or Scope.
+
+        Calling this method with no query arguments will return ScopedKeys for
+        all ChemicalSystems that are within the Scopes this user has access to.
+
+        """
+        if scope is None:
+            scope = Scope()
+
+        params = dict(name=name, **scope.dict())
+
+        return self._query_resource("/chemicalsystems", params=params)
+
+    def get_network_transformations(self, network: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
+        return self._query_resource(f"/networks/{network}/transformations")
+
+    def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
+        return self._query_resource(f"/transformations/{transformation}/networks")
+
+    def get_network_chemicalsystems(self, network: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for the ChemicalSystems associated with the given AlchemicalNetwork."""
+        return self._query_resource(f"/networks/{network}/chemicalsystems")
+
+    def get_chemicalsystem_networks(self, chemicalsystem: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for the AlchemicalNetworks associated with the given ChemicalSystem."""
+        return self._query_resource(f"/chemicalsystems/{chemicalsystem}/networks")
+
+    def get_transformation_chemicalsystems(
+        self, transformation: ScopedKey
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
+        return self._query_resource(
+            f"/transformations/{transformation}/chemicalsystems"
+        )
+
+    def get_chemicalsystem_transformations(
+        self, chemicalsystem: ScopedKey
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for the Transformations associated with the given ChemicalSystem."""
+        return self._query_resource(
+            f"/chemicalsystems/{chemicalsystem}/transformations"
+        )
+
     def get_network(self, network: Union[ScopedKey, str]) -> AlchemicalNetwork:
+        """Retrieve an AlchemicalNetwork given its ScopedKey."""
         return json_to_gufe(self._get_resource(f"/networks/{network}"))
 
     def get_transformation(
         self, transformation: Union[ScopedKey, str]
     ) -> Transformation:
+        """Retrieve a Transformation given its ScopedKey."""
         return json_to_gufe(self._get_resource(f"/transformations/{transformation}"))
 
     def get_chemicalsystem(
         self, chemicalsystem: Union[ScopedKey, str]
     ) -> ChemicalSystem:
+        """Retrieve a Transformation given its ScopedKey."""
         return json_to_gufe(self._get_resource(f"/chemicalsystems/{chemicalsystem}"))
 
     ### compute
@@ -155,11 +225,39 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
         return [ScopedKey.from_str(i) for i in task_sks]
 
+    def query_tasks(
+        self,
+        scope: Optional[Scope] = None,
+        status: Optional[str] = None,
+    ) -> List[ScopedKey]:
+        """Query for Tasks, optionally by status or Scope.
+
+        Calling this method with no query arguments will return ScopedKeys for
+        all Tasks that are within the Scopes this user has access to.
+
+        """
+        if scope is None:
+            scope = Scope()
+
+        params = dict(status=status, **scope.dict())
+
+        return self._query_resource("/tasks", params=params)
+
+    def get_network_tasks(self, network: ScopedKey, status: Optional[str] = None):
+        """List ScopedKeys for all Tasks associated with the given AlchemicalNetwork."""
+        params = {"status": status}
+        return self._query_resource(f"/networks/{network}/tasks", params=params)
+
+    def get_task_networks(self, task: ScopedKey):
+        """List ScopedKeys for all AlchemicalNetworks associated with the given Task."""
+        return self._query_resource(f"/tasks/{task}/networks")
+
     def get_transformation_tasks(
         self,
         transformation: ScopedKey,
         extends: Optional[ScopedKey] = None,
         return_as: str = "list",
+        status: Optional[str] = None,
     ) -> Union[List[ScopedKey], nx.DiGraph]:
         """Return the Tasks associated with the given Transformation.
 
@@ -181,7 +279,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if extends:
             extends = str(extends)
 
-        params = dict(extends=extends, return_as=return_as)
+        params = dict(extends=extends, return_as=return_as, status=status)
         task_sks = self._get_resource(
             f"/transformations/{transformation}/tasks", params
         )
@@ -200,51 +298,114 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             raise ValueError(f"`return_as` takes 'list' or 'graph', not '{return_as}'")
 
     def get_task_transformation(self, task: ScopedKey) -> ScopedKey:
+        """Get the Transformation associated with the given Task."""
         transformation = self._get_resource(f"tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
 
-    def get_transformation_status(
-        self, transformation: ScopedKey, visualize: Optional[bool] = True
-    ) -> bool:
-        """Return the status of the given Transformation.
+    def _visualize_status(self, status_counts, status_object):
+        from rich import print as rprint
 
-        If visualize is True, counts of Task statuses for the Transformation
-        will be printed to the console.
+        from rich.table import Table
 
+        title = f"{status_object}"
+        table = Table(title=title, title_justify="left", expand=True)
+        # table = Table()
+
+        table.add_column("status", justify="left", no_wrap=True)
+        table.add_column("count", justify="right")
+
+        table.add_row("complete", f"{status_counts.get('complete', 0)}", style="green")
+        table.add_row("running", f"{status_counts.get('running', 0)}", style="orange3")
+        table.add_row("waiting", f"{status_counts.get('waiting', 0)}", style="blue")
+        table.add_row("error", f"{status_counts.get('error', 0)}", style="red")
+        table.add_row("invalid", f"{status_counts.get('invalid', 0)}", style="magenta1")
+        table.add_row("deleted", f"{status_counts.get('deleted', 0)}", style="purple")
+
+        rprint(table)
+
+    def get_scope_status(
+        self,
+        scope: Optional[Scope] = None,
+        visualize: Optional[bool] = True,
+    ) -> Dict[str, int]:
+        """Return status counts for all Tasks within the given Scope.
+
+        Parameters
+        ----------
+        scope
+            Scope to use for querying status. Non-specific Scopes are allowed,
+            and will give back counts for all Tasks within that this user has
+            Scope access to. Defaults to all Scopes.
+        visualize
+            If ``True``, print a table of status counts.
+
+        Returns
+        -------
+        status_counts
+            Dict giving statuses as keys, Task counts as values.
         """
-        g = self.get_transformation_tasks(transformation, return_as="graph")
-        all_tasks = list(g.nodes)
-        statuses = self.get_tasks_status(all_tasks)
-        stat_dict = {}
-        for stat, task in zip(statuses, all_tasks):
-            stat_dict[task] = stat
+        if scope is None:
+            scope = Scope()
 
-        # check if everything is finished
-        complete = all([i == TaskStatusEnum.complete for i in statuses])
+        status_counts = self._get_resource(f"/scopes/{scope}/status")
 
         if visualize:
-            from rich import print as rprint
+            self._visualize_status(status_counts, scope)
 
-            # tasks status
-            value_counts = Counter(stat_dict.values())
-            rprint(
-                f"[bold yellow]Alchemiscale Task Status for transformation: {transformation}\n"
-            )
-            rprint(f"[bold green]Complete: {value_counts[TaskStatusEnum.complete]}")
-            rprint(f"[bold blue]Waiting:  {value_counts[TaskStatusEnum.waiting]}")
-            rprint(f"[bold orange3]Running:  {value_counts[TaskStatusEnum.running]}")
-            rprint(f"[bold red]Error:    {value_counts[TaskStatusEnum.error]}")
-            rprint(f"[bold magenta1]Invalid:  {value_counts[TaskStatusEnum.invalid]}")
-            rprint(f"[bold purple]Deleted:  {value_counts[TaskStatusEnum.deleted]}")
-            rprint(f"-----------")
-            rprint(
-                f"[bold white]Total Complete:  {value_counts[TaskStatusEnum.complete]}/{sum(value_counts.values())}"
-            )
-            if complete:
-                rprint(f"\n[bold green]Transformation complete!")
-            else:
-                rprint(f"\n[bold red]Transformation incomplete!")
-        return complete
+        return status_counts
+
+    def get_network_status(
+        self,
+        network: ScopedKey,
+        visualize: Optional[bool] = True,
+    ) -> Dict[str, int]:
+        """Return status counts for all Tasks associated with the given AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network
+            ScopedKey for the Alchemicalnetwork to obtain status counts for.
+        visualize
+            If ``True``, print a table of status counts.
+
+        Returns
+        -------
+        status_counts
+            Dict giving statuses as keys, Task counts as values.
+        """
+        status_counts = self._get_resource(f"/networks/{network}/status")
+
+        if visualize:
+            self._visualize_status(status_counts, network)
+
+        return status_counts
+
+    def get_transformation_status(
+        self,
+        transformation: ScopedKey,
+        visualize: Optional[bool] = True,
+    ) -> Dict[str, int]:
+        """Return status counts for all Tasks associated with the given
+        Transformation.
+
+        Parameters
+        ----------
+        transformation
+            ScopedKey for the Transformation to obtain status counts for.
+        visualize
+            If ``True``, print a table of status counts.
+
+        Returns
+        -------
+        status_counts
+            Dict giving statuses as keys, Task counts as values.
+        """
+        status_counts = self._get_resource(f"/transformations/{transformation}/status")
+
+        if visualize:
+            self._visualize_status(status_counts, transformation)
+
+        return status_counts
 
     def action_tasks(
         self, tasks: List[ScopedKey], network: ScopedKey
@@ -317,7 +478,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def _get_task_status(self, task: ScopedKey) -> TaskStatusEnum:
         """Get the status of a `Task`."""
         status = self._get_resource(f"tasks/{task}/status")
-        return TaskStatusEnum(status)
+        return status
 
     def set_tasks_status(
         self, tasks: Union[ScopedKey, List[ScopedKey]], status: TaskStatusEnum
@@ -384,7 +545,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     ### results
 
-    def _get_prototocoldagresults(
+    def _get_protocoldagresults(
         self,
         protocoldagresultrefs: List[Dict],
         transformation: ScopedKey,
@@ -453,7 +614,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/transformations/{transformation}/results",
         )
 
-        pdrs = self._get_prototocoldagresults(
+        pdrs = self._get_protocoldagresults(
             protocoldagresultrefs, transformation, ok=True
         )
 
@@ -482,7 +643,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/transformations/{transformation}/failures",
         )
 
-        pdrs = self._get_prototocoldagresults(
+        pdrs = self._get_protocoldagresults(
             protocoldagresultrefs, transformation, ok=False
         )
 
@@ -498,7 +659,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/tasks/{task}/results",
         )
 
-        pdrs = self._get_prototocoldagresults(
+        pdrs = self._get_protocoldagresults(
             protocoldagresultrefs, transformation, ok=True
         )
 
@@ -514,7 +675,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/tasks/{task}/failures",
         )
 
-        pdrs = self._get_prototocoldagresults(
+        pdrs = self._get_protocoldagresults(
             protocoldagresultrefs, transformation, ok=False
         )
 

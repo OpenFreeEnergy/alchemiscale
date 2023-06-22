@@ -9,6 +9,7 @@ AlchemiscaleClientAPI --- :mod:`alchemiscale.interface.api`
 from typing import Any, Dict, List, Optional, Union
 import os
 import json
+from collections import Counter
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
@@ -102,47 +103,6 @@ def check_existence(
     return n4js.check_existence(scoped_key=sk)
 
 
-@router.get("/networks", response_class=GufeJSONResponse)
-def query_networks(
-    *,
-    name: str = None,
-    return_gufe: bool = False,
-    scope: Scope = Depends(scope_params),
-    n4js: Neo4jStore = Depends(get_n4js_depends),
-    token: TokenData = Depends(get_token_data_depends),
-):
-    # Intersect query scopes with accessible scopes in the token
-    query_scopes = validate_scopes_query(scope, token)
-    networks_handler = QueryGUFEHandler(return_gufe)
-
-    # query each scope
-    # loop might be removable in the future with a Union like operator on scopes
-    for single_query_scope in query_scopes:
-        # add new networks
-        networks_handler.update_results(
-            n4js.query_networks(
-                name=name, scope=single_query_scope, return_gufe=return_gufe
-            )
-        )
-
-    return networks_handler.format_return()
-
-
-@router.get("/networks/{network_scoped_key}", response_class=GufeJSONResponse)
-def get_network(
-    network_scoped_key,
-    *,
-    n4js: Neo4jStore = Depends(get_n4js_depends),
-    token: TokenData = Depends(get_token_data_depends),
-):
-    # Get scope from scoped key provided by user, uniquely identifying the network
-    sk = ScopedKey.from_str(network_scoped_key)
-    validate_scopes(sk.scope, token)
-
-    network = n4js.get_gufe(scoped_key=sk)
-    return gufe_to_json(network)
-
-
 @router.post("/networks", response_model=ScopedKey)
 def create_network(
     *,
@@ -162,9 +122,165 @@ def create_network(
     return an_sk
 
 
+@router.get("/networks", response_class=GufeJSONResponse)
+def query_networks(
+    *,
+    name: str = None,
+    return_gufe: bool = False,
+    scope: Scope = Depends(scope_params),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    # Intersect query scopes with accessible scopes in the token
+    query_scopes = validate_scopes_query(scope, token)
+    networks_handler = QueryGUFEHandler(return_gufe)
+
+    # query each scope
+    # loop might be removable in the future with a Union like operator on scopes
+    for single_query_scope in query_scopes:
+        networks_handler.update_results(
+            n4js.query_networks(
+                name=name, scope=single_query_scope, return_gufe=return_gufe
+            )
+        )
+
+    return networks_handler.format_return()
+
+
 @router.get("/transformations")
-def query_transformations():
-    return {"message": "nothing yet"}
+def query_transformations(
+    *,
+    name: str = None,
+    scope: Scope = Depends(scope_params),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    # Intersect query scopes with accessible scopes in the token
+    query_scopes = validate_scopes_query(scope, token)
+
+    # query each scope
+    # loop might be removable in the future with a Union like operator on scopes
+    results = []
+    for single_query_scope in query_scopes:
+        results.extend(n4js.query_transformations(name=name, scope=single_query_scope))
+
+    return [str(sk) for sk in results]
+
+
+@router.get("/chemicalsystems")
+def query_chemicalsystems(
+    *,
+    name: str = None,
+    scope: Scope = Depends(scope_params),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    # Intersect query scopes with accessible scopes in the token
+    query_scopes = validate_scopes_query(scope, token)
+
+    # query each scope
+    # loop might be removable in the future with a Union like operator on scopes
+    results = []
+    for single_query_scope in query_scopes:
+        results.extend(n4js.query_chemicalsystems(name=name, scope=single_query_scope))
+
+    return [str(sk) for sk in results]
+
+
+@router.get("/networks/{network_scoped_key}/transformations")
+def get_network_transformations(
+    network_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return [str(sk) for sk in n4js.get_network_transformations(network=sk)]
+
+
+@router.get("/transformations/{transformation_scoped_key}/networks")
+def get_transformation_networks(
+    transformation_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(transformation_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return [str(sk) for sk in n4js.get_transformation_networks(transformation=sk)]
+
+
+@router.get("/networks/{network_scoped_key}/chemicalsystems")
+def get_network_chemicalsystems(
+    network_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return [str(sk) for sk in n4js.get_network_chemicalsystems(network=sk)]
+
+
+@router.get("/chemicalsystems/{chemicalsystem_scoped_key}/networks")
+def get_chemicalsystem_networks(
+    chemicalsystem_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(chemicalsystem_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return [str(sk) for sk in n4js.get_chemicalsystem_networks(chemicalsystem=sk)]
+
+
+@router.get("/transformations/{transformation_scoped_key}/chemicalsystems")
+def get_transformation_chemicalsystems(
+    transformation_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(transformation_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return [
+        str(sk) for sk in n4js.get_transformation_chemicalsystems(transformation=sk)
+    ]
+
+
+@router.get("/chemicalsystems/{chemicalsystem_scoped_key}/transformations")
+def get_chemicalsystem_transformations(
+    chemicalsystem_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(chemicalsystem_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return [
+        str(sk) for sk in n4js.get_chemicalsystem_transformations(chemicalsystem=sk)
+    ]
+
+
+@router.get("/networks/{network_scoped_key}", response_class=GufeJSONResponse)
+def get_network(
+    network_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    network = n4js.get_gufe(scoped_key=sk)
+    return gufe_to_json(network)
 
 
 @router.get(
@@ -181,11 +297,6 @@ def get_transformation(
 
     transformation = n4js.get_gufe(scoped_key=sk)
     return gufe_to_json(transformation)
-
-
-@router.get("/chemicalsystems")
-def query_chemicalsystems():
-    return {"message": "nothing yet"}
 
 
 @router.get(
@@ -233,19 +344,76 @@ def create_tasks(
     return [str(sk) for sk in task_sks]
 
 
+@router.get("/tasks")
+def query_tasks(
+    *,
+    status: str = None,
+    scope: Scope = Depends(scope_params),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    # Intersect query scopes with accessible scopes in the token
+    query_scopes = validate_scopes_query(scope, token)
+
+    # query each scope
+    # loop might be removable in the future with a Union like operator on scopes
+    results = []
+    for single_query_scope in query_scopes:
+        results.extend(n4js.query_tasks(status=status, scope=single_query_scope))
+
+    return [str(sk) for sk in results]
+
+
+@router.get("/networks/{network_scoped_key}/tasks")
+def get_network_tasks(
+    network_scoped_key,
+    *,
+    status: str = None,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    # Get scope from scoped key provided by user, uniquely identifying the network
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    if status is not None:
+        status = TaskStatusEnum(status)
+
+    return [str(sk) for sk in n4js.get_network_tasks(network=sk, status=status)]
+
+
+@router.get("/tasks/{task_scoped_key}/networks")
+def get_task_networks(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return [str(sk) for sk in n4js.get_task_networks(task=sk)]
+
+
 @router.get("/transformations/{transformation_scoped_key}/tasks")
-def get_tasks(
+def get_transformation_tasks(
     transformation_scoped_key,
     *,
     extends: str = None,
     return_as: str = "list",
+    status: str = None,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    task_sks = n4js.get_tasks(sk, extends=extends, return_as=return_as)
+    if status is not None:
+        status = TaskStatusEnum(status)
+
+    task_sks = n4js.get_transformation_tasks(
+        sk, extends=extends, return_as=return_as, status=status
+    )
 
     if return_as == "list":
         return [str(sk) for sk in task_sks]
@@ -259,6 +427,53 @@ def get_tasks(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"`return_as` takes 'list' or 'graph', not '{return_as}'",
         )
+
+
+@router.get("/scopes/{scope}/status")
+def get_scope_status(
+    scope,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    scope = Scope.from_str(scope)
+    scope_space = validate_scopes_query(scope, token)
+
+    status_counts = Counter()
+    for single_scope in scope_space:
+        status_counts.update(n4js.get_scope_status(single_scope))
+
+    return dict(status_counts)
+
+
+@router.get("/networks/{network_scoped_key}/status")
+def get_network_status(
+    network_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    status_counts = n4js.get_network_status(network_scoped_key)
+
+    return status_counts
+
+
+@router.get("/transformations/{transformation_scoped_key}/status")
+def get_transformation_status(
+    transformation_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(transformation_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    status_counts = n4js.get_transformation_status(transformation_scoped_key)
+
+    return status_counts
 
 
 @router.post("/networks/{network_scoped_key}/tasks/action")
@@ -331,6 +546,26 @@ def get_task_status(
     status = n4js.get_task_status([task_sk])
 
     return status[0].value
+
+
+@router.get("/tasks/{task_scoped_key}/transformation", response_class=GufeJSONResponse)
+def get_task_transformation(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    transformation: ScopedKey
+
+    transformation, protocoldagresultref = n4js.get_task_transformation(
+        task=task_scoped_key,
+        return_gufe=False,
+    )
+
+    return str(transformation)
 
 
 ### results
@@ -420,26 +655,6 @@ def get_protocoldagresult_failure(
     pdr: str = s3os.pull_protocoldagresult(sk, tf_sk, return_as="json", ok=False)
 
     return [pdr]
-
-
-@router.get("/tasks/{task_scoped_key}/transformation", response_class=GufeJSONResponse)
-def get_task_transformation(
-    task_scoped_key,
-    *,
-    n4js: Neo4jStore = Depends(get_n4js_depends),
-    token: TokenData = Depends(get_token_data_depends),
-):
-    sk = ScopedKey.from_str(task_scoped_key)
-    validate_scopes(sk.scope, token)
-
-    transformation: ScopedKey
-
-    transformation, protocoldagresultref = n4js.get_task_transformation(
-        task=task_scoped_key,
-        return_gufe=False,
-    )
-
-    return str(transformation)
 
 
 @router.get(

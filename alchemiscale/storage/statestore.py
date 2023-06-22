@@ -557,6 +557,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         else:
             q += """
             RETURN n
+            ORDER BY n._org, n._campaign, n._project, n._gufe_key
             """
         with self.transaction() as tx:
             res = tx.run(q)
@@ -675,29 +676,113 @@ class Neo4jStore(AlchemiscaleStateStore):
             return_gufe=return_gufe,
         )
 
-    def query_transformations(
-        self, *, name=None, key=None, scope: Scope = Scope(), chemical_systems=None
-    ):
+    def query_transformations(self, *, name=None, key=None, scope: Scope = Scope()):
         """Query for `Transformation`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="Transformation", additional=additional, key=key, scope=scope
         )
 
-    def query_chemicalsystems(
-        self, *, name=None, key=None, scope: Scope = Scope(), transformations=None
-    ):
+    def query_chemicalsystems(self, *, name=None, key=None, scope: Scope = Scope()):
         """Query for `ChemicalSystem`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="ChemicalSystem", additional=additional, key=key, scope=scope
         )
 
-    def get_transformations_for_chemicalsystem(self):
-        ...
+    def get_network_transformations(self, network: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
+        q = f"""
+        MATCH (:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(t:Transformation)
+        WITH t._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
 
-    def get_networks_for_transformation(self):
-        ...
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
+        q = f"""
+        MATCH (:Transformation {{_scoped_key: '{transformation}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        WITH an._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_network_chemicalsystems(self, network: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for ChemicalSystems associated with the given AlchemicalNetwork."""
+        q = f"""
+        MATCH (:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        WITH cs._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_chemicalsystem_networks(self, chemicalsystem: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for AlchemicalNetworks associated with the given ChemicalSystem."""
+        q = f"""
+        MATCH (:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        WITH an._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_transformation_chemicalsystems(
+        self, transformation: ScopedKey
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
+        q = f"""
+        MATCH (:Transformation {{_scoped_key: '{transformation}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        WITH cs._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_chemicalsystem_transformations(
+        self, chemicalsystem: ScopedKey
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for the Transformations associated with the given ChemicalSystem."""
+        q = f"""
+        MATCH (:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(t:Transformation)
+        WITH t._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
 
     def _get_protocoldagresultrefs(self, q):
         with self.transaction() as tx:
@@ -1395,52 +1480,59 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return scoped_key
 
-    def set_tasks(
-        self,
-        transformation: ScopedKey,
-        extends: Optional[Task] = None,
-        count: int = 1,
-    ) -> ScopedKey:
-        """Set a fixed number of Tasks against the given Transformation if not
-        already present.
+    def query_tasks(self, *, status=None, key=None, scope: Scope = Scope()):
+        """Query for `Task`\s matching given attributes."""
+        additional = {"status": status}
+        return self._query(qualname="Task", additional=additional, key=key, scope=scope)
 
-        Note: Tasks created by this method are not added to any TaskHubs.
-
-        Parameters
-        ----------
-        transformation
-            The Transformation to compute.
-        scope
-            The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
-        extends
-            The Task to use as a starting point for this Task.
-            Will use the `ProtocolDAGResult` from the given Task as the
-            `extends` input for the Task's eventual call to `Protocol.create`.
-        count
-            The total number of tasks that should exist corresponding to the
-            specified `transformation`, `scope`, and `extends`.
-        """
-        raise NotImplementedError
-        # TODO: finish this one out when we have a reasonable approach to locking
-        # too hard to perform in a single Cypher query; unclear how to create many nodes in a loop
-        transformation_node = self._get_node_from_obj_or_sk(
-            transformation, Transformation, scope
-        )
-
-    def set_task_priority(self, task: ScopedKey, priority: int):
+    def get_network_tasks(
+        self, network: ScopedKey, status: Optional[TaskStatusEnum] = None
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for all Tasks associated with the given AlchemicalNetwork."""
         q = f"""
-        MATCH (t:Task {{_scoped_key: "{task}"}})
-        SET t.priority = {priority}
-        RETURN t
+        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
+              (tf)<-[:PERFORMS]-(t:Task)
         """
-        with self.transaction() as tx:
-            tx.run(q)
 
-    def get_tasks(
+        if status is not None:
+            q += f"""
+            WHERE t.status = '{status.value}'
+            """
+
+        q += """
+        WITH t._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_task_networks(self, task: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for AlchemicalNetworks associated with the given Task."""
+        q = f"""
+        MATCH (t:Task {{_scoped_key: '{task}'}})-[:PERFORMS]->(tf:Transformation),
+              (tf)<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        WITH an._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_transformation_tasks(
         self,
         transformation: ScopedKey,
         extends: Optional[ScopedKey] = None,
         return_as: str = "list",
+        status: Optional[TaskStatusEnum] = None,
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Optional[ScopedKey]]]:
         """Get all Tasks that perform the given Transformation.
 
@@ -1461,6 +1553,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         q = f"""
         MATCH (trans:Transformation {{_scoped_key: '{transformation}'}})<-[:PERFORMS]-(task:Task)
         """
+
+        if status is not None:
+            q += f"""
+            WHERE task.status = '{status.value}'
+            """
 
         if extends:
             q += f"""
@@ -1489,30 +1586,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                 else None
                 for t in tasks
             }
-
-    def query_tasks(
-        self,
-        scope: Optional[Scope] = None,
-        network: Optional[ScopedKey] = None,
-        transformation: Optional[ScopedKey] = None,
-        extends: Optional[ScopedKey] = None,
-        status: Optional[List[TaskStatusEnum]] = None,
-    ):
-        raise NotImplementedError
-
-    def delete_task(
-        self,
-        task: ScopedKey,
-    ) -> Task:
-        """Remove a compute Task from a Transformation.
-
-        This will also remove the Task from all TaskHubs it is a part of.
-
-        This method is intended for administrator use; generally Tasks should
-        instead have their tasks set to 'deleted' and retained.
-
-        """
-        raise NotImplementedError
 
     def get_task_transformation(
         self,
@@ -1569,6 +1642,111 @@ class Neo4jStore(AlchemiscaleStateStore):
             )
 
         return transformation, protocoldagresultref
+
+    def set_tasks(
+        self,
+        transformation: ScopedKey,
+        extends: Optional[Task] = None,
+        count: int = 1,
+    ) -> ScopedKey:
+        """Set a fixed number of Tasks against the given Transformation if not
+        already present.
+
+        Note: Tasks created by this method are not added to any TaskHubs.
+
+        Parameters
+        ----------
+        transformation
+            The Transformation to compute.
+        scope
+            The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
+        extends
+            The Task to use as a starting point for this Task.
+            Will use the `ProtocolDAGResult` from the given Task as the
+            `extends` input for the Task's eventual call to `Protocol.create`.
+        count
+            The total number of tasks that should exist corresponding to the
+            specified `transformation`, `scope`, and `extends`.
+        """
+        raise NotImplementedError
+        # TODO: finish this one out when we have a reasonable approach to locking
+        # too hard to perform in a single Cypher query; unclear how to create many nodes in a loop
+        transformation_node = self._get_node_from_obj_or_sk(
+            transformation, Transformation, scope
+        )
+
+    def set_task_priority(self, task: ScopedKey, priority: int):
+        q = f"""
+        MATCH (t:Task {{_scoped_key: "{task}"}})
+        SET t.priority = {priority}
+        RETURN t
+        """
+        with self.transaction() as tx:
+            tx.run(q)
+
+    def delete_task(
+        self,
+        task: ScopedKey,
+    ) -> Task:
+        """Remove a compute Task from a Transformation.
+
+        This will also remove the Task from all TaskHubs it is a part of.
+
+        This method is intended for administrator use; generally Tasks should
+        instead have their tasks set to 'deleted' and retained.
+
+        """
+        raise NotImplementedError
+
+    def get_scope_status(self, scope: Scope) -> Dict[str, int]:
+        """Return status counts for all Tasks within the given Scope."""
+
+        properties = {
+            "_org": scope.org,
+            "_campaign": scope.campaign,
+            "_project": scope.project,
+        }
+
+        prop_string = ", ".join(
+            "{}: '{}'".format(key, value)
+            for key, value in properties.items()
+            if value is not None
+        )
+
+        q = f"""
+        MATCH (n:Task {{{prop_string}}})
+        RETURN n.status AS status, count(n) as counts
+        """
+        with self.transaction() as tx:
+            res = tx.run(q)
+            counts = {rec["status"]: rec["counts"] for rec in res}
+
+        return counts
+
+    def get_network_status(self, network: ScopedKey) -> Dict[str, int]:
+        """Return status counts for all Tasks associated with the given AlchemicalNetwork."""
+        q = f"""
+        MATCH (:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
+              (tf)<-[:PERFORMS]-(t:Task)
+        RETURN t.status AS status, count(t) as counts
+        """
+        with self.transaction() as tx:
+            res = tx.run(q)
+            counts = {rec["status"]: rec["counts"] for rec in res}
+
+        return counts
+
+    def get_transformation_status(self, transformation: ScopedKey) -> Dict[str, int]:
+        """Return status counts for all Tasks associated with the given Transformation."""
+        q = f"""
+        MATCH (:Transformation {{_scoped_key: "{transformation}"}})<-[:PERFORMS]-(t:Task)
+        RETURN t.status AS status, count(t) as counts
+        """
+        with self.transaction() as tx:
+            res = tx.run(q)
+            counts = {rec["status"]: rec["counts"] for rec in res}
+
+        return counts
 
     def set_task_result(
         self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
@@ -1669,14 +1847,10 @@ class Neo4jStore(AlchemiscaleStateStore):
             for t in tasks:
                 q = f"""
                 MATCH (t:Task {{_scoped_key: '{t}'}})
-                RETURN t
+                RETURN t.status
                 """
-                task = tx.run(q).to_subgraph()
-                if task is None:
-                    statuses.append(None)
-                else:
-                    status = task.get("status")
-                    statuses.append(TaskStatusEnum(status))
+                status = tx.run(q).evaluate()
+                statuses.append(TaskStatusEnum(status) if status is not None else None)
 
         return statuses
 
