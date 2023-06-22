@@ -693,7 +693,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_network_transformations(self, network: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
         q = f"""
-        MATCH (n:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(t:Transformation)
+        MATCH (AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(t:Transformation)
         WITH t._scoped_key as sk
         RETURN sk
         """
@@ -723,7 +723,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_network_chemicalsystems(self, network: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for ChemicalSystems associated with the given AlchemicalNetwork."""
         q = f"""
-        MATCH (n:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        MATCH (:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
         WITH cs._scoped_key as sk
         RETURN sk
         """
@@ -738,7 +738,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_chemicalsystem_networks(self, chemicalsystem: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given ChemicalSystem."""
         q = f"""
-        MATCH (cs:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        MATCH (:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
         WITH an._scoped_key as sk
         RETURN sk
         """
@@ -755,7 +755,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> List[ScopedKey]:
         """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
         q = f"""
-        MATCH (t:Transformation {{_scoped_key: '{transformation}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        MATCH (:Transformation {{_scoped_key: '{transformation}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
         WITH cs._scoped_key as sk
         RETURN sk
         """
@@ -772,7 +772,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> List[ScopedKey]:
         """List ScopedKeys for the Transformations associated with the given ChemicalSystem."""
         q = f"""
-        MATCH (cs:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(t:Transformation)
+        MATCH (:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(t:Transformation)
         WITH t._scoped_key as sk
         RETURN sk
         """
@@ -1726,7 +1726,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_network_status(self, network: ScopedKey) -> Dict[str, int]:
         """Return status counts for all Tasks associated with the given AlchemicalNetwork."""
         q = f"""
-        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
+        MATCH (:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
               (tf)<-[:PERFORMS]-(t:Task)
         RETURN t.status AS status, count(t) as counts
         """
@@ -1739,7 +1739,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_transformation_status(self, transformation: ScopedKey) -> Dict[str, int]:
         """Return status counts for all Tasks associated with the given Transformation."""
         q = f"""
-        MATCH (tf:Transformation {{_scoped_key: "{transformation}"}})<-[:PERFORMS]-(t:Task)
+        MATCH (:Transformation {{_scoped_key: "{transformation}"}})<-[:PERFORMS]-(t:Task)
         RETURN t.status AS status, count(t) as counts
         """
         with self.transaction() as tx:

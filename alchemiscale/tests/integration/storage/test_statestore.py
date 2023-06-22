@@ -1093,8 +1093,9 @@ class TestNeo4jStore(TestStateStore):
         assert tf == transformation
         assert tf_sk == transformation_sk
 
-    def test_get_scope_status(self, n4js: Neo4jStore):
-        ...
+    def test_get_scope_status(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        n4js.create_network(an, scope_test)
 
     def test_get_network_status(self, n4js: Neo4jStore):
         ...
