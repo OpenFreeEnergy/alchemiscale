@@ -163,11 +163,7 @@ class TestNeo4jStore(TestStateStore):
             network_tyk2.edges
         )
         assert (
-            len(
-                n4js.query_transformations(
-                    name="lig_ejm_31_to_lig_ejm_50_complex"
-                )
-            )
+            len(n4js.query_transformations(name="lig_ejm_31_to_lig_ejm_50_complex"))
             == 2
         )
         assert (
@@ -1235,15 +1231,15 @@ class TestNeo4jStore(TestStateStore):
         # try all scopes first
         status = n4js.get_scope_status(Scope())
         assert len(status) == 1
-        assert len(task_sks) == status['waiting']
+        assert len(task_sks) == status["waiting"]
 
         # try specific scope
         status = n4js.get_scope_status(scope_test)
         assert len(status) == 1
-        assert len(task_sks) == status['waiting']
+        assert len(task_sks) == status["waiting"]
 
         # try a different scope
-        status = n4js.get_scope_status(Scope(org='test_org_1'))
+        status = n4js.get_scope_status(Scope(org="test_org_1"))
         assert status == {}
 
         # change some task statuses
@@ -1252,8 +1248,8 @@ class TestNeo4jStore(TestStateStore):
         # try specific scope
         status = n4js.get_scope_status(scope_test)
         assert len(status) == 2
-        assert status['waiting'] == len(task_sks) - 10 
-        assert status['invalid'] == 10
+        assert status["waiting"] == len(task_sks) - 10
+        assert status["invalid"] == 10
 
     def test_get_network_status(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
@@ -1267,17 +1263,19 @@ class TestNeo4jStore(TestStateStore):
 
         status = n4js.get_network_status(an_sk)
         assert len(status) == 1
-        assert status['waiting'] == len(task_sks)
+        assert status["waiting"] == len(task_sks)
 
         # change some task statuses
         n4js.set_task_invalid(task_sks[:10])
 
         status = n4js.get_network_status(an_sk)
         assert len(status) == 2
-        assert status['waiting'] == len(task_sks) - 10 
-        assert status['invalid'] == 10
+        assert status["waiting"] == len(task_sks) - 10
+        assert status["invalid"] == 10
 
-    def test_get_transformation_status(self, n4js: Neo4jStore, network_tyk2, scope_test):
+    def test_get_transformation_status(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
         an = network_tyk2
         an_sk = n4js.create_network(an, scope_test)
 
@@ -1288,7 +1286,7 @@ class TestNeo4jStore(TestStateStore):
             task_sks.append([n4js.create_task(tf_sk) for i in range(3)])
 
             status = n4js.get_transformation_status(tf_sk)
-            assert status == {'waiting': 3}
+            assert status == {"waiting": 3}
 
         for tf_task_sks in task_sks:
             # change some task statuses
@@ -1296,7 +1294,7 @@ class TestNeo4jStore(TestStateStore):
 
         for tf_sk in tf_sks:
             status = n4js.get_transformation_status(tf_sk)
-            assert status == {'waiting': 2, 'invalid': 1}
+            assert status == {"waiting": 2, "invalid": 1}
 
     def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test, tmpdir):
         an = network_tyk2
