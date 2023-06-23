@@ -12,6 +12,7 @@ import json
 from urllib.parse import urljoin
 from functools import wraps
 
+import requests
 import httpx
 
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
@@ -295,21 +296,16 @@ class AlchemiscaleBaseClient:
     def _query_resource(self, resource, params=None):
         if params is None:
             params = {}
-        else:
-            # drop params that are None
-            params = {k: v for k, v in params.items() if v is not None}
-
-        get = self._session.get if self._session is not None else httpx.get
 
         url = urljoin(self.api_url, resource)
         try:
-            resp = get(url, params=params, headers=self._headers, timeout=None)
-        except httpx.RequestError as e:
+            resp = requests.get(url, params=params, headers=self._headers)
+        except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason_phrase}",
+                f"Status Code {resp.status_code} : {resp.reason}",
                 status_code=resp.status_code,
             )
 
@@ -320,11 +316,34 @@ class AlchemiscaleBaseClient:
         else:
             return [ScopedKey.from_str(i) for i in resp.json()]
 
+    @_retry
+    @_use_token
+    def _get_resource(self, resource, params=None):
+        if params is None:
+            params = {}
+
+        url = urljoin(self.api_url, resource)
+        try:
+            resp = requests.get(url, params=params, headers=self._headers)
+        except requests.exceptions.RequestException as e:
+            raise AlchemiscaleConnectionError(*e.args)
+
+        if not 200 <= resp.status_code < 300:
+            raise self._exception(
+                f"Status Code {resp.status_code} : {resp.reason} : {resp.text}",
+                status_code=resp.status_code,
+            )
+        content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
+        return content
+
     @_retry_async
     @_use_token_async
     async def _get_resource_async(self, resource, params=None):
         if params is None:
             params = {}
+        else:
+            # drop params that are None
+            params = {k: v for k, v in params.items() if v is not None}
 
         url = urljoin(self.api_url, resource)
         try:
@@ -344,39 +363,18 @@ class AlchemiscaleBaseClient:
 
     @_retry
     @_use_token
-    def _get_resource(self, resource, params=None):
-        if params is None:
-            params = {}
-
-        get = self._session.get if self._session is not None else httpx.get
-
-        url = urljoin(self.api_url, resource)
-        try:
-            resp = get(url, params=params, headers=self._headers, timeout=None)
-        except httpx.RequestError as e:
-            raise AlchemiscaleConnectionError(*e.args)
-
-        if not 200 <= resp.status_code < 300:
-            raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason_phrase} : {resp.text}",
-                status_code=resp.status_code,
-            )
-        content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
-        return content
-
-    @_retry
-    @_use_token
     def _post_resource(self, resource, data):
         url = urljoin(self.api_url, resource)
+
         jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
         try:
-            resp = httpx.post(url, data=jsondata, headers=self._headers, timeout=None)
-        except httpx.RequestError as e:
+            resp = requests.post(url, data=jsondata, headers=self._headers)
+        except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason_phrase}",
+                f"Status Code {resp.status_code} : {resp.reason}",
                 status_code=resp.status_code,
             )
 

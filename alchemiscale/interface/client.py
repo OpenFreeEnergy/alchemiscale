@@ -7,6 +7,7 @@ Client for interacting with user-facing API. --- :mod:`alchemiscale.interface.cl
 import asyncio
 from typing import Union, List, Dict, Optional, Tuple
 import json
+from itertools import chain
 from collections import Counter
 
 import httpx
@@ -510,7 +511,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         status = TaskStatusEnum(status)
 
         data = dict(tasks=[t.dict() for t in tasks], status=status.value)
-        tasks_updated = self._post_resource(f"/tasks/status/set", data=data)
+        tasks_updated = self._post_resource(f"/bulk/tasks/status/set", data=data)
 
         return [
             ScopedKey.from_str(task_sk) if task_sk is not None else None
@@ -553,7 +554,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 self._session = None
                 self._lock = None
 
-            return statuses
+            return chain.from_iterable(statuses)
 
         return asyncio.run(async_request())
 
