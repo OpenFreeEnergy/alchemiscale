@@ -549,10 +549,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return statuses
 
-        statuses = asyncio.run(async_request())
-        return statuses
-
-        return self._post_resource(f"/tasks/status/get", data=data)
+        return asyncio.run(async_request())
 
     def get_tasks_priority(
         self,
