@@ -531,6 +531,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             a given `Task` doesn't exist, `None` will be returned in its place.
 
         """
+
         async def async_request():
             self._lock = asyncio.Lock()
             self._session = httpx.AsyncClient()

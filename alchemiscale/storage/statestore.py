@@ -1854,7 +1854,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             res = tx.run(q, scoped_keys=[str(t) for t in tasks])
 
             for rec in res:
-                status = rec['status']
+                status = rec["status"]
                 statuses.append(TaskStatusEnum(status) if status is not None else None)
 
         return statuses
