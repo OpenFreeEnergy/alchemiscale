@@ -584,10 +584,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         else:
             route = "failures"
 
-        # get each protocoldagresult; could optimize by parallelizing these
-        # calls to some extent, or at least using async/await
-        pdrs = []
-        for protocoldagresultref in protocoldagresultrefs:
+        
+        async def async_get_protocoldagresult(protocoldagresultref):
             pdr_key = protocoldagresultref["obj_key"]
             scope = protocoldagresultref["scope"]
 
@@ -595,16 +593,35 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 gufe_key=GufeKey(pdr_key), **Scope.from_str(scope).dict()
             )
 
-            pdr_json = self._get_resource(
+            pdr_json = await self._get_resource_async(
                 f"/transformations/{transformation}/{route}/{pdr_sk}",
-            )[0]
+            )
 
             pdr = GufeTokenizable.from_dict(
-                json.loads(pdr_json, cls=JSON_HANDLER.decoder)
+                json.loads(pdr_json[0], cls=JSON_HANDLER.decoder)
             )
-            pdrs.append(pdr)
 
-        return pdrs
+            return pdr
+
+
+        async def async_request():
+            self._lock = asyncio.Lock()
+            self._session = httpx.AsyncClient()
+            try:
+                pdrs = await asyncio.gather(
+                    *[
+                        async_get_protocoldagresult(protocoldagresultref)
+                        for protocoldagresultref in protocoldagresultrefs
+                    ]
+                )
+            finally:
+                await self._session.aclose()
+                self._session = None
+                self._lock = None
+
+            return pdrs
+
+        return asyncio.run(async_request())
 
     def get_transformation_results(
         self,
@@ -627,7 +644,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         transformation
             The `ScopedKey` of the `Transformation` to retrieve results for.
         return_protocoldagresults
-            If `True`, return the raw `ProtocolDAGResult`s instead of returning
+            If ``True``, return the raw `ProtocolDAGResult`s instead of returning
             a processed `ProtocolResult`. Only successful `ProtocolDAGResult`\s
             are returned.
 

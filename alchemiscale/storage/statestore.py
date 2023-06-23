@@ -784,9 +784,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [ScopedKey.from_str(sk) for sk in sks]
 
-    def _get_protocoldagresultrefs(self, q):
+    def _get_protocoldagresultrefs(self, q, scoped_key):
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, scoped_key=str(scoped_key))
 
         protocoldagresultrefs = []
         subgraph = Subgraph()
@@ -801,26 +801,26 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> List[ProtocolDAGResultRef]:
         # get all task result protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
-        q = f"""
-        MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
+        q = """
+        MATCH (trans:Transformation {_scoped_key: $scoped_key}),
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = true
         RETURN res
         """
-        return self._get_protocoldagresultrefs(q)
+        return self._get_protocoldagresultrefs(q, transformation)
 
     def get_transformation_failures(
         self, transformation: ScopedKey
     ) -> List[ProtocolDAGResultRef]:
         # get all task failure protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
-        q = f"""
-        MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
+        q = """
+        MATCH (trans:Transformation {_scoped_key: $scoped_key}),
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = false
         RETURN res
         """
-        return self._get_protocoldagresultrefs(q)
+        return self._get_protocoldagresultrefs(q, transformation)
 
     ## compute
 
@@ -1782,24 +1782,24 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_task_results(self, task: ScopedKey) -> List[ProtocolDAGResultRef]:
         # get all task result protocoldagresultrefs corresponding to given task
         # returned in no particular order
-        q = f"""
-        MATCH (task:Task {{_scoped_key: "{task}"}}),
+        q = """
+        MATCH (task:Task {_scoped_key: $scoped_key}),
               (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = true
         RETURN res
         """
-        return self._get_protocoldagresultrefs(q)
+        return self._get_protocoldagresultrefs(q, task)
 
     def get_task_failures(self, task: ScopedKey) -> List[ProtocolDAGResultRef]:
         # get all task failure protocoldagresultrefs corresponding to given task
         # returned in no particular order
-        q = f"""
-        MATCH (task:Task {{_scoped_key: "{task}"}}),
+        q = """
+        MATCH (task:Task {_scoped_key: $scoped_key}),
               (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = false
         RETURN res
         """
-        return self._get_protocoldagresultrefs(q)
+        return self._get_protocoldagresultrefs(q, task)
 
     def set_task_status(
         self, tasks: List[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
