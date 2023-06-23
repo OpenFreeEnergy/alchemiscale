@@ -388,7 +388,9 @@ class AlchemiscaleBaseClient:
         url = urljoin(self.api_url, resource)
         jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
         try:
-            resp = await self._session.post(url, data=jsondata, headers=self._headers, timeout=None)
+            resp = await self._session.post(
+                url, data=jsondata, headers=self._headers, timeout=None
+            )
         except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)
 
@@ -404,7 +406,7 @@ class AlchemiscaleBaseClient:
     def _batched(iterable, n):
         # batched('ABCDEFG', 3) --> ABC DEF G
         if n < 1:
-            raise ValueError('n must be at least one')
+            raise ValueError("n must be at least one")
         it = iter(iterable)
         while batch := tuple(islice(it, n)):
             yield batch

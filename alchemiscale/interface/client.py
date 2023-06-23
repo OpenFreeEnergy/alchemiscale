@@ -484,7 +484,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return statuses
 
     def set_tasks_status(
-        self, tasks: List[ScopedKey], status: Union[TaskStatusEnum,str]
+        self, tasks: List[ScopedKey], status: Union[TaskStatusEnum, str]
     ) -> List[Optional[ScopedKey]]:
         """Set the status of one or multiple Tasks.
 
@@ -512,7 +512,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         data = dict(tasks=[t.dict() for t in tasks], status=status.value)
         tasks_updated = self._post_resource(f"/tasks/status/set", data=data)
 
-        return [ScopedKey.from_str(task_sk) if task_sk is not None else None for task_sk in tasks_updated]
+        return [
+            ScopedKey.from_str(task_sk) if task_sk is not None else None
+            for task_sk in tasks_updated
+        ]
 
     def get_tasks_status(
         self, tasks: List[ScopedKey], batch_size=1000
@@ -534,14 +537,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             given Task doesn't exist, ``None`` will be returned in its place.
 
         """
+
         async def async_request():
             self._lock = asyncio.Lock()
             self._session = httpx.AsyncClient()
             try:
                 statuses = await asyncio.gather(
-                        *[self._get_task_status(task_batch)
-                          for task_batch in self._batched(tasks, batch_size)]
-                    )
+                    *[
+                        self._get_task_status(task_batch)
+                        for task_batch in self._batched(tasks, batch_size)
+                    ]
+                )
             finally:
                 await self._session.aclose()
                 self._session = None
