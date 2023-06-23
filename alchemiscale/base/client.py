@@ -188,13 +188,13 @@ class AlchemiscaleBaseClient:
 
         url = urljoin(self.api_url, "/token")
         try:
-            resp = httpx.post(url, data=data, timeout=None)
-        except httpx.RequestError as e:
+            resp = requests.post(url, data=data, timeout=None)
+        except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason_phrase}",
+                f"Status Code {resp.status_code} : {resp.reason}",
                 status_code=resp.status_code,
             )
 
