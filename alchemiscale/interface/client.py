@@ -584,7 +584,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         else:
             route = "failures"
 
-        
         async def async_get_protocoldagresult(protocoldagresultref):
             pdr_key = protocoldagresultref["obj_key"]
             scope = protocoldagresultref["scope"]
@@ -602,7 +601,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             )
 
             return pdr
-
 
         async def async_request():
             self._lock = asyncio.Lock()
