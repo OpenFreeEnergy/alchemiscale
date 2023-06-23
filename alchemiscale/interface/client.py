@@ -477,60 +477,63 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sk = self._post_resource(f"tasks/{task}/status", status.value)
         return ScopedKey.from_str(task_sk) if task_sk is not None else None
 
+<<<<<<< HEAD
     async def _get_task_status(self, task: ScopedKey) -> TaskStatusEnum:
         """Get the status of a `Task`."""
         status = await self._get_resource_async(f"tasks/{task}/status")
         return status
 
+=======
+>>>>>>> issue-126-task-status-single
     def set_tasks_status(
-        self, tasks: Union[ScopedKey, List[ScopedKey]], status: TaskStatusEnum
+        self, tasks: List[ScopedKey], status: Union[TaskStatusEnum,str]
     ) -> List[Optional[ScopedKey]]:
-        """Set the status of one or multiple `Task`\s.
+        """Set the status of one or multiple Tasks.
 
         Task status can be set to 'waiting' if currently 'error'.
         Status can be set to 'invalid' or 'deleted' from any other status.
 
         Parameters
         ----------
-        tasks: Union[ScopedKey, List[ScopedKey]]
-            The `Task` or `Task`\s to set the status of.
-        status: TaskStatusEnum
-            The status to set the `Task`\s to. Can be one of
+        tasks
+            The Tasks to set the status of.
+        status
+            The status to set the Tasks to. Can be one of
             'waiting', 'invalid', or 'deleted'.
 
         Returns
         -------
-        List[Optional[ScopedKey]]
-            The ScopedKeys of the `Task`\s that were updated, in the same order
-            as given in `tasks`. If a given `Task` doesn't exist, `None` will
+        updated
+            The ScopedKeys of the Tasks that were updated, in the same order
+            as given in `tasks`. If a given Task doesn't exist, ``None`` will
             be returned in its place.
 
         """
-        if isinstance(tasks, ScopedKey):
-            tasks = [tasks]
-
         status = TaskStatusEnum(status)
 
-        task_sks = [self._set_task_status(t, status) for t in tasks]
-        return task_sks
+        data = dict(tasks=[t.dict() for t in tasks], status=status.value)
+        tasks_updated = self._post_resource(f"/tasks/status/set", data=data)
+
+        return [ScopedKey.from_str(task_sk) if task_sk is not None else None for task_sk in tasks_updated]
 
     def get_tasks_status(
-        self, tasks: Union[ScopedKey, List[ScopedKey]]
+        self, tasks: List[ScopedKey]
     ) -> List[TaskStatusEnum]:
-        """Get the status of one or multiple `Task`\s.
+        """Get the status of multiple Tasks.
 
         Parameters
         ----------
-        tasks: Union[ScopedKey, List[ScopedKey]]
-            The `Task` or `Task`\s to get the status of.
+        tasks
+            The Tasks to get the status of.
 
         Returns
         -------
-        List[TaskStatusEnum]
-            The status of each `Task` in the same order as given in `tasks`. If
-            a given `Task` doesn't exist, `None` will be returned in its place.
+        statuses
+            The status of each Task in the same order as given in `tasks`. If a
+            given Task doesn't exist, ``None`` will be returned in its place.
 
         """
+<<<<<<< HEAD
 
         async def async_request():
             self._lock = asyncio.Lock()
@@ -547,6 +550,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         statuses = asyncio.run(async_request())
         return statuses
+=======
+        data = dict(tasks=[t.dict() for t in tasks])
+        return self._post_resource(f"/tasks/status/get", data=data)
+>>>>>>> issue-126-task-status-single
 
     def get_tasks_priority(
         self,

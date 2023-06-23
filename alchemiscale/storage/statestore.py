@@ -1841,13 +1841,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         Dict[ScopedKey,TaskStatusEnum]
             A dictionary of Tasks and their statuses.
         """
-
         statuses = []
         with self.transaction() as tx:
             q = """
             WITH $scoped_keys AS batch
             UNWIND batch as sk
-            MATCH (t:Task)
+            OPTIONAL MATCH (t:Task)
             WHERE t._scoped_key = sk
             RETURN t.status as status
             """
