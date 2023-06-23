@@ -6,6 +6,7 @@ Base class for API clients --- :mod:`alchemiscale.base.client`
 
 import time
 import random
+from itertools import islice
 from typing import List
 import json
 from urllib.parse import urljoin
@@ -99,6 +100,7 @@ class AlchemiscaleBaseClient:
         self._headers = None
 
         self._session = None
+        self._lock = None
 
     def __repr__(self):
         return f"{self.__class__.__name__}('{self.api_url}')"
@@ -379,6 +381,33 @@ class AlchemiscaleBaseClient:
             )
 
         return resp.json()
+
+    @_retry_async
+    @_use_token_async
+    async def _post_resource_async(self, resource, data):
+        url = urljoin(self.api_url, resource)
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+        try:
+            resp = await self._session.post(url, data=jsondata, headers=self._headers, timeout=None)
+        except httpx.RequestError as e:
+            raise AlchemiscaleConnectionError(*e.args)
+
+        if not 200 <= resp.status_code < 300:
+            raise self._exception(
+                f"Status Code {resp.status_code} : {resp.reason_phrase}",
+                status_code=resp.status_code,
+            )
+
+        return resp.json()
+
+    @staticmethod
+    def _batched(iterable, n):
+        # batched('ABCDEFG', 3) --> ABC DEF G
+        if n < 1:
+            raise ValueError('n must be at least one')
+        it = iter(iterable)
+        while batch := tuple(islice(it, n)):
+            yield batch
 
     @_retry
     def get_info(self):

@@ -510,7 +510,7 @@ def cancel_tasks(
     return [str(sk) if sk is not None else None for sk in canceled_sks]
 
 
-@router.post("/tasks/status/get")
+@router.post("/bulk/tasks/status/get")
 def tasks_status_get(
     *,
     tasks: List[ScopedKey] = Body(embed=True),
@@ -530,7 +530,7 @@ def tasks_status_get(
     return [status.value if status is not None else None for status in statuses]
 
 
-@router.post("/tasks/status/set")
+@router.post("/bulk/tasks/status/set")
 def tasks_status_set(
     *,
     tasks: List[ScopedKey] = Body(),

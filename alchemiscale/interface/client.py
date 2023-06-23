@@ -301,7 +301,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def get_task_transformation(self, task: ScopedKey) -> ScopedKey:
         """Get the Transformation associated with the given Task."""
-        transformation = self._get_resource(f"tasks/{task}/transformation")
+        transformation = self._get_resource(f"/tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
 
     def _visualize_status(self, status_counts, status_object):
@@ -474,17 +474,15 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self, task: ScopedKey, status: TaskStatusEnum
     ) -> Optional[ScopedKey]:
         """Set the status of a `Task`."""
-        task_sk = self._post_resource(f"tasks/{task}/status", status.value)
+        task_sk = self._post_resource(f"/tasks/{task}/status", status.value)
         return ScopedKey.from_str(task_sk) if task_sk is not None else None
 
-<<<<<<< HEAD
-    async def _get_task_status(self, task: ScopedKey) -> TaskStatusEnum:
-        """Get the status of a `Task`."""
-        status = await self._get_resource_async(f"tasks/{task}/status")
-        return status
+    async def _get_task_status(self, tasks: List[ScopedKey]) -> TaskStatusEnum:
+        """Get the statuses for many Tasks"""
+        data = dict(tasks=[t.dict() for t in tasks])
+        statuses = await self._post_resource_async(f"/bulk/tasks/status/get", data=data)
+        return statuses
 
-=======
->>>>>>> issue-126-task-status-single
     def set_tasks_status(
         self, tasks: List[ScopedKey], status: Union[TaskStatusEnum,str]
     ) -> List[Optional[ScopedKey]]:
@@ -517,7 +515,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return [ScopedKey.from_str(task_sk) if task_sk is not None else None for task_sk in tasks_updated]
 
     def get_tasks_status(
-        self, tasks: List[ScopedKey]
+        self, tasks: List[ScopedKey], batch_size=1000
     ) -> List[TaskStatusEnum]:
         """Get the status of multiple Tasks.
 
@@ -525,6 +523,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         ----------
         tasks
             The Tasks to get the status of.
+        batch_size
+            The number of Tasks to include in a single request; use to tune
+            method call speed when requesting many statuses at once.
 
         Returns
         -------
@@ -533,27 +534,25 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             given Task doesn't exist, ``None`` will be returned in its place.
 
         """
-<<<<<<< HEAD
-
         async def async_request():
             self._lock = asyncio.Lock()
             self._session = httpx.AsyncClient()
             try:
                 statuses = await asyncio.gather(
-                    *[self._get_task_status(t) for t in tasks]
-                )
+                        *[self._get_task_status(task_batch)
+                          for task_batch in self._batched(tasks, batch_size)]
+                    )
             finally:
                 await self._session.aclose()
                 self._session = None
+                self._lock = None
 
             return statuses
 
         statuses = asyncio.run(async_request())
         return statuses
-=======
-        data = dict(tasks=[t.dict() for t in tasks])
+
         return self._post_resource(f"/tasks/status/get", data=data)
->>>>>>> issue-126-task-status-single
 
     def get_tasks_priority(
         self,
