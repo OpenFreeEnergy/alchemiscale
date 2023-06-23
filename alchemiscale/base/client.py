@@ -249,9 +249,18 @@ class AlchemiscaleBaseClient:
 
     def _use_token_async(f):
         async def _wrapper(self, *args, **kwargs):
-            # if we don't have a token at all, get one
+            # if we don't have a token at all, get one; if a coroutine already
+            # has the lock, wait until it releases
             if self._jwtoken is None:
-                self._get_token()
+                if not self._lock.locked():
+                    await self._lock.acquire()
+                    try:
+                        await self._get_token_async()
+                    finally:
+                        self._lock.release()
+                else:
+                    async with self._lock:
+                        pass
 
             # execute our function
             # if we get an unauthorized exception, it may be that our token is
@@ -261,7 +270,15 @@ class AlchemiscaleBaseClient:
                 return await f(self, *args, **kwargs)
             except self._exception as e:
                 if e.status_code == 401:
-                    self._get_token()
+                    if not self._lock.locked():
+                        await self._lock.acquire()
+                        try:
+                            await self._get_token_async()
+                        finally:
+                            self._lock.release()
+                    else:
+                        async with self._lock:
+                            pass
                 else:
                     raise
 
