@@ -8,5 +8,4 @@
 !LICENSE 
 !MANIFEST.in 
 !README.md 
-!setup.cfg 
-!setup.py 
+!pyproject.toml
