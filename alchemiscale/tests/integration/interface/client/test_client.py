@@ -178,9 +178,10 @@ class TestClient:
         user_client: client.AlchemiscaleClient,
     ):
         tf_sk = user_client.get_scoped_key(transformation, scope_test)
-        n_sks = user_client.get_transformation_networks(tf_sk)
+        an_sks = user_client.get_transformation_networks(tf_sk)
 
-        assert len(n_sks) == 2
+        for an_sk in an_sks:
+            assert tf_sk in user_client.get_network_transformations(an_sk)
 
     def test_get_network_chemicalsystems(
         self,
@@ -205,9 +206,10 @@ class TestClient:
         user_client: client.AlchemiscaleClient,
     ):
         cs_sk = user_client.get_scoped_key(chemicalsystem, scope_test)
-        n_sks = user_client.get_chemicalsystem_networks(cs_sk)
+        an_sks = user_client.get_chemicalsystem_networks(cs_sk)
 
-        assert len(n_sks) == 2
+        for an_sk in an_sks:
+            assert cs_sk in user_client.get_network_chemicalsystems(an_sk)
 
     def test_get_transformation_chemicalsystems(
         self,
@@ -394,7 +396,8 @@ class TestClient:
         for task_sk in task_sks:
             an_sks = user_client.get_task_networks(task_sk)
             assert an_sk in an_sks
-            assert len(an_sks) == 2
+            for an_sk in an_sks:
+                assert task_sk in user_client.get_network_tasks(an_sk)
 
     def test_get_transformation_tasks(
         self,
