@@ -795,7 +795,7 @@ class TestClient:
 
         # select the transformation we want to compute
         an = network_tyk2
-        transformation = list(an.edges)[0]
+        transformation = list(t for t in an.edges if "_solvent" in t.name)[0]
 
         network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
