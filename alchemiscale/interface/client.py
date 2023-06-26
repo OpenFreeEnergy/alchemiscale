@@ -22,7 +22,7 @@ from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
     json_to_gufe,
-    use_session
+    use_session,
 )
 from ..models import Scope, ScopedKey
 from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
@@ -72,11 +72,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def create_network(self, network: AlchemicalNetwork, scope: Scope) -> ScopedKey:
         """Submit an AlchemicalNetwork."""
         data = dict(network=network.to_dict(), scope=scope.dict())
-        data_compressed = gzip.compress(json.dumps(
-                data, cls=JSON_HANDLER.encoder
-            ).encode('utf-8'))
+        data_compressed = gzip.compress(
+            json.dumps(data, cls=JSON_HANDLER.encoder).encode("utf-8")
+        )
 
-        headers = {"Content-Encoding": 'gzip'}
+        headers = {"Content-Encoding": "gzip"}
 
         scoped_key = self._post_resource("/networks", data_compressed, headers=headers)
         return ScopedKey.from_dict(scoped_key)
@@ -606,11 +606,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         @use_session
         async def async_request(self):
             pdrs = await asyncio.gather(
-                    *[
-                        async_get_protocoldagresult(protocoldagresultref)
-                        for protocoldagresultref in protocoldagresultrefs
-                    ]
-                )
+                *[
+                    async_get_protocoldagresult(protocoldagresultref)
+                    for protocoldagresultref in protocoldagresultrefs
+                ]
+            )
 
             return pdrs
 

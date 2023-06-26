@@ -25,7 +25,7 @@ from ..base.api import (
     validate_scopes_query,
     _check_store_connectivity,
     gufe_to_json,
-    GzipRoute
+    GzipRoute,
 )
 from ..settings import (
     get_base_api_settings,

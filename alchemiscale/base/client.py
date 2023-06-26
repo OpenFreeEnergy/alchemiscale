@@ -64,7 +64,7 @@ class AlchemiscaleBaseClient:
         max_retries: int = 5,
         retry_base_seconds: float = 2.0,
         retry_max_seconds: float = 60.0,
-        verify: bool = True
+        verify: bool = True,
     ):
         """Client class for interfacing with an alchemiscale API service.
 
@@ -307,7 +307,9 @@ class AlchemiscaleBaseClient:
 
         url = urljoin(self.api_url, resource)
         try:
-            resp = requests.get(url, params=params, headers=self._headers, verify=self.verify)
+            resp = requests.get(
+                url, params=params, headers=self._headers, verify=self.verify
+            )
         except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 
@@ -332,7 +334,9 @@ class AlchemiscaleBaseClient:
 
         url = urljoin(self.api_url, resource)
         try:
-            resp = requests.get(url, params=params, headers=self._headers, verify=self.verify)
+            resp = requests.get(
+                url, params=params, headers=self._headers, verify=self.verify
+            )
         except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 
@@ -383,7 +387,9 @@ class AlchemiscaleBaseClient:
 
         jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
         try:
-            resp = requests.post(url, data=jsondata, headers=headers, verify=self.verify)
+            resp = requests.post(
+                url, data=jsondata, headers=headers, verify=self.verify
+            )
         except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 
