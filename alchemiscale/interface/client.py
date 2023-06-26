@@ -9,6 +9,7 @@ from typing import Union, List, Dict, Optional, Tuple
 import json
 from itertools import chain
 from collections import Counter
+import gzip
 
 import httpx
 import networkx as nx
@@ -21,7 +22,7 @@ from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
     json_to_gufe,
-    use_session,
+    use_session
 )
 from ..models import Scope, ScopedKey
 from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
@@ -71,7 +72,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def create_network(self, network: AlchemicalNetwork, scope: Scope) -> ScopedKey:
         """Submit an AlchemicalNetwork."""
         data = dict(network=network.to_dict(), scope=scope.dict())
-        scoped_key = self._post_resource("/networks", data)
+        data_compressed = gzip.compress(json.dumps(
+                data, cls=JSON_HANDLER.encoder
+            ).encode('utf-8'))
+
+        headers = {"Content-Encoding": 'gzip'}
+
+        scoped_key = self._post_resource("/networks", data_compressed, headers=headers)
         return ScopedKey.from_dict(scoped_key)
 
     def query_networks(
@@ -543,24 +550,18 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             for task in tasks
         ]
 
-        async def async_request():
-            self._lock = asyncio.Lock()
-            self._session = httpx.AsyncClient()
-            try:
-                statuses = await asyncio.gather(
-                    *[
-                        self._get_task_status(task_batch)
-                        for task_batch in self._batched(tasks, batch_size)
-                    ]
-                )
-            finally:
-                await self._session.aclose()
-                self._session = None
-                self._lock = None
+        @use_session
+        async def async_request(self):
+            statuses = await asyncio.gather(
+                *[
+                    self._get_task_status(task_batch)
+                    for task_batch in self._batched(tasks, batch_size)
+                ]
+            )
 
             return chain.from_iterable(statuses)
 
-        return asyncio.run(async_request())
+        return asyncio.run(async_request(self))
 
     def get_tasks_priority(
         self,
@@ -602,24 +603,18 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return pdr
 
-        async def async_request():
-            self._lock = asyncio.Lock()
-            self._session = httpx.AsyncClient()
-            try:
-                pdrs = await asyncio.gather(
+        @use_session
+        async def async_request(self):
+            pdrs = await asyncio.gather(
                     *[
                         async_get_protocoldagresult(protocoldagresultref)
                         for protocoldagresultref in protocoldagresultrefs
                     ]
                 )
-            finally:
-                await self._session.aclose()
-                self._session = None
-                self._lock = None
 
             return pdrs
 
-        return asyncio.run(async_request())
+        return asyncio.run(async_request(self))
 
     def get_transformation_results(
         self,

@@ -4,6 +4,7 @@ Base class for API clients --- :mod:`alchemiscale.base.client`
 
 """
 
+import asyncio
 import time
 import random
 from itertools import islice
@@ -35,14 +36,16 @@ class AlchemiscaleConnectionError(Exception):
     ...
 
 
-async def use_session(f):
+def use_session(f):
     async def _wrapper(self, *args, **kwargs):
-        self._session = httpx.AsyncClient()
+        self._lock = asyncio.Lock()
+        self._session = httpx.AsyncClient(verify=self.verify)
         try:
-            return f(self, *args, **kwargs)
+            return await f(self, *args, **kwargs)
         finally:
             await self._session.aclose()
             self._session = None
+            self._lock = None
 
     return _wrapper
 
@@ -239,7 +242,7 @@ class AlchemiscaleBaseClient:
 
         url = urljoin(self.api_url, "/token")
         try:
-            resp = await self._session.post(url, data=data, timeout=None, verify=self.verify)
+            resp = await self._session.post(url, data=data, timeout=None)
         except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)
 
@@ -353,7 +356,7 @@ class AlchemiscaleBaseClient:
         url = urljoin(self.api_url, resource)
         try:
             resp = await self._session.get(
-                url, params=params, headers=self._headers, timeout=None, verify=self.verify
+                url, params=params, headers=self._headers, timeout=None
             )
         except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)
@@ -368,12 +371,19 @@ class AlchemiscaleBaseClient:
 
     @_retry
     @_use_token
-    def _post_resource(self, resource, data):
+    def _post_resource(self, resource, data, headers=None):
         url = urljoin(self.api_url, resource)
+
+        if headers is None:
+            headers = self._headers
+        else:
+            headers_ = dict(self._headers)
+            headers_.update(headers)
+            headers = headers_
 
         jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
         try:
-            resp = requests.post(url, data=jsondata, headers=self._headers, verify=self.verify)
+            resp = requests.post(url, data=jsondata, headers=headers, verify=self.verify)
         except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 
@@ -392,7 +402,7 @@ class AlchemiscaleBaseClient:
         jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
         try:
             resp = await self._session.post(
-                url, data=jsondata, headers=self._headers, timeout=None, verify=self.verify
+                url, data=jsondata, headers=self._headers, timeout=None
             )
         except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)

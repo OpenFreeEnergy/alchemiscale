@@ -29,6 +29,7 @@ from ..base.api import (
     validate_scopes_query,
     _check_store_connectivity,
     gufe_to_json,
+    GzipRoute
 )
 from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
@@ -749,3 +750,4 @@ def get_task_failures(
 ### add router
 
 app.include_router(router)
+app.router.route_class = GzipRoute
