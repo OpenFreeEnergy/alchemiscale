@@ -17,7 +17,8 @@ def pre_load_payload(network, scope, name="incomplete 2"):
     headers = {"Content-type": "application/json"}
     data = dict(network=new_network.to_dict(), scope=scope.dict())
     jsondata = gzip.compress(
-            json.dumps(data, cls=JSON_HANDLER.encoder).encode('utf-8'), mtime=0)
+        json.dumps(data, cls=JSON_HANDLER.encoder).encode("utf-8"), mtime=0
+    )
 
     headers.update({"Content-Encoding": "gzip"})
     return new_network, headers, jsondata

@@ -57,6 +57,7 @@ router = APIRouter(
 )
 router.route_class = GzipRoute
 
+
 @app.get("/ping")
 def ping():
     return {"api": "AlchemiscaleAPI"}
