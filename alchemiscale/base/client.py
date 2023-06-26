@@ -61,6 +61,7 @@ class AlchemiscaleBaseClient:
         max_retries: int = 5,
         retry_base_seconds: float = 2.0,
         retry_max_seconds: float = 60.0,
+        verify: bool = True
     ):
         """Client class for interfacing with an alchemiscale API service.
 
@@ -84,6 +85,8 @@ class AlchemiscaleBaseClient:
         retry_max_seconds
             Maximum number of seconds to sleep between retries; avoids runaway
             exponential backoff while allowing for many retries.
+        verify
+            Whether to verify SSL certificate presented by the API server.
 
         """
         self.api_url = api_url
@@ -96,6 +99,8 @@ class AlchemiscaleBaseClient:
 
         self.retry_base_seconds = retry_base_seconds
         self.retry_max_seconds = retry_max_seconds
+
+        self.verify = verify
 
         self._jwtoken = None
         self._headers = None
@@ -188,7 +193,7 @@ class AlchemiscaleBaseClient:
 
         url = urljoin(self.api_url, "/token")
         try:
-            resp = requests.post(url, data=data, timeout=None)
+            resp = requests.post(url, data=data, timeout=None, verify=self.verify)
         except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 
@@ -234,7 +239,7 @@ class AlchemiscaleBaseClient:
 
         url = urljoin(self.api_url, "/token")
         try:
-            resp = await self._session.post(url, data=data, timeout=None)
+            resp = await self._session.post(url, data=data, timeout=None, verify=self.verify)
         except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)
 
@@ -299,7 +304,7 @@ class AlchemiscaleBaseClient:
 
         url = urljoin(self.api_url, resource)
         try:
-            resp = requests.get(url, params=params, headers=self._headers)
+            resp = requests.get(url, params=params, headers=self._headers, verify=self.verify)
         except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 
@@ -324,7 +329,7 @@ class AlchemiscaleBaseClient:
 
         url = urljoin(self.api_url, resource)
         try:
-            resp = requests.get(url, params=params, headers=self._headers)
+            resp = requests.get(url, params=params, headers=self._headers, verify=self.verify)
         except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 
@@ -348,7 +353,7 @@ class AlchemiscaleBaseClient:
         url = urljoin(self.api_url, resource)
         try:
             resp = await self._session.get(
-                url, params=params, headers=self._headers, timeout=None
+                url, params=params, headers=self._headers, timeout=None, verify=self.verify
             )
         except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)
@@ -368,7 +373,7 @@ class AlchemiscaleBaseClient:
 
         jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
         try:
-            resp = requests.post(url, data=jsondata, headers=self._headers)
+            resp = requests.post(url, data=jsondata, headers=self._headers, verify=self.verify)
         except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 
@@ -387,7 +392,7 @@ class AlchemiscaleBaseClient:
         jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
         try:
             resp = await self._session.post(
-                url, data=jsondata, headers=self._headers, timeout=None
+                url, data=jsondata, headers=self._headers, timeout=None, verify=self.verify
             )
         except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)
