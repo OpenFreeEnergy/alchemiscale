@@ -64,6 +64,7 @@ app.dependency_overrides[get_cred_entity] = get_cred_compute
 router = APIRouter(
     dependencies=[Depends(get_token_data_depends)],
 )
+router.route_class = GzipRoute
 
 
 @app.get("/ping")

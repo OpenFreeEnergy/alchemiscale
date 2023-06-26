@@ -73,7 +73,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """Submit an AlchemicalNetwork."""
         data = dict(network=network.to_dict(), scope=scope.dict())
         data_compressed = gzip.compress(
-            json.dumps(data, cls=JSON_HANDLER.encoder).encode("utf-8")
+            json.dumps(data, cls=JSON_HANDLER.encoder).encode("utf-8"), mtime=0
         )
 
         headers = {"Content-Encoding": "gzip"}

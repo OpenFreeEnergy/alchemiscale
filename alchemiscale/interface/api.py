@@ -55,7 +55,7 @@ app.dependency_overrides[get_cred_entity] = get_cred_user
 router = APIRouter(
     dependencies=[Depends(get_token_data_depends)],
 )
-
+router.route_class = GzipRoute
 
 @app.get("/ping")
 def ping():
@@ -750,4 +750,3 @@ def get_task_failures(
 ### add router
 
 app.include_router(router)
-app.router.route_class = GzipRoute
