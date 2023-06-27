@@ -693,6 +693,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             # we use nest_asyncio to support environments where an event loop
             # is already running, such as in a Jupyter notebook
             import nest_asyncio
+
             nest_asyncio.apply()
             return asyncio.run(async_request(self))
 
@@ -738,6 +739,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             # we use nest_asyncio to support environments where an event loop
             # is already running, such as in a Jupyter notebook
             import nest_asyncio
+
             nest_asyncio.apply()
             return asyncio.run(async_request(self))
 
@@ -810,6 +812,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             # we use nest_asyncio to support environments where an event loop
             # is already running, such as in a Jupyter notebook
             import nest_asyncio
+
             nest_asyncio.apply()
             return asyncio.run(async_request(self))
 
