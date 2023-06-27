@@ -446,23 +446,33 @@ class AlchemiscaleBaseClient:
     @staticmethod
     def _rich_waiting_columns():
         from rich.progress import SpinnerColumn, TimeElapsedColumn, TextColumn
+
         return [
-                SpinnerColumn(style='#ff073a'),
-                SpinnerColumn(style='#1793d0'),
-                TextColumn("[progress.description]{task.description}"),
-                TimeElapsedColumn()]
-        
+            SpinnerColumn(style="#ff073a"),
+            SpinnerColumn(style="#1793d0"),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+        ]
+
     @staticmethod
     def _rich_progress_columns():
-        from rich.progress import Progress, SpinnerColumn, MofNCompleteColumn, TextColumn, BarColumn, TimeRemainingColumn
+        from rich.progress import (
+            Progress,
+            SpinnerColumn,
+            MofNCompleteColumn,
+            TextColumn,
+            BarColumn,
+            TimeRemainingColumn,
+        )
+
         return [
-                SpinnerColumn(style='#ff073a'),
-                SpinnerColumn(style='#1793d0'),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                MofNCompleteColumn(),
-                TimeRemainingColumn(),
-                ]
+            SpinnerColumn(style="#ff073a"),
+            SpinnerColumn(style="#1793d0"),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TimeRemainingColumn(),
+        ]
 
     @_retry
     def get_info(self):

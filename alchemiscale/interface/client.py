@@ -266,7 +266,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             task = progress.add_task(f"Retrieving '{transformation}'...", total=None)
 
             tf = json_to_gufe(
-                self._get_resource(f"/transformations/{transformation}", compress=compress)
+                self._get_resource(
+                    f"/transformations/{transformation}", compress=compress
+                )
             )
             progress.start_task(task)
             progress.update(task, total=1, completed=1)
@@ -301,7 +303,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             task = progress.add_task(f"Retrieving '{chemicalsystem}'...", total=None)
 
             cs = json_to_gufe(
-                self._get_resource(f"/chemicalsystems/{chemicalsystem}", compress=compress)
+                self._get_resource(
+                    f"/chemicalsystems/{chemicalsystem}", compress=compress
+                )
             )
 
             progress.start_task(task)
@@ -600,12 +604,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sk = self._post_resource(f"/tasks/{task}/status", status.value)
         return ScopedKey.from_str(task_sk) if task_sk is not None else None
 
-    async def _set_task_status(self,
-                               tasks: List[ScopedKey], 
-                               status: TaskStatusEnum) -> List[Optional[ScopedKey]]:
+    async def _set_task_status(
+        self, tasks: List[ScopedKey], status: TaskStatusEnum
+    ) -> List[Optional[ScopedKey]]:
         """Set the statuses for many Tasks"""
         data = dict(tasks=[t.dict() for t in tasks], status=status.value)
-        tasks_updated = await self._post_resource_async(f"/bulk/tasks/status/set", data=data)
+        tasks_updated = await self._post_resource_async(
+            f"/bulk/tasks/status/set", data=data
+        )
         return [
             ScopedKey.from_str(task_sk) if task_sk is not None else None
             for task_sk in tasks_updated
@@ -618,8 +624,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return statuses
 
     def set_tasks_status(
-        self, tasks: List[ScopedKey], status: Union[TaskStatusEnum, str],
-        batch_size: int = 1000
+        self,
+        tasks: List[ScopedKey],
+        status: Union[TaskStatusEnum, str],
+        batch_size: int = 1000,
     ) -> List[Optional[ScopedKey]]:
         """Set the status of one or multiple Tasks.
 
@@ -663,7 +671,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return asyncio.run(async_request(self))
 
     def get_tasks_status(
-            self, tasks: List[ScopedKey], batch_size: int = 1000
+        self, tasks: List[ScopedKey], batch_size: int = 1000
     ) -> List[TaskStatusEnum]:
         """Get the status of multiple Tasks.
 
