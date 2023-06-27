@@ -393,9 +393,7 @@ class AlchemiscaleBaseClient:
     def _post(self, url, headers, data):
         headers = dict(self._headers) | headers
         try:
-            resp = requests.post(
-                url, data=data, headers=headers, verify=self.verify
-            )
+            resp = requests.post(url, data=data, headers=headers, verify=self.verify)
         except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 
