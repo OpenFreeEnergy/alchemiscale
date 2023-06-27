@@ -228,7 +228,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn
 
         with Progress(*self._rich_waiting_columns(), transient=False) as progress:
-            task = progress.add_task(f"Retrieving [bold]'{network}'[/bold]...", total=None)
+            task = progress.add_task(
+                f"Retrieving [bold]'{network}'[/bold]...", total=None
+            )
 
             an = json_to_gufe(
                 self._get_resource(f"/networks/{network}", compress=compress)
@@ -263,7 +265,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
 
         with Progress(*self._rich_waiting_columns(), transient=False) as progress:
-            task = progress.add_task(f"Retrieving [bold]'{transformation}'[/bold]...", total=None)
+            task = progress.add_task(
+                f"Retrieving [bold]'{transformation}'[/bold]...", total=None
+            )
 
             tf = json_to_gufe(
                 self._get_resource(
@@ -300,7 +304,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         from rich.progress import Progress
 
         with Progress(*self._rich_waiting_columns(), transient=False) as progress:
-            task = progress.add_task(f"Retrieving [bold]'{chemicalsystem}'[/bold]...", total=None)
+            task = progress.add_task(
+                f"Retrieving [bold]'{chemicalsystem}'[/bold]...", total=None
+            )
 
             cs = json_to_gufe(
                 self._get_resource(

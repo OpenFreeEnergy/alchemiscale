@@ -92,7 +92,7 @@ class SynchronousComputeService:
         client_max_retries=5,
         client_retry_base_seconds=2.0,
         client_retry_max_seconds=60.0,
-        client_verify=True
+        client_verify=True,
     ):
         """Create a `SynchronousComputeService` instance.
 
@@ -161,7 +161,7 @@ class SynchronousComputeService:
             max_retries=client_max_retries,
             retry_base_seconds=client_retry_base_seconds,
             retry_max_seconds=client_retry_max_seconds,
-            verify=client_verify
+            verify=client_verify,
         )
 
         if scopes is None:
