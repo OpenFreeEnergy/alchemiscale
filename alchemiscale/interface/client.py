@@ -93,9 +93,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The ScopedKey of the AlchemicalNetwork.
 
         """
-        data = dict(network=network.to_dict(), scope=scope.dict())
+        from rich.progress import Progress
 
-        scoped_key = self._post_resource("/networks", data, compress=compress)
+        sk = self.get_scoped_key(network, scope)
+        with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+            task = progress.add_task(f"Submitting '{sk}'...", total=None)
+
+            data = dict(network=network.to_dict(), scope=scope.dict())
+            scoped_key = self._post_resource("/networks", data, compress=compress)
+            progress.start_task(task)
+            progress.update(task, total=1, completed=1)
+
         return ScopedKey.from_dict(scoped_key)
 
     def query_networks(
@@ -217,9 +225,18 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The retrieved AlchemicalNetwork.
 
         """
-        return json_to_gufe(
-            self._get_resource(f"/networks/{network}", compress=compress)
-        )
+        from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn
+
+        with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+            task = progress.add_task(f"Retrieving '{network}'...", total=None)
+
+            an = json_to_gufe(
+                self._get_resource(f"/networks/{network}", compress=compress)
+            )
+            progress.start_task(task)
+            progress.update(task, total=1, completed=1)
+
+        return an
 
     def get_transformation(
         self, transformation: Union[ScopedKey, str], compress: bool = True
@@ -243,9 +260,18 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The retrieved Transformation.
 
         """
-        return json_to_gufe(
-            self._get_resource(f"/transformations/{transformation}", compress=compress)
-        )
+        from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
+
+        with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+            task = progress.add_task(f"Retrieving '{transformation}'...", total=None)
+
+            tf = json_to_gufe(
+                self._get_resource(f"/transformations/{transformation}", compress=compress)
+            )
+            progress.start_task(task)
+            progress.update(task, total=1, completed=1)
+
+        return tf
 
     def get_chemicalsystem(
         self, chemicalsystem: Union[ScopedKey, str], compress: bool = True
@@ -269,9 +295,19 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The retrieved ChemicalSystem.
 
         """
-        return json_to_gufe(
-            self._get_resource(f"/chemicalsystems/{chemicalsystem}", compress=compress)
-        )
+        from rich.progress import Progress
+
+        with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+            task = progress.add_task(f"Retrieving '{chemicalsystem}'...", total=None)
+
+            cs = json_to_gufe(
+                self._get_resource(f"/chemicalsystems/{chemicalsystem}", compress=compress)
+            )
+
+            progress.start_task(task)
+            progress.update(task, total=1, completed=1)
+
+        return cs
 
     ### compute
 
@@ -564,14 +600,26 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sk = self._post_resource(f"/tasks/{task}/status", status.value)
         return ScopedKey.from_str(task_sk) if task_sk is not None else None
 
-    async def _get_task_status(self, tasks: List[ScopedKey]) -> TaskStatusEnum:
+    async def _set_task_status(self,
+                               tasks: List[ScopedKey], 
+                               status: TaskStatusEnum) -> List[Optional[ScopedKey]]:
+        """Set the statuses for many Tasks"""
+        data = dict(tasks=[t.dict() for t in tasks], status=status.value)
+        tasks_updated = await self._post_resource_async(f"/bulk/tasks/status/set", data=data)
+        return [
+            ScopedKey.from_str(task_sk) if task_sk is not None else None
+            for task_sk in tasks_updated
+        ]
+
+    async def _get_task_status(self, tasks: List[ScopedKey]) -> List[TaskStatusEnum]:
         """Get the statuses for many Tasks"""
         data = dict(tasks=[t.dict() for t in tasks])
         statuses = await self._post_resource_async(f"/bulk/tasks/status/get", data=data)
         return statuses
 
     def set_tasks_status(
-        self, tasks: List[ScopedKey], status: Union[TaskStatusEnum, str]
+        self, tasks: List[ScopedKey], status: Union[TaskStatusEnum, str],
+        batch_size: int = 1000
     ) -> List[Optional[ScopedKey]]:
         """Set the status of one or multiple Tasks.
 
@@ -596,16 +644,26 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         status = TaskStatusEnum(status)
 
-        data = dict(tasks=[t.dict() for t in tasks], status=status.value)
-        tasks_updated = self._post_resource(f"/bulk/tasks/status/set", data=data)
-
-        return [
-            ScopedKey.from_str(task_sk) if task_sk is not None else None
-            for task_sk in tasks_updated
+        tasks = [
+            ScopedKey.from_str(task) if isinstance(task, str) else task
+            for task in tasks
         ]
 
+        @use_session
+        async def async_request(self):
+            scoped_keys = await asyncio.gather(
+                *[
+                    self._set_task_status(task_batch, status)
+                    for task_batch in self._batched(tasks, batch_size)
+                ]
+            )
+
+            return list(chain.from_iterable(scoped_keys))
+
+        return asyncio.run(async_request(self))
+
     def get_tasks_status(
-        self, tasks: List[ScopedKey], batch_size=1000
+            self, tasks: List[ScopedKey], batch_size: int = 1000
     ) -> List[TaskStatusEnum]:
         """Get the status of multiple Tasks.
 
@@ -638,7 +696,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 ]
             )
 
-            return chain.from_iterable(statuses)
+            return list(chain.from_iterable(statuses))
 
         return asyncio.run(async_request(self))
 
@@ -687,9 +745,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         @use_session
         async def async_request(self):
-            with Progress(transient=True) as progress:
+            with Progress(*self._rich_progress_columns(), transient=False) as progress:
                 task = progress.add_task(
-                    f"Retrieving {len(protocoldagresultrefs)} ProtocolDAGResults",
+                    f"Retrieving ProtocolDAGResults",
                     total=len(protocoldagresultrefs),
                 )
 
