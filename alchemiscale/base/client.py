@@ -256,7 +256,7 @@ class AlchemiscaleBaseClient:
         self._jwtoken = resp.json()["access_token"]
         self._headers = {
             "Authorization": f"Bearer {self._jwtoken}",
-            "Content-type": "application/json",
+            "Content-Type": "application/json",
         }
 
     def _use_token_async(f):
@@ -329,14 +329,19 @@ class AlchemiscaleBaseClient:
 
     @_retry
     @_use_token
-    def _get_resource(self, resource, params=None):
+    def _get_resource(self, resource, params=None, compress=False):
         if params is None:
             params = {}
+
+        if compress:
+            headers = self._headers | {"Accept-Encoding": "gzip"}
+        else:
+            headers = self._headers | {"Accept-Encoding": ""}
 
         url = urljoin(self.api_url, resource)
         try:
             resp = requests.get(
-                url, params=params, headers=self._headers, verify=self.verify
+                url, params=params, headers=headers, verify=self.verify
             )
         except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
@@ -346,22 +351,28 @@ class AlchemiscaleBaseClient:
                 f"Status Code {resp.status_code} : {resp.reason} : {resp.text}",
                 status_code=resp.status_code,
             )
+
         content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
         return content
 
     @_retry_async
     @_use_token_async
-    async def _get_resource_async(self, resource, params=None):
+    async def _get_resource_async(self, resource, params=None, compress=False):
         if params is None:
             params = {}
         else:
             # drop params that are None
             params = {k: v for k, v in params.items() if v is not None}
 
+        if compress:
+            headers = self._headers | {"Accept-Encoding": "gzip"}
+        else:
+            headers = self._headers | {"Accept-Encoding": ""}
+
         url = urljoin(self.api_url, resource)
         try:
             resp = await self._session.get(
-                url, params=params, headers=self._headers, timeout=None
+                url, params=params, headers=headers, timeout=None
             )
         except httpx.RequestError as e:
             raise AlchemiscaleConnectionError(*e.args)

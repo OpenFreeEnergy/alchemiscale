@@ -89,7 +89,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         Returns
         -------
-        scoped_key
+        ScopedKey
             The ScopedKey of the AlchemicalNetwork.
 
         """
@@ -195,21 +195,75 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/chemicalsystems/{chemicalsystem}/transformations"
         )
 
-    def get_network(self, network: Union[ScopedKey, str]) -> AlchemicalNetwork:
-        """Retrieve an AlchemicalNetwork given its ScopedKey."""
-        return json_to_gufe(self._get_resource(f"/networks/{network}"))
+    def get_network(self, network: Union[ScopedKey, str], compress: bool = True) -> AlchemicalNetwork:
+        """Retrieve an AlchemicalNetwork given its ScopedKey.
+
+        Parameters
+        ----------
+        network
+            The ScopedKey of the AlchemicalNetwork to retrieve.
+        compress
+            If ``True``, compress the AlchemicalNetwork server-side before
+            shipping it to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
+
+        Returns
+        -------
+        AlchemicalNetwork
+            The retrieved AlchemicalNetwork.
+
+        """
+        return json_to_gufe(self._get_resource(f"/networks/{network}", compress=compress))
 
     def get_transformation(
-        self, transformation: Union[ScopedKey, str]
+            self, transformation: Union[ScopedKey, str], compress: bool = True
     ) -> Transformation:
-        """Retrieve a Transformation given its ScopedKey."""
-        return json_to_gufe(self._get_resource(f"/transformations/{transformation}"))
+        """Retrieve a Transformation given its ScopedKey.
+
+        Parameters
+        ----------
+        transformation
+            The ScopedKey of the Transformation to retrieve.
+        compress
+            If ``True``, compress the Transformation server-side before
+            shipping it to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
+
+        Returns
+        -------
+        Transformation
+            The retrieved Transformation.
+
+        """
+        return json_to_gufe(self._get_resource(f"/transformations/{transformation}", compress=compress))
 
     def get_chemicalsystem(
-        self, chemicalsystem: Union[ScopedKey, str]
+            self, chemicalsystem: Union[ScopedKey, str], compress: bool = True
     ) -> ChemicalSystem:
-        """Retrieve a Transformation given its ScopedKey."""
-        return json_to_gufe(self._get_resource(f"/chemicalsystems/{chemicalsystem}"))
+        """Retrieve a ChemicalSystem given its ScopedKey.
+
+        Parameters
+        ----------
+        chemicalsystem
+            The ScopedKey of the ChemicalSystem to retrieve.
+        compress
+            If ``True``, compress the ChemicalSystem server-side before
+            shipping it to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
+
+        Returns
+        -------
+        ChemicalSystem
+            The retrieved ChemicalSystem.
+
+        """
+        return json_to_gufe(self._get_resource(f"/chemicalsystems/{chemicalsystem}", compress=compress))
 
     ### compute
 
@@ -596,6 +650,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         protocoldagresultrefs: List[Dict],
         transformation: ScopedKey,
         ok: bool,
+        compress: bool = True
     ):
         if ok:
             route = "results"
@@ -611,7 +666,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             )
 
             pdr_json = await self._get_resource_async(
-                f"/transformations/{transformation}/{route}/{pdr_sk}",
+                f"/transformations/{transformation}/{route}/{pdr_sk}", compress=compress
             )
 
             pdr = GufeTokenizable.from_dict(

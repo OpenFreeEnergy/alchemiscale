@@ -12,6 +12,7 @@ import json
 from collections import Counter
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
+from fastapi.middleware.gzip import GZipMiddleware
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.protocols import ProtocolDAGResult
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
@@ -44,6 +45,7 @@ from ..security.models import Token, TokenData, CredentialedUserIdentity
 app = FastAPI(title="AlchemiscaleAPI")
 app.dependency_overrides[get_base_api_settings] = get_api_settings
 app.include_router(base_router)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 def get_cred_user():
