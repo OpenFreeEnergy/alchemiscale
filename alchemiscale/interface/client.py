@@ -688,15 +688,20 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         @use_session
         async def async_request(self):
             with Progress(transient=True) as progress:
-                task = progress.add_task(f"Retrieving {len(protocoldagresultrefs)} ProtocolDAGResults", total=len(protocoldagresultrefs))
+                task = progress.add_task(
+                    f"Retrieving {len(protocoldagresultrefs)} ProtocolDAGResults",
+                    total=len(protocoldagresultrefs),
+                )
 
-                coros = [async_get_protocoldagresult(protocoldagresultref)
-                         for protocoldagresultref in protocoldagresultrefs]
+                coros = [
+                    async_get_protocoldagresult(protocoldagresultref)
+                    for protocoldagresultref in protocoldagresultrefs
+                ]
                 pdrs = []
                 for coro in asyncio.as_completed(coros):
-                        pdr = await coro
-                        pdrs.append(pdr)
-                        progress.update(task, advance=1)
+                    pdr = await coro
+                    pdrs.append(pdr)
+                    progress.update(task, advance=1)
 
             return pdrs
 
@@ -758,9 +763,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 return None
 
     def get_transformation_failures(
-        self,
-        transformation: ScopedKey,
-        compress: bool = True
+        self, transformation: ScopedKey, compress: bool = True
     ) -> List[ProtocolDAGResult]:
         """Get failed `ProtocolDAGResult`\s for the given `Transformation`.
 
@@ -787,7 +790,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return pdrs
 
-    def get_task_results(self, task: ScopedKey, compress: bool = True) -> List[ProtocolDAGResult]:
+    def get_task_results(
+        self, task: ScopedKey, compress: bool = True
+    ) -> List[ProtocolDAGResult]:
         """Get successful `ProtocolDAGResult`s for the given `Task`.
 
         Parameters
@@ -816,7 +821,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return pdrs
 
-    def get_task_failures(self, task: ScopedKey, compress: bool = True) -> List[ProtocolDAGResult]:
+    def get_task_failures(
+        self, task: ScopedKey, compress: bool = True
+    ) -> List[ProtocolDAGResult]:
         """Get failed `ProtocolDAGResult`s for the given `Task`.
 
         Parameters
