@@ -448,8 +448,8 @@ class AlchemiscaleBaseClient:
         from rich.progress import SpinnerColumn, TimeElapsedColumn, TextColumn
 
         return [
-            SpinnerColumn(style="#ff073a"),
-            SpinnerColumn(style="#1793d0"),
+            SpinnerColumn("dots2", style="#ff073a"),
+            SpinnerColumn("dots2", style="#1793d0"),
             TextColumn("[progress.description]{task.description}"),
             TimeElapsedColumn(),
         ]
@@ -466,8 +466,8 @@ class AlchemiscaleBaseClient:
         )
 
         return [
-            SpinnerColumn(style="#ff073a"),
-            SpinnerColumn(style="#1793d0"),
+            SpinnerColumn("dots2", style="#ff073a"),
+            SpinnerColumn("dots2", style="#1793d0"),
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             MofNCompleteColumn(),

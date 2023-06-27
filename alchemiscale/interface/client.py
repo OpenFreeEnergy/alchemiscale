@@ -97,7 +97,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         sk = self.get_scoped_key(network, scope)
         with Progress(*self._rich_waiting_columns(), transient=False) as progress:
-            task = progress.add_task(f"Submitting '{sk}'...", total=None)
+            task = progress.add_task(f"Submitting [bold]'{sk}'[/bold]...", total=None)
 
             data = dict(network=network.to_dict(), scope=scope.dict())
             scoped_key = self._post_resource("/networks", data, compress=compress)
@@ -228,7 +228,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn
 
         with Progress(*self._rich_waiting_columns(), transient=False) as progress:
-            task = progress.add_task(f"Retrieving '{network}'...", total=None)
+            task = progress.add_task(f"Retrieving [bold]'{network}'[/bold]...", total=None)
 
             an = json_to_gufe(
                 self._get_resource(f"/networks/{network}", compress=compress)
@@ -263,7 +263,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
 
         with Progress(*self._rich_waiting_columns(), transient=False) as progress:
-            task = progress.add_task(f"Retrieving '{transformation}'...", total=None)
+            task = progress.add_task(f"Retrieving [bold]'{transformation}'[/bold]...", total=None)
 
             tf = json_to_gufe(
                 self._get_resource(
@@ -300,7 +300,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         from rich.progress import Progress
 
         with Progress(*self._rich_waiting_columns(), transient=False) as progress:
-            task = progress.add_task(f"Retrieving '{chemicalsystem}'...", total=None)
+            task = progress.add_task(f"Retrieving [bold]'{chemicalsystem}'[/bold]...", total=None)
 
             cs = json_to_gufe(
                 self._get_resource(
@@ -755,7 +755,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         async def async_request(self):
             with Progress(*self._rich_progress_columns(), transient=False) as progress:
                 task = progress.add_task(
-                    f"Retrieving ProtocolDAGResults",
+                    f"Retrieving [bold]ProtocolDAGResult[/bold]s",
                     total=len(protocoldagresultrefs),
                 )
 

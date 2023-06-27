@@ -92,6 +92,7 @@ class SynchronousComputeService:
         client_max_retries=5,
         client_retry_base_seconds=2.0,
         client_retry_max_seconds=60.0,
+        client_verify=True
     ):
         """Create a `SynchronousComputeService` instance.
 
@@ -143,6 +144,8 @@ class SynchronousComputeService:
         client_retry_max_seconds
             Maximum number of seconds to sleep between retries; avoids runaway
             exponential backoff while allowing for many retries.
+        client_verify
+            Whether to verify SSL certificate presented by the API server.
 
         """
         self.api_url = api_url
@@ -155,9 +158,10 @@ class SynchronousComputeService:
             api_url,
             identifier,
             key,
-            client_max_retries,
-            client_retry_base_seconds,
-            client_retry_max_seconds,
+            max_retries=client_max_retries,
+            retry_base_seconds=client_retry_base_seconds,
+            retry_max_seconds=client_retry_max_seconds,
+            verify=client_verify
         )
 
         if scopes is None:
