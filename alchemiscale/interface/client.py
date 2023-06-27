@@ -660,6 +660,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         ok: bool,
         compress: bool = True,
     ):
+        from rich.progress import Progress
+
         if ok:
             route = "results"
         else:
@@ -685,12 +687,16 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         @use_session
         async def async_request(self):
-            pdrs = await asyncio.gather(
-                *[
-                    async_get_protocoldagresult(protocoldagresultref)
-                    for protocoldagresultref in protocoldagresultrefs
-                ]
-            )
+            with Progress(transient=True) as progress:
+                task = progress.add_task(f"Retrieving {len(protocoldagresultrefs)} ProtocolDAGResults", total=len(protocoldagresultrefs))
+
+                coros = [async_get_protocoldagresult(protocoldagresultref)
+                         for protocoldagresultref in protocoldagresultrefs]
+                pdrs = []
+                for coro in asyncio.as_completed(coros):
+                        pdr = await coro
+                        pdrs.append(pdr)
+                        progress.update(task, advance=1)
 
             return pdrs
 
@@ -700,6 +706,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         transformation: ScopedKey,
         return_protocoldagresults: bool = False,
+        compress: bool = True,
     ) -> Union[Optional[ProtocolResult], List[ProtocolDAGResult]]:
         """Get a `ProtocolResult` for the given `Transformation`.
 
@@ -720,6 +727,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             If ``True``, return the raw `ProtocolDAGResult`s instead of returning
             a processed `ProtocolResult`. Only successful `ProtocolDAGResult`\s
             are returned.
+        compress
+            If ``True``, compress the ProtocolDAGResults server-side before
+            shipping them to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
 
         """
 
@@ -733,7 +746,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=True
+            protocoldagresultrefs, transformation, ok=True, compress=compress
         )
 
         if return_protocoldagresults:
@@ -747,13 +760,20 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_transformation_failures(
         self,
         transformation: ScopedKey,
-    ) -> Union[ProtocolResult, List[ProtocolDAGResult]]:
+        compress: bool = True
+    ) -> List[ProtocolDAGResult]:
         """Get failed `ProtocolDAGResult`\s for the given `Transformation`.
 
         Parameters
         ----------
         transformation
             The `ScopedKey` of the `Transformation` to retrieve failures for.
+        compress
+            If ``True``, compress the ProtocolDAGResults server-side before
+            shipping them to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
 
         """
         # get all protocoldagresultrefs for the given transformation
@@ -762,13 +782,26 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=False
+            protocoldagresultrefs, transformation, ok=False, compress=compress
         )
 
         return pdrs
 
-    def get_task_results(self, task: ScopedKey):
-        """Get successful `ProtocolDAGResult`s for the given `Task`."""
+    def get_task_results(self, task: ScopedKey, compress: bool = True) -> List[ProtocolDAGResult]:
+        """Get successful `ProtocolDAGResult`s for the given `Task`.
+
+        Parameters
+        ----------
+        task
+            The `ScopedKey` of the `Task` to retrieve results for.
+        compress
+            If ``True``, compress the ProtocolDAGResults server-side before
+            shipping them to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
+
+        """
         # first, get the transformation; also confirms it exists
         transformation: ScopedKey = self.get_task_transformation(task)
 
@@ -778,13 +811,26 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=True
+            protocoldagresultrefs, transformation, ok=True, compress=compress
         )
 
         return pdrs
 
-    def get_task_failures(self, task: ScopedKey):
-        """Get failed `ProtocolDAGResult`s for the given `Task`."""
+    def get_task_failures(self, task: ScopedKey, compress: bool = True) -> List[ProtocolDAGResult]:
+        """Get failed `ProtocolDAGResult`s for the given `Task`.
+
+        Parameters
+        ----------
+        task
+            The `ScopedKey` of the `Task` to retrieve failures for.
+        compress
+            If ``True``, compress the ProtocolDAGResults server-side before
+            shipping them to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
+
+        """
         # first, get the transformation; also confirms it exists
         transformation: ScopedKey = self.get_task_transformation(task)
 
@@ -794,7 +840,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=False
+            protocoldagresultrefs, transformation, ok=False, compress=compress
         )
 
         return pdrs

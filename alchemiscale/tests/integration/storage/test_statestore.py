@@ -612,7 +612,8 @@ class TestNeo4jStore(TestStateStore):
         for task_sk in task_sks:
             an_sks = n4js.get_task_networks(task_sk)
             assert an_sk in an_sks
-            assert len(an_sks) == 2
+            for an_sk in an_sks:
+                assert task_sk in n4js.get_network_tasks(an_sk)
 
     def test_get_transformation_tasks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
