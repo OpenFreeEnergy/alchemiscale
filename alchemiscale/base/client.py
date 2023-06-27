@@ -386,14 +386,25 @@ class AlchemiscaleBaseClient:
     def _post_resource(self, resource, data, compress=False):
         url = urljoin(self.api_url, resource)
 
-        if compress:
+        if compress is True:
+            compress = 5
+        elif compress is False:
+            compress = 0
+
+        if 0 < compress <= 9:
             headers = {"Content-Encoding": "gzip"}
             data_ = gzip.compress(
-                json.dumps(data, cls=JSON_HANDLER.encoder).encode("utf-8"), mtime=0
+                json.dumps(data, cls=JSON_HANDLER.encoder).encode("utf-8"),
+                mtime=0,
+                compresslevel=compress,
             )
-        else:
+        elif compress == 0:
             headers = {}
             data_ = json.dumps(data, cls=JSON_HANDLER.encoder)
+        else:
+            ValueError(
+                "`compress` must be a bool or an integer between 0 and 9, inclusive"
+            )
 
         return self._post(url, headers, data_)
 

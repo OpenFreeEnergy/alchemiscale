@@ -53,7 +53,7 @@ from ..security.models import (
 app = FastAPI(title="AlchemiscaleComputeAPI")
 app.dependency_overrides[get_base_api_settings] = get_compute_api_settings
 app.include_router(base_router)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
 
 def get_cred_compute():

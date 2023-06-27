@@ -69,7 +69,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return self._get_resource("/exists/{scoped_key}")
 
     def create_network(
-        self, network: AlchemicalNetwork, scope: Scope, compress: bool = True
+        self,
+        network: AlchemicalNetwork,
+        scope: Scope,
+        compress: Union[bool, int] = True,
     ) -> ScopedKey:
         """Submit an AlchemicalNetwork to a specific Scope.
 
@@ -87,6 +90,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             Set to ``False`` to submit without compressing. This is a
             performance optimization; it has no bearing on the result of this
             method call.
+
+            Use an integer between 0 and 9 for finer control over
+            the degree of compression; 0 means no compression, 9 means max
+            compression. ``True`` is synonymous with level 5 compression.
 
         Returns
         -------
