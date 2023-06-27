@@ -71,7 +71,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def create_network(
         self, network: AlchemicalNetwork, scope: Scope, compress: bool = True
     ) -> ScopedKey:
-        """Submit an AlchemicalNetwork.
+        """Submit an AlchemicalNetwork to a specific Scope.
 
         Parameters
         ----------
@@ -79,6 +79,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The AlchemicalNetwork to submit.
         scope
             The Scope in which to submit the AlchemicalNetwork.
+            This must be a *specific* Scope; it must not contain wildcards.
         compress
             If ``True``, compress the AlchemicalNetwork client-side before
             shipping to the API service. This can reduce submission time
@@ -93,6 +94,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The ScopedKey of the AlchemicalNetwork.
 
         """
+        if not scope.specific():
+            raise ValueError(f"`scope` '{scope}' contains wildcards ('*'); `scope` must be *specific*")
+
         from rich.progress import Progress
 
         sk = self.get_scoped_key(network, scope)
