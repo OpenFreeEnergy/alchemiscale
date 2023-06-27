@@ -340,9 +340,7 @@ class AlchemiscaleBaseClient:
 
         url = urljoin(self.api_url, resource)
         try:
-            resp = requests.get(
-                url, params=params, headers=headers, verify=self.verify
-            )
+            resp = requests.get(url, params=params, headers=headers, verify=self.verify)
         except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
 

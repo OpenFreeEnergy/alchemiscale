@@ -195,7 +195,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/chemicalsystems/{chemicalsystem}/transformations"
         )
 
-    def get_network(self, network: Union[ScopedKey, str], compress: bool = True) -> AlchemicalNetwork:
+    def get_network(
+        self, network: Union[ScopedKey, str], compress: bool = True
+    ) -> AlchemicalNetwork:
         """Retrieve an AlchemicalNetwork given its ScopedKey.
 
         Parameters
@@ -215,10 +217,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The retrieved AlchemicalNetwork.
 
         """
-        return json_to_gufe(self._get_resource(f"/networks/{network}", compress=compress))
+        return json_to_gufe(
+            self._get_resource(f"/networks/{network}", compress=compress)
+        )
 
     def get_transformation(
-            self, transformation: Union[ScopedKey, str], compress: bool = True
+        self, transformation: Union[ScopedKey, str], compress: bool = True
     ) -> Transformation:
         """Retrieve a Transformation given its ScopedKey.
 
@@ -239,10 +243,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The retrieved Transformation.
 
         """
-        return json_to_gufe(self._get_resource(f"/transformations/{transformation}", compress=compress))
+        return json_to_gufe(
+            self._get_resource(f"/transformations/{transformation}", compress=compress)
+        )
 
     def get_chemicalsystem(
-            self, chemicalsystem: Union[ScopedKey, str], compress: bool = True
+        self, chemicalsystem: Union[ScopedKey, str], compress: bool = True
     ) -> ChemicalSystem:
         """Retrieve a ChemicalSystem given its ScopedKey.
 
@@ -263,7 +269,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The retrieved ChemicalSystem.
 
         """
-        return json_to_gufe(self._get_resource(f"/chemicalsystems/{chemicalsystem}", compress=compress))
+        return json_to_gufe(
+            self._get_resource(f"/chemicalsystems/{chemicalsystem}", compress=compress)
+        )
 
     ### compute
 
@@ -650,7 +658,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         protocoldagresultrefs: List[Dict],
         transformation: ScopedKey,
         ok: bool,
-        compress: bool = True
+        compress: bool = True,
     ):
         if ok:
             route = "results"
