@@ -687,7 +687,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return list(chain.from_iterable(scoped_keys))
 
-        return asyncio.run(async_request(self))
+        try:
+            return asyncio.run(async_request(self))
+        except RuntimeError:
+            # we use nest_asyncio to support environments where an event loop
+            # is already running, such as in a Jupyter notebook
+            import nest_asyncio
+            nest_asyncio.apply()
+            return asyncio.run(async_request(self))
 
     def get_tasks_status(
         self, tasks: List[ScopedKey], batch_size: int = 1000
@@ -725,7 +732,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return list(chain.from_iterable(statuses))
 
-        return asyncio.run(async_request(self))
+        try:
+            return asyncio.run(async_request(self))
+        except RuntimeError:
+            # we use nest_asyncio to support environments where an event loop
+            # is already running, such as in a Jupyter notebook
+            import nest_asyncio
+            nest_asyncio.apply()
+            return asyncio.run(async_request(self))
 
     def get_tasks_priority(
         self,
@@ -790,7 +804,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return pdrs
 
-        return asyncio.run(async_request(self))
+        try:
+            return asyncio.run(async_request(self))
+        except RuntimeError:
+            # we use nest_asyncio to support environments where an event loop
+            # is already running, such as in a Jupyter notebook
+            import nest_asyncio
+            nest_asyncio.apply()
+            return asyncio.run(async_request(self))
 
     def get_transformation_results(
         self,

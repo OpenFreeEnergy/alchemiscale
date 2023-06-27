@@ -556,17 +556,17 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
         else:
             q += """
-            RETURN n
+            RETURN DISTINCT n
             ORDER BY n._org, n._campaign, n._project, n._gufe_key
             """
         with self.transaction() as tx:
             res = tx.run(q)
 
-        nodes = set()
+        nodes = list()
         subgraph = Subgraph()
 
         for record in res:
-            nodes.add(record["n"])
+            nodes.append(record["n"])
             if return_gufe and record["p"] is not None:
                 subgraph = subgraph | record["p"]
             else:
