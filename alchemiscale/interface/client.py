@@ -68,11 +68,32 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """Returns `True` if the given ScopedKey represents an object in the database."""
         return self._get_resource("/exists/{scoped_key}")
 
-    def create_network(self, network: AlchemicalNetwork, scope: Scope) -> ScopedKey:
-        """Submit an AlchemicalNetwork."""
+    def create_network(self, network: AlchemicalNetwork, scope: Scope, compress: bool = True) -> ScopedKey:
+        """Submit an AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network
+            The AlchemicalNetwork to submit.
+        scope
+            The Scope in which to submit the AlchemicalNetwork.
+        compress
+            If ``True``, compress the AlchemicalNetwork client-side before
+            shipping to the API service. This can reduce submission time
+            depending on the bandwidth of your connection to the API service.
+            Set to ``False`` to submit without compressing. This is a
+            performance optimization; it has no bearing on the result of this
+            method call.
+
+        Returns
+        -------
+        scoped_key
+            The ScopedKey of the AlchemicalNetwork.
+
+        """
         data = dict(network=network.to_dict(), scope=scope.dict())
 
-        scoped_key = self._post_resource("/networks", data, compress=True)
+        scoped_key = self._post_resource("/networks", data, compress=compress)
         return ScopedKey.from_dict(scoped_key)
 
     def query_networks(
