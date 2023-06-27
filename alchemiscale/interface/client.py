@@ -95,7 +95,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         """
         if not scope.specific():
-            raise ValueError(f"`scope` '{scope}' contains wildcards ('*'); `scope` must be *specific*")
+            raise ValueError(
+                f"`scope` '{scope}' contains wildcards ('*'); `scope` must be *specific*"
+            )
 
         from rich.progress import Progress
 
