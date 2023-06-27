@@ -260,4 +260,3 @@ def set_task_result(
 ### add router
 
 app.include_router(router)
-app.router.route_class = GzipRoute

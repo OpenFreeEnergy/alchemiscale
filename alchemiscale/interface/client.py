@@ -691,7 +691,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def get_tasks_status(
         self, tasks: List[ScopedKey], batch_size: int = 1000
-    ) -> List[TaskStatusEnum]:
+    ) -> List[str]:
         """Get the status of multiple Tasks.
 
         Parameters

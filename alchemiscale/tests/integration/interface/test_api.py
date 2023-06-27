@@ -1,6 +1,5 @@
 import pytest
 import json
-import gzip
 
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.tokenization import JSON_HANDLER, GufeTokenizable
@@ -16,11 +15,8 @@ def pre_load_payload(network, scope, name="incomplete 2"):
     )
     headers = {"Content-type": "application/json"}
     data = dict(network=new_network.to_dict(), scope=scope.dict())
-    jsondata = gzip.compress(
-        json.dumps(data, cls=JSON_HANDLER.encoder).encode("utf-8"), mtime=0
-    )
+    jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
 
-    headers.update({"Content-Encoding": "gzip"})
     return new_network, headers, jsondata
 
 
@@ -48,7 +44,7 @@ class TestAPI:
         response = test_client.get("/info")
         assert response.status_code == 200
 
-    def test_check(self, test_client, n4js_preloaded):
+    def test_check(self, test_client, n4js):
         response = test_client.get("/check")
         assert response.status_code == 200
 

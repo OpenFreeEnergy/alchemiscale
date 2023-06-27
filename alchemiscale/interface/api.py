@@ -538,7 +538,7 @@ def tasks_status_get(
 def tasks_status_set(
     *,
     tasks: List[ScopedKey] = Body(),
-    status: Optional[str] = Body(),
+    status: str = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> List[Union[str, None]]:

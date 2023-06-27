@@ -784,7 +784,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [ScopedKey.from_str(sk) for sk in sks]
 
-    def _get_protocoldagresultrefs(self, q, scoped_key):
+    def _get_protocoldagresultrefs(self, q: str, scoped_key: ScopedKey):
         with self.transaction() as tx:
             res = tx.run(q, scoped_key=str(scoped_key))
 
