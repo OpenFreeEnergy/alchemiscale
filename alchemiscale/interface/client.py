@@ -68,7 +68,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """Returns `True` if the given ScopedKey represents an object in the database."""
         return self._get_resource("/exists/{scoped_key}")
 
-    def create_network(self, network: AlchemicalNetwork, scope: Scope, compress: bool = True) -> ScopedKey:
+    def create_network(
+        self, network: AlchemicalNetwork, scope: Scope, compress: bool = True
+    ) -> ScopedKey:
         """Submit an AlchemicalNetwork.
 
         Parameters
