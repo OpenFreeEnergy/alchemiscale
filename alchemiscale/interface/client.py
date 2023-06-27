@@ -9,7 +9,6 @@ from typing import Union, List, Dict, Optional, Tuple
 import json
 from itertools import chain
 from collections import Counter
-import gzip
 
 import httpx
 import networkx as nx
@@ -72,13 +71,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def create_network(self, network: AlchemicalNetwork, scope: Scope) -> ScopedKey:
         """Submit an AlchemicalNetwork."""
         data = dict(network=network.to_dict(), scope=scope.dict())
-        data_compressed = gzip.compress(
-            json.dumps(data, cls=JSON_HANDLER.encoder).encode("utf-8"), mtime=0
-        )
 
-        headers = {"Content-Encoding": "gzip"}
-
-        scoped_key = self._post_resource("/networks", data_compressed, headers=headers)
+        scoped_key = self._post_resource("/networks", data, compress=True)
         return ScopedKey.from_dict(scoped_key)
 
     def query_networks(

@@ -12,6 +12,7 @@ from typing import List
 import json
 from urllib.parse import urljoin
 from functools import wraps
+import gzip
 
 import requests
 import httpx
@@ -106,7 +107,7 @@ class AlchemiscaleBaseClient:
         self.verify = verify
 
         self._jwtoken = None
-        self._headers = None
+        self._headers = {}
 
         self._session = None
         self._lock = None
@@ -373,22 +374,27 @@ class AlchemiscaleBaseClient:
         content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
         return content
 
-    @_retry
-    @_use_token
-    def _post_resource(self, resource, data, headers=None):
+    def _post_resource(self, resource, data, compress=False):
         url = urljoin(self.api_url, resource)
 
-        if headers is None:
-            headers = self._headers
+        if compress:
+            headers = {"Content-Encoding": "gzip"}
+            data_ = gzip.compress(
+                json.dumps(data, cls=JSON_HANDLER.encoder).encode("utf-8"), mtime=0
+            )
         else:
-            headers_ = dict(self._headers)
-            headers_.update(headers)
-            headers = headers_
+            headers = {}
+            data_ = json.dumps(data, cls=JSON_HANDLER.encoder)
 
-        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+        return self._post(url, headers, data_)
+
+    @_retry
+    @_use_token
+    def _post(self, url, headers, data):
+        headers = dict(self._headers) | headers
         try:
             resp = requests.post(
-                url, data=jsondata, headers=headers, verify=self.verify
+                url, data=data, headers=headers, verify=self.verify
             )
         except requests.exceptions.RequestException as e:
             raise AlchemiscaleConnectionError(*e.args)
