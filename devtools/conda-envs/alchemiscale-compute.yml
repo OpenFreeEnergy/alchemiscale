@@ -4,12 +4,12 @@ channels:
   - openeye
 dependencies:
   - pip
-  - python =3.9
+  - python =3.10
   - cudatoolkit <=11.7  # many actual compute resources are not yet compatible with cudatoolkit >=11.8
 
   # alchemiscale dependencies
-  - gufe=0.7.3
-  - openfe=0.7.4
+  - gufe=0.9.0
+  - openfe=0.10.1
   - requests
   - click
 
