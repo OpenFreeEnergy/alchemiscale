@@ -5,7 +5,6 @@ channels:
   - openeye
 dependencies:
   - pip
-  - python =3.10
 
   # gufe dependencies
   - numpy
