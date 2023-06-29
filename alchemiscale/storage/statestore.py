@@ -1845,9 +1845,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             q = """
             WITH $scoped_keys AS batch
-            UNWIND batch as sk
+            UNWIND batch AS scoped_key
             OPTIONAL MATCH (t:Task)
-            WHERE t._scoped_key = sk
+            WHERE t._scoped_key = scoped_key
             RETURN t.status as status
             """
             res = tx.run(q, scoped_keys=[str(t) for t in tasks])
@@ -1858,28 +1858,29 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return statuses
 
-    def _set_task_status(self, tasks, q_func, err_msg_func, raise_error):
+    def _set_task_status(
+        self, tasks, q: str, err_msg_func, raise_error
+    ) -> List[Optional[ScopedKey]]:
         tasks_statused = []
         with self.transaction() as tx:
-            for t in tasks:
-                res = tx.run(q_func(t))
-                # we only need the first record to get the info we need
-                for record in res:
-                    task_i = record["t"]
-                    task_set = record["t_"]
-                    break
+            res = tx.run(q, scoped_keys=[str(t) for t in tasks])
+
+            for record in res:
+                task_i = record["t"]
+                task_set = record["t_"]
+                scoped_key = record["scoped_key"]
 
                 if task_set is None:
                     if raise_error:
                         status = task_i["status"]
-                        raise ValueError(err_msg_func(t, status))
+                        raise ValueError(err_msg_func(scoped_key, status))
                     tasks_statused.append(None)
                 elif task_i is None:
                     if raise_error:
                         raise ValueError("No such task {t}")
                     tasks_statused.append(None)
                 else:
-                    tasks_statused.append(t)
+                    tasks_statused.append(ScopedKey.from_str(scoped_key))
 
         return tasks_statused
 
@@ -1892,23 +1893,25 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        def q(t):
-            return f"""
-            MATCH (t:Task {{_scoped_key: '{t}'}})
+        q = """
+        WITH $scoped_keys AS batch
+        UNWIND batch AS scoped_key
 
-            OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
-            WHERE t_.status IN ['waiting', 'running', 'error']
-            SET t_.status = '{TaskStatusEnum.waiting.value}'
+        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
-            WITH t, t_
+        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
+        WHERE t_.status IN ['waiting', 'running', 'error']
+        SET t_.status = 'waiting'
 
-            // if we changed the status to waiting,
-            // drop CLAIMS relationship
-            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
-            DELETE cl
+        WITH scoped_key, t, t_
 
-            RETURN t, t_
-            """
+        // if we changed the status to waiting,
+        // drop CLAIMS relationship
+        OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        DELETE cl
+
+        RETURN scoped_key, t, t_
+        """
 
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `waiting` as it is not currently `error` or `running`."
@@ -1924,16 +1927,18 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        def q(t):
-            return f"""
-            MATCH (t:Task {{_scoped_key: '{t}'}})
+        q = """
+        WITH $scoped_keys AS batch
+        UNWIND batch AS scoped_key
 
-            OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
-            WHERE t_.status IN ['running', 'waiting']
-            SET t_.status = '{TaskStatusEnum.running.value}'
+        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
-            RETURN t, t_
-            """
+        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
+        WHERE t_.status IN ['running', 'waiting']
+        SET t_.status = 'running'
+
+        RETURN scoped_key, t, t_
+        """
 
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `running` as it is not currently `waiting`."
@@ -1949,30 +1954,32 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        def q(t):
-            return f"""
-            MATCH (t:Task {{_scoped_key: '{t}'}})
+        q = """
+        WITH $scoped_keys AS batch
+        UNWIND batch AS scoped_key
 
-            OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
-            WHERE t_.status IN ['complete', 'running']
-            SET t_.status = '{TaskStatusEnum.complete.value}'
+        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
-            WITH t, t_
+        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
+        WHERE t_.status IN ['complete', 'running']
+        SET t_.status = 'complete'
 
-            // if we changed the status to complete,
-            // drop all ACTIONS relationships
-            OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
-            DELETE ar
+        WITH scoped_key, t, t_
 
-            WITH t, t_
+        // if we changed the status to complete,
+        // drop all ACTIONS relationships
+        OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
+        DELETE ar
 
-            // if we changed the status to complete,
-            // drop CLAIMS relationship
-            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
-            DELETE cl
+        WITH scoped_key, t, t_
 
-            RETURN t, t_
-            """
+        // if we changed the status to complete,
+        // drop CLAIMS relationship
+        OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        DELETE cl
+
+        RETURN scoped_key, t, t_
+        """
 
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `complete` as it is not currently `running`."
@@ -1988,23 +1995,25 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        def q(t):
-            return f"""
-            MATCH (t:Task {{_scoped_key: '{t}'}})
+        q = """
+        WITH $scoped_keys AS batch
+        UNWIND batch AS scoped_key
 
-            OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
-            WHERE t_.status IN ['error', 'running']
-            SET t_.status = '{TaskStatusEnum.error.value}'
+        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
-            WITH t, t_
+        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
+        WHERE t_.status IN ['error', 'running']
+        SET t_.status = 'error'
 
-            // if we changed the status to error,
-            // drop CLAIMS relationship
-            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
-            DELETE cl
+        WITH scoped_key, t, t_
 
-            RETURN t, t_
-            """
+        // if we changed the status to error,
+        // drop CLAIMS relationship
+        OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        DELETE cl
+
+        RETURN scoped_key, t, t_
+        """
 
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `error` as it is not currently `running`."
@@ -2021,35 +2030,42 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        with self.transaction() as tx:
-            for t in tasks:
-                # set the status and delete the ACTIONS relationship
-                # make sure we follow the extends chain and set all tasks to invalid
-                # and remove actions relationships
-                q = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
+        # set the status and delete the ACTIONS relationship
+        # make sure we follow the extends chain and set all tasks to invalid
+        # and remove actions relationships
+        q = """
+        WITH $scoped_keys AS batch
+        UNWIND batch AS scoped_key
 
-                // EXTENDS* used to get all tasks in the extends chain
-                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task)
-                SET t.status = '{TaskStatusEnum.invalid.value}'
-                SET extends_task.status = '{TaskStatusEnum.invalid.value}'
-                WITH t, extends_task
+        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
-                OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
-                OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
+        WHERE NOT t_.status IN ['deleted']
+        OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
+        SET t_.status = 'invalid'
+        SET extends_task.status = 'invalid'
 
-                DELETE ar
-                DELETE are
+        WITH scoped_key, t, t_, extends_task
 
-                WITH t
+        OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
 
-                // drop CLAIMS relationship if present
-                OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
-                DELETE cl
-                """
-                tx.run(q)
+        DELETE ar
+        DELETE are
 
-        return tasks
+        WITH scoped_key, t, t_
+
+        // drop CLAIMS relationship if present
+        OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        DELETE cl
+
+        RETURN scoped_key, t, t_
+        """
+
+        def err_msg(t, status):
+            return f"Cannot set task {t} with current status: {status} to `invalid` as it is `deleted`."
+
+        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_deleted(
         self, tasks: List[ScopedKey], raise_error: bool = False
@@ -2061,35 +2077,42 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        with self.transaction() as tx:
-            for t in tasks:
-                # set the status and delete the ACTIONS relationship
-                # make sure we follow the extends chain and set all tasks to deleted
-                # and remove actions relationships
-                q = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
+        # set the status and delete the ACTIONS relationship
+        # make sure we follow the extends chain and set all tasks to deleted
+        # and remove actions relationships
+        q = """
+        WITH $scoped_keys AS batch
+        UNWIND batch AS scoped_key
 
-                // EXTENDS* used to get all tasks in the extends chain
-                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task)
-                SET t.status = '{TaskStatusEnum.deleted.value}'
-                SET extends_task.status = '{TaskStatusEnum.deleted.value}'
-                WITH t, extends_task
+        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
-                OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
-                OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
+        WHERE NOT t_.status IN ['deleted']
+        OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
+        SET t_.status = 'deleted'
+        SET extends_task.status = 'deleted'
 
-                DELETE ar
-                DELETE are
+        WITH scoped_key, t, t_, extends_task
 
-                WITH t
+        OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
 
-                // drop CLAIMS relationship if present
-                OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
-                DELETE cl
-                """
-                tx.run(q)
+        DELETE ar
+        DELETE are
 
-        return tasks
+        WITH scoped_key, t, t_
+
+        // drop CLAIMS relationship if present
+        OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        DELETE cl
+
+        RETURN scoped_key, t, t_
+        """
+
+        def err_msg(t, status):
+            return f"Cannot set task {t} with current status: {status} to `deleted` as it is `invalid`."
+
+        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     ## authentication
 

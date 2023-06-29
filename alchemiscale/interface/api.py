@@ -553,14 +553,15 @@ def tasks_status_set(
             detail=f"Cannot set status to '{status}', must be one of 'waiting', 'invalid', 'deleted'",
         )
 
-    tasks_updated = []
+    valid_tasks = []
     for task_sk in tasks:
         try:
             validate_scopes(task_sk.scope, token)
+            valid_tasks.append(task_sk)
         except HTTPException:
-            tasks_updated.append(None)
-        else:
-            tasks_updated.extend(n4js.set_task_status([task_sk], status))
+            valid_tasks.append(None)
+
+    tasks_updated = n4js.set_task_status(valid_tasks, status)
 
     return [str(t) if t is not None else None for t in tasks_updated]
 
