@@ -12,6 +12,7 @@ dependencies:
   - openfe=0.10.1
   - requests
   - click
+  - httpx
 
   ## user client printing
   - rich
