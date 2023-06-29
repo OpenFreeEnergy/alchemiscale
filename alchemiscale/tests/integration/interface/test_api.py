@@ -16,6 +16,7 @@ def pre_load_payload(network, scope, name="incomplete 2"):
     headers = {"Content-type": "application/json"}
     data = dict(network=new_network.to_dict(), scope=scope.dict())
     jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
     return new_network, headers, jsondata
 
 
@@ -43,7 +44,7 @@ class TestAPI:
         response = test_client.get("/info")
         assert response.status_code == 200
 
-    def test_check(self, test_client):
+    def test_check(self, test_client, n4js):
         response = test_client.get("/check")
         assert response.status_code == 200
 

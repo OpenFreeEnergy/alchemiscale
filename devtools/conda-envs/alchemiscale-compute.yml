@@ -12,6 +12,7 @@ dependencies:
   - openfe=0.7.4
   - requests
   - click
+  - httpx
 
   # perses dependencies
   - openeye-toolkits
