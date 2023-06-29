@@ -4,11 +4,13 @@ Client for interacting with user-facing API. --- :mod:`alchemiscale.interface.cl
 
 """
 
+import asyncio
 from typing import Union, List, Dict, Optional, Tuple
 import json
+from itertools import chain
 from collections import Counter
 
-
+import httpx
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
@@ -19,6 +21,7 @@ from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
     json_to_gufe,
+    use_session,
 )
 from ..models import Scope, ScopedKey
 from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
@@ -65,10 +68,55 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """Returns `True` if the given ScopedKey represents an object in the database."""
         return self._get_resource("/exists/{scoped_key}")
 
-    def create_network(self, network: AlchemicalNetwork, scope: Scope) -> ScopedKey:
-        """Submit an AlchemicalNetwork."""
-        data = dict(network=network.to_dict(), scope=scope.dict())
-        scoped_key = self._post_resource("/networks", data)
+    def create_network(
+        self,
+        network: AlchemicalNetwork,
+        scope: Scope,
+        compress: Union[bool, int] = True,
+    ) -> ScopedKey:
+        """Submit an AlchemicalNetwork to a specific Scope.
+
+        Parameters
+        ----------
+        network
+            The AlchemicalNetwork to submit.
+        scope
+            The Scope in which to submit the AlchemicalNetwork.
+            This must be a *specific* Scope; it must not contain wildcards.
+        compress
+            If ``True``, compress the AlchemicalNetwork client-side before
+            shipping to the API service. This can reduce submission time
+            depending on the bandwidth of your connection to the API service.
+            Set to ``False`` to submit without compressing. This is a
+            performance optimization; it has no bearing on the result of this
+            method call.
+
+            Use an integer between 0 and 9 for finer control over
+            the degree of compression; 0 means no compression, 9 means max
+            compression. ``True`` is synonymous with level 5 compression.
+
+        Returns
+        -------
+        ScopedKey
+            The ScopedKey of the AlchemicalNetwork.
+
+        """
+        if not scope.specific():
+            raise ValueError(
+                f"`scope` '{scope}' contains wildcards ('*'); `scope` must be *specific*"
+            )
+
+        from rich.progress import Progress
+
+        sk = self.get_scoped_key(network, scope)
+        with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+            task = progress.add_task(f"Submitting [bold]'{sk}'[/bold]...", total=None)
+
+            data = dict(network=network.to_dict(), scope=scope.dict())
+            scoped_key = self._post_resource("/networks", data, compress=compress)
+            progress.start_task(task)
+            progress.update(task, total=1, completed=1)
+
         return ScopedKey.from_dict(scoped_key)
 
     def query_networks(
@@ -168,21 +216,121 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/chemicalsystems/{chemicalsystem}/transformations"
         )
 
-    def get_network(self, network: Union[ScopedKey, str]) -> AlchemicalNetwork:
-        """Retrieve an AlchemicalNetwork given its ScopedKey."""
-        return json_to_gufe(self._get_resource(f"/networks/{network}"))
+    def get_network(
+        self, network: Union[ScopedKey, str], compress: bool = True
+    ) -> AlchemicalNetwork:
+        """Retrieve an AlchemicalNetwork given its ScopedKey.
+
+        Parameters
+        ----------
+        network
+            The ScopedKey of the AlchemicalNetwork to retrieve.
+        compress
+            If ``True``, compress the AlchemicalNetwork server-side before
+            shipping it to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
+
+        Returns
+        -------
+        AlchemicalNetwork
+            The retrieved AlchemicalNetwork.
+
+        """
+        from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn
+
+        with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+            task = progress.add_task(
+                f"Retrieving [bold]'{network}'[/bold]...", total=None
+            )
+
+            an = json_to_gufe(
+                self._get_resource(f"/networks/{network}", compress=compress)
+            )
+            progress.start_task(task)
+            progress.update(task, total=1, completed=1)
+
+        return an
 
     def get_transformation(
-        self, transformation: Union[ScopedKey, str]
+        self, transformation: Union[ScopedKey, str], compress: bool = True
     ) -> Transformation:
-        """Retrieve a Transformation given its ScopedKey."""
-        return json_to_gufe(self._get_resource(f"/transformations/{transformation}"))
+        """Retrieve a Transformation given its ScopedKey.
+
+        Parameters
+        ----------
+        transformation
+            The ScopedKey of the Transformation to retrieve.
+        compress
+            If ``True``, compress the Transformation server-side before
+            shipping it to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
+
+        Returns
+        -------
+        Transformation
+            The retrieved Transformation.
+
+        """
+        from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
+
+        with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+            task = progress.add_task(
+                f"Retrieving [bold]'{transformation}'[/bold]...", total=None
+            )
+
+            tf = json_to_gufe(
+                self._get_resource(
+                    f"/transformations/{transformation}", compress=compress
+                )
+            )
+            progress.start_task(task)
+            progress.update(task, total=1, completed=1)
+
+        return tf
 
     def get_chemicalsystem(
-        self, chemicalsystem: Union[ScopedKey, str]
+        self, chemicalsystem: Union[ScopedKey, str], compress: bool = True
     ) -> ChemicalSystem:
-        """Retrieve a Transformation given its ScopedKey."""
-        return json_to_gufe(self._get_resource(f"/chemicalsystems/{chemicalsystem}"))
+        """Retrieve a ChemicalSystem given its ScopedKey.
+
+        Parameters
+        ----------
+        chemicalsystem
+            The ScopedKey of the ChemicalSystem to retrieve.
+        compress
+            If ``True``, compress the ChemicalSystem server-side before
+            shipping it to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
+
+        Returns
+        -------
+        ChemicalSystem
+            The retrieved ChemicalSystem.
+
+        """
+        from rich.progress import Progress
+
+        with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+            task = progress.add_task(
+                f"Retrieving [bold]'{chemicalsystem}'[/bold]...", total=None
+            )
+
+            cs = json_to_gufe(
+                self._get_resource(
+                    f"/chemicalsystems/{chemicalsystem}", compress=compress
+                )
+            )
+
+            progress.start_task(task)
+            progress.update(task, total=1, completed=1)
+
+        return cs
 
     ### compute
 
@@ -299,7 +447,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def get_task_transformation(self, task: ScopedKey) -> ScopedKey:
         """Get the Transformation associated with the given Task."""
-        transformation = self._get_resource(f"tasks/{task}/transformation")
+        transformation = self._get_resource(f"/tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
 
     def _visualize_status(self, status_counts, status_object):
@@ -472,67 +620,128 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self, task: ScopedKey, status: TaskStatusEnum
     ) -> Optional[ScopedKey]:
         """Set the status of a `Task`."""
-        task_sk = self._post_resource(f"tasks/{task}/status", status.value)
+        task_sk = self._post_resource(f"/tasks/{task}/status", status.value)
         return ScopedKey.from_str(task_sk) if task_sk is not None else None
 
-    def _get_task_status(self, task: ScopedKey) -> TaskStatusEnum:
-        """Get the status of a `Task`."""
-        status = self._get_resource(f"tasks/{task}/status")
-        return status
+    async def _set_task_status(
+        self, tasks: List[ScopedKey], status: TaskStatusEnum
+    ) -> List[Optional[ScopedKey]]:
+        """Set the statuses for many Tasks"""
+        data = dict(tasks=[t.dict() for t in tasks], status=status.value)
+        tasks_updated = await self._post_resource_async(
+            f"/bulk/tasks/status/set", data=data
+        )
+        return [
+            ScopedKey.from_str(task_sk) if task_sk is not None else None
+            for task_sk in tasks_updated
+        ]
+
+    async def _get_task_status(self, tasks: List[ScopedKey]) -> List[TaskStatusEnum]:
+        """Get the statuses for many Tasks"""
+        data = dict(tasks=[t.dict() for t in tasks])
+        statuses = await self._post_resource_async(f"/bulk/tasks/status/get", data=data)
+        return statuses
 
     def set_tasks_status(
-        self, tasks: Union[ScopedKey, List[ScopedKey]], status: TaskStatusEnum
+        self,
+        tasks: List[ScopedKey],
+        status: Union[TaskStatusEnum, str],
+        batch_size: int = 1000,
     ) -> List[Optional[ScopedKey]]:
-        """Set the status of one or multiple `Task`\s.
+        """Set the status of one or multiple Tasks.
 
         Task status can be set to 'waiting' if currently 'error'.
         Status can be set to 'invalid' or 'deleted' from any other status.
 
         Parameters
         ----------
-        tasks: Union[ScopedKey, List[ScopedKey]]
-            The `Task` or `Task`\s to set the status of.
-        status: TaskStatusEnum
-            The status to set the `Task`\s to. Can be one of
+        tasks
+            The Tasks to set the status of.
+        status
+            The status to set the Tasks to. Can be one of
             'waiting', 'invalid', or 'deleted'.
 
         Returns
         -------
-        List[Optional[ScopedKey]]
-            The ScopedKeys of the `Task`\s that were updated, in the same order
-            as given in `tasks`. If a given `Task` doesn't exist, `None` will
+        updated
+            The ScopedKeys of the Tasks that were updated, in the same order
+            as given in `tasks`. If a given Task doesn't exist, ``None`` will
             be returned in its place.
 
         """
-        if isinstance(tasks, ScopedKey):
-            tasks = [tasks]
-
         status = TaskStatusEnum(status)
 
-        task_sks = [self._set_task_status(t, status) for t in tasks]
-        return task_sks
+        tasks = [
+            ScopedKey.from_str(task) if isinstance(task, str) else task
+            for task in tasks
+        ]
+
+        @use_session
+        async def async_request(self):
+            scoped_keys = await asyncio.gather(
+                *[
+                    self._set_task_status(task_batch, status)
+                    for task_batch in self._batched(tasks, batch_size)
+                ]
+            )
+
+            return list(chain.from_iterable(scoped_keys))
+
+        try:
+            return asyncio.run(async_request(self))
+        except RuntimeError:
+            # we use nest_asyncio to support environments where an event loop
+            # is already running, such as in a Jupyter notebook
+            import nest_asyncio
+
+            nest_asyncio.apply()
+            return asyncio.run(async_request(self))
 
     def get_tasks_status(
-        self, tasks: Union[ScopedKey, List[ScopedKey]]
-    ) -> List[TaskStatusEnum]:
-        """Get the status of one or multiple `Task`\s.
+        self, tasks: List[ScopedKey], batch_size: int = 1000
+    ) -> List[str]:
+        """Get the status of multiple Tasks.
 
         Parameters
         ----------
-        tasks: Union[ScopedKey, List[ScopedKey]]
-            The `Task` or `Task`\s to get the status of.
+        tasks
+            The Tasks to get the status of.
+        batch_size
+            The number of Tasks to include in a single request; use to tune
+            method call speed when requesting many statuses at once.
 
         Returns
         -------
-        List[TaskStatusEnum]
-            The status of each `Task` in the same order as given in `tasks`. If
-            a given `Task` doesn't exist, `None` will be returned in its place.
+        statuses
+            The status of each Task in the same order as given in `tasks`. If a
+            given Task doesn't exist, ``None`` will be returned in its place.
 
         """
-        if isinstance(tasks, ScopedKey):
-            tasks = [tasks]
-        statuses = [self._get_task_status(t) for t in tasks]
-        return statuses
+        tasks = [
+            ScopedKey.from_str(task) if isinstance(task, str) else task
+            for task in tasks
+        ]
+
+        @use_session
+        async def async_request(self):
+            statuses = await asyncio.gather(
+                *[
+                    self._get_task_status(task_batch)
+                    for task_batch in self._batched(tasks, batch_size)
+                ]
+            )
+
+            return list(chain.from_iterable(statuses))
+
+        try:
+            return asyncio.run(async_request(self))
+        except RuntimeError:
+            # we use nest_asyncio to support environments where an event loop
+            # is already running, such as in a Jupyter notebook
+            import nest_asyncio
+
+            nest_asyncio.apply()
+            return asyncio.run(async_request(self))
 
     def get_tasks_priority(
         self,
@@ -550,16 +759,16 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         protocoldagresultrefs: List[Dict],
         transformation: ScopedKey,
         ok: bool,
+        compress: bool = True,
     ):
+        from rich.progress import Progress
+
         if ok:
             route = "results"
         else:
             route = "failures"
 
-        # get each protocoldagresult; could optimize by parallelizing these
-        # calls to some extent, or at least using async/await
-        pdrs = []
-        for protocoldagresultref in protocoldagresultrefs:
+        async def async_get_protocoldagresult(protocoldagresultref):
             pdr_key = protocoldagresultref["obj_key"]
             scope = protocoldagresultref["scope"]
 
@@ -567,21 +776,51 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 gufe_key=GufeKey(pdr_key), **Scope.from_str(scope).dict()
             )
 
-            pdr_json = self._get_resource(
-                f"/transformations/{transformation}/{route}/{pdr_sk}",
-            )[0]
+            pdr_json = await self._get_resource_async(
+                f"/transformations/{transformation}/{route}/{pdr_sk}", compress=compress
+            )
 
             pdr = GufeTokenizable.from_dict(
-                json.loads(pdr_json, cls=JSON_HANDLER.decoder)
+                json.loads(pdr_json[0], cls=JSON_HANDLER.decoder)
             )
-            pdrs.append(pdr)
 
-        return pdrs
+            return pdr
+
+        @use_session
+        async def async_request(self):
+            with Progress(*self._rich_progress_columns(), transient=False) as progress:
+                task = progress.add_task(
+                    f"Retrieving [bold]ProtocolDAGResult[/bold]s",
+                    total=len(protocoldagresultrefs),
+                )
+
+                coros = [
+                    async_get_protocoldagresult(protocoldagresultref)
+                    for protocoldagresultref in protocoldagresultrefs
+                ]
+                pdrs = []
+                for coro in asyncio.as_completed(coros):
+                    pdr = await coro
+                    pdrs.append(pdr)
+                    progress.update(task, advance=1)
+
+            return pdrs
+
+        try:
+            return asyncio.run(async_request(self))
+        except RuntimeError:
+            # we use nest_asyncio to support environments where an event loop
+            # is already running, such as in a Jupyter notebook
+            import nest_asyncio
+
+            nest_asyncio.apply()
+            return asyncio.run(async_request(self))
 
     def get_transformation_results(
         self,
         transformation: ScopedKey,
         return_protocoldagresults: bool = False,
+        compress: bool = True,
     ) -> Union[Optional[ProtocolResult], List[ProtocolDAGResult]]:
         """Get a `ProtocolResult` for the given `Transformation`.
 
@@ -599,9 +838,15 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         transformation
             The `ScopedKey` of the `Transformation` to retrieve results for.
         return_protocoldagresults
-            If `True`, return the raw `ProtocolDAGResult`s instead of returning
+            If ``True``, return the raw `ProtocolDAGResult`s instead of returning
             a processed `ProtocolResult`. Only successful `ProtocolDAGResult`\s
             are returned.
+        compress
+            If ``True``, compress the ProtocolDAGResults server-side before
+            shipping them to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
 
         """
 
@@ -615,7 +860,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=True
+            protocoldagresultrefs, transformation, ok=True, compress=compress
         )
 
         if return_protocoldagresults:
@@ -627,15 +872,20 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 return None
 
     def get_transformation_failures(
-        self,
-        transformation: ScopedKey,
-    ) -> Union[ProtocolResult, List[ProtocolDAGResult]]:
+        self, transformation: ScopedKey, compress: bool = True
+    ) -> List[ProtocolDAGResult]:
         """Get failed `ProtocolDAGResult`\s for the given `Transformation`.
 
         Parameters
         ----------
         transformation
             The `ScopedKey` of the `Transformation` to retrieve failures for.
+        compress
+            If ``True``, compress the ProtocolDAGResults server-side before
+            shipping them to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
 
         """
         # get all protocoldagresultrefs for the given transformation
@@ -644,13 +894,28 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=False
+            protocoldagresultrefs, transformation, ok=False, compress=compress
         )
 
         return pdrs
 
-    def get_task_results(self, task: ScopedKey):
-        """Get successful `ProtocolDAGResult`s for the given `Task`."""
+    def get_task_results(
+        self, task: ScopedKey, compress: bool = True
+    ) -> List[ProtocolDAGResult]:
+        """Get successful `ProtocolDAGResult`s for the given `Task`.
+
+        Parameters
+        ----------
+        task
+            The `ScopedKey` of the `Task` to retrieve results for.
+        compress
+            If ``True``, compress the ProtocolDAGResults server-side before
+            shipping them to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
+
+        """
         # first, get the transformation; also confirms it exists
         transformation: ScopedKey = self.get_task_transformation(task)
 
@@ -660,13 +925,28 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=True
+            protocoldagresultrefs, transformation, ok=True, compress=compress
         )
 
         return pdrs
 
-    def get_task_failures(self, task: ScopedKey):
-        """Get failed `ProtocolDAGResult`s for the given `Task`."""
+    def get_task_failures(
+        self, task: ScopedKey, compress: bool = True
+    ) -> List[ProtocolDAGResult]:
+        """Get failed `ProtocolDAGResult`s for the given `Task`.
+
+        Parameters
+        ----------
+        task
+            The `ScopedKey` of the `Task` to retrieve failures for.
+        compress
+            If ``True``, compress the ProtocolDAGResults server-side before
+            shipping them to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
+
+        """
         # first, get the transformation; also confirms it exists
         transformation: ScopedKey = self.get_task_transformation(task)
 
@@ -676,7 +956,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=False
+            protocoldagresultrefs, transformation, ok=False, compress=compress
         )
 
         return pdrs

@@ -12,6 +12,7 @@ import json
 from collections import Counter
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
+from fastapi.middleware.gzip import GZipMiddleware
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.protocols import ProtocolDAGResult
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
@@ -29,6 +30,7 @@ from ..base.api import (
     validate_scopes_query,
     _check_store_connectivity,
     gufe_to_json,
+    GzipRoute,
 )
 from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
@@ -43,6 +45,7 @@ from ..security.models import Token, TokenData, CredentialedUserIdentity
 app = FastAPI(title="AlchemiscaleAPI")
 app.dependency_overrides[get_base_api_settings] = get_api_settings
 app.include_router(base_router)
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
 
 def get_cred_user():
@@ -54,6 +57,7 @@ app.dependency_overrides[get_cred_entity] = get_cred_user
 router = APIRouter(
     dependencies=[Depends(get_token_data_depends)],
 )
+router.route_class = GzipRoute
 
 
 @app.get("/ping")
@@ -508,6 +512,58 @@ def cancel_tasks(
     canceled_sks = n4js.cancel_tasks(tasks, taskhub_sk)
 
     return [str(sk) if sk is not None else None for sk in canceled_sks]
+
+
+@router.post("/bulk/tasks/status/get")
+def tasks_status_get(
+    *,
+    tasks: List[ScopedKey] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Union[str, None]]:
+    valid_tasks = []
+    for task_sk in tasks:
+        try:
+            validate_scopes(task_sk.scope, token)
+            valid_tasks.append(task_sk)
+        except HTTPException:
+            valid_tasks.append(None)
+
+    statuses = n4js.get_task_status(valid_tasks)
+
+    return [status.value if status is not None else None for status in statuses]
+
+
+@router.post("/bulk/tasks/status/set")
+def tasks_status_set(
+    *,
+    tasks: List[ScopedKey] = Body(),
+    status: str = Body(),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Union[str, None]]:
+    status = TaskStatusEnum(status)
+    if status not in (
+        TaskStatusEnum.waiting,
+        TaskStatusEnum.invalid,
+        TaskStatusEnum.deleted,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot set status to '{status}', must be one of 'waiting', 'invalid', 'deleted'",
+        )
+
+    valid_tasks = []
+    for task_sk in tasks:
+        try:
+            validate_scopes(task_sk.scope, token)
+            valid_tasks.append(task_sk)
+        except HTTPException:
+            valid_tasks.append(None)
+
+    tasks_updated = n4js.set_task_status(valid_tasks, status)
+
+    return [str(t) if t is not None else None for t in tasks_updated]
 
 
 @router.post("/tasks/{task_scoped_key}/status")

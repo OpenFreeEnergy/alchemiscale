@@ -6,12 +6,14 @@ Reusable components for API services. --- :mod:`alchemiscale.base.api`
 
 
 from functools import lru_cache
-from typing import Any, Union, Dict, List
+from typing import Any, Union, Dict, List, Callable
 import os
 import json
+import gzip
 
 from starlette.responses import JSONResponse
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from fastapi.routing import APIRoute
 from fastapi.security import OAuth2PasswordRequestForm
 from py2neo import Graph
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
@@ -144,6 +146,27 @@ class GufeJSONResponse(JSONResponse):
 
     def render(self, content: Any) -> bytes:
         return json.dumps(content, cls=JSON_HANDLER.encoder).encode("utf-8")
+
+
+class GzipRequest(Request):
+    async def body(self) -> bytes:
+        if not hasattr(self, "_body"):
+            body = await super().body()
+            if "gzip" in self.headers.getlist("Content-Encoding"):
+                body = gzip.decompress(body)
+            self._body = body
+        return self._body
+
+
+class GzipRoute(APIRoute):
+    def get_route_handler(self) -> Callable:
+        original_route_handler = super().get_route_handler()
+
+        async def custom_route_handler(request: Request) -> Response:
+            request = GzipRequest(request.scope, request.receive)
+            return await original_route_handler(request)
+
+        return custom_route_handler
 
 
 def scope_params(org: str = None, campaign: str = None, project: str = None):
