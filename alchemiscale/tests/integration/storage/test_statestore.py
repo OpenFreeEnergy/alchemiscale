@@ -1929,14 +1929,14 @@ class TestNeo4jStore(TestStateStore):
         ],
     )
     @pytest.mark.parametrize(
-        "status_func, allowed, result_status",
+        "status_func, result_status",
         [
-            ("f_set_task_waiting", False, None),
-            ("f_set_task_running", False, None),
-            ("f_set_task_complete", False, None),
-            ("f_set_task_error", False, None),
-            ("f_set_task_invalid", True, TaskStatusEnum.invalid),
-            ("f_set_task_deleted", True, TaskStatusEnum.deleted),
+            ("f_set_task_waiting", None),
+            ("f_set_task_running", None),
+            ("f_set_task_complete", None),
+            ("f_set_task_error", None),
+            ("f_set_task_invalid", TaskStatusEnum.invalid),
+            ("f_set_task_deleted", TaskStatusEnum.deleted),
         ],
     )
     def test_set_task_status_from_terminals(
@@ -1947,7 +1947,6 @@ class TestNeo4jStore(TestStateStore):
         terminal_status_func,
         terminal_status,
         status_func,
-        allowed,
         result_status,
         request,
     ):
@@ -1968,14 +1967,14 @@ class TestNeo4jStore(TestStateStore):
         # move it to one of the terminal statuses
         neo4j_terminal_op(task_sks)
 
-        if not allowed:
+        if not neo4j_status_op == neo4j_terminal_op:
             with pytest.raises(ValueError, match="Cannot set task"):
                 neo4j_status_op(task_sks, raise_error=True)
 
         tasks_statused = neo4j_status_op(task_sks)
         all_status = n4js.get_task_status(task_sks)
 
-        if not allowed:
+        if not neo4j_status_op == neo4j_terminal_op:
             assert all(s == terminal_status for s in all_status)
             assert all(t is None for t in tasks_statused)
         else:

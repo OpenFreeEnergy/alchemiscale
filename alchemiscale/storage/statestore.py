@@ -2041,13 +2041,16 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
         WHERE NOT t_.status IN ['deleted']
-        OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
         SET t_.status = 'invalid'
+
+        WITH scoped_key, t, t_
+
+        OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
         SET extends_task.status = 'invalid'
 
         WITH scoped_key, t, t_, extends_task
 
-        OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
         OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
 
         DELETE ar
@@ -2056,7 +2059,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         WITH scoped_key, t, t_
 
         // drop CLAIMS relationship if present
-        OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
         DELETE cl
 
         RETURN scoped_key, t, t_
@@ -2087,14 +2090,17 @@ class Neo4jStore(AlchemiscaleStateStore):
         OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
         OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
-        WHERE NOT t_.status IN ['deleted']
-        OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
+        WHERE NOT t_.status IN ['invalid']
         SET t_.status = 'deleted'
+
+        WITH scoped_key, t, t_
+
+        OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
         SET extends_task.status = 'deleted'
 
         WITH scoped_key, t, t_, extends_task
 
-        OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
         OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
 
         DELETE ar
@@ -2103,7 +2109,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         WITH scoped_key, t, t_
 
         // drop CLAIMS relationship if present
-        OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
         DELETE cl
 
         RETURN scoped_key, t, t_
