@@ -5,11 +5,11 @@ channels:
   - openeye
 dependencies:
   - pip
-  - python =3.9
+  - python =3.10
 
   # alchemiscale dependencies
-  - gufe=0.7.3
-  - openfe=0.7.4
+  - gufe=0.9.0
+  - openfe=0.10.1
   - requests
   - click
 
@@ -42,5 +42,5 @@ dependencies:
   - pymbar >=3.0.6,<4
 
   - pip:
-    - git+https://github.com/openforcefield/alchemiscale.git@v0.1.2
+    - git+https://github.com/openforcefield/alchemiscale.git@v0.1.3
     - git+https://github.com/choderalab/perses.git@protocol-neqcyc

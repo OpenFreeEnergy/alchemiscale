@@ -507,8 +507,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         table.add_row("complete", f"{status_counts.get('complete', 0)}", style="green")
         table.add_row("running", f"{status_counts.get('running', 0)}", style="orange3")
-        table.add_row("waiting", f"{status_counts.get('waiting', 0)}", style="blue")
-        table.add_row("error", f"{status_counts.get('error', 0)}", style="red")
+        table.add_row("waiting", f"{status_counts.get('waiting', 0)}", style="#1793d0")
+        table.add_row("error", f"{status_counts.get('error', 0)}", style="#ff073a")
         table.add_row("invalid", f"{status_counts.get('invalid', 0)}", style="magenta1")
         table.add_row("deleted", f"{status_counts.get('deleted', 0)}", style="purple")
 
