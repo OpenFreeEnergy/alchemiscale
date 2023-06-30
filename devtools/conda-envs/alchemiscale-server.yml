@@ -8,7 +8,7 @@ dependencies:
   - python =3.10
 
   # alchemiscale dependencies
-  - gufe=0.9.1
+  #- gufe=0.9.1
   - openfe=0.10.1
   - requests
   - click
@@ -43,5 +43,6 @@ dependencies:
 
   - pip:
     - async_lru
+    - git+https://github.com/OpenFreeEnergy/gufe@v0.9.1
     - git+https://github.com/openforcefield/alchemiscale.git@v0.1.3
     - git+https://github.com/choderalab/perses.git@protocol-neqcyc
