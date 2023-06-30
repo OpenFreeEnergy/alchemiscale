@@ -9,8 +9,10 @@ from typing import Union, List, Dict, Optional, Tuple
 import json
 from itertools import chain
 from collections import Counter
+from functools import lru_cache
 
 import httpx
+from async_lru import alru_cache
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
@@ -216,8 +218,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/chemicalsystems/{chemicalsystem}/transformations"
         )
 
+    @lru_cache(maxsize=100)
     def get_network(
-        self, network: Union[ScopedKey, str], compress: bool = True
+        self,
+        network: Union[ScopedKey, str],
+        compress: bool = True,
+        visualize: bool = True,
     ) -> AlchemicalNetwork:
         """Retrieve an AlchemicalNetwork given its ScopedKey.
 
@@ -231,6 +237,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             on the bandwidth of your connection to the API service. Set to
             ``False`` to retrieve without compressing. This is a performance
             optimization; it has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicator.
 
         Returns
         -------
@@ -238,23 +246,37 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The retrieved AlchemicalNetwork.
 
         """
-        from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn
-
-        with Progress(*self._rich_waiting_columns(), transient=False) as progress:
-            task = progress.add_task(
-                f"Retrieving [bold]'{network}'[/bold]...", total=None
+        if visualize:
+            from rich.progress import (
+                Progress,
+                SpinnerColumn,
+                TimeElapsedColumn,
+                TextColumn,
             )
 
+            with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+                task = progress.add_task(
+                    f"Retrieving [bold]'{network}'[/bold]...", total=None
+                )
+
+                an = json_to_gufe(
+                    self._get_resource(f"/networks/{network}", compress=compress)
+                )
+                progress.start_task(task)
+                progress.update(task, total=1, completed=1)
+        else:
             an = json_to_gufe(
                 self._get_resource(f"/networks/{network}", compress=compress)
             )
-            progress.start_task(task)
-            progress.update(task, total=1, completed=1)
 
         return an
 
+    @lru_cache(maxsize=10000)
     def get_transformation(
-        self, transformation: Union[ScopedKey, str], compress: bool = True
+        self,
+        transformation: Union[ScopedKey, str],
+        compress: bool = True,
+        visualize: bool = True,
     ) -> Transformation:
         """Retrieve a Transformation given its ScopedKey.
 
@@ -268,6 +290,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             on the bandwidth of your connection to the API service. Set to
             ``False`` to retrieve without compressing. This is a performance
             optimization; it has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicator.
 
         Returns
         -------
@@ -275,25 +299,36 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The retrieved Transformation.
 
         """
-        from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
+        if visualize:
+            from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
 
-        with Progress(*self._rich_waiting_columns(), transient=False) as progress:
-            task = progress.add_task(
-                f"Retrieving [bold]'{transformation}'[/bold]...", total=None
-            )
+            with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+                task = progress.add_task(
+                    f"Retrieving [bold]'{transformation}'[/bold]...", total=None
+                )
 
+                tf = json_to_gufe(
+                    self._get_resource(
+                        f"/transformations/{transformation}", compress=compress
+                    )
+                )
+                progress.start_task(task)
+                progress.update(task, total=1, completed=1)
+        else:
             tf = json_to_gufe(
                 self._get_resource(
                     f"/transformations/{transformation}", compress=compress
                 )
             )
-            progress.start_task(task)
-            progress.update(task, total=1, completed=1)
 
         return tf
 
+    @lru_cache(maxsize=1000)
     def get_chemicalsystem(
-        self, chemicalsystem: Union[ScopedKey, str], compress: bool = True
+        self,
+        chemicalsystem: Union[ScopedKey, str],
+        compress: bool = True,
+        visualize: bool = True,
     ) -> ChemicalSystem:
         """Retrieve a ChemicalSystem given its ScopedKey.
 
@@ -307,6 +342,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             on the bandwidth of your connection to the API service. Set to
             ``False`` to retrieve without compressing. This is a performance
             optimization; it has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicator.
 
         Returns
         -------
@@ -314,21 +351,28 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The retrieved ChemicalSystem.
 
         """
-        from rich.progress import Progress
+        if visualize:
+            from rich.progress import Progress
 
-        with Progress(*self._rich_waiting_columns(), transient=False) as progress:
-            task = progress.add_task(
-                f"Retrieving [bold]'{chemicalsystem}'[/bold]...", total=None
-            )
+            with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+                task = progress.add_task(
+                    f"Retrieving [bold]'{chemicalsystem}'[/bold]...", total=None
+                )
 
+                cs = json_to_gufe(
+                    self._get_resource(
+                        f"/chemicalsystems/{chemicalsystem}", compress=compress
+                    )
+                )
+
+                progress.start_task(task)
+                progress.update(task, total=1, completed=1)
+        else:
             cs = json_to_gufe(
                 self._get_resource(
                     f"/chemicalsystems/{chemicalsystem}", compress=compress
                 )
             )
-
-            progress.start_task(task)
-            progress.update(task, total=1, completed=1)
 
         return cs
 
@@ -452,7 +496,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def _visualize_status(self, status_counts, status_object):
         from rich import print as rprint
-
         from rich.table import Table
 
         title = f"{status_object}"
@@ -754,55 +797,76 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     ### results
 
+    @alru_cache(maxsize=10000)
+    async def _async_get_protocoldagresult(
+        self, pdr_key, scope, transformation, route, compress
+    ):
+        pdr_sk = ScopedKey(gufe_key=GufeKey(pdr_key), **Scope.from_str(scope).dict())
+
+        pdr_json = await self._get_resource_async(
+            f"/transformations/{transformation}/{route}/{pdr_sk}", compress=compress
+        )
+
+        pdr = GufeTokenizable.from_dict(
+            json.loads(pdr_json[0], cls=JSON_HANDLER.decoder)
+        )
+
+        return pdr
+
     def _get_protocoldagresults(
         self,
         protocoldagresultrefs: List[Dict],
         transformation: ScopedKey,
         ok: bool,
         compress: bool = True,
+        visualize: bool = True,
     ):
-        from rich.progress import Progress
-
         if ok:
             route = "results"
         else:
             route = "failures"
 
-        async def async_get_protocoldagresult(protocoldagresultref):
-            pdr_key = protocoldagresultref["obj_key"]
-            scope = protocoldagresultref["scope"]
-
-            pdr_sk = ScopedKey(
-                gufe_key=GufeKey(pdr_key), **Scope.from_str(scope).dict()
-            )
-
-            pdr_json = await self._get_resource_async(
-                f"/transformations/{transformation}/{route}/{pdr_sk}", compress=compress
-            )
-
-            pdr = GufeTokenizable.from_dict(
-                json.loads(pdr_json[0], cls=JSON_HANDLER.decoder)
-            )
-
-            return pdr
-
         @use_session
         async def async_request(self):
-            with Progress(*self._rich_progress_columns(), transient=False) as progress:
-                task = progress.add_task(
-                    f"Retrieving [bold]ProtocolDAGResult[/bold]s",
-                    total=len(protocoldagresultrefs),
-                )
+            if visualize:
+                from rich.progress import Progress
 
+                with Progress(
+                    *self._rich_progress_columns(), transient=False
+                ) as progress:
+                    task = progress.add_task(
+                        f"Retrieving [bold]ProtocolDAGResult[/bold]s",
+                        total=len(protocoldagresultrefs),
+                    )
+
+                    coros = [
+                        self._async_get_protocoldagresult(
+                            protocoldagresultref["obj_key"],
+                            protocoldagresultref["scope"],
+                            transformation,
+                            route,
+                            compress,
+                        )
+                        for protocoldagresultref in protocoldagresultrefs
+                    ]
+                    pdrs = []
+                    for coro in asyncio.as_completed(coros):
+                        pdr = await coro
+                        pdrs.append(pdr)
+                        progress.update(task, advance=1)
+                    progress.refresh()
+            else:
                 coros = [
-                    async_get_protocoldagresult(protocoldagresultref)
+                    self._async_get_protocoldagresult(
+                        protocoldagresultref["obj_key"],
+                        protocoldagresultref["scope"],
+                        transformation,
+                        route,
+                        compress,
+                    )
                     for protocoldagresultref in protocoldagresultrefs
                 ]
-                pdrs = []
-                for coro in asyncio.as_completed(coros):
-                    pdr = await coro
-                    pdrs.append(pdr)
-                    progress.update(task, advance=1)
+                pdrs = await asyncio.gather(*coros)
 
             return pdrs
 
@@ -821,6 +885,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         transformation: ScopedKey,
         return_protocoldagresults: bool = False,
         compress: bool = True,
+        visualize: bool = True,
     ) -> Union[Optional[ProtocolResult], List[ProtocolDAGResult]]:
         """Get a `ProtocolResult` for the given `Transformation`.
 
@@ -847,12 +912,16 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             on the bandwidth of your connection to the API service. Set to
             ``False`` to retrieve without compressing. This is a performance
             optimization; it has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicators.
 
         """
 
         if not return_protocoldagresults:
             # get the transformation if we intend to return a ProtocolResult
-            tf: Transformation = self.get_transformation(transformation)
+            tf: Transformation = self.get_transformation(
+                transformation, visualize=visualize
+            )
 
         # get all protocoldagresultrefs for the given transformation
         protocoldagresultrefs = self._get_resource(
@@ -860,7 +929,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=True, compress=compress
+            protocoldagresultrefs,
+            transformation,
+            ok=True,
+            compress=compress,
+            visualize=visualize,
         )
 
         if return_protocoldagresults:
@@ -872,7 +945,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 return None
 
     def get_transformation_failures(
-        self, transformation: ScopedKey, compress: bool = True
+        self, transformation: ScopedKey, compress: bool = True, visualize: bool = True
     ) -> List[ProtocolDAGResult]:
         """Get failed `ProtocolDAGResult`\s for the given `Transformation`.
 
@@ -886,6 +959,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             on the bandwidth of your connection to the API service. Set to
             ``False`` to retrieve without compressing. This is a performance
             optimization; it has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicators.
 
         """
         # get all protocoldagresultrefs for the given transformation
@@ -894,13 +969,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=False, compress=compress
+            protocoldagresultrefs,
+            transformation,
+            ok=False,
+            compress=compress,
+            visualize=visualize,
         )
 
         return pdrs
 
     def get_task_results(
-        self, task: ScopedKey, compress: bool = True
+        self, task: ScopedKey, compress: bool = True, visualize: bool = True
     ) -> List[ProtocolDAGResult]:
         """Get successful `ProtocolDAGResult`s for the given `Task`.
 
@@ -914,6 +993,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             on the bandwidth of your connection to the API service. Set to
             ``False`` to retrieve without compressing. This is a performance
             optimization; it has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicators.
 
         """
         # first, get the transformation; also confirms it exists
@@ -925,13 +1006,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=True, compress=compress
+            protocoldagresultrefs,
+            transformation,
+            ok=True,
+            compress=compress,
+            visualize=visualize,
         )
 
         return pdrs
 
     def get_task_failures(
-        self, task: ScopedKey, compress: bool = True
+        self, task: ScopedKey, compress: bool = True, visualize: bool = True
     ) -> List[ProtocolDAGResult]:
         """Get failed `ProtocolDAGResult`s for the given `Task`.
 
@@ -945,6 +1030,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             on the bandwidth of your connection to the API service. Set to
             ``False`` to retrieve without compressing. This is a performance
             optimization; it has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicators.
 
         """
         # first, get the transformation; also confirms it exists
@@ -956,7 +1043,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=False, compress=compress
+            protocoldagresultrefs,
+            transformation,
+            ok=False,
+            compress=compress,
+            visualize=visualize,
         )
 
         return pdrs
