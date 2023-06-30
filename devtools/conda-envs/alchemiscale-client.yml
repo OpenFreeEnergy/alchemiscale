@@ -8,7 +8,7 @@ dependencies:
   - python =3.10
 
   # alchemiscale dependencies
-  - gufe=0.9.0
+  - gufe=0.9.1
   - openfe=0.10.1
   - requests
   - click
