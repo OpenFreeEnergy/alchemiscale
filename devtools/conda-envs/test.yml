@@ -58,6 +58,7 @@ dependencies:
   - openmmforcefields
 
   - pip:
+    - async_lru
     - git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment
     - git+https://github.com/OpenFreeEnergy/gufe
     - git+https://github.com/OpenFreeEnergy/openfe
