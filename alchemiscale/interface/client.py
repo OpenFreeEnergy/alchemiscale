@@ -220,7 +220,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     @lru_cache(maxsize=100)
     def get_network(
-            self, network: Union[ScopedKey, str], compress: bool = True, visualize: bool = True
+        self,
+        network: Union[ScopedKey, str],
+        compress: bool = True,
+        visualize: bool = True,
     ) -> AlchemicalNetwork:
         """Retrieve an AlchemicalNetwork given its ScopedKey.
 
@@ -244,7 +247,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         """
         if visualize:
-            from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn
+            from rich.progress import (
+                Progress,
+                SpinnerColumn,
+                TimeElapsedColumn,
+                TextColumn,
+            )
+
             with Progress(*self._rich_waiting_columns(), transient=False) as progress:
                 task = progress.add_task(
                     f"Retrieving [bold]'{network}'[/bold]...", total=None
@@ -257,14 +266,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 progress.update(task, total=1, completed=1)
         else:
             an = json_to_gufe(
-                    self._get_resource(f"/networks/{network}", compress=compress)
-                )
+                self._get_resource(f"/networks/{network}", compress=compress)
+            )
 
         return an
 
     @lru_cache(maxsize=10000)
     def get_transformation(
-            self, transformation: Union[ScopedKey, str], compress: bool = True, visualize: bool = True
+        self,
+        transformation: Union[ScopedKey, str],
+        compress: bool = True,
+        visualize: bool = True,
     ) -> Transformation:
         """Retrieve a Transformation given its ScopedKey.
 
@@ -304,16 +316,19 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 progress.update(task, total=1, completed=1)
         else:
             tf = json_to_gufe(
-                    self._get_resource(
-                        f"/transformations/{transformation}", compress=compress
-                    )
+                self._get_resource(
+                    f"/transformations/{transformation}", compress=compress
                 )
+            )
 
         return tf
 
     @lru_cache(maxsize=1000)
     def get_chemicalsystem(
-            self, chemicalsystem: Union[ScopedKey, str], compress: bool = True, visualize: bool = True
+        self,
+        chemicalsystem: Union[ScopedKey, str],
+        compress: bool = True,
+        visualize: bool = True,
     ) -> ChemicalSystem:
         """Retrieve a ChemicalSystem given its ScopedKey.
 
@@ -354,10 +369,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 progress.update(task, total=1, completed=1)
         else:
             cs = json_to_gufe(
-                    self._get_resource(
-                        f"/chemicalsystems/{chemicalsystem}", compress=compress
-                    )
+                self._get_resource(
+                    f"/chemicalsystems/{chemicalsystem}", compress=compress
                 )
+            )
 
         return cs
 
@@ -783,10 +798,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     ### results
 
     @alru_cache(maxsize=10000)
-    async def _async_get_protocoldagresult(self, pdr_key, scope, transformation, route, compress):
-        pdr_sk = ScopedKey(
-            gufe_key=GufeKey(pdr_key), **Scope.from_str(scope).dict()
-        )
+    async def _async_get_protocoldagresult(
+        self, pdr_key, scope, transformation, route, compress
+    ):
+        pdr_sk = ScopedKey(gufe_key=GufeKey(pdr_key), **Scope.from_str(scope).dict())
 
         pdr_json = await self._get_resource_async(
             f"/transformations/{transformation}/{route}/{pdr_sk}", compress=compress
@@ -804,7 +819,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         transformation: ScopedKey,
         ok: bool,
         compress: bool = True,
-        visualize: bool = True
+        visualize: bool = True,
     ):
         if ok:
             route = "results"
@@ -815,14 +830,23 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         async def async_request(self):
             if visualize:
                 from rich.progress import Progress
-                with Progress(*self._rich_progress_columns(), transient=False) as progress:
+
+                with Progress(
+                    *self._rich_progress_columns(), transient=False
+                ) as progress:
                     task = progress.add_task(
                         f"Retrieving [bold]ProtocolDAGResult[/bold]s",
                         total=len(protocoldagresultrefs),
                     )
 
                     coros = [
-                        self._async_get_protocoldagresult(protocoldagresultref['obj_key'], protocoldagresultref['scope'], transformation, route, compress)
+                        self._async_get_protocoldagresult(
+                            protocoldagresultref["obj_key"],
+                            protocoldagresultref["scope"],
+                            transformation,
+                            route,
+                            compress,
+                        )
                         for protocoldagresultref in protocoldagresultrefs
                     ]
                     pdrs = []
@@ -833,7 +857,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     progress.refresh()
             else:
                 coros = [
-                    self._async_get_protocoldagresult(protocoldagresultref['obj_key'], protocoldagresultref['scope'], transformation, route, compress)
+                    self._async_get_protocoldagresult(
+                        protocoldagresultref["obj_key"],
+                        protocoldagresultref["scope"],
+                        transformation,
+                        route,
+                        compress,
+                    )
                     for protocoldagresultref in protocoldagresultrefs
                 ]
                 pdrs = await asyncio.gather(*coros)
@@ -889,7 +919,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         if not return_protocoldagresults:
             # get the transformation if we intend to return a ProtocolResult
-            tf: Transformation = self.get_transformation(transformation, visualize=visualize)
+            tf: Transformation = self.get_transformation(
+                transformation, visualize=visualize
+            )
 
         # get all protocoldagresultrefs for the given transformation
         protocoldagresultrefs = self._get_resource(
@@ -897,7 +929,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=True, compress=compress, visualize=visualize
+            protocoldagresultrefs,
+            transformation,
+            ok=True,
+            compress=compress,
+            visualize=visualize,
         )
 
         if return_protocoldagresults:
@@ -909,7 +945,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 return None
 
     def get_transformation_failures(
-            self, transformation: ScopedKey, compress: bool = True, visualize: bool = True
+        self, transformation: ScopedKey, compress: bool = True, visualize: bool = True
     ) -> List[ProtocolDAGResult]:
         """Get failed `ProtocolDAGResult`\s for the given `Transformation`.
 
@@ -933,13 +969,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=False, compress=compress, visualize=visualize
+            protocoldagresultrefs,
+            transformation,
+            ok=False,
+            compress=compress,
+            visualize=visualize,
         )
 
         return pdrs
 
     def get_task_results(
-            self, task: ScopedKey, compress: bool = True, visualize: bool = True
+        self, task: ScopedKey, compress: bool = True, visualize: bool = True
     ) -> List[ProtocolDAGResult]:
         """Get successful `ProtocolDAGResult`s for the given `Task`.
 
@@ -966,13 +1006,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=True, compress=compress, visualize=visualize
+            protocoldagresultrefs,
+            transformation,
+            ok=True,
+            compress=compress,
+            visualize=visualize,
         )
 
         return pdrs
 
     def get_task_failures(
-            self, task: ScopedKey, compress: bool = True, visualize: bool = True
+        self, task: ScopedKey, compress: bool = True, visualize: bool = True
     ) -> List[ProtocolDAGResult]:
         """Get failed `ProtocolDAGResult`s for the given `Task`.
 
@@ -999,7 +1043,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         pdrs = self._get_protocoldagresults(
-            protocoldagresultrefs, transformation, ok=False, compress=compress, visualize=visualize
+            protocoldagresultrefs,
+            transformation,
+            ok=False,
+            compress=compress,
+            visualize=visualize,
         )
 
         return pdrs
