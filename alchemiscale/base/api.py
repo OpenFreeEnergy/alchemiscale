@@ -6,12 +6,14 @@ Reusable components for API services. --- :mod:`alchemiscale.base.api`
 
 
 from functools import lru_cache
-from typing import Any, Union, Dict, List
+from typing import Any, Union, Dict, List, Callable
 import os
 import json
+import gzip
 
 from starlette.responses import JSONResponse
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from fastapi.routing import APIRoute
 from fastapi.security import OAuth2PasswordRequestForm
 from py2neo import Graph
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
@@ -54,6 +56,20 @@ def validate_scopes(scope: Scope, token: TokenData) -> None:
         )
 
 
+def minimize_scope_space(scopes: List[Scope]) -> List[Scope]:
+    """Remove redundant Scopes from a list of Scopes."""
+    scopes = sorted(scopes)
+
+    minimal_scope_space = []
+    for scope in scopes:
+        if not any(
+            other_scope.is_superset(scope) for other_scope in minimal_scope_space
+        ):
+            minimal_scope_space.append(scope)
+
+    return minimal_scope_space
+
+
 def validate_scopes_query(
     query_scope: Scope, token: TokenData, as_str: bool = False
 ) -> Union[list[Scope], list[str]]:
@@ -64,19 +80,21 @@ def validate_scopes_query(
     If as_str is True, returns a list of str rather than list of Scopes.
 
     """
+    token_scopes = sorted({Scope.from_str(ts) for ts in token.scopes})
 
-    token_scopes = [Scope.from_str(ts) for ts in token.scopes]
+    # start by minimizing the scope space
+    token_scope_space = minimize_scope_space(token_scopes)
 
-    # we want to return all (and only) authorized token scopes that fall within
-    # the query_scope
-    scope_space = {ts for ts in token_scopes if query_scope.is_superset(ts)}
-
-    # we also want to return the query_scope if it is a subset of any of the
+    # we just want to return the query_scope if it is a subset of any of the
     # authorized token scopes
-    if any([Scope.from_str(ts).is_superset(query_scope) for ts in token.scopes]):
-        scope_space.add(query_scope)
-
-    scope_space = list(scope_space)
+    if any([scope.is_superset(query_scope) for scope in token_scope_space]):
+        scope_space = [query_scope]
+    else:
+        # otherwise, we want to return all (and only) authorized token scopes
+        # that fall within the query_scope
+        scope_space = [
+            scope for scope in token_scope_space if query_scope.is_superset(scope)
+        ]
 
     if as_str:
         scope_space = [str(s) for s in scope_space]
@@ -128,6 +146,27 @@ class GufeJSONResponse(JSONResponse):
 
     def render(self, content: Any) -> bytes:
         return json.dumps(content, cls=JSON_HANDLER.encoder).encode("utf-8")
+
+
+class GzipRequest(Request):
+    async def body(self) -> bytes:
+        if not hasattr(self, "_body"):
+            body = await super().body()
+            if "gzip" in self.headers.getlist("Content-Encoding"):
+                body = gzip.decompress(body)
+            self._body = body
+        return self._body
+
+
+class GzipRoute(APIRoute):
+    def get_route_handler(self) -> Callable:
+        original_route_handler = super().get_route_handler()
+
+        async def custom_route_handler(request: Request) -> Response:
+            request = GzipRequest(request.scope, request.receive)
+            return await original_route_handler(request)
+
+        return custom_route_handler
 
 
 def scope_params(org: str = None, campaign: str = None, project: str = None):

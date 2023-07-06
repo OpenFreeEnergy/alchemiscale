@@ -10,6 +10,7 @@ import json
 from datetime import datetime, timedelta
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
+from fastapi.middleware.gzip import GZipMiddleware
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from ..base.api import (
@@ -25,6 +26,7 @@ from ..base.api import (
     validate_scopes_query,
     _check_store_connectivity,
     gufe_to_json,
+    GzipRoute,
 )
 from ..settings import (
     get_base_api_settings,
@@ -51,6 +53,7 @@ from ..security.models import (
 app = FastAPI(title="AlchemiscaleComputeAPI")
 app.dependency_overrides[get_base_api_settings] = get_compute_api_settings
 app.include_router(base_router)
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
 
 def get_cred_compute():
@@ -63,6 +66,7 @@ app.dependency_overrides[get_cred_entity] = get_cred_compute
 router = APIRouter(
     dependencies=[Depends(get_token_data_depends)],
 )
+router.route_class = GzipRoute
 
 
 @app.get("/ping")

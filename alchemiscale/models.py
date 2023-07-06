@@ -24,6 +24,15 @@ class Scope(BaseModel):
         )
         return "-".join(triple)
 
+    def __lt__(self, other):
+        return str(self) < str(other)
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+
+        return str(self) == str(other)
+
     class Config:
         frozen = True
 
