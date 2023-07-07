@@ -157,8 +157,14 @@ Compute identities are needed by compute services to authenticate with and use t
 
 For a ``docker-compose``-based deployment, it is easiest to do the above using the same ``alchemiscale-server`` image the API services are deployed with::
 
-    $ docker run --rm -it --network docker_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> <ALCHEMISCALE_DOCKER_IMAGE> identity add -t user -i <user identity> -k <user key>
-    $ docker run --rm -it --network docker_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> <ALCHEMISCALE_DOCKER_IMAGE> identity add-scope -t user -i <user identity> -s <org-campaign-project> -s ...
+    $ docker run --rm -it --network docker_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> \
+      <ALCHEMISCALE_DOCKER_IMAGE> identity add -t user \
+                                               -i <user identity> \
+                                               -k <user key>
+    $ docker run --rm -it --network docker_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> \
+      <ALCHEMISCALE_DOCKER_IMAGE> identity add-scope -t user \
+                                                     -i <user identity> \
+                                                     -s <org-campaign-project> -s ...
 
 The important bits here are:
 1. ``--network docker_db``
