@@ -3,22 +3,30 @@ Deployment
 ##########
 
 ``alchemiscale`` consists of multiple services that can be independently scaled.
-This document details on how to deploy and configure the server service.
+This document details on how to deploy and configure the "server" services in a number of ways.
+The "server" services need not be deployed to the same physical host, though you may choose to do so.
+
+Only Linux is supported as a platform for deploying ``alchemiscale`` services; Windows and OSX are not recommended as deployment targets.
 
 
-********
-Overview
-********
+.. _deploy-docker-compose:
 
-The alchemiscale server deployment consists of a ``neo4j`` database, a client API endpoint, a reverse proxy (``traefik``), and a compute API endpoint.
+******************************************
+Single-Host Deployment with docker-compose
+******************************************
+
+An alchemiscale "server" deployment consists of a ``neo4j`` database (the "state store"), a client API endpoint, a compute API endpoint, and a reverse proxy (``traefik``).
 The client and compute API endpoints can be scaled by adjusting the number of workers.
 A single ``docker-compose.yml`` file defines all of these services.
-Because our deployment process is containerized, the only requirements for the host is to be able to run ``docker compose`` in a ``x86_64`` environment.
-Installation of ``alchemiscale`` software dependencies is  unnecessary on the host.
+Because our deployment process is containerized, the only requirement for the host is to be able to run ``docker compose`` in a ``x86_64`` environment.
+Installation of ``alchemiscale`` software dependencies is unnecessary on the host itself.
 
+The "server" also requires an object store; see :ref:`deploy-object-store`.
 
-Host Configuration
-==================
+.. _deploy-docker-compose-instructions:
+
+Deployment Instructions
+=======================
 
 Install `docker compose <https://docs.docker.com/compose/install/#scenario-two-install-the-compose-plugin>`_
 We recommend using "Scenario two: Install the Compose plugin" since Docker Desktop may require a paid subscription.
@@ -43,7 +51,7 @@ Now make a copy of ``.env.template``:
 and modify ``.env`` with your favorite text editor.
 
 .. warning::
-   The ``.env`` file will contain sensitive information and should not be checked into version control programs or shared publicly.
+   The ``.env`` file will contain sensitive information and should not be checked into version control or shared publicly.
 
 See ``.env.testing`` for an example. 
 
@@ -59,11 +67,12 @@ Now start the service with::
 
 We set ``USER_ID`` and ``GROUP_ID`` to be the same as the user running the ``docker-compose up -d`` command.
 
-AWS
----
+
+Setting up a host on AWS EC2
+============================
 
 .. Note:: This is a guide on how to setup a fresh EC2 x86_64 instance running a Amazon Linux 2023 AMI.
-   These steps should generally work for other linux distributions, but may require some modifcation e.g. the package manger may be ``apt`` instead of ``dnf``.
+   These steps should generally work for other Linux distributions, but may require some modifcation e.g. the package manager may be ``apt`` instead of ``dnf``.
 
 
 Once connected to the instance, run the following commands::
@@ -83,7 +92,39 @@ Once connected to the instance, run the following commands::
     $ docker info  # Test if everything works
     $ docker compose version  # Test if plugin was installed correctly
 
-Now the instance has all of the dependences required to deploy an alchemical server.
+Now the instance has all of the dependencies required for ``docker-compose``-based deployment (:ref:`deploy-docker-compose-instructions`)
+
+
+.. _deploy-object-store:
+
+************
+Object Store
+************
+
+An "object store" is also needed for a complete server deployment.
+Currently, the only supported object store is AWS S3.
+
+Create a private AWS S3 bucket, then provide the following environment variables to the client and compute API services:
+
+``AWS_S3_BUCKET``
+    The name of the AWS S3 bucket to use.
+
+``AWS_S3_PREFIX``
+    The prefix within the bucket to use for all objects; typically set to ``objectstore``
+
+``AWS_DEFAULT_REGION``
+    The AWS region the bucket exists in.
+
+If your API services are deployed on AWS resources, you should grant those resources role-based access to S3.
+If your API services are deployed on resources outside AWS, you will need to give your services an access key on a user account with S3 access permissions.
+
+``AWS_ACCESS_KEY_ID``
+    The ID of the access key.
+
+``AWS_SECRET_ACCESS_KEY``
+    The access key content itself.
+
+No additional setup is required for the object store.
 
 
 ###########
@@ -93,6 +134,40 @@ Maintenance
 *********
 Add Users
 *********
+
+To add a new user identity, you will generally use the ``alchemiscale`` CLI::
+
+
+    $ export NEO4J_URL=bolt://<NEO4J_HOSTNAME>7687
+    $ export NEO4J_USER=<NEO4J_USERNAME>
+    $ export NEO4J_PASS=<NEO4J_PASSWORD>
+    $
+    $ # add a user identity, with key
+    $ alchemiscale identity add -t user -i <user identity> -k <user key>
+    $
+    $ add one or more scopes the user should have access to
+    $ alchemiscale identity add-scope -t user -i <user identity> -s <org-campaign-project> -s ...
+
+To add a new compute identity, perform the same operation as for user identities given above, **but replace ``-t user`` with ``-t compute``**.
+Compute identities are needed by compute services to authenticate with and use the compute API.
+
+
+``docker-compose`` deployment
+=============================
+
+For a ``docker-compose``-based deployment, it is easiest to do the above using the same ``alchemiscale-server`` image the API services are deployed with::
+
+    $ docker run --rm -it --network docker_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> <ALCHEMISCALE_DOCKER_IMAGE> identity add -t user -i <user identity> -k <user key>
+    $ docker run --rm -it --network docker_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> <ALCHEMISCALE_DOCKER_IMAGE> identity add-scope -t user -i <user identity> -s <org-campaign-project> -s ...
+
+The important bits here are:
+1. ``--network docker_db``
+    We need to make sure the docker container we are using can talk to the database container.
+
+2. ``-e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD>``
+    We need to pass in these environment variables so that the container can talk to the database.
+    These should match the values set in ``.env``.
+
 
 *******
 Backups
