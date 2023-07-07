@@ -28,7 +28,7 @@ The "server" also requires an object store; see :ref:`deploy-object-store`.
 Deployment Instructions
 =======================
 
-Install `docker compose <https://docs.docker.com/compose/install/#scenario-two-install-the-compose-plugin>`_
+Install `docker compose <https://docs.docker.com/compose/install/#scenario-two-install-the-compose-plugin>`_.
 We recommend using "Scenario two: Install the Compose plugin" since Docker Desktop may require a paid subscription.
 First install the `docker engine <https://docs.docker.com/engine/install/#server>`_ and then install the `plugin <https://docs.docker.com/compose/install/linux/>`_.
 
@@ -72,7 +72,7 @@ Setting up a host on AWS EC2
 ============================
 
 .. Note:: This is a guide on how to setup a fresh EC2 x86_64 instance running a Amazon Linux 2023 AMI.
-   These steps should generally work for other Linux distributions, but may require some modifcation e.g. the package manager may be ``apt`` instead of ``dnf``.
+   These steps should generally work for other Linux distributions, but may require some modification e.g. the package manager may be ``apt`` instead of ``dnf``.
 
 
 Once connected to the instance, run the following commands::
@@ -115,7 +115,7 @@ Create a private AWS S3 bucket, then provide the following environment variables
 ``AWS_DEFAULT_REGION``
     The AWS region the bucket exists in.
 
-If your API services are deployed on AWS resources, you should grant those resources role-based access to S3.
+If your API services are deployed on AWS resources, you should grant those resources `role-based <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html>_` access to S3.
 If your API services are deployed on resources outside AWS, you will need to give your services an access key on a user account with S3 access permissions.
 
 ``AWS_ACCESS_KEY_ID``
@@ -172,7 +172,8 @@ The important bits here are:
     We need to make sure the docker container we are using can talk to the database container.
 
 ``-e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD>``
-    We need to pass in these environment variables so that the container can talk to the database. These should match the values set in ``.env``.
+    We need to pass in these environment variables so that the container can talk to the database.
+    These should match the values set in ``.env``.
 
 
 *******
