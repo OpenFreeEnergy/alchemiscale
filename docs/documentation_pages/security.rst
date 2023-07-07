@@ -1,3 +1,7 @@
+########
+Security
+########
+
 .. automodule:: alchemiscale.security.auth
     :members:
     :show-inheritance:

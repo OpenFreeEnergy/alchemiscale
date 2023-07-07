@@ -115,7 +115,7 @@ Create a private AWS S3 bucket, then provide the following environment variables
 ``AWS_DEFAULT_REGION``
     The AWS region the bucket exists in.
 
-If your API services are deployed on AWS resources, you should grant those resources `role-based <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html>_` access to S3.
+If your API services are deployed on AWS resources, you should grant those resources `role-based <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html>`_ access to S3.
 If your API services are deployed on resources outside AWS, you will need to give your services an access key on a user account with S3 access permissions.
 
 ``AWS_ACCESS_KEY_ID``

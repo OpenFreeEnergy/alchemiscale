@@ -1,3 +1,7 @@
+#######
+Storage
+#######
+
 .. automodule:: alchemiscale.storage.models
     :members:
     :show-inheritance:

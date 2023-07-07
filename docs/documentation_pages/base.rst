@@ -1,3 +1,7 @@
+####
+Base
+####
+
 .. automodule:: alchemiscale.base.api
     :members:
     :show-inheritance:
