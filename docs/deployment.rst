@@ -167,12 +167,12 @@ For a ``docker-compose``-based deployment, it is easiest to do the above using t
                                                      -s <org-campaign-project> -s ...
 
 The important bits here are:
-1. ``--network docker_db``
+
+``--network docker_db``
     We need to make sure the docker container we are using can talk to the database container.
 
-2. ``-e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD>``
-    We need to pass in these environment variables so that the container can talk to the database.
-    These should match the values set in ``.env``.
+``-e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD>``
+    We need to pass in these environment variables so that the container can talk to the database. These should match the values set in ``.env``.
 
 
 *******
