@@ -2,9 +2,6 @@
 Compute
 #######
 
-.. automodule:: alchemiscale.compute.api
-    :members:
-    :show-inheritance:
 
 .. automodule:: alchemiscale.compute.client
     :members:
