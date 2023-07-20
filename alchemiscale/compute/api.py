@@ -51,8 +51,7 @@ from ..security.models import (
 
 
 app = FastAPI(title="AlchemiscaleComputeAPI")
-if not os.environ.get("SPHINX"):
-    app.dependency_overrides[get_base_api_settings] = get_compute_api_settings
+app.dependency_overrides[get_base_api_settings] = get_compute_api_settings
 app.include_router(base_router)
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
@@ -61,8 +60,7 @@ def get_cred_compute():
     return CredentialedComputeIdentity
 
 
-if not os.environ.get("SPHINX"):
-    app.dependency_overrides[get_cred_entity] = get_cred_compute
+app.dependency_overrides[get_cred_entity] = get_cred_compute
 
 
 router = APIRouter(

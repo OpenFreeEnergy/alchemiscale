@@ -43,8 +43,7 @@ from ..security.models import Token, TokenData, CredentialedUserIdentity
 
 
 app = FastAPI(title="AlchemiscaleAPI")
-if not os.environ.get("SPHINX"):
-    app.dependency_overrides[get_base_api_settings] = get_api_settings
+app.dependency_overrides[get_base_api_settings] = get_api_settings
 app.include_router(base_router)
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
@@ -53,8 +52,7 @@ def get_cred_user():
     return CredentialedUserIdentity
 
 
-if not os.environ.get("SPHINX"):
-    app.dependency_overrides[get_cred_entity] = get_cred_user
+app.dependency_overrides[get_cred_entity] = get_cred_user
 
 router = APIRouter(
     dependencies=[Depends(get_token_data_depends)],
