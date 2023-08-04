@@ -6,19 +6,21 @@
 Welcome to alchemiscale's documentation!
 ========================================
 
+**alchemiscale** 
 
-**alchemiscale** is a package for running large scale free energy campaigns
-on the `Folding at Home`_ (FAH) distributed computing platform. It is designed for 
-maximum interoperability with the `Open Molecular Software Foundation`_ stack,
-and is built on top of `OpenMM`_, `OpenForceField`_ and `OpenFreeEnergy`_. 
+s a service-oriented execution system for ``AlchemicalNetworks``,
+suitable for utilizing multiple compute resources,
+such as HPC clusters, individual hosts, Kubernetes clusters, Folding@Home work servers, etc., 
+to support large campaigns requiring high-throughput.
+
+It is designed for maximum interoperability with the `Open Molecular Software Foundation`_ stack,
+in particular the `OpenForceField`_ and `OpenFreeEnergy`_ ecosystems. 
 
 .. note::
    This software is pre-alpha and under active development. It is not yet ready
    for production use and the API is liable to change rapidly at any time. 
 
-.. _Folding at Home: https://foldingathome.org
-.. _Open Molecular Software Foundation: https://openmolecular.org
-.. _OpenMM: https://openmm.org
+.. _Open Molecular Software Foundation: https://omsf.io
 .. _OpenForceField: https://openforcefield.org
 .. _OpenFreeEnergy: https://openfree.energy/
 

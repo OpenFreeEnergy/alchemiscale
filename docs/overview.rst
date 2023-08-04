@@ -1,5 +1,5 @@
 Overview
 ========
 
-This is an overview of the FAH-Alchemy Concept
+This is an overview of ``alchemiscale`` concepts and system architecture.
 
