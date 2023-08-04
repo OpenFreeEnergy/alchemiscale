@@ -6,9 +6,7 @@
 Welcome to alchemiscale's documentation!
 ========================================
 
-**alchemiscale** 
-
-s a service-oriented execution system for ``AlchemicalNetworks``,
+**alchemiscale** is a service-oriented execution system for ``AlchemicalNetworks``,
 suitable for utilizing multiple compute resources,
 such as HPC clusters, individual hosts, Kubernetes clusters, Folding@Home work servers, etc., 
 to support large campaigns requiring high-throughput.
