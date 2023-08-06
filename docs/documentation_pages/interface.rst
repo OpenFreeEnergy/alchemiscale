@@ -1,6 +1,7 @@
-.. automodule:: alchemiscale.interface.api
-    :members:
-    :show-inheritance:
+#########
+Interface
+#########
+
 
 .. automodule:: alchemiscale.interface.client
     :members:
