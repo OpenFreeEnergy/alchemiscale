@@ -213,7 +213,16 @@ def get_task_transformation(
         pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.dict())
 
         # we keep this as a string to avoid useless deserialization/reserialization here
-        pdr: str = s3os.pull_protocoldagresult(pdr_sk, tf_sk, return_as="json", ok=True)
+        try:
+            pdr: str = s3os.pull_protocoldagresult(pdr_sk, tf_sk, 
+                                                   return_as="json", ok=True)
+        except:
+            # if we fail to get the object with the above, fall back to
+            # location-based retrieval
+            pdr: str = s3os.pull_protocoldagresult(pdr_sk, tf_sk,
+                                                   location=protocoldagresultref.location,
+                                                   return_as="json", ok=True)
+
     else:
         pdr = None
 
@@ -237,9 +246,14 @@ def set_task_result(
     pdr = json.loads(protocoldagresult, cls=JSON_HANDLER.decoder)
     pdr = GufeTokenizable.from_dict(pdr)
 
+    tf_sk, _ = n4js.get_task_transformation(
+        task=task_scoped_key,
+        return_gufe=False,
+    )
+
     # push the ProtocolDAGResult to the object store
     protocoldagresultref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
-        pdr, scope=task_sk.scope, creator=compute_service_id
+        pdr, transformation=tf_sk, creator=compute_service_id
     )
 
     # push the reference to the state store

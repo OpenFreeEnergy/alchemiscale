@@ -195,7 +195,7 @@ class S3ObjectStore:
     def push_protocoldagresult(
         self,
         protocoldagresult: ProtocolDAGResult,
-        scope: Scope,
+        transformation: ScopedKey,
         creator: Optional[str] = None,
     ) -> ProtocolDAGResultRef:
         """Push given `ProtocolDAGResult` to this `ObjectStore`.
@@ -204,8 +204,9 @@ class S3ObjectStore:
         ----------
         protocoldagresult
             ProtocolDAGResult to store.
-        scope
-            Scope to store ProtocolDAGResult under.
+        transformation
+            The ScopedKey of the Transformation this ProtocolDAGResult
+            corresponds to.
 
         Returns
         -------
@@ -219,8 +220,8 @@ class S3ObjectStore:
         # build `location` based on gufe key
         location = os.path.join(
             "protocoldagresult",
-            *scope.to_tuple(),
-            protocoldagresult.transformation_key,
+            *transformation.scope.to_tuple(),
+            transformation.gufe_key,
             route,
             protocoldagresult.key,
             "obj.json",
@@ -235,7 +236,7 @@ class S3ObjectStore:
         return ProtocolDAGResultRef(
             location=location,
             obj_key=protocoldagresult.key,
-            scope=scope,
+            scope=transformation.scope,
             ok=ok,
             datetime_created=datetime.utcnow(),
             creator=creator,
@@ -245,6 +246,7 @@ class S3ObjectStore:
         self,
         protocoldagresult: ScopedKey,
         transformation: ScopedKey,
+        location: Optional[str] = None,
         return_as="gufe",
         ok=True,
     ) -> Union[ProtocolDAGResult, dict, str]:
@@ -254,6 +256,12 @@ class S3ObjectStore:
         ----------
         protocoldagresult
             ScopedKey for ProtocolDAGResult in the object store.
+        transformation
+            The ScopedKey of the Transformation this ProtocolDAGResult
+            corresponds to.
+        location
+            The full path in the object store to the ProtocolDAGResult. If
+            provided, this will be used to retrieve it.
         return_as : ['gufe', 'dict', 'json']
             Form in which to return result; this is provided to avoid
             unnecessary deserializations where desired.
@@ -271,15 +279,16 @@ class S3ObjectStore:
 
         route = "results" if ok else "failures"
 
-        # build `location` based on gufe key
-        location = os.path.join(
-            "protocoldagresult",
-            *protocoldagresult.scope.to_tuple(),
-            transformation.gufe_key,
-            route,
-            protocoldagresult.gufe_key,
-            "obj.json",
-        )
+        # build `location` based on gufe key if not provided
+        if location is None:
+            location = os.path.join(
+                "protocoldagresult",
+                *protocoldagresult.scope.to_tuple(),
+                transformation.gufe_key,
+                route,
+                protocoldagresult.gufe_key,
+                "obj.json",
+            )
 
         ## TODO: want organization alongside `obj.json` of `ProtocolUnit` gufe_keys
         ## for any file objects stored in the same space
