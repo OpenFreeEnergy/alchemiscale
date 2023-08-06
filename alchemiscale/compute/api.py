@@ -204,22 +204,25 @@ def get_task_transformation(
     sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(sk.scope, token)
 
-    transformation, protocoldagresultref = n4js.get_task_transformation(
-        task=task_scoped_key
+    transformation_sk, protocoldagresultref_sk = n4js.get_task_transformation(
+        task=task_scoped_key,
+        return_gufe=False
     )
 
-    if protocoldagresultref:
-        tf_sk = ScopedKey(gufe_key=transformation.key, **sk.scope.dict())
+    transformation = n4js.get_gufe(transformation_sk)
+
+    if protocoldagresultref_sk:
+        protocoldagresultref = n4js.get_gufe(protocoldagresultref_sk)
         pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.dict())
 
         # we keep this as a string to avoid useless deserialization/reserialization here
         try:
-            pdr: str = s3os.pull_protocoldagresult(pdr_sk, tf_sk, 
+            pdr: str = s3os.pull_protocoldagresult(pdr_sk, transformation_sk, 
                                                    return_as="json", ok=True)
         except:
             # if we fail to get the object with the above, fall back to
             # location-based retrieval
-            pdr: str = s3os.pull_protocoldagresult(pdr_sk, tf_sk,
+            pdr: str = s3os.pull_protocoldagresult(pdr_sk, transformation_sk,
                                                    location=protocoldagresultref.location,
                                                    return_as="json", ok=True)
 

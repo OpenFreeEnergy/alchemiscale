@@ -799,12 +799,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     @alru_cache(maxsize=10000)
     async def _async_get_protocoldagresult(
-        self, pdr_key, transformation, route, compress
+        self, protocoldagresultref, transformation, route, compress
     ):
-        pdr_sk = ScopedKey(gufe_key=GufeKey(pdr_key), **transformation.scope.dict())
-
         pdr_json = await self._get_resource_async(
-            f"/transformations/{transformation}/{route}/{pdr_sk}", compress=compress
+            f"/transformations/{transformation}/{route}/{protocoldagresultref}", compress=compress
         )
 
         pdr = GufeTokenizable.from_dict(
@@ -815,7 +813,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def _get_protocoldagresults(
         self,
-        protocoldagresultrefs: List[Dict],
+        protocoldagresultrefs: List[ScopedKey],
         transformation: ScopedKey,
         ok: bool,
         compress: bool = True,
@@ -841,7 +839,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
                     coros = [
                         self._async_get_protocoldagresult(
-                            protocoldagresultref["obj_key"],
+                            protocoldagresultref,
                             transformation,
                             route,
                             compress,
@@ -857,7 +855,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             else:
                 coros = [
                     self._async_get_protocoldagresult(
-                        protocoldagresultref["obj_key"],
+                        protocoldagresultref,
                         transformation,
                         route,
                         compress,
