@@ -672,17 +672,15 @@ def get_protocoldagresult(
     s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> List[str]:
-
-    if route == 'results':
+    if route == "results":
         ok = True
-    elif route == 'failures':
+    elif route == "failures":
         ok = False
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"`route` takes 'results' or 'failures', not '{route}'",
         )
-
 
     sk = ScopedKey.from_str(protocoldagresultref_scoped_key)
     transformation_sk = ScopedKey.from_str(transformation_scoped_key)
@@ -696,14 +694,19 @@ def get_protocoldagresult(
     # we leave each ProtocolDAGResult in string form to avoid
     # deserializing/reserializing here; just passing through to client
     try:
-        pdr: str = s3os.pull_protocoldagresult(pdr_sk, transformation_sk, 
-                                               return_as="json", ok=ok)
+        pdr: str = s3os.pull_protocoldagresult(
+            pdr_sk, transformation_sk, return_as="json", ok=ok
+        )
     except:
         # if we fail to get the object with the above, fall back to
         # location-based retrieval
-        pdr: str = s3os.pull_protocoldagresult(pdr_sk, transformation_sk,
-                                               location=protocoldagresultref.location,
-                                               return_as="json", ok=ok)
+        pdr: str = s3os.pull_protocoldagresult(
+            pdr_sk,
+            transformation_sk,
+            location=protocoldagresultref.location,
+            return_as="json",
+            ok=ok,
+        )
 
     return [pdr]
 

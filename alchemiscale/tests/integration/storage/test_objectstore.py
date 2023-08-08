@@ -15,7 +15,7 @@ class TestS3ObjectStore:
         s3os._delete("_check_test")
 
     def test_push_protocolresult(
-        self, s3os: S3ObjectStore, protocoldagresults, transformation , scope_test
+        self, s3os: S3ObjectStore, protocoldagresults, transformation, scope_test
     ):
         transformation_sk = ScopedKey(gufe_key=transformation.key, **scope_test.dict())
 

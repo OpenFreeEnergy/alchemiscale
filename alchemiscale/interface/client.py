@@ -802,7 +802,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self, protocoldagresultref, transformation, route, compress
     ):
         pdr_json = await self._get_resource_async(
-            f"/transformations/{transformation}/{route}/{protocoldagresultref}", compress=compress
+            f"/transformations/{transformation}/{route}/{protocoldagresultref}",
+            compress=compress,
         )
 
         pdr = GufeTokenizable.from_dict(
