@@ -1074,6 +1074,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         A given compute task can be represented in any number of
         AlchemicalNetwork TaskHubs, or none at all.
 
+        Only Tasks with status 'waiting', 'running', or 'error' can be
+        actioned.
+
         """
         with self.transaction() as tx:
             actioned_sks = []
