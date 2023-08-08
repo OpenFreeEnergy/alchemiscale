@@ -223,8 +223,6 @@ def get_task_transformation(
             # if we fail to get the object with the above, fall back to
             # location-based retrieval
             pdr: str = s3os.pull_protocoldagresult(
-                pdr_sk,
-                transformation_sk,
                 location=protocoldagresultref.location,
                 return_as="json",
                 ok=True,

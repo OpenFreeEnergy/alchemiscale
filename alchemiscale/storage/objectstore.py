@@ -244,8 +244,8 @@ class S3ObjectStore:
 
     def pull_protocoldagresult(
         self,
-        protocoldagresult: ScopedKey,
-        transformation: ScopedKey,
+        protocoldagresult: Optional[ScopedKey] = None,
+        transformation: Optional[ScopedKey] = None,
         location: Optional[str] = None,
         return_as="gufe",
         ok=True,
@@ -256,9 +256,11 @@ class S3ObjectStore:
         ----------
         protocoldagresult
             ScopedKey for ProtocolDAGResult in the object store.
+            Must be provided if `location` is ``None``.
         transformation
             The ScopedKey of the Transformation this ProtocolDAGResult
             corresponds to.
+            Must be provided if `location` is ``None``.
         location
             The full path in the object store to the ProtocolDAGResult. If
             provided, this will be used to retrieve it.
@@ -272,15 +274,15 @@ class S3ObjectStore:
             The ProtocolDAGResult corresponding to the given `ProtocolDAGResultRef`.
 
         """
-        if transformation.scope != protocoldagresult.scope:
-            raise ValueError(
-                f"transformation scope '{transformation.scope}' differs from protocoldagresult scope '{protocoldagresult.scope}'"
-            )
-
         route = "results" if ok else "failures"
 
-        # build `location` based on gufe key if not provided
+        # build `location` based on provided ScopedKey if not provided
         if location is None:
+            if transformation.scope != protocoldagresult.scope:
+                raise ValueError(
+                    f"transformation scope '{transformation.scope}' differs from protocoldagresult scope '{protocoldagresult.scope}'"
+                )
+
             location = os.path.join(
                 "protocoldagresult",
                 *protocoldagresult.scope.to_tuple(),

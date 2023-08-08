@@ -52,7 +52,7 @@ class TestS3ObjectStore:
         assert pdr.protocol_unit_results == pdr.protocol_unit_results
 
         # test location-based pull
-        pdr = s3os.pull_protocoldagresult(sk, tf_sk, location=objstoreref.location)
+        pdr = s3os.pull_protocoldagresult(location=objstoreref.location)
 
         assert pdr.key == protocoldagresults[0].key
         assert pdr.protocol_unit_results == pdr.protocol_unit_results
