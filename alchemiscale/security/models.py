@@ -7,10 +7,7 @@ Data models for security components --- :mod:`alchemiscale.security.models`
 from datetime import datetime, timedelta
 from typing import List, Union, Optional
 
-try:
-    from pydantic.v1 import BaseModel, validator
-except ImportError:
-    from pydantic import BaseModel, validator
+from pydantic import BaseModel, validator
 
 from ..models import Scope
 
