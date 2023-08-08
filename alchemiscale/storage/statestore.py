@@ -1087,8 +1087,10 @@ class Neo4jStore(AlchemiscaleStateStore):
                 MATCH (task:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
 
                 // only proceed for cases where task is not already actioned on hub
+                // and where the task is either in 'waiting', 'running', or 'error' status
                 WITH th, an, task
                 WHERE NOT (th)-[:ACTIONS]->(task)
+                  AND task.status IN ['waiting', 'running', 'error']
 
                 // create the connection
                 CREATE (th)-[ar:ACTIONS {{weight: 1.0}}]->(task)
