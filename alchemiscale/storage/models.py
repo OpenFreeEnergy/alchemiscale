@@ -11,8 +11,11 @@ from typing import Union, Dict, Optional
 from uuid import uuid4
 import hashlib
 
+try:
+    from pydantic.v1 import BaseModel, Field
+except ImportError:
+    from pydantic import BaseModel, Field
 
-from pydantic import BaseModel, Field
 from gufe.tokenization import GufeTokenizable, GufeKey
 
 from ..models import ScopedKey, Scope

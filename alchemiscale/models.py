@@ -4,9 +4,13 @@ Data models --- :mod:`alchemiscale.models`
 
 """
 from typing import Optional, Union
-from pydantic import BaseModel, Field, validator, root_validator
 from gufe.tokenization import GufeKey
 from re import fullmatch
+
+try:
+    from pydantic.v1 import BaseModel, Field, validator, root_validator
+except ImportError:
+    from pydantic import BaseModel, Field, validator, root_validator
 
 
 class Scope(BaseModel):

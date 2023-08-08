@@ -7,7 +7,10 @@ Settings --- :mod:`alchemiscale.settings`
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import BaseSettings
+try:
+    from pydantic.v1 import BaseSettings
+except ImportError:
+    from pydantic import BaseSettings
 
 
 class FrozenSettings(BaseSettings):
