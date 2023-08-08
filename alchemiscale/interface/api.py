@@ -640,10 +640,7 @@ def get_transformation_results(
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    # get all ProtocolDAGResultRefs for the given transformation's results
-    refs: List[ProtocolDAGResultRef] = n4js.get_transformation_results(sk)
-
-    return [i.to_dict() for i in refs]
+    return [str(sk) for sk in n4js.get_transformation_results(sk)]
 
 
 @router.get(
@@ -659,56 +656,55 @@ def get_transformation_failures(
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    # get all ProtocolDAGResultRefs for the given transformation's results
-    refs: List[ProtocolDAGResultRef] = n4js.get_transformation_failures(sk)
-
-    return [i.to_dict() for i in refs]
+    return [str(sk) for sk in n4js.get_transformation_failures(sk)]
 
 
 @router.get(
-    "/transformations/{transformation_scoped_key}/results/{protocoldagresult_scoped_key}",
+    "/transformations/{transformation_scoped_key}/{route}/{protocoldagresultref_scoped_key}",
     response_class=GufeJSONResponse,
 )
 def get_protocoldagresult(
-    protocoldagresult_scoped_key,
+    protocoldagresultref_scoped_key,
+    route,
     transformation_scoped_key,
     *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> List[str]:
-    sk = ScopedKey.from_str(protocoldagresult_scoped_key)
-    tf_sk = ScopedKey.from_str(transformation_scoped_key)
+    if route == "results":
+        ok = True
+    elif route == "failures":
+        ok = False
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"`route` takes 'results' or 'failures', not '{route}'",
+        )
+
+    sk = ScopedKey.from_str(protocoldagresultref_scoped_key)
+    transformation_sk = ScopedKey.from_str(transformation_scoped_key)
 
     validate_scopes(sk.scope, token)
-    validate_scopes(tf_sk.scope, token)
+    validate_scopes(transformation_sk.scope, token)
+
+    protocoldagresultref = n4js.get_gufe(scoped_key=sk)
+    pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.dict())
 
     # we leave each ProtocolDAGResult in string form to avoid
     # deserializing/reserializing here; just passing through to client
-    pdr: str = s3os.pull_protocoldagresult(sk, tf_sk, return_as="json", ok=True)
-
-    return [pdr]
-
-
-@router.get(
-    "/transformations/{transformation_scoped_key}/failures/{protocoldagresult_scoped_key}",
-    response_class=GufeJSONResponse,
-)
-def get_protocoldagresult_failure(
-    protocoldagresult_scoped_key,
-    transformation_scoped_key,
-    *,
-    s3os: S3ObjectStore = Depends(get_s3os_depends),
-    token: TokenData = Depends(get_token_data_depends),
-) -> List[str]:
-    sk = ScopedKey.from_str(protocoldagresult_scoped_key)
-    tf_sk = ScopedKey.from_str(transformation_scoped_key)
-
-    validate_scopes(sk.scope, token)
-    validate_scopes(tf_sk.scope, token)
-
-    # we leave each ProtocolDAGResult in string form to avoid
-    # deserializing/reserializing here; just passing through to client
-    pdr: str = s3os.pull_protocoldagresult(sk, tf_sk, return_as="json", ok=False)
+    try:
+        pdr: str = s3os.pull_protocoldagresult(
+            pdr_sk, transformation_sk, return_as="json", ok=ok
+        )
+    except:
+        # if we fail to get the object with the above, fall back to
+        # location-based retrieval
+        pdr: str = s3os.pull_protocoldagresult(
+            location=protocoldagresultref.location,
+            return_as="json",
+            ok=ok,
+        )
 
     return [pdr]
 
@@ -726,10 +722,7 @@ def get_task_results(
     sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(sk.scope, token)
 
-    # get all ProtocolDAGResultRefs for the given transformation's results
-    refs: List[ProtocolDAGResultRef] = n4js.get_task_results(sk)
-
-    return [i.to_dict() for i in refs]
+    return [str(sk) for sk in n4js.get_task_results(sk)]
 
 
 @router.get(
@@ -745,10 +738,7 @@ def get_task_failures(
     sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(sk.scope, token)
 
-    # get all ProtocolDAGResultRefs for the given transformation's results
-    refs: List[ProtocolDAGResultRef] = n4js.get_task_failures(sk)
-
-    return [i.to_dict() for i in refs]
+    return [str(sk) for sk in n4js.get_task_failures(sk)]
 
 
 ### add router

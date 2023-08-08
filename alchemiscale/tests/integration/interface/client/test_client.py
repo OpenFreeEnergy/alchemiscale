@@ -747,9 +747,21 @@ class TestClient:
 
             # get the transformation and extending protocoldagresult as if we
             # were a compute service
-            transformation, extends_protocoldagresult = n4js.get_task_transformation(
-                task=task_sk
-            )
+            (
+                transformation_sk,
+                extends_protocoldagresultref_sk,
+            ) = n4js.get_task_transformation(task=task_sk, return_gufe=False)
+
+            transformation = n4js.get_gufe(transformation_sk)
+            if extends_protocoldagresultref_sk:
+                extends_protocoldagresultref = n4js.get_gufe(
+                    extends_protocoldagresultref_sk
+                )
+                extends_protocoldagresult = s3os_server.pull_protocoldagresult(
+                    extends_protocoldagresultref, transformation_sk
+                )
+            else:
+                extends_protocoldagresult = None
 
             protocoldag = transformation.create(
                 extends=extends_protocoldagresult,
@@ -776,7 +788,7 @@ class TestClient:
             protocoldagresults.append(protocoldagresult)
 
             protocoldagresultref = s3os_server.push_protocoldagresult(
-                protocoldagresult, scope=task_sk.scope
+                protocoldagresult, transformation=transformation_sk
             )
 
             n4js.set_task_result(
