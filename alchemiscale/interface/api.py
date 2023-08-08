@@ -737,7 +737,7 @@ def get_task_failures(
     sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(sk.scope, token)
 
-    return [str(sk) for sk in n4js.get_task_results(sk)]
+    return [str(sk) for sk in n4js.get_task_failures(sk)]
 
 
 ### add router

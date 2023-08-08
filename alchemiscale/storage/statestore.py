@@ -803,7 +803,7 @@ class Neo4jStore(AlchemiscaleStateStore):
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = true
         WITH res._scoped_key as sk
-        RETURN sk
+        RETURN DISTINCT sk
         """
         return self._get_protocoldagresultrefs(q, transformation)
 
@@ -817,7 +817,7 @@ class Neo4jStore(AlchemiscaleStateStore):
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = false
         WITH res._scoped_key as sk
-        RETURN sk
+        RETURN DISTINCT sk
         """
         return self._get_protocoldagresultrefs(q, transformation)
 
@@ -1786,7 +1786,7 @@ class Neo4jStore(AlchemiscaleStateStore):
               (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = true
         WITH res._scoped_key as sk
-        RETURN sk
+        RETURN DISTINCT sk
         """
         return self._get_protocoldagresultrefs(q, task)
 
@@ -1798,7 +1798,7 @@ class Neo4jStore(AlchemiscaleStateStore):
               (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = false
         WITH res._scoped_key as sk
-        RETURN sk
+        RETURN DISTINCT sk
         """
         return self._get_protocoldagresultrefs(q, task)
 
