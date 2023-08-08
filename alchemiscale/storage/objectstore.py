@@ -278,6 +278,10 @@ class S3ObjectStore:
 
         # build `location` based on provided ScopedKey if not provided
         if location is None:
+            if None in (transformation, protocoldagresult):
+                raise ValueError(
+                    "`transformation` and `protocoldagresult` must both be given if `location` is ``None``"
+                )
             if transformation.scope != protocoldagresult.scope:
                 raise ValueError(
                     f"transformation scope '{transformation.scope}' differs from protocoldagresult scope '{protocoldagresult.scope}'"
