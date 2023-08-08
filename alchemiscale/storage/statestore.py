@@ -785,16 +785,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         return [ScopedKey.from_str(sk) for sk in sks]
 
     def _get_protocoldagresultrefs(self, q: str, scoped_key: ScopedKey):
+        sks = []
         with self.transaction() as tx:
             res = tx.run(q, scoped_key=str(scoped_key))
+            for rec in res:
+                sks.append(rec["sk"])
 
-        protocoldagresultrefs = []
-        subgraph = Subgraph()
-        for record in res:
-            protocoldagresultrefs.append(record["res"])
-            subgraph = subgraph | record["res"]
-
-        return list(self._subgraph_to_gufe(protocoldagresultrefs, subgraph).values())
+        return [ScopedKey.from_str(sk) for sk in sks]
 
     def get_transformation_results(
         self, transformation: ScopedKey
@@ -805,7 +802,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (trans:Transformation {_scoped_key: $scoped_key}),
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = true
-        RETURN res
+        WITH res._scoped_key as sk
+        RETURN DISTINCT sk
         """
         return self._get_protocoldagresultrefs(q, transformation)
 
@@ -818,7 +816,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (trans:Transformation {_scoped_key: $scoped_key}),
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = false
-        RETURN res
+        WITH res._scoped_key as sk
+        RETURN DISTINCT sk
         """
         return self._get_protocoldagresultrefs(q, transformation)
 
@@ -1786,7 +1785,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (task:Task {_scoped_key: $scoped_key}),
               (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = true
-        RETURN res
+        WITH res._scoped_key as sk
+        RETURN DISTINCT sk
         """
         return self._get_protocoldagresultrefs(q, task)
 
@@ -1797,7 +1797,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (task:Task {_scoped_key: $scoped_key}),
               (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = false
-        RETURN res
+        WITH res._scoped_key as sk
+        RETURN DISTINCT sk
         """
         return self._get_protocoldagresultrefs(q, task)
 
