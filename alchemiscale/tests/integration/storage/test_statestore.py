@@ -822,6 +822,35 @@ class TestNeo4jStore(TestStateStore):
         task_sks_fail = n4js.action_tasks(task_sks, taskhub_sk2)
         assert all([i is None for i in task_sks_fail])
 
+    def test_action_task_other_statuses(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(6)]
+
+        # set all but first task to running
+        n4js.set_task_running(task_sks[1:])
+
+        # set 1 task for each available status
+        n4js.set_task_error(task_sks[2:3])
+        n4js.set_task_complete(task_sks[3:4])
+        n4js.set_task_invalid(task_sks[4:5])
+        n4js.set_task_deleted(task_sks[5:6])
+
+        # action all tasks; only those that are 'waiting', 'running', or
+        # 'error' should be actioned
+        actioned = n4js.action_tasks(task_sks, taskhub_sk)
+
+        assert actioned[:3] == task_sks[:3]
+        assert actioned[3:] == [None] * 3
+
     def test_action_task_extends(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)

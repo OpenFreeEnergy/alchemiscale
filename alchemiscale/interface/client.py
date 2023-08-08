@@ -607,6 +607,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         A Task cannot be actioned:
             - to an AlchemicalNetwork in a different Scope.
             - if it extends another Task that is not complete.
+            - if it has any status other than 'waiting', 'running', or 'error'
 
         Parameters
         ----------
