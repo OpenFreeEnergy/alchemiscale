@@ -26,5 +26,5 @@ dependencies:
 
   - pip:
     - async_lru
-    - git+https://github.com/openforcefield/alchemiscale.git@v0.1.3
+    - git+https://github.com/openforcefield/alchemiscale.git@v0.1.4
     - git+https://github.com/choderalab/perses.git@protocol-neqcyc
