@@ -194,7 +194,7 @@ If we submit another ``AlchemicalNetwork`` including some of the same ``Transfor
 The more ``AlchemicalNetwork``/s a ``Task`` is actioned to, the higher its chances of being picked up by a compute service.
 In this way, actioning is an indicator of demand for a given ``Task`` and its corresponding ``Transformation``.
 
-.. note:: About ``Task``s
+.. note:: About ``Task``/s
 
     Alchemiscale ``Task``/s can be considered a single independent “repeat” of an alchemical transformation, or a :py:class:`~gufe.protocols.ProtocolDAG` as defined in :py:mod:`gufe`.
     What this exactly means will be subtly different depending on the type of alchemical ``Protocol`` employed.
