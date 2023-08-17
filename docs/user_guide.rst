@@ -2,8 +2,8 @@
 User Guide
 ##########
 
-This document details the basic usage of the :py:class:`~alchemiscale.AlchemiscaleClient` for evaluating :py:class:`~gufe.AlchemicalNetwork`/s.
-It assumes that you already have a user identity on the target ``alchemiscale`` instance, with access to :py:class:`~alchemiscale.Scope`/s to submit ``AlchemicalNetwork``/s to.
+This document details the basic usage of the :py:class:`~alchemiscale.AlchemiscaleClient` for evaluating :py:class:`~gufe.AlchemicalNetwork`\s.
+It assumes that you already have a user identity on the target ``alchemiscale`` instance, with access to :py:class:`~alchemiscale.Scope`\s to submit ``AlchemicalNetwork``/s to.
 
 
 ************
