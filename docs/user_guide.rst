@@ -3,7 +3,7 @@ User Guide
 ##########
 
 This document details the basic usage of the :py:class:`~alchemiscale.AlchemiscaleClient` for evaluating :py:class:`~gufe.AlchemicalNetwork`\s.
-It assumes that you already have a user identity on the target ``alchemiscale`` instance, with access to :py:class:`~alchemiscale.Scope`\s to submit ``AlchemicalNetwork``/s to.
+It assumes that you already have a user identity on the target ``alchemiscale`` instance, with access to :py:class:`~alchemiscale.Scope`\s to submit ``AlchemicalNetwork``\s to.
 
 
 ************
@@ -121,8 +121,8 @@ You can create one with, e.g.::
 
     >>> scope = Scope('my_org', 'my_campaign', 'my_project')
 
-Within a ``Scope``, components of an ``AlchemicalNetwork`` are deduplicated against other components already present, allowing you to e.g. submit new ``AlchemicalNetwork``/s sharing ``Transformation``/s with previous ones and benefit from existing results.
-If you prefer to have an ``AlchemicalNetwork`` not share any components with previously-submitted ``AlchemicalNetwork``/s, then submit it into a different ``Scope``.
+Within a ``Scope``, components of an ``AlchemicalNetwork`` are deduplicated against other components already present, allowing you to e.g. submit new ``AlchemicalNetwork``\s sharing ``Transformation``\s with previous ones and benefit from existing results.
+If you prefer to have an ``AlchemicalNetwork`` not share any components with previously-submitted ``AlchemicalNetwork``\s, then submit it into a different ``Scope``.
 
 
 Submitting and retrieving an AlchemicalNetwork
@@ -160,10 +160,10 @@ and you can use these with :py:meth:`~alchemiscale.AlchemiscaleClient.get_networ
 Creating and actioning Tasks
 ****************************
 
-Submitting an ``AlchemicalNetwork`` defines it on the ``alchemiscale`` server, but it does not define where to allocate effort in evaluating the ``Transformation``/s in the network.
-To do this, we need to create and action ``Task``/s on the ``Transformation``/s we are most interested in.
+Submitting an ``AlchemicalNetwork`` defines it on the ``alchemiscale`` server, but it does not define where to allocate effort in evaluating the ``Transformation``\s in the network.
+To do this, we need to create and action ``Task``\s on the ``Transformation``\s we are most interested in.
 
-For this example, we’ll loop through every ``Transformation`` in our ``AlchemicalNetwork``, creating and actioning 3 ``Task``/s for each::
+For this example, we’ll loop through every ``Transformation`` in our ``AlchemicalNetwork``, creating and actioning 3 ``Task``\s for each::
 
     >>> tasks = []
     >>> for tf_sk in asc.get_network_transformations(an_sk):
@@ -176,7 +176,7 @@ For this example, we’ll loop through every ``Transformation`` in our ``Alchemi
      ...]
 
 A ``Task`` is associated with a ``Transformation`` on creation, and actioning the ``Task`` marks it for execution for our ``AlchemicalNetwork`` we submitted earlier.
-If we submit another ``AlchemicalNetwork`` including some of the same ``Transformation``/s later to the same ``Scope``, we could get the ``Task``/s for each ``Transformation`` and only create new ``Task``/s if necessary, actioning the existing ones to that ``AlchemicalNetwork`` as well::
+If we submit another ``AlchemicalNetwork`` including some of the same ``Transformation``\s later to the same ``Scope``, we could get the ``Task``\s for each ``Transformation`` and only create new ``Task``\s if necessary, actioning the existing ones to that ``AlchemicalNetwork`` as well::
 
     >>> tasks = []
     >>> for tf_sk in asc.get_network_transformations(other_network_sk):
@@ -191,25 +191,25 @@ If we submit another ``AlchemicalNetwork`` including some of the same ``Transfor
      None,
      ...]
 
-The more ``AlchemicalNetwork``/s a ``Task`` is actioned to, the higher its chances of being picked up by a compute service.
+The more ``AlchemicalNetwork``\s a ``Task`` is actioned to, the higher its chances of being picked up by a compute service.
 In this way, actioning is an indicator of demand for a given ``Task`` and its corresponding ``Transformation``.
 
-.. note:: About ``Task``/s
+.. note:: About ``Task``\s
 
-    Alchemiscale ``Task``/s can be considered a single independent “repeat” of an alchemical transformation, or a :py:class:`~gufe.protocols.ProtocolDAG` as defined in :py:mod:`gufe`.
+    Alchemiscale ``Task``\s can be considered a single independent “repeat” of an alchemical transformation, or a :py:class:`~gufe.protocols.ProtocolDAG` as defined in :py:mod:`gufe`.
     What this exactly means will be subtly different depending on the type of alchemical ``Protocol`` employed.
     
     In the case of the :py:class:`~openfe.protocols.openmm_rfe.RelativeHybridTopologyProtocol` (i.e. for HREX, and SAMS), this effectively means that each ``Task`` carries out all the computation required to obtain a single estimate of the free energy (in practice one would want to do several repeats to get an idea of the sampling error).
     
     In the case of the :py:class:`~perses.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`, a ``Task`` instead encompasses a non-equilibrium cycle and will return a single work estimate.
-    The work values of multiple ``Task``/s can then be gathered to obtain a free energy estimate, and more ``Task``/s will improve the convergence of the estimate.
+    The work values of multiple ``Task``\s can then be gathered to obtain a free energy estimate, and more ``Task``\s will improve the convergence of the estimate.
 
 
 ********************************
 Getting the status of your Tasks
 ********************************
 
-As you await results for your actioned ``Task``/s, it’s often desirable to check their status to ensure they are running or completing at the rate you expect.
+As you await results for your actioned ``Task``\s, it’s often desirable to check their status to ensure they are running or completing at the rate you expect.
 You can quickly obtain statuses for all Tasks associated with various levels, including:
 
 * ``Scope``
@@ -220,7 +220,7 @@ You can quickly obtain statuses for all Tasks associated with various levels, in
 Scope
 =====
 
-For example, to get the status counts for all ``Task``/s within a particular ``Scope``, you could do::
+For example, to get the status counts for all ``Task``\s within a particular ``Scope``, you could do::
 
     >>> # corresponds to the scope 'my_org-my_campaign-*'
     >>> asc.get_scope_status(Scope('my_org', 'my_campaign'))
@@ -231,12 +231,12 @@ For example, to get the status counts for all ``Task``/s within a particular ``S
      'waiting': 372,
      'running': 66}
 
-For a *specific* ``Scope``, this will give status counts of all ``Task``/s within that exact ``Scope``, assuming your user has permissions on it (see :py:meth:`~alchemiscale.AlchemiscaleClient.list_scopes` for your accessible ``Scope`` space).
+For a *specific* ``Scope``, this will give status counts of all ``Task``\s within that exact ``Scope``, assuming your user has permissions on it (see :py:meth:`~alchemiscale.AlchemiscaleClient.list_scopes` for your accessible ``Scope`` space).
 For a *non-specific* ``Scope`` (like ``my_org-my_campaign-*`` above), this will give the aggregate status counts across the ``Scope`` space visible to your user under the given ``Scope``.
 
 Calling :py:meth:`~alchemiscale.AlchemiscaleClient.get_scope_status` without arguments will default to the highest non-specific ``Scope`` of ``*-*-*``.
 
-To get the individual statuses of all ``Task``/s in a given ``Scope``, use the :py:meth:`~alchemiscale.AlchemiscaleClient.query_tasks` method in combination with :py:meth:`~alchemiscale.AlchemiscaleClient.get_tasks_status`::
+To get the individual statuses of all ``Task``\s in a given ``Scope``, use the :py:meth:`~alchemiscale.AlchemiscaleClient.query_tasks` method in combination with :py:meth:`~alchemiscale.AlchemiscaleClient.get_tasks_status`::
 
     >>> tasks = asc.query_tasks(scope=Scope('my_org', 'my_campaign'))
     >>> asc.get_tasks_status(tasks)
@@ -256,7 +256,7 @@ To get the individual statuses of all ``Task``/s in a given ``Scope``, use the :
 AlchemicalNetwork
 =================
 
-You can get the status counts of all ``Task``/s associated with ``Transformation``/s within a given ``AlchemicalNetwork`` with::
+You can get the status counts of all ``Task``\s associated with ``Transformation``\s within a given ``AlchemicalNetwork`` with::
 
     >>> asc.get_network_status(an_sk)
     {'complete': 138,
@@ -266,9 +266,9 @@ You can get the status counts of all ``Task``/s associated with ``Transformation
      'waiting': 57,
      'running': 33}
 
-Note that this will show status counts for all such ``Task``/s, whether or not they have been actioned on the given ``AlchemicalNetwork``.
+Note that this will show status counts for all such ``Task``\s, whether or not they have been actioned on the given ``AlchemicalNetwork``.
 
-To get the specific statuses of all ``Task``/s for a given ``AlchemicalNetwork``, use the :py:meth:`~alchemiscale.AlchemiscaleClient.get_network_tasks` method in combination with :py:meth:`~alchemiscale.AlchemiscaleClient.get_tasks_status`::
+To get the specific statuses of all ``Task``\s for a given ``AlchemicalNetwork``, use the :py:meth:`~alchemiscale.AlchemiscaleClient.get_network_tasks` method in combination with :py:meth:`~alchemiscale.AlchemiscaleClient.get_tasks_status`::
 
     >>> tasks = asc.get_network_tasks(an_sk)
     >>> asc.get_tasks_status(tasks)
@@ -286,14 +286,14 @@ To get the specific statuses of all ``Task``/s for a given ``AlchemicalNetwork``
 Transformation
 ==============
 
-To get the status counts of all ``Task``/s associated with only a given ``Transformation``, use::
+To get the status counts of all ``Task``\s associated with only a given ``Transformation``, use::
 
     >>> asc.get_transformation_status(tf_sk)
     {'complete': 2,
      'error': 1,
      'running': 3}
 
-To get the specific statuses of all ``Task``/s for a given ``Transformation``, use the :py:meth:`~alchemiscale.AlchemiscaleClient.get_transformation_tasks` method in combination with :py:meth:`~alchemiscale.AlchemiscaleClient.get_tasks_status`::
+To get the specific statuses of all ``Task``\s for a given ``Transformation``, use the :py:meth:`~alchemiscale.AlchemiscaleClient.get_transformation_tasks` method in combination with :py:meth:`~alchemiscale.AlchemiscaleClient.get_tasks_status`::
 
     >>> tasks = asc.get_transformation_tasks(tf_sk)
     >>> asc.get_tasks_status(tasks)
@@ -319,7 +319,7 @@ We can check the status of a ``Transformation`` with::
      'error': 1,
      'running': 3}
 
-If there are complete ``Task``/s, we can pull in all successful ``ProtocolDAGResult``/s for the ``Transformation`` and combine them into a ``ProtocolResult`` corresponding to that ``Transformation``/'s ``Protocol`` with::
+If there are complete ``Task``\s, we can pull in all successful ``ProtocolDAGResult``\s for the ``Transformation`` and combine them into a ``ProtocolResult`` corresponding to that ``Transformation``/'s ``Protocol`` with::
 
     >>> protocol_result = asc.get_transformation_results(tf_sk)
     >>> protocol_result
@@ -327,8 +327,8 @@ If there are complete ``Task``/s, we can pull in all successful ``ProtocolDAGRes
 
 This object features a :py:meth:`~gufe.protocols.ProtocolResult.get_estimate` and :py:meth:`~gufe.protocols.ProtocolResult.get_uncertainty` method, giving the best available estimate of the free energy difference and its uncertainty. 
 
-To pull the ``ProtocolDAGResult``/s and not combine them into a ``ProtocolResult`` object, you can give ``return_protocoldagresults=True`` to this method.
-Any number of ``ProtocolDAGResult``/s can then be manually combined into a single ``ProtocolResult`` with::
+To pull the ``ProtocolDAGResult``\s and not combine them into a ``ProtocolResult`` object, you can give ``return_protocoldagresults=True`` to this method.
+Any number of ``ProtocolDAGResult``\s can then be manually combined into a single ``ProtocolResult`` with::
 
     >>> # protocol_dag_results: List[ProtocolDAGResult]
     >>> protocol_dag_results = asc.get_transformation_results(tf_sk, return_protocoldagresults=True)
@@ -336,7 +336,7 @@ Any number of ``ProtocolDAGResult``/s can then be manually combined into a singl
     >>> protocol_result
     <RelativeHybridTopologyProtocolResult-44b0f588f5f3073aa58d86e1017ef623>
 
-This can be useful for subsampling the available ``ProtocolDAGResult``/s and building estimates from these subsamples, such as for an analysis of convergence for the :py:class:`~perses.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`.
+This can be useful for subsampling the available ``ProtocolDAGResult``\s and building estimates from these subsamples, such as for an analysis of convergence for the :py:class:`~perses.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`.
 
 If you wish to pull results for only a single ``Task``, you can do so with::
 
@@ -345,13 +345,13 @@ If you wish to pull results for only a single ``Task``, you can do so with::
     >>> protocol_dag_results
     [<ProtocolDAGResult-54a3ed32cbd3e3d60d87b2a17519e399>]
 
-You can then iteratively create and action new ``Task``/s on your desired ``Transformation``/s based on their current estimate and uncertainty, allocating effort where it will be most beneficial.
+You can then iteratively create and action new ``Task``\s on your desired ``Transformation``\s based on their current estimate and uncertainty, allocating effort where it will be most beneficial.
 
 *******************
 Dealing with errors
 *******************
 
-If you observe many errored ``Task``/s from running :py:meth:`~alchemiscale.AlchemiscaleClient.get_transformation_status`, you can introspect the traceback raised by the ``Task`` on execution.
+If you observe many errored ``Task``\s from running :py:meth:`~alchemiscale.AlchemiscaleClient.get_transformation_status`, you can introspect the traceback raised by the ``Task`` on execution.
 For a given ``Transformation``, you can pull down all failed results and print their exceptions and tracebacks with::
 
     >>> # failed_protocol_dag_results : List[ProtocolDAGResult]
@@ -362,9 +362,9 @@ For a given ``Transformation``, you can pull down all failed results and print t
     >>>         print(failed_unit.exception)
     >>>         print(failed_unit.traceback)
 
-This may give you clues as to what is going wrong with your ``Transformation``/s.
-A failure may be a symptom of the environments the compute services are running with; it could also indicate some fundamental problems with the ``Transformation``/s you are attempting to execute, and in this case trying to reproduce the error locally and experimenting with possible solutions is appropriate.
-You may want to try different ``Protocol`` settings, different ``Mapping``/s, or try to adjust the components in your ``ChemicalSystem``/s.
+This may give you clues as to what is going wrong with your ``Transformation``\s.
+A failure may be a symptom of the environments the compute services are running with; it could also indicate some fundamental problems with the ``Transformation``\s you are attempting to execute, and in this case trying to reproduce the error locally and experimenting with possible solutions is appropriate.
+You may want to try different ``Protocol`` settings, different ``Mapping``\s, or try to adjust the components in your ``ChemicalSystem``\s.
 
 For a given ``Transformation``, you can execute it locally with::
 
@@ -385,7 +385,7 @@ For a given ``Transformation``, you can execute it locally with::
     >>> protocol_result.get_estimate()
     >>> protocol_result.get_uncertainty()
 
-Note that for some ``Protocol``/s, your local machine may need to meet certain requirements:
+Note that for some ``Protocol``\s, your local machine may need to meet certain requirements:
 
 * :py:class:`openfe.protocols.openmm_rfe.RelativeHybridTopologyProtocol`: NVIDIA GPU if ``settings.platform == 'CUDA'``
 * :py:class:`~perses.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`: OpenEye Toolkit license, NVIDIA GPU if ``settings.platform == 'CUDA'``
@@ -397,13 +397,13 @@ Re-running errored Tasks
 If you believe an errored ``Task`` is due to a random failure (such as landing on a flaky compute host, or due to inherent stochasticity in the ``Protocol`` itself), or due to a systematic failure that has been resolved (such as a misconfigured compute environment, now remediated), you can choose to set that ``Task``/'s status back to ``'waiting'``.
 This will make it eligible for being claimed and executed again, perhaps succesfully.
 
-Given a set of ``Task``/s you wish to set back to ``'waiting'``, you can do::
+Given a set of ``Task``\s you wish to set back to ``'waiting'``, you can do::
 
     >>> asc.set_tasks_status(tasks, 'waiting')
 
-Only ``Task``/s with status ``'error'`` or ``'running'`` can be set back to ``'waiting'``; it is not possible to set ``Task``/s with status ``'complete'``, ``'invalid'``, or ``'deleted'`` back to ``'waiting'``.
+Only ``Task``\s with status ``'error'`` or ``'running'`` can be set back to ``'waiting'``; it is not possible to set ``Task``\s with status ``'complete'``, ``'invalid'``, or ``'deleted'`` back to ``'waiting'``.
 
-If you’re feeling confident, you could set all errored ``Task``/s on a given ``AlchemicalNetwork`` with::
+If you’re feeling confident, you could set all errored ``Task``\s on a given ``AlchemicalNetwork`` with::
 
     >>> # first, get all tasks associated with network with status 'error'
     >>> tasks = asc.get_network_tasks(an_sk, status='error')
