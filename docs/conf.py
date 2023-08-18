@@ -48,10 +48,10 @@ autodoc_mock_imports = [
 ]
 
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
     'gufe': ('https://gufe.readthedocs.io/en/latest/', None),
     'openfe': ('https://docs.openfree.energy/en/stable/', None),
-    'perses': ('https://perses.readthedocs.io/en/latest/', None)
+    'perses': ('https://perses.readthedocs.io/en/latest/', None),
+    'python': ('https://docs.python.org/3', None),
 }
 
 # -- Options for HTML output -------------------------------------------------
