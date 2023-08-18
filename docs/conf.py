@@ -24,6 +24,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.githubpages",
+    "sphinx.ext.intersphinx"
 ]
 
 templates_path = ["_templates"]
@@ -45,6 +46,13 @@ autodoc_mock_imports = [
     "starlette",
     "yaml",
 ]
+
+intersphinx_mapping = {
+    'gufe': ('https://gufe.readthedocs.io/en/latest/', None),
+    'openfe': ('https://docs.openfree.energy/en/stable/', None),
+    'perses': ('https://perses.readthedocs.io/en/latest/', None),
+    'python': ('https://docs.python.org/3', None),
+}
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
