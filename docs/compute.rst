@@ -70,7 +70,7 @@ You will need to tailor your specific approach to the constraints of the cluster
 
 The following is an example of the *content* of a script submitted to an HPC cluster. 
 We have left off the top matter that is specific to the queueing system, and certain environment variables (e.g. ``JOBID``, ``JOBINDEX``) should be tailored to those presented by the queueing system.
-Note that for this case we've made use of a ``conda``/``mamba``-based deployment, detailed above in :ref:`deployment_conda`::
+Note that for this case we've made use of a ``conda``/``mamba``-based deployment, detailed above in :ref:`compute_conda`::
 
     # don't limit stack size
     ulimit -s unlimited
@@ -130,7 +130,7 @@ Any compute service that fails to claim a ``Task`` will shut itself down, and th
 Kubernetes Cluster
 ******************
 
-To deploy compute services to a Kubernetes ("k8s") cluster, we make use of a similar approach to deployment with Docker detailed above in :ref:`deployment_docker`.
+To deploy compute services to a Kubernetes ("k8s") cluster, we make use of a similar approach to deployment with Docker detailed above in :ref:`compute_docker`.
 We define a k8s `Deployment`_ featuring a single container spec as the file ``compute-services.yaml``::
 
     apiVersion: apps/v1
