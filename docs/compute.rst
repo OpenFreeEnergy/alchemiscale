@@ -58,6 +58,8 @@ See the `official Docker documentation on GPU use`_ for details on how to specif
 It may also make sense to apply constraints to the number of CPUs available to each container to avoid oversubscription.
 
 
+.. _official Docker documentation on GPU use: https://docs.docker.com/config/containers/resource_constraints/#gpu
+
 ***********
 HPC Cluster
 ***********
