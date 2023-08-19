@@ -9,7 +9,7 @@ Add Users
 To add a new user identity, you will generally use the ``alchemiscale`` CLI::
 
 
-    $ export NEO4J_URL=bolt://<NEO4J_HOSTNAME>7687
+    $ export NEO4J_URL=bolt://<NEO4J_HOSTNAME>:7687
     $ export NEO4J_USER=<NEO4J_USERNAME>
     $ export NEO4J_PASS=<NEO4J_PASSWORD>
     $
@@ -51,3 +51,5 @@ The important bits here are:
 Backups
 *******
 
+Performing regular backups of the state store is an important component for any production deployment of ``alchemiscale``.
+To 
