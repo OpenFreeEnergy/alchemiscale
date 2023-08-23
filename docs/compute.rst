@@ -75,8 +75,9 @@ Note that for this case we've made use of a ``conda``/``mamba``-based deployment
     # don't limit stack size
     ulimit -s unlimited
     
-    # make scratch space
-    mkdir -p /scratch/${USER}/${JOBID}-${JOBINDEX}
+    # make scratch space (path will be HPC system dependent)
+    ALCHEM_SCRATCH=/scratch/${USER}/${JOBID}-${JOBINDEX}
+    mkdir -p $ALCHEM_SCRATCH
     
     # activate environment
     conda activate alchemiscale-compute-$ALCHEMISCALE_VERSION
@@ -89,7 +90,7 @@ Note that for this case we've made use of a ``conda``/``mamba``-based deployment
     alchemiscale compute synchronous -c configs/settings.${LSB_JOBID}-${LSB_JOBINDEX}.yaml
     
     # remove scratch space
-    rm -r /scratch/${USER}/${JOBID}-${JOBINDEX}
+    rm -r $ALCHEM_SCRATCH
 
 
 The ``envsubst`` line in particular will make a config specific to this job, with environment variable substitutions.
