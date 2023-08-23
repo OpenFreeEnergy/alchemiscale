@@ -18,7 +18,7 @@ A template for this file can be found here; replace ``$ALCHEMISCALE_VERSION`` wi
 
 
 ***********
-Single-Host
+Single-host
 ***********
 
 To deploy a compute service (or multiple services) to a single host, we recommend one of two routes.
@@ -61,7 +61,7 @@ It may also make sense to apply constraints to the number of CPUs available to e
 .. _official Docker documentation on GPU use: https://docs.docker.com/config/containers/resource_constraints/#gpu
 
 ***********
-HPC Cluster
+HPC cluster
 ***********
 
 To deploy compute services to an HPC cluster, we recommend submitting them as individual jobs to the HPC cluster's scheduler.
@@ -127,7 +127,7 @@ Any compute service that fails to claim a ``Task`` will shut itself down, and th
 
 
 ******************
-Kubernetes Cluster
+Kubernetes cluster
 ******************
 
 To deploy compute services to a Kubernetes ("k8s") cluster, we make use of a similar approach to deployment with Docker detailed above in :ref:`compute_docker`.

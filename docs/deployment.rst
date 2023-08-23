@@ -105,7 +105,7 @@ Kubernetes-based deployment with alchemiscale-k8s
 
 To deploy ``alchemiscale`` to a Kubernetes cluster, review the resources defined and detailed in `alchemiscale-k8s`_.
 
-.. _alchemiscale-k8s: https://github.com/datryllic/alchemiscale-k8s/tree/main/compute
+.. _alchemiscale-k8s: https://github.com/datryllic/alchemiscale-k8s
 
 
 .. _deploy-object-store:

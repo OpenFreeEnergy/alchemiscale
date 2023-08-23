@@ -3,7 +3,7 @@ Operations
 ##########
 
 *********
-Add Users
+Add users
 *********
 
 To add a new user identity, you will generally use the ``alchemiscale`` CLI::
@@ -60,9 +60,14 @@ The same general principles apply to any deployment type, however.
 Creating a database dump
 ========================
 
-**With the ``neo4j`` service shut down**, navigate to the directory containing your database data, set ``$BACKUPS_DIR`` to the absolute path of your choice, then run::
+**With the neo4j service shut down**, navigate to the directory containing your database data, set ``$BACKUPS_DIR`` to the absolute path of your choice, then run::
 
-    docker run --rm -v $(pwd):/var/lib/neo4j/data -v ${BACKUPS_DIR}:/tmp --entrypoint /bin/bash neo4j:4.4 neo4j-admin dump --to /tmp/neo4j-$(date -I).dump
+    docker run --rm \
+               -v $(pwd):/var/lib/neo4j/data \
+               -v ${BACKUPS_DIR}:/tmp \
+               --entrypoint /bin/bash \
+               neo4j:4.4 \
+               neo4j-admin dump --to /tmp/neo4j-$(date -I).dump
 
 This will create a new database dump in the ``$BACKUPS_DIR`` directory.
 
@@ -72,8 +77,13 @@ Restoring from a database dump
 
 To later restore from a database dump, navigate to the directory containing your current database data, and clear or move the current data to another location (Neo4J will not restore to a database that is already initialized).
 
-**With the ``neo4j`` service shut down**, choose ``$DUMP_DATE``, then run::
+**With the neo4j service shut down**, choose ``$DUMP_DATE``, then run::
 
-    docker run --rm -v $(pwd):/var/lib/neo4j/data -v ${BACKUPS_DIR}:/tmp --entrypoint /bin/bash neo4j:4.4 neo4j-admin load --from /tmp/neo4j-${DUMP_DATE}.dump
+    docker run --rm \
+               -v $(pwd):/var/lib/neo4j/data \
+               -v ${BACKUPS_DIR}:/tmp \
+               --entrypoint /bin/bash \
+               neo4j:4.4 \
+               neo4j-admin load --from /tmp/neo4j-${DUMP_DATE}.dump
 
 Automating the backup process to perform regular backups without human intervention for your deployment is ideal, but out of scope for this document.
