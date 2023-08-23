@@ -14,7 +14,7 @@ Only Linux is supported as a platform for deploying ``alchemiscale`` services; W
 .. _deploy-docker-compose:
 
 ******************************************
-Single-Host Deployment with docker-compose
+Single-host deployment with docker-compose
 ******************************************
 
 An alchemiscale "server" deployment consists of a ``neo4j`` database (the "state store"), a client API endpoint, a compute API endpoint, and a reverse proxy (``traefik``).
@@ -27,7 +27,7 @@ The "server" also requires an object store; see :ref:`deploy-object-store`.
 
 .. _deploy-docker-compose-instructions:
 
-Deployment Instructions
+Deployment instructions
 =======================
 
 Install `docker compose <https://docs.docker.com/compose/install/#scenario-two-install-the-compose-plugin>`_.
@@ -97,11 +97,22 @@ Once connected to the instance, run the following commands::
 Now the instance has all of the dependencies required for ``docker-compose``-based deployment (:ref:`deploy-docker-compose-instructions`)
 
 
+.. _deploy-kubernetes:
+
+*************************************************
+Kubernetes-based deployment with alchemiscale-k8s
+*************************************************
+
+To deploy ``alchemiscale`` to a Kubernetes cluster, review the resources defined and detailed in `alchemiscale-k8s`_.
+
+.. _alchemiscale-k8s: https://github.com/datryllic/alchemiscale-k8s/tree/main/compute
+
+
 .. _deploy-object-store:
 
-************
-Object Store
-************
+**************************
+Setting up an object store
+**************************
 
 An "object store" is also needed for a complete server deployment.
 Currently, the only supported object store is AWS S3.
