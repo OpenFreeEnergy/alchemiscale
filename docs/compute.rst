@@ -69,7 +69,7 @@ Different clusters feature different schedulers (e.g. SLURM, LSF, TORQUE/PBS, et
 You will need to tailor your specific approach to the constraints of the cluster you are targeting.
 
 The following is an example of the *content* of a script submitted to an HPC cluster. 
-We have left off the top matter that is specific to the queueing system, and certain environment variables (e.g. ``JOBID``, ``JOBINDEX``) should be tailored to those presented by the queueing system.
+We have omitted queuing system specific options, flags, and certain environment variables (e.g. ``JOBID``, ``JOBINDEX``) which should be tailored to those presented by the queuing system.
 Note that for this case we've made use of a ``conda``/``mamba``-based deployment, detailed above in :ref:`compute_conda`::
 
     # don't limit stack size
