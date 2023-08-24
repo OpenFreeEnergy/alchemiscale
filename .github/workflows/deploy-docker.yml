@@ -108,4 +108,6 @@ jobs:
         run: singularity build ${{ matrix.image }}:$GITHUB_SHA.sif docker-daemon:${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:${{ github.sha }}
 
       - name: Push Apptainer Image
-        run: singularity push ${{ matrix.image }}:$GITHUB_SHA.sif oras://${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:${{ github.sha }}-apptainer
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://ghcr.io
+          singularity push ${{ matrix.image }}:$GITHUB_SHA.sif oras://${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:${{ github.sha }}-apptainer
