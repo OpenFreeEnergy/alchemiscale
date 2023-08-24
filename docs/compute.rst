@@ -7,7 +7,7 @@ Compute
 In order to actually execute ``Transformation``\s to obtain free energy estimates, you must deploy compute services to resources suitable for executing these types of calculations.
 This document details how to do this on several different types of compute resources.
 
-There currently exists a single implementation of an ``alchemiscale`` compute service: the py:class:`~alchemiscale.compute.service.SynchronousComputeService`.
+There currently exists a single implementation of an ``alchemiscale`` compute service: the :py:class:`~alchemiscale.compute.service.SynchronousComputeService`.
 Other variants will likely be created in the future, optimized for different use cases.
 This documentation will expand over time as these variants become available; for now, it assumes use of this variant.
 
@@ -21,7 +21,8 @@ A template for this file can be found here; replace ``$ALCHEMISCALE_VERSION`` wi
 Single-host
 ***********
 
-To deploy a compute service (or multiple services) to a single host, we recommend one of two routes.
+To deploy a compute service (or multiple services) to a single host, we recommend one of two routes:
+
 * installing all dependencies in a ``conda``/``mamba`` environment
 * running the services as Docker containers, with all dependencies baked in
 
@@ -33,7 +34,8 @@ Deploying with conda/mamba
 
 To deploy via ``conda``/``mamba``, first create an environment (we recommend ``mamba`` for its performance)::
 
-    mamba env create -n alchemiscale-compute-$ALCHEMISCALE_VERSION -f https://raw.githubusercontent.com/openforcefield/alchemiscale/$ALCHEMISCALE_VERSION/devtools/conda-envs/alchemiscale-compute.yml
+    mamba env create -n alchemiscale-compute-$ALCHEMISCALE_VERSION \
+                     -f https://raw.githubusercontent.com/openforcefield/alchemiscale/$ALCHEMISCALE_VERSION/devtools/conda-envs/alchemiscale-compute.yml
 
 Once created, activate the environment in your current shell::
 
@@ -51,7 +53,10 @@ Deploying with Docker
 
 Assuming your configuration file is in the current working directory, to deploy with Docker, you might use::
 
-    docker run --gpus all --rm -v $(pwd):/mnt ghcr.io/openforcefield/alchemiscale-compute:$ALCHEMISCALE_VERSION compute synchronous -c /mnt/synchronous-compute-settings.yaml
+    docker run --gpus all \
+               --rm \
+               -v $(pwd):/mnt ghcr.io/openforcefield/alchemiscale-compute:$ALCHEMISCALE_VERSION \
+               compute synchronous -c /mnt/synchronous-compute-settings.yaml
 
 
 See the `official Docker documentation on GPU use`_ for details on how to specify individual GPUs for each container you launch.
