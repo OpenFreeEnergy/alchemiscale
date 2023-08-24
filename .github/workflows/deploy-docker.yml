@@ -11,7 +11,7 @@ name: Deployment - Docker images
 
 on:
   push:
-    branches: ['release']
+    branches: ['release', 'feat/build_apptainer_images']
   workflow_dispatch:
 
 env:
@@ -107,7 +107,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
-          push: true
+          push: false # change to true after merge, but I don't want to mess anything up while testing
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
