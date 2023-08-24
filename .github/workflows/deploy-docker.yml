@@ -37,7 +37,6 @@ jobs:
     steps:
       - name: Free disk space
         run: |
-          run: |
           sudo docker rmi $(docker image ls -aq) >/dev/null 2>&1 || true
           sudo rm -rf \
             /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -121,7 +120,7 @@ jobs:
 
       - name: Test & Push Apptainer Image
         run: |
-        mkdir test_apptainer
-        cd test_apptainer
-        singularity run ../${{ matrix.image }}:$GITHUB_SHA.sif --pyargs alchemiscale
-        singularity push ../${{ matrix.image }}:$GITHUB_SHA.sif oras://${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:$GITHUB_SHA-apptainer
+          mkdir test_apptainer
+          cd test_apptainer
+          singularity run ../${{ matrix.image }}:$GITHUB_SHA.sif --pyargs alchemiscale
+          singularity push ../${{ matrix.image }}:$GITHUB_SHA.sif oras://${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:$GITHUB_SHA-apptainer
