@@ -87,6 +87,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{version}}
             type=sha
+            $GITHUB_SHA
 
       - name: Build Docker Image
         uses: docker/build-push-action@v4
