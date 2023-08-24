@@ -92,7 +92,7 @@ Note that for this case we've made use of a ``conda``/``mamba``-based deployment
     envsubst < settings.yaml > configs/settings.${JOBID}-${JOBINDEX}.yaml
     
     # start up a single service
-    alchemiscale compute synchronous -c configs/settings.${LSB_JOBID}-${LSB_JOBINDEX}.yaml
+    alchemiscale compute synchronous -c configs/settings.${JOBID}-${JOBINDEX}.yaml
     
     # remove scratch space
     rm -r $ALCHEMISCALE_SCRATCH
@@ -106,10 +106,10 @@ A subset of options used in the config file are given below::
     init:
     
       # Filesystem path to use for `ProtocolDAG` `shared` space.
-      shared_basedir: "/scratch/${USER}/${LSB_JOBID}-${LSB_JOBINDEX}/shared"
+      shared_basedir: "/scratch/${USER}/${JOBID}-${JOBINDEX}/shared"
     
       # Filesystem path to use for `ProtocolUnit` `scratch` space.
-      scratch_basedir: "/scratch/${USER}/${LSB_JOBID}-${LSB_JOBINDEX}/scratch"
+      scratch_basedir: "/scratch/${USER}/${JOBID}-${JOBINDEX}/scratch"
     
       # Path to file for logging output; if not set, logging will only go to
       # STDOUT.
@@ -185,14 +185,15 @@ We define a k8s `Deployment`_ featuring a single container spec as the file ``co
 This assumes our configuration file has been defined as a *secret* in the cluster.
 Assuming the file is in the current working directory, we can add it as a secret with::
 
-    kubectl create secret generic alchemiscale-compute-settings-yaml --from-file=synchronous-compute-settings.yaml
+    kubectl create secret generic alchemiscale-compute-settings-yaml \
+                                  --from-file=synchronous-compute-settings.yaml
 
 
-The we can then deploy the compute services with::
+Then we can then deploy the compute services with::
 
     kubectl apply -f compute-services.yaml
 
-To scale up the number of compute services, increase the number of ``replicas`` to the number desired, and re-run the ``kubectl apply`` command above.
+To scale up the number of compute services on the cluster, increase ``replicas`` to the number desired, and re-run the ``kubectl apply`` command above.
 
 A more complete example of this type of deployment can be found in `alchemiscale-k8s`_.
 
