@@ -488,7 +488,9 @@ def key(func):
 
 
 def scope(func):
-    scope = click.option("--scope", "-s", help="scope", required=True, type=str, multiple=True)
+    scope = click.option(
+        "--scope", "-s", help="scope", required=True, type=str, multiple=True
+    )
     return scope(func)
 
 

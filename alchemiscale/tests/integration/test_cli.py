@@ -529,8 +529,12 @@ def test_scope_add(n4js_fresh):
         assert click_success(result)
         scopes = n4js.list_scopes("bill", CredentialedUserIdentity)
         assert len(scopes) == 2
-        assert set(scopes) == set([Scope.from_str("org1-campaign2-project3"),
-                                   Scope.from_str("org1-campaign2-project4")])
+        assert set(scopes) == set(
+            [
+                Scope.from_str("org1-campaign2-project3"),
+                Scope.from_str("org1-campaign2-project4"),
+            ]
+        )
 
 
 def test_scope_remove(n4js_fresh):
