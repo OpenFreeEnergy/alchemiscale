@@ -99,6 +99,11 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Setup Apptainer
+        uses: eWaterCycle/setup-apptainer@v2
+        with:
+          apptainer-version: 1.1.2
+
       - name: Build Apptainer Image
         run: singularity build ${{ matrix.image }}:$GITHUB_SHA.sif docker-daemon:${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:${{ github.sha }}
 
