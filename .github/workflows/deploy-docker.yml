@@ -17,6 +17,8 @@ on:
 env:
   REGISTRY: ghcr.io
   NAMESPACE: openforcefield
+  GITHUB_SHA: $GITHUB_SHA
+
 
 jobs:
   build-and-push-image:
@@ -87,7 +89,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{version}}
             type=sha
-            $GITHUB_SHA
+            ${{ env.GITHUB_SHA }}
 
       - name: Build Docker Image
         uses: docker/build-push-action@v4
