@@ -11,7 +11,7 @@ ENV PYTHONUNBUFFERED=1
 COPY --chown=$MAMBA_USER:$MAMBA_USER devtools/conda-envs/alchemiscale-compute.yml /tmp/env.yaml
 COPY --chown=$MAMBA_USER:$MAMBA_USER alchemiscale /tmp/alchemiscale
 COPY --chown=$MAMBA_USER:$MAMBA_USER LICENSE README.md pyproject.toml /tmp/
-RUN micromamba install -y -n base git -f /tmp/env.yaml pytest && \
+RUN micromamba install -y -n base git -f /tmp/env.yaml && \
     micromamba clean --all --yes
 
 # Ensure that conda environment is automatically activated

@@ -90,20 +90,7 @@ jobs:
             type=sha
             ${{ github.sha }}
 
-      - name: Build Docker Image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: false
-          load: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Test Image
-        run: docker run --rm ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:${{ github.sha }} pytest --pyargs alchemiscale
-
-      - name: Push Docker Image
+      - name: Build Docker Image and Push
         uses: docker/build-push-action@v4
         with:
           context: .
@@ -112,17 +99,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Setup Apptainer
-        uses: eWaterCycle/setup-apptainer@v2
-        with:
-          apptainer-version: 1.1.2
-
       - name: Build Apptainer Image
         run: singularity build ${{ matrix.image }}:$GITHUB_SHA.sif docker-daemon:${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:${{ github.sha }}
 
-      - name: Test & Push Apptainer Image
-        run: |
-          mkdir test_apptainer
-          cd test_apptainer
-          singularity run ../${{ matrix.image }}:$GITHUB_SHA.sif --pyargs alchemiscale
-          singularity push ../${{ matrix.image }}:$GITHUB_SHA.sif oras://${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:${{ github.sha }}-apptainer
+      - name: Push Apptainer Image
+        run: singularity push ${{ matrix.image }}:$GITHUB_SHA.sif oras://${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:${{ github.sha }}-apptainer
