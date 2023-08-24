@@ -17,7 +17,6 @@ on:
 env:
   REGISTRY: ghcr.io
   NAMESPACE: openforcefield
-  GITHUB_SHA: $GITHUB_SHA
 
 
 jobs:
@@ -89,7 +88,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{version}}
             type=sha
-            ${{ env.GITHUB_SHA }}
+            ${{ github.sha }}
 
       - name: Build Docker Image
         uses: docker/build-push-action@v4
@@ -102,7 +101,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Test Image
-        run: docker run --rm ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:$GITHUB_SHA pytest --pyargs alchemiscale
+        run: docker run --rm ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:${{ github.sha }} pytest --pyargs alchemiscale
 
       - name: Push Docker Image
         uses: docker/build-push-action@v4
@@ -119,11 +118,11 @@ jobs:
           apptainer-version: 1.1.2
 
       - name: Build Apptainer Image
-        run: singularity build ${{ matrix.image }}:$GITHUB_SHA.sif docker-daemon:${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:$GITHUB_SHA
+        run: singularity build ${{ matrix.image }}:$GITHUB_SHA.sif docker-daemon:${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:${{ github.sha }}
 
       - name: Test & Push Apptainer Image
         run: |
           mkdir test_apptainer
           cd test_apptainer
           singularity run ../${{ matrix.image }}:$GITHUB_SHA.sif --pyargs alchemiscale
-          singularity push ../${{ matrix.image }}:$GITHUB_SHA.sif oras://${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:$GITHUB_SHA-apptainer
+          singularity push ../${{ matrix.image }}:$GITHUB_SHA.sif oras://${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.image }}:${{ github.sha }}-apptainer
