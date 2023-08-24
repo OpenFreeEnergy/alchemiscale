@@ -488,7 +488,7 @@ def key(func):
 
 
 def scope(func):
-    scope = click.option("--scope", "-s", help="scope", required=True, type=str)
+    scope = click.option("--scope", "-s", help="scope", required=True, type=str, multiple=True)
     return scope(func)
 
 
@@ -569,10 +569,10 @@ def add_scope(url, user, password, dbname, identity_type, identifier, scope):
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
 
-    scope = Scope.from_str(scope)
     identity_type_cls = _identity_type_string_to_cls(identity_type)
-
-    n4js.add_scope(identifier, identity_type_cls, scope)
+    for s in scope:
+        s_ = Scope.from_str(s)
+        n4js.add_scope(identifier, identity_type_cls, s_)
 
 
 @identity.command()
@@ -611,7 +611,8 @@ def remove_scope(url, user, password, dbname, identity_type, identifier, scope):
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
 
-    scope = Scope.from_str(scope)
     identity_type_cls = _identity_type_string_to_cls(identity_type)
 
-    n4js.remove_scope(identifier, identity_type_cls, scope)
+    for s in scope:
+        s_ = Scope.from_str(s)
+        n4js.remove_scope(identifier, identity_type_cls, s_)

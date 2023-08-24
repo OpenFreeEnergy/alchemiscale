@@ -522,12 +522,15 @@ def test_scope_add(n4js_fresh):
                 ident,
                 "--scope",
                 "org1-campaign2-project3",
+                "--scope",
+                "org1-campaign2-project4",
             ],
         )
         assert click_success(result)
         scopes = n4js.list_scopes("bill", CredentialedUserIdentity)
-        assert len(scopes) == 1
-        assert scopes[0] == Scope.from_str("org1-campaign2-project3")
+        assert len(scopes) == 2
+        assert set(scopes) == set([Scope.from_str("org1-campaign2-project3"),
+                                   Scope.from_str("org1-campaign2-project4")])
 
 
 def test_scope_remove(n4js_fresh):
@@ -552,6 +555,9 @@ def test_scope_remove(n4js_fresh):
             ident, CredentialedUserIdentity, Scope.from_str("org1-campaign2-project3")
         )
         n4js.add_scope(
+            ident, CredentialedUserIdentity, Scope.from_str("org1-campaign2-project4")
+        )
+        n4js.add_scope(
             ident, CredentialedUserIdentity, Scope.from_str("org4-campaign5-project6")
         )
 
@@ -566,10 +572,13 @@ def test_scope_remove(n4js_fresh):
                 ident,
                 "--scope",
                 "org1-campaign2-project3",
+                "--scope",
+                "org1-campaign2-project4",
             ],
         )
         assert click_success(result)
         scopes = n4js.list_scopes("bill", CredentialedUserIdentity)
         scope_strs = [str(s) for s in scopes]
         assert "org1-campaign2-project3" not in scope_strs
+        assert "org1-campaign2-project4" not in scope_strs
         assert "org4-campaign5-project6" in scope_strs
