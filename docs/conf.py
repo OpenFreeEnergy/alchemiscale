@@ -84,4 +84,5 @@ myst_heading_anchors = 2
 # Never execute notebooks
 # Output is stored in the notebook itself
 # Remember `Widgets -> Save Notebook Widget State` in the notebook.
+# See: https://myst-nb.readthedocs.io/en/latest/computation/execute.html
 nb_execution_mode = "off"
