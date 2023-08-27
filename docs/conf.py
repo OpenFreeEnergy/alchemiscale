@@ -24,7 +24,8 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.githubpages",
-    "sphinx.ext.intersphinx"
+    "sphinx.ext.intersphinx",
+    "myst_nb",
 ]
 
 templates_path = ["_templates"]
@@ -59,3 +60,21 @@ intersphinx_mapping = {
 
 html_theme = "sphinx_rtd_theme"
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+
+
+# -- Options for MystNB ------------------------------------------------------
+
+myst_url_schemes = [
+    "http",
+    "https",
+]
+
+myst_enable_extensions = [
+    "amsmath",
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "html_image",
+    "smartquotes",
+    "replacements",
+]
