@@ -78,3 +78,10 @@ myst_enable_extensions = [
     "smartquotes",
     "replacements",
 ]
+
+myst_heading_anchors = 2
+
+# Never execute notebooks
+# Output is stored in the notebook itself
+# Remember `Widgets -> Save Notebook Widget State` in the notebook.
+nb_execution_mode = "off"
