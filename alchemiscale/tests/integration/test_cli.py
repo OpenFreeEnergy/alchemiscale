@@ -492,7 +492,17 @@ def test_scope_list(n4js_fresh):
         assert "org7-*-*" in result.output
 
 
-def test_scope_add(n4js_fresh):
+@pytest.mark.parametrize(
+    "scopes",
+    [
+        ("org1-campaign2-project3",),
+        (
+            "org1-campaign2-project3",
+            "org1-campaign2-project4",
+        ),
+    ],
+)
+def test_scope_add(n4js_fresh, scopes):
     n4js = n4js_fresh
     env_vars = {
         "NEO4J_URL": n4js.graph.service.uri,
@@ -511,6 +521,11 @@ def test_scope_add(n4js_fresh):
 
         n4js.create_credentialed_entity(identity)
 
+        scopes_cli = []
+        for scope in scopes:
+            scopes_cli.append("--scope")
+            scopes_cli.append(scope)
+
         result = runner.invoke(
             cli,
             [
@@ -520,17 +535,26 @@ def test_scope_add(n4js_fresh):
                 "user",
                 "--identifier",
                 ident,
-                "--scope",
-                "org1-campaign2-project3",
-            ],
+            ]
+            + scopes_cli,
         )
         assert click_success(result)
-        scopes = n4js.list_scopes("bill", CredentialedUserIdentity)
-        assert len(scopes) == 1
-        assert scopes[0] == Scope.from_str("org1-campaign2-project3")
+        scopes_ = n4js.list_scopes("bill", CredentialedUserIdentity)
+        assert len(scopes_) == len(scopes)
+        assert set(scopes_) == set([Scope.from_str(scope) for scope in scopes])
 
 
-def test_scope_remove(n4js_fresh):
+@pytest.mark.parametrize(
+    "scopes_remove",
+    [
+        ("org1-campaign2-project3",),
+        (
+            "org1-campaign2-project3",
+            "org1-campaign2-project4",
+        ),
+    ],
+)
+def test_scope_remove(n4js_fresh, scopes_remove):
     n4js = n4js_fresh
     env_vars = {
         "NEO4J_URL": n4js.graph.service.uri,
@@ -552,8 +576,16 @@ def test_scope_remove(n4js_fresh):
             ident, CredentialedUserIdentity, Scope.from_str("org1-campaign2-project3")
         )
         n4js.add_scope(
+            ident, CredentialedUserIdentity, Scope.from_str("org1-campaign2-project4")
+        )
+        n4js.add_scope(
             ident, CredentialedUserIdentity, Scope.from_str("org4-campaign5-project6")
         )
+
+        scopes_cli = []
+        for scope in scopes_remove:
+            scopes_cli.append("--scope")
+            scopes_cli.append(scope)
 
         result = runner.invoke(
             cli,
@@ -564,12 +596,12 @@ def test_scope_remove(n4js_fresh):
                 "user",
                 "--identifier",
                 ident,
-                "--scope",
-                "org1-campaign2-project3",
-            ],
+            ]
+            + scopes_cli,
         )
         assert click_success(result)
         scopes = n4js.list_scopes("bill", CredentialedUserIdentity)
         scope_strs = [str(s) for s in scopes]
-        assert "org1-campaign2-project3" not in scope_strs
+        for scope in scopes_remove:
+            assert scope not in scope_strs
         assert "org4-campaign5-project6" in scope_strs
