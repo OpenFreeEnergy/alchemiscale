@@ -13,7 +13,6 @@ This document provides some guidance on:
 * how best to engage with the project
 
 
-
 *****************************************
 System architecture and design philosophy
 *****************************************
@@ -41,13 +40,12 @@ They are shown together visually in
 .. _Neo4j: https://neo4j.com/
 .. _AWS S3: https://aws.amazon.com/s3/
 .. _GPUs: https://en.wikipedia.org/wiki/Graphics_processing_unit
+.. _RESTful: https://en.wikipedia.org/wiki/Representational_state_transfer
 
 
 ********************************
 Components and technology stacks
 ********************************
-
-
 
 
 **************
