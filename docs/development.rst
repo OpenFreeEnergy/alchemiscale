@@ -60,7 +60,7 @@ It represents the single source of truth for what exists and what does not in th
 Other components can experience failures and faults, but the content of the *state store* is the only content that really matters at any given moment.
 
 We use a `graph database`_, `Neo4j`_, as the *state store*.
-The choice of a graph database (over e.g. a `relational database`_ or a `document database`_) was natural given the graph structure of :ref:`~gufe.AlchemicalNetwork`\s,
+The choice of a graph database (over e.g. a `relational database`_ or a `document database`_) was natural given the graph structure of :py:class:`~gufe.AlchemicalNetwork`\s,
 which constitute the core data model ``alchemiscale`` operates on.
 With Neo4j, it wasn't necessary to contort these networks into relational tables or into loosely-related document records, and we can take advantage of deduplication of network nodes where appropriate for database performance and efficient use of compute resources.
 
