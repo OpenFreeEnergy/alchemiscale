@@ -32,6 +32,7 @@ in particular the `OpenForceField`_ and `OpenFreeEnergy`_ ecosystems.
    ./deployment
    ./compute
    ./operations
+   ./development
    ./API_docs
 
 
