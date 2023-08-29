@@ -29,7 +29,7 @@ System architecture and design philosophy
 These components function together to create a complete ``alchemiscale`` deployment.
 They are shown together visually in
 
-.. image:: assets/system-architecture.png
+.. figure:: assets/system-architecture.png
    :alt: alchemiscale system architecture
 
    Diagram of the system architecture for ``alchemiscale``.
