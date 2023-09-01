@@ -225,6 +225,7 @@ Other modules, such as ``strategist`` and ``strategies``, are currently placehol
 .. _grolt: https://github.com/py2neo-org/grolt
 
 
+.. _contributing:
 
 *****************
 How to contribute
