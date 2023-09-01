@@ -28,7 +28,7 @@ System architecture and design philosophy
 * another `RESTful`_ API (``AlchemiscaleComputeAPI``) used by the compute services for interaction with the *state store* and *object store*
 
 These components function together to create a complete ``alchemiscale`` deployment.
-They are shown together visually in :numref:`system-architecture-figure`.
+They are shown together visually in :ref:`system-architecture-figure`.
 
 .. _system-architecture-figure:
 .. figure:: assets/system-architecture.png
@@ -131,7 +131,22 @@ This is the approach taken, for example, when deploying to Kubernetes via `alche
 User-facing Python client
 =========================
 
-Users interact
+Users (typically) interact with an ``alchemiscale`` deployment via the Python client :py:class:`~alchemiscale.interface.client.AlchemiscaleClient`.
+This client allows users to directly use `Open Free Energy`_ ecosystem tools to define :py:class:`~gufe.AlchemicalNetwork`\s, then submit, execute, and retrieve results for those networks via ``alchemiscale``, all from within a single Python session.
+
+The client methods convert user input into HTTP requests to the ``AlchemiscaleAPI``, which services those requests and issues responses.
+The client automatically handles authentication, including `JWT`_ retrieval and refreshes, as well as retries due to unreliable network connections, overloaded or temporarily-unreachable API services, etc.
+Some methods also make use of `asyncio`_ for requesting many entities in concurrent calls, and/or performs batching of calls for many entities.
+Internally, the `requests`_ and `httpx`_ libraries are used for making HTTP requests, for synchronous and asynchronous calls, respectively.
+
+Although it is possible to interact with the ``AlchemiscaleAPI`` with requests using any HTTP client, including e.g. `curl`_, this is not generally recommended for users.
+
+.. _Open Free Energy: https://openfree.energy/
+.. _JWT: https://en.wikipedia.org/wiki/JSON_Web_Token 
+.. _asyncio: https://docs.python.org/3/library/asyncio.html
+.. _requests: https://docs.python-requests.org/en/latest/index.html
+.. _httpx: https://www.python-httpx.org/
+.. _curl: https://en.wikipedia.org/wiki/CURL
 
 
 .. _component-compute-services:
