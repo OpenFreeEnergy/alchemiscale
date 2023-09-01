@@ -216,6 +216,8 @@ At the top level of the source tree, we have:
 
 ``tests``
     integration and unit test suite; implemented via `pytest`_, and utilizes Docker via `grolt`_ for Neo4j testing
+    
+Other modules, such as ``strategist`` and ``strategies``, are currently placeholders for future functionality.
 
 
 .. _click: https://click.palletsprojects.com/
@@ -228,4 +230,61 @@ At the top level of the source tree, we have:
 How to contribute
 *****************
 
+Interested in helping to develop ``alchemiscale``?
+The project is `developed openly on GitHub`_, and the best way to get started is to introduce yourself in our `New Contributors`_ Discussions tab.
+We can help orient you to problems aligned with your interests and skills from there!
 
+Before you start work on a new feature, it's a good practice to first `open an issue`_ describing it.
+This allows the maintainers to respond to your desired feature and offer guidance on how to go about implementing it, or whether it is within scope of the project's vision.
+It may be that the feature you are after already exists in some form, isn't really possible given ``alchemiscale``'s architecture, or isn't actually desirable for one or more reasons.
+Starting the discussion in an issue is likely to save you time, energy, and possibly frustration, so please take a moment to describe what you are after before working to implement it.
+The issue also functions as a convenient *anchor point* for maintainers to triage feature requests, perhaps grouping them with others in an upcoming milestone.
+
+If the feature is of broad interest, or of interest to the maintainers themselves, you may find you don't have to implement it at all!
+
+
+Setting up your development environment
+=======================================
+
+If you've decided to work on some aspect of ``alchemiscale``, the development workflow is roughly as follows.
+It's recommended that you develop/test on a Linux host, as there are `known issues with developing on Mac`_.
+
+To develop new features, fix bugs, and advance the ``alchemiscale`` codebase, you will need to:
+
+1. Clone the repository to your local machine::
+
+    $ git clone git@github.com:openforcefield/alchemiscale.git
+    $ cd alchemiscale
+
+2. Create a conda environment for running the test suite, preferrably with `mamba`_.::
+
+    $ mamba env create -f devtools/conda-envs/test.yml
+
+3. Perform an editable install of the ``alchemiscale`` source tree::
+
+    $ pip install -e .
+
+4. Make changes to the codebase, add or modify tests where necessary, then run the test suite::
+
+    $ pytest -v alchemiscale/tests
+
+5. Address test failures. Once clear, commit your changes on a new branch::
+
+    $ git checkout -b <feature-branch-name>
+    $ git commit -a -m <commit-message>
+
+6. Create a pull request (PR) from a fork; this is easiest with the `GitHub CLI`_::
+
+    $ gh pr create
+
+Once your PR is up, a maintainer can review it and offer feedback.
+It is unlikely that your PR will be merged immediately; it is often the case that changes will be requested to conform the feature to current patterns in the codebase, improve its maintainability, etc.
+Please be patient, and understand that it may take some time (weeks, even months) between the time a PR is created and it is ultimately accepted and merged.
+
+
+.. _developed openly on GitHub: https://github.com/openforcefield/alchemiscale
+.. _New Contributors: https://github.com/openforcefield/alchemiscale/discussions/categories/new-contributors
+.. _mamba: https://github.com/conda-forge/miniforge#mambaforge
+.. _known issues with developing on Mac: https://github.com/openforcefield/alchemiscale/issues/92
+.. _GitHub CLI: https://cli.github.com/
+.. _open an issue: https://github.com/openforcefield/alchemiscale/issues
