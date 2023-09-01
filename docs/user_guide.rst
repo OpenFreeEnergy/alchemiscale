@@ -87,6 +87,8 @@ For production use of this protocol, we recommend the default settings::
     >>> settings = NonEquilibriumCyclingProtocol.default_settings()
 
 
+.. _user-guide-submit-network:
+
 *************************************************
 Submitting your AlchemicalNetwork to alchemiscale
 *************************************************
@@ -155,6 +157,8 @@ You can list all your accessible ``AlchemicalNetworks`` on the ``alchemiscale`` 
 
 and you can use these with :py:meth:`~alchemiscale.AlchemiscaleClient.get_network` above to pull them down as desired.
 
+
+.. _user-guide-create-tasks:
 
 ****************************
 Creating and actioning Tasks
