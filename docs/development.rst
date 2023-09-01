@@ -153,7 +153,34 @@ Although it is possible to interact with the ``AlchemiscaleAPI`` with requests u
 
 Compute services
 ================
-Compute services make use of the :py:class:`~alchemiscale.compute.client.AlchemiscaleComputeClient`.
+
+Compute services are deployed and run on resources suitable for executing actual free energy calculations.
+They are not considered part of the "server" deployment, which includes the *state store*, the *object store*, and the API services.
+Compute services are designed to be run independently of one another, and function as clients to the ``AlchemiscaleComputeAPI``.
+
+There currently exists a single implementation of an ``alchemiscale`` compute service: the :py:class:`~alchemiscale.compute.service.SynchronousComputeService`.
+This functions as the reference implementation; other variants will likely be created in the future, optimized for different use cases.
+The discussion that follows describes the behavior of compute services in general, and should apply to all variants.
+
+When a compute service is started, it consumes a configuration file for setting its parameters, such as `this template configuration`_ for the :py:class:`~alchemiscale.compute.service.SynchronousComputeService`, 
+This file sets the URL for the target ``alchemiscale`` instance, compute identity and key, and any parameters specific to the resource on which the compute service is deployed.
+See :ref:`compute` for additional details on deployment.
+
+After starting up, the compute service registers itself with the ``AlchemiscaleComputeAPI``, creating a :py:class:`~alchemiscale.storage.models.ComputeServiceRegistration` instance in the *state store*.
+It will then claim :py:class:`~alchemiscale.storage.models.Task``\s for execution, pull the corresponding :py:class:`~gufe.transformations.Transformation`, create and execute a :py:class:`~gufe.protocols.protocoldag.ProtocolDAG`, and push the corresponding :py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult` back to the ``AlchemiscaleComputeAPI`` upon completion or failure.
+The compute service will continue this behavior until it reaches a configured stop condition, receives a termination signal, or is killed.
+
+The compute service periodically issues a heartbeat to the ``AlchemiscaleComputeAPI``, updating its last known heartbeat datetime in its registration.
+If the compute service is killed without a chance to deregister itself, its heartbeat won't be updated, and eventually the registration will be expired by the ``AlchemiscaleComputeAPI`` and any claimed ``Task``\s unclaimed.
+If the compute service reaches a configured stop condition or receives a termination signal, it will cease execution, deregister itself, and shut down.
+Deregistration automatically unclaims any ``"running"`` ``Task``\s and sets their status back to ``"waiting"``.
+
+Compute services make use of the :py:class:`~alchemiscale.compute.client.AlchemiscaleComputeClient` for issuing all requests and handling responses from the ``AlchemiscaleComputeAPI``.
+This is directly analogous to the way users interact with ``alchemiscale`` via the :py:class:`~alchemiscale.interface.client.AlchemiscaleClient` through the ``AlchemiscaleAPI``.
+Like the ``AlchemiscaleClient``, the ``AlchemiscaleComputeClient`` automatically handles authentication and JWT refreshes, retries, etc.
+
+
+.. _this template configuration: https://github.com/openforcefield/alchemiscale/blob/main/devtools/configs/synchronous-compute-settings.yaml
 
 
 **************
