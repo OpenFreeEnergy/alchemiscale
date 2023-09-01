@@ -1,5 +1,5 @@
 #######
-Storage
+storage
 #######
 
 .. automodule:: alchemiscale.storage.models

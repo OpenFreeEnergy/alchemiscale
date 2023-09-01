@@ -1,5 +1,5 @@
 ####
-Base
+base
 ####
 
 .. automodule:: alchemiscale.base.api
