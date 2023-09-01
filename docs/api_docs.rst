@@ -6,7 +6,7 @@ API Documentation
 
 .. toctree::
    :maxdepth: 1
-   :caption: Contents:
+   :caption: API Contents:
 
 
    ./documentation_pages/models
