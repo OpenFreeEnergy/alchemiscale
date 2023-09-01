@@ -1,5 +1,5 @@
 ########
-Security
+security
 ########
 
 .. automodule:: alchemiscale.security.auth

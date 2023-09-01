@@ -1,5 +1,5 @@
 ##########
-Strategies
+strategies
 ##########
 
 .. automodule:: alchemiscale.strategies.base

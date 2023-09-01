@@ -1,5 +1,5 @@
 ##########
-Strategist
+strategist
 ##########
 
 .. automodule:: alchemiscale.strategist.service

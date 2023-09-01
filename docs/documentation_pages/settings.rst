@@ -1,5 +1,5 @@
 ########
-Settings
+settings
 ########
 
 .. automodule:: alchemiscale.settings

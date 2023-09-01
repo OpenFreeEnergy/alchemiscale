@@ -190,13 +190,13 @@ Library layout
 The ``alchemiscale`` codebase is generally organized according to the components detailed above.
 At the top level of the source tree, we have:
 
-``models.py``
+``models``
     user-facing ``alchemiscale`` data models, in particular :py:class:`~alchemiscale.models.Scope` and :py:class:`~alchemiscale.models.ScopedKey`
 
-``settings.py``
+``settings``
     settings data models for configurable components
 
-``cli.py``
+``cli``
     command-line interface, implemented via `click`_
 
 ``storage``
@@ -218,6 +218,8 @@ At the top level of the source tree, we have:
     integration and unit test suite; implemented via `pytest`_, and utilizes Docker via `grolt`_ for Neo4j testing
     
 Other modules, such as ``strategist`` and ``strategies``, are currently placeholders for future functionality.
+
+See the :ref:`api-docs` for the detailed contents of each of these modules.
 
 
 .. _click: https://click.palletsprojects.com/
