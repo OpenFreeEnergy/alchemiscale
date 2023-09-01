@@ -240,10 +240,14 @@ Before you start work on a new feature, it's a good practice to first `open an i
 This allows the maintainers to respond to your desired feature and offer guidance on how to go about implementing it, or whether it is within scope of the project's vision.
 It may be that the feature you are after already exists in some form, isn't really possible given ``alchemiscale``'s architecture, or isn't actually desirable for one or more reasons.
 Starting the discussion in an issue is likely to save you time, energy, and possibly frustration, so please take a moment to describe what you are after before working to implement it.
-The issue also functions as a convenient *anchor point* for maintainers to triage feature requests, perhaps grouping them with others in an upcoming milestone.
+The issue also functions as a convenient *anchor point* for maintainers to triage feature requests, perhaps grouping them with others in an `upcoming milestone`_.
 
 If the feature is of broad interest, or of interest to the maintainers themselves, you may find you don't have to implement it at all!
 
+.. _developed openly on GitHub: https://github.com/openforcefield/alchemiscale
+.. _New Contributors: https://github.com/openforcefield/alchemiscale/discussions/categories/new-contributors
+.. _open an issue: https://github.com/openforcefield/alchemiscale/issues
+.. _upcoming milestone: https://github.com/openforcefield/alchemiscale/milestones
 
 Setting up your development environment
 =======================================
@@ -258,9 +262,10 @@ To develop new features, fix bugs, and advance the ``alchemiscale`` codebase, yo
     $ git clone git@github.com:openforcefield/alchemiscale.git
     $ cd alchemiscale
 
-2. Create a conda environment for running the test suite, preferrably with `mamba`_.::
+2. Create a conda environment for running the test suite, preferrably with `mamba`_, and activate it::
 
-    $ mamba env create -f devtools/conda-envs/test.yml
+    $ mamba env create -n <environment-name> -f devtools/conda-envs/test.yml
+    $ conda activate <environment-name>
 
 3. Perform an editable install of the ``alchemiscale`` source tree::
 
@@ -275,18 +280,15 @@ To develop new features, fix bugs, and advance the ``alchemiscale`` codebase, yo
     $ git checkout -b <feature-branch-name>
     $ git commit -a -m <commit-message>
 
-6. Create a pull request (PR) from a fork; this is easiest with the `GitHub CLI`_::
+6. Create a pull request (PR) from your own fork; this is easiest with the `GitHub CLI`_::
 
     $ gh pr create
 
 Once your PR is up, a maintainer can review it and offer feedback.
 It is unlikely that your PR will be merged immediately; it is often the case that changes will be requested to conform the feature to current patterns in the codebase, improve its maintainability, etc.
-Please be patient, and understand that it may take some time (weeks, even months) between the time a PR is created and it is ultimately accepted and merged.
+Please be patient, and understand that it may take some time (weeks, even months) between the time a PR is created, accepted, and merged.
 
 
-.. _developed openly on GitHub: https://github.com/openforcefield/alchemiscale
-.. _New Contributors: https://github.com/openforcefield/alchemiscale/discussions/categories/new-contributors
 .. _mamba: https://github.com/conda-forge/miniforge#mambaforge
 .. _known issues with developing on Mac: https://github.com/openforcefield/alchemiscale/issues/92
 .. _GitHub CLI: https://cli.github.com/
-.. _open an issue: https://github.com/openforcefield/alchemiscale/issues
