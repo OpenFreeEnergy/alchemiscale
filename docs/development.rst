@@ -167,11 +167,11 @@ This file sets the URL for the target ``alchemiscale`` instance, compute identit
 See :ref:`compute` for additional details on deployment.
 
 After starting up, the compute service registers itself with the ``AlchemiscaleComputeAPI``, creating a :py:class:`~alchemiscale.storage.models.ComputeServiceRegistration` instance in the *state store*.
-It will then claim :py:class:`~alchemiscale.storage.models.Task``\s for execution, pull the corresponding :py:class:`~gufe.transformations.Transformation`, create and execute a :py:class:`~gufe.protocols.protocoldag.ProtocolDAG`, and push the corresponding :py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult` back to the ``AlchemiscaleComputeAPI`` upon completion or failure.
+It will then claim :py:class:`~alchemiscale.storage.models.Task`\s for execution, pull the corresponding :py:class:`~gufe.transformations.Transformation`, create and execute a :py:class:`~gufe.protocols.protocoldag.ProtocolDAG`, and push the corresponding :py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult` back to the ``AlchemiscaleComputeAPI`` upon completion or failure.
 The compute service will continue this behavior until it reaches a configured stop condition, receives a termination signal, or is killed.
 
 The compute service periodically issues a heartbeat to the ``AlchemiscaleComputeAPI``, updating its last known heartbeat datetime in its registration.
-If the compute service is killed without a chance to deregister itself, its heartbeat won't be updated, and eventually the registration will be expired by the ``AlchemiscaleComputeAPI`` and any claimed ``Task``\s unclaimed.
+If the compute service is killed without a chance to deregister itself, its heartbeat won't be updated, and eventually the registration will be expired and deregistered by the ``AlchemiscaleComputeAPI``.
 If the compute service reaches a configured stop condition or receives a termination signal, it will cease execution, deregister itself, and shut down.
 Deregistration automatically unclaims any ``"running"`` ``Task``\s and sets their status back to ``"waiting"``.
 
@@ -187,6 +187,40 @@ Like the ``AlchemiscaleClient``, the ``AlchemiscaleComputeClient`` automatically
 Library layout
 **************
 
+The ``alchemiscale`` codebase is generally organized according to the components detailed above.
+At the top level of the source tree, we have:
+
+``models.py``
+    user-facing ``alchemiscale`` data models, in particular :py:class:`~alchemiscale.models.Scope` and :py:class:`~alchemiscale.models.ScopedKey`
+
+``settings.py``
+    settings data models for configurable components
+
+``cli.py``
+    command-line interface, implemented via `click`_
+
+``storage``
+    *state store* and *object store* interfaces, along with relevant data models; not user-facing
+
+``base``
+    base classes and common components for RESTful APIs, HTTP clients
+
+``interface``
+    user-facing ``AlchemiscaleClient`` and ``AlchemiscaleAPI`` definitions
+
+``compute``
+    compute-facing ``AlchemiscaleComputeClient`` and ``AlchemiscaleComputeAPI``, as well as compute service classes
+
+``security``
+    data models and methods for defining credentialed identities and authenticating them, implementation of JWT via `jose`_
+
+``tests``
+    integration and unit test suite; implemented via `pytest`_, and utilizes Docker via `grolt`_ for Neo4j testing
+
+
+.. _click: https://click.palletsprojects.com/
+.. _jose: https://github.com/mpdavis/python-jose
+.. _grolt: https://github.com/py2neo-org/grolt
 
 
 
