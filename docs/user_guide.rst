@@ -106,7 +106,7 @@ Create an :py:class:`~alchemiscale.interface.client.AlchemiscaleClient` instance
 Choosing a Scope
 ================
 
-Choose a :py:class:`~alchemiscale.models.Scope` to submit your :external+gufe:py:class:`gufe.network.AlchemicalNetwork` to. 
+Choose a :py:class:`~alchemiscale.models.Scope` to submit your :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` to. 
 A :py:class:`~alchemiscale.models.Scope` is an org-campaign-project triple, and your user will have permissions to work within some of these.
 You can list your accessible ``Scopes`` with::
 
@@ -116,30 +116,30 @@ You can list your accessible ``Scopes`` with::
      ...]
 
 If you are a user, you will likely see the :py:class:`~alchemiscale.models.Scope` ``<Scope('openff-*-*')>`` among this list. 
-This means that you can submit your :external+gufe:py:class:`gufe.network.AlchemicalNetwork` to any Scope matching that pattern, such as ``'openff-my_special_campaign-tyk2_testing_1'``.
-A :py:class:`~alchemiscale.models.Scope` without any wildcards (``'*'``) is considered a *specific* :py:class:`~alchemiscale.models.Scope`; an :external+gufe:py:class:`gufe.network.AlchemicalNetwork` can only be submitted to a *specific* :py:class:`~alchemiscale.models.Scope`.
+This means that you can submit your :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` to any Scope matching that pattern, such as ``'openff-my_special_campaign-tyk2_testing_1'``.
+A :py:class:`~alchemiscale.models.Scope` without any wildcards (``'*'``) is considered a *specific* :py:class:`~alchemiscale.models.Scope`; an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` can only be submitted to a *specific* :py:class:`~alchemiscale.models.Scope`.
 
 You can create one with, e.g.::
 
     >>> scope = Scope('my_org', 'my_campaign', 'my_project')
 
-Within a :py:class:`~alchemiscale.models.Scope`, components of an :external+gufe:py:class:`gufe.network.AlchemicalNetwork` are deduplicated against other components already present, allowing you to e.g. submit new :external+gufe:py:class:`gufe.network.AlchemicalNetwork`\s sharing :external+gufe:py:class:`~gufe.transformations.Transformation`\s with previous ones and benefit from existing results.
-If you prefer to have an :external+gufe:py:class:`gufe.network.AlchemicalNetwork` not share any components with previously-submitted :external+gufe:py:class:`gufe.network.AlchemicalNetwork`\s, then submit it into a different :py:class:`~alchemiscale.models.Scope`.
+Within a :py:class:`~alchemiscale.models.Scope`, components of an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` are deduplicated against other components already present, allowing you to e.g. submit new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s sharing :external+gufe:py:class:`~gufe.transformations.Transformation`\s with previous ones and benefit from existing results.
+If you prefer to have an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` not share any components with previously-submitted :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s, then submit it into a different :py:class:`~alchemiscale.models.Scope`.
 
 
 Submitting and retrieving an AlchemicalNetwork
 ==============================================
 
-Submit your :external+gufe:py:class:`gufe.network.AlchemicalNetwork`::
+Submit your :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`::
 
     >>> an_sk = asc.create_network(network, scope)
 
-This will return a :py:class:`~alchemiscale.models.ScopedKey` uniquely identifying your :external+gufe:py:class:`gufe.network.AlchemicalNetwork`. A :py:class:`~alchemiscale.models.ScopedKey` is a combination of ``network.key`` and the :py:class:`~alchemiscale.models.Scope` we submitted it to, e.g.::
+This will return a :py:class:`~alchemiscale.models.ScopedKey` uniquely identifying your :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`. A :py:class:`~alchemiscale.models.ScopedKey` is a combination of ``network.key`` and the :py:class:`~alchemiscale.models.Scope` we submitted it to, e.g.::
 
     >>> an_sk
     <ScopedKey('AlchemicalNetwork-66d7676b10a1fd9cb3f75e6e2e7f6e9c-my_org-my_campaign-my_project')>
 
-You can pull the full :external+gufe:py:class:`gufe.network.AlchemicalNetwork` back down (even in another Python session) with::
+You can pull the full :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` back down (even in another Python session) with::
 
     >>> network_again = asc.get_network(network_sk)
     >>> network_again
@@ -164,10 +164,10 @@ and you can use these with :py:meth:`~alchemiscale.interface.client.Alchemiscale
 Creating and actioning Tasks
 ****************************
 
-Submitting an :external+gufe:py:class:`gufe.network.AlchemicalNetwork` defines it on the ``alchemiscale`` server, but it does not define where to allocate effort in evaluating the :external+gufe:py:class:`~gufe.transformations.Transformation`\s in the network.
+Submitting an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` defines it on the ``alchemiscale`` server, but it does not define where to allocate effort in evaluating the :external+gufe:py:class:`~gufe.transformations.Transformation`\s in the network.
 To do this, we need to create and action :py:class:`~alchemiscale.storage.models.Task`\s on the :external+gufe:py:class:`~gufe.transformations.Transformation`\s we are most interested in.
 
-For this example, we’ll loop through every :external+gufe:py:class:`~gufe.transformations.Transformation` in our :external+gufe:py:class:`gufe.network.AlchemicalNetwork`, creating and actioning 3 :py:class:`~alchemiscale.storage.models.Task`\s for each::
+For this example, we’ll loop through every :external+gufe:py:class:`~gufe.transformations.Transformation` in our :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, creating and actioning 3 :py:class:`~alchemiscale.storage.models.Task`\s for each::
 
     >>> tasks = []
     >>> for tf_sk in asc.get_network_transformations(an_sk):
@@ -179,8 +179,8 @@ For this example, we’ll loop through every :external+gufe:py:class:`~gufe.tran
      <ScopedKey('Task-157232d7ff794a0985ebce5055e0f336-my_org-my_campaign-my_project')>,
      ...]
 
-A :py:class:`~alchemiscale.storage.models.Task` is associated with a :external+gufe:py:class:`~gufe.transformations.Transformation` on creation, and actioning the :py:class:`~alchemiscale.storage.models.Task` marks it for execution for our :external+gufe:py:class:`gufe.network.AlchemicalNetwork` we submitted earlier.
-If we submit another :external+gufe:py:class:`gufe.network.AlchemicalNetwork` including some of the same :external+gufe:py:class:`~gufe.transformations.Transformation`\s later to the same :py:class:`~alchemiscale.models.Scope`, we could get the :py:class:`~alchemiscale.storage.models.Task`\s for each :external+gufe:py:class:`~gufe.transformations.Transformation` and only create new :py:class:`~alchemiscale.storage.models.Task`\s if necessary, actioning the existing ones to that :external+gufe:py:class:`gufe.network.AlchemicalNetwork` as well::
+A :py:class:`~alchemiscale.storage.models.Task` is associated with a :external+gufe:py:class:`~gufe.transformations.Transformation` on creation, and actioning the :py:class:`~alchemiscale.storage.models.Task` marks it for execution for our :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` we submitted earlier.
+If we submit another :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` including some of the same :external+gufe:py:class:`~gufe.transformations.Transformation`\s later to the same :py:class:`~alchemiscale.models.Scope`, we could get the :py:class:`~alchemiscale.storage.models.Task`\s for each :external+gufe:py:class:`~gufe.transformations.Transformation` and only create new :py:class:`~alchemiscale.storage.models.Task`\s if necessary, actioning the existing ones to that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` as well::
 
     >>> tasks = []
     >>> for tf_sk in asc.get_network_transformations(other_network_sk):
@@ -195,7 +195,7 @@ If we submit another :external+gufe:py:class:`gufe.network.AlchemicalNetwork` in
      None,
      ...]
 
-The more :external+gufe:py:class:`gufe.network.AlchemicalNetwork`\s a :py:class:`~alchemiscale.storage.models.Task` is actioned to, the higher its chances of being picked up by a compute service.
+The more :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s a :py:class:`~alchemiscale.storage.models.Task` is actioned to, the higher its chances of being picked up by a compute service.
 In this way, actioning is an indicator of demand for a given :py:class:`~alchemiscale.storage.models.Task` and its corresponding :external+gufe:py:class:`~gufe.transformations.Transformation`.
 
 .. note:: About :py:class:`~alchemiscale.storage.models.Task`\s
@@ -217,7 +217,7 @@ As you await results for your actioned :py:class:`~alchemiscale.storage.models.T
 You can quickly obtain statuses for all Tasks associated with various levels, including:
 
 * :py:class:`~alchemiscale.models.Scope`
-* :external+gufe:py:class:`gufe.network.AlchemicalNetwork`
+* :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`
 * :external+gufe:py:class:`~gufe.transformations.Transformation`
 
 
@@ -260,7 +260,7 @@ To get the individual statuses of all :py:class:`~alchemiscale.storage.models.Ta
 AlchemicalNetwork
 =================
 
-You can get the status counts of all :py:class:`~alchemiscale.storage.models.Task`\s associated with :external+gufe:py:class:`~gufe.transformations.Transformation`\s within a given :external+gufe:py:class:`gufe.network.AlchemicalNetwork` with::
+You can get the status counts of all :py:class:`~alchemiscale.storage.models.Task`\s associated with :external+gufe:py:class:`~gufe.transformations.Transformation`\s within a given :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` with::
 
     >>> asc.get_network_status(an_sk)
     {'complete': 138,
@@ -270,9 +270,9 @@ You can get the status counts of all :py:class:`~alchemiscale.storage.models.Tas
      'waiting': 57,
      'running': 33}
 
-Note that this will show status counts for all such :py:class:`~alchemiscale.storage.models.Task`\s, whether or not they have been actioned on the given :external+gufe:py:class:`gufe.network.AlchemicalNetwork`.
+Note that this will show status counts for all such :py:class:`~alchemiscale.storage.models.Task`\s, whether or not they have been actioned on the given :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
 
-To get the specific statuses of all :py:class:`~alchemiscale.storage.models.Task`\s for a given :external+gufe:py:class:`gufe.network.AlchemicalNetwork`, use the :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_network_tasks` method in combination with :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_tasks_status`::
+To get the specific statuses of all :py:class:`~alchemiscale.storage.models.Task`\s for a given :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, use the :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_network_tasks` method in combination with :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_tasks_status`::
 
     >>> tasks = asc.get_network_tasks(an_sk)
     >>> asc.get_tasks_status(tasks)
@@ -407,7 +407,7 @@ Given a set of :py:class:`~alchemiscale.storage.models.Task`\s you wish to set b
 
 Only :py:class:`~alchemiscale.storage.models.Task`\s with status ``'error'`` or ``'running'`` can be set back to ``'waiting'``; it is not possible to set :py:class:`~alchemiscale.storage.models.Task`\s with status ``'complete'``, ``'invalid'``, or ``'deleted'`` back to ``'waiting'``.
 
-If you’re feeling confident, you could set all errored :py:class:`~alchemiscale.storage.models.Task`\s on a given :external+gufe:py:class:`gufe.network.AlchemicalNetwork` with::
+If you’re feeling confident, you could set all errored :py:class:`~alchemiscale.storage.models.Task`\s on a given :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` with::
 
     >>> # first, get all tasks associated with network with status 'error'
     >>> tasks = asc.get_network_tasks(an_sk, status='error')
