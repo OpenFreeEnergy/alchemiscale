@@ -222,6 +222,7 @@ Other modules, such as ``strategist`` and ``strategies``, are currently placehol
 
 .. _click: https://click.palletsprojects.com/
 .. _jose: https://github.com/mpdavis/python-jose
+.. _pytest: https://docs.pytest.org
 .. _grolt: https://github.com/py2neo-org/grolt
 
 
