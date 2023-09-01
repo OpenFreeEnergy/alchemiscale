@@ -131,10 +131,10 @@ This is the approach taken, for example, when deploying to Kubernetes via `alche
 User-facing Python client
 =========================
 
-Users (typically) interact with an ``alchemiscale`` deployment via the Python client :py:class:`~alchemiscale.interface.client.AlchemiscaleClient`.
+Users interact with an ``alchemiscale`` deployment via the Python client :py:class:`~alchemiscale.interface.client.AlchemiscaleClient`.
 This client allows users to directly use `Open Free Energy`_ ecosystem tools to define :py:class:`~gufe.AlchemicalNetwork`\s, then submit, execute, and retrieve results for those networks via ``alchemiscale``, all from within a single Python session.
 
-The client methods convert user input into HTTP requests to the ``AlchemiscaleAPI``, which services those requests and issues responses.
+The client methods convert Pythonic user input into HTTP requests to the ``AlchemiscaleAPI``, which services those requests and issues responses, which are then converted by the client back into Pythonic objects.
 The client automatically handles authentication, including `JWT`_ retrieval and refreshes, as well as retries due to unreliable network connections, overloaded or temporarily-unreachable API services, etc.
 Some methods also make use of `asyncio`_ for requesting many entities in concurrent calls, and/or performs batching of calls for many entities.
 Internally, the `requests`_ and `httpx`_ libraries are used for making HTTP requests, for synchronous and asynchronous calls, respectively.
@@ -153,7 +153,6 @@ Although it is possible to interact with the ``AlchemiscaleAPI`` with requests u
 
 Compute services
 ================
-
 Compute services make use of the :py:class:`~alchemiscale.compute.client.AlchemiscaleComputeClient`.
 
 
