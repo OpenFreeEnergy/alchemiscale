@@ -219,7 +219,7 @@ At the top level of the source tree, we have:
     
 Other modules, such as ``strategist`` and ``strategies``, are currently placeholders for future functionality.
 
-See the :ref:`api-docs` for the detailed contents of each of these modules.
+See the :ref:`api-reference` for the detailed contents of each of these modules.
 
 
 .. _click: https://click.palletsprojects.com/
