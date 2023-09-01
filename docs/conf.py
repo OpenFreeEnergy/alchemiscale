@@ -27,6 +27,8 @@ extensions = [
     "sphinx.ext.intersphinx"
 ]
 
+numref = True
+
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
