@@ -35,6 +35,10 @@ class AlchemiscaleClientError(AlchemiscaleBaseClientError):
     ...
 
 
+def _get_transformation_results(client, tf_sk, kwargs):
+    return tf_sk, client.get_transformation_results(tf_sk, **kwargs)
+
+
 class AlchemiscaleClient(AlchemiscaleBaseClient):
     """Client for user interaction with API service."""
 
@@ -915,15 +919,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         from concurrent.futures import ProcessPoolExecutor, as_completed
 
-
-        def get_transformation_results(client, tf_sk, kwargs):
-            return tf_sk, client.get_transformation_results(tf_sk, **kwargs)
-
         with ProcessPoolExecutor() as executor:
             futures = []
             for tf_sk in self.get_network_transformations(network):
                 futures.append(executor.submit(
-                        get_transformation_results,
+                        _get_transformation_results,
                         self,
                         tf_sk,
                         dict(return_protocoldagresults=return_protocoldagresults,
