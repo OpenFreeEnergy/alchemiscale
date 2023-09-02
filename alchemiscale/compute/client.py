@@ -1,6 +1,6 @@
 """
-Client for interacting with compute API --- :mod:`alchemiscale.compute.client`
-===============================================================================
+:mod:`alchemiscale.compute.client` --- client for interacting with compute API
+==============================================================================
 
 
 """

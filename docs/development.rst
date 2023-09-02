@@ -191,7 +191,7 @@ The ``alchemiscale`` codebase is generally organized according to the components
 At the top level of the source tree, we have:
 
 ``models``
-    user-facing ``alchemiscale`` data models, in particular :py:class:`~alchemiscale.models.Scope` and :py:class:`~alchemiscale.models.ScopedKey`
+    common ``alchemiscale`` data models, in particular :py:class:`~alchemiscale.models.Scope` and :py:class:`~alchemiscale.models.ScopedKey`
 
 ``settings``
     settings data models for configurable components

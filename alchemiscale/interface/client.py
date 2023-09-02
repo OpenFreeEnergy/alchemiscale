@@ -1,6 +1,6 @@
 """
-Client for interacting with user-facing API. --- :mod:`alchemiscale.interface.client`
-=====================================================================================
+:mod:`alchemiscale.interface.client` --- client for interacting with user-facing API
+====================================================================================
 
 """
 

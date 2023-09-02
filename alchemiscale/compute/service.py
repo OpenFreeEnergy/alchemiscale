@@ -1,6 +1,6 @@
 """
-AlchemiscaleComputeService --- :mod:`alchemiscale.compute.service`
-==================================================================
+:mod:`alchemiscale.compute.service` --- compute services for FEC execution
+==========================================================================
 
 """
 
