@@ -878,6 +878,65 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             nest_asyncio.apply()
             return asyncio.run(async_request(self))
 
+    def get_network_results(self,
+        network: ScopedKey,
+        return_protocoldagresults: bool = False,
+        compress: bool = True,
+    ) -> Dict[str, Union[Optional[ProtocolResult], List[ProtocolDAGResult]]]:
+        """Get all a `ProtocolResult` for every `Transformation` in the given
+        `AlchemicalNetwork`.
+
+        A dict giving the `ScopedKey` of each `Transformation` in the network
+        as keys, `ProtocolResult` as values, is returned. If no
+        `ProtocolDAGResult`\s exist for a given `Transformation`, ``None`` is
+        given for its value.
+
+        If `return_protocoldagresults` is ``True``, then a list of the
+        `ProtocolDAGResult`\s themselves is given as values instead of
+        `ProtocolResult`\s.
+
+        Parameters
+        ----------
+        network
+            The `ScopedKey` of the `AlchemicalNetwork` to retrieve results for.
+        return_protocoldagresults
+            If ``True``, return the raw `ProtocolDAGResult`s instead of returning
+            a processed `ProtocolResult`. Only successful `ProtocolDAGResult`\s
+            are returned.
+        compress
+            If ``True``, compress the ProtocolDAGResults server-side before
+            shipping them to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicators.
+
+        """
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+
+
+        def get_transformation_results(client, tf_sk, kwargs):
+            return tf_sk, client.get_transformation_results(tf_sk, **kwargs)
+
+        with ProcessPoolExecutor() as executor:
+            futures = []
+            for tf_sk in self.get_network_transformations(network):
+                futures.append(executor.submit(
+                        get_transformation_results,
+                        self,
+                        tf_sk,
+                        dict(return_protocoldagresults=return_protocoldagresults,
+                             compress=compress,
+                             visualize=False)))
+
+            results = {}
+            for future in as_completed(futures):
+                tf_sk, result = future.result()
+                results[tf_sk] = result
+
+        return results
+
     def get_transformation_results(
         self,
         transformation: ScopedKey,
@@ -887,14 +946,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     ) -> Union[Optional[ProtocolResult], List[ProtocolDAGResult]]:
         """Get a `ProtocolResult` for the given `Transformation`.
 
-        A `ProtocolResult` object corresponding to the `Protocol` used for this
+        A `ProtocolResult` object corresponds to the `Protocol` used for this
         `Transformation`. This is constructed from the available
-        `ProtocolDAGResult`\s for this `Transformation`. If no
-        `ProtocolDAGResult`\s exist for this `Transformation`, ``None`` is
-        returned.
+        `ProtocolDAGResult`\s for this `Transformation` via
+        `Transformation.gather`. If no `ProtocolDAGResult`\s exist for this
+        `Transformation`, ``None`` is returned.
 
         If `return_protocoldagresults` is ``True``, then a list of the
-        `ProtocolDAGResult`\s themselves are returned instead.
+        `ProtocolDAGResult`\s themselves is returned instead.
 
         Parameters
         ----------
@@ -912,6 +971,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             optimization; it has no bearing on the result of this method call.
         visualize
             If ``True``, show retrieval progress indicators.
+
 
         """
 
