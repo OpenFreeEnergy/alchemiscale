@@ -1,5 +1,5 @@
 ###
-CLI
+cli
 ###
 
 .. automodule:: alchemiscale.cli
