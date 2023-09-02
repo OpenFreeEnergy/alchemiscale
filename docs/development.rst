@@ -183,6 +183,8 @@ Like the ``AlchemiscaleClient``, the ``AlchemiscaleComputeClient`` automatically
 .. _this template configuration: https://github.com/openforcefield/alchemiscale/blob/main/devtools/configs/synchronous-compute-settings.yaml
 
 
+.. _library-layout:
+
 **************
 Library layout
 **************
