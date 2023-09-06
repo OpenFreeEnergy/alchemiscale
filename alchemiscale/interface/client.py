@@ -735,15 +735,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return list(chain.from_iterable(scoped_keys))
 
+        coro = async_request(self)
+
         try:
-            return asyncio.run(async_request(self))
+            return asyncio.run(coro)
         except RuntimeError:
             # we use nest_asyncio to support environments where an event loop
             # is already running, such as in a Jupyter notebook
             import nest_asyncio
 
             nest_asyncio.apply()
-            return asyncio.run(async_request(self))
+            return asyncio.run(coro)
 
     def get_tasks_status(
         self, tasks: List[ScopedKey], batch_size: int = 1000
@@ -872,15 +874,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return pdrs
 
+        coro = async_request(self)
+
         try:
-            return asyncio.run(async_request(self))
+            return asyncio.run(coro)
         except RuntimeError:
             # we use nest_asyncio to support environments where an event loop
             # is already running, such as in a Jupyter notebook
             import nest_asyncio
 
             nest_asyncio.apply()
-            return asyncio.run(async_request(self))
+            return asyncio.run(coro)
 
     def get_network_results(self,
         network: ScopedKey,
