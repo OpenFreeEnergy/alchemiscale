@@ -35,7 +35,8 @@ class AlchemiscaleClientError(AlchemiscaleBaseClientError):
     ...
 
 
-def _get_transformation_results(client, tf_sk, kwargs):
+def _get_transformation_results(client_settings, tf_sk, kwargs):
+    client = AlchemiscaleClient(**client_settings)
     return tf_sk, client.get_transformation_results(tf_sk, **kwargs)
 
 
@@ -928,7 +929,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             for tf_sk in self.get_network_transformations(network):
                 futures.append(executor.submit(
                         _get_transformation_results,
-                        self,
+                        self._settings(),
                         tf_sk,
                         dict(return_protocoldagresults=return_protocoldagresults,
                              compress=compress,

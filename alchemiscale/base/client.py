@@ -112,6 +112,15 @@ class AlchemiscaleBaseClient:
         self._session = None
         self._lock = None
 
+    def _settings(self):
+        return dict(api_url=self.api_url,
+                    identifier=self.identifier,
+                    key=self.key,
+                    max_retries=self.max_retries,
+                    retry_base_seconds=self.retry_base_seconds,
+                    retry_max_seconds=self.retry_max_seconds,
+                    verify=self.verify)
+
     def __repr__(self):
         return f"{self.__class__.__name__}('{self.api_url}')"
 
