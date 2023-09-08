@@ -255,4 +255,8 @@ def get_access_token(
         jwt_algorithm=settings.JWT_ALGORITHM,
     )
 
-    return {"access_token": access_token, "token_type": "bearer", 'expiration': expire.isoformat()}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expiration": expire.isoformat(),
+    }

@@ -887,7 +887,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             nest_asyncio.apply()
             return asyncio.run(coro)
 
-    def get_network_results(self,
+    def get_network_results(
+        self,
         network: ScopedKey,
         return_protocoldagresults: bool = False,
         compress: bool = True,
@@ -927,13 +928,18 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         with ProcessPoolExecutor() as executor:
             futures = []
             for tf_sk in self.get_network_transformations(network):
-                futures.append(executor.submit(
+                futures.append(
+                    executor.submit(
                         _get_transformation_results,
                         self._settings(),
                         tf_sk,
-                        dict(return_protocoldagresults=return_protocoldagresults,
-                             compress=compress,
-                             visualize=False)))
+                        dict(
+                            return_protocoldagresults=return_protocoldagresults,
+                            compress=compress,
+                            visualize=False,
+                        ),
+                    )
+                )
 
             results = {}
             for future in as_completed(futures):
