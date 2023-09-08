@@ -6,6 +6,7 @@ Base class for API clients --- :mod:`alchemiscale.base.client`
 
 import asyncio
 import time
+from datetime import datetime
 import random
 from itertools import islice
 from typing import List
@@ -39,14 +40,12 @@ class AlchemiscaleConnectionError(Exception):
 
 def use_session(f):
     async def _wrapper(self, *args, **kwargs):
-        self._lock = asyncio.Lock()
         self._session = httpx.AsyncClient(verify=self.verify)
         try:
             return await f(self, *args, **kwargs)
         finally:
             await self._session.aclose()
             self._session = None
-            self._lock = None
 
     return _wrapper
 
@@ -247,41 +246,12 @@ class AlchemiscaleBaseClient:
 
         return _wrapper
 
-    async def _get_token_async(self):
-        data = {"username": self.identifier, "password": self.key}
-
-        url = urljoin(self.api_url, "/token")
-        try:
-            resp = await self._session.post(url, data=data, timeout=None)
-        except httpx.RequestError as e:
-            raise AlchemiscaleConnectionError(*e.args)
-
-        if not 200 <= resp.status_code < 300:
-            raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason_phrase}",
-                status_code=resp.status_code,
-            )
-
-        self._jwtoken = resp.json()["access_token"]
-        self._headers = {
-            "Authorization": f"Bearer {self._jwtoken}",
-            "Content-Type": "application/json",
-        }
-
     def _use_token_async(f):
         async def _wrapper(self, *args, **kwargs):
-            # if we don't have a token at all, get one; if a coroutine already
-            # has the lock, wait until it releases
+            # if we don't have a token at all, get one
+            # deliberately synchronous
             if self._jwtoken is None:
-                if not self._lock.locked():
-                    await self._lock.acquire()
-                    try:
-                        await self._get_token_async()
-                    finally:
-                        self._lock.release()
-                else:
-                    async with self._lock:
-                        pass
+                self._get_token()
 
             # execute our function
             # if we get an unauthorized exception, it may be that our token is
@@ -291,15 +261,12 @@ class AlchemiscaleBaseClient:
                 return await f(self, *args, **kwargs)
             except self._exception as e:
                 if e.status_code == 401:
-                    if not self._lock.locked():
-                        await self._lock.acquire()
-                        try:
-                            await self._get_token_async()
-                        finally:
-                            self._lock.release()
-                    else:
-                        async with self._lock:
-                            pass
+                    # if token is expired now, get a new one
+                    # if it isn't, just proceed with trying function call again
+                    # means that another coroutine has updated it in the meantime;
+                    # this is an alternative to using a lock
+                    if self._jwtoken_expiration < datetime.utcnow():
+                        self._get_token()
                 else:
                     raise
 

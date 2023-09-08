@@ -55,7 +55,7 @@ def create_access_token(
     to_encode.update({"exp": expire})
 
     encoded_jwt = jwt.encode(to_encode, secret_key, algorithm=jwt_algorithm)
-    return encoded_jwt
+    return encoded_jwt, expire
 
 
 def get_token_data(

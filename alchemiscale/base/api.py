@@ -248,11 +248,11 @@ def get_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(
+    access_token, expire = create_access_token(
         data={"sub": entity.identifier, "scopes": entity.scopes},
         secret_key=settings.JWT_SECRET_KEY,
         expires_seconds=settings.JWT_EXPIRE_SECONDS,
         jwt_algorithm=settings.JWT_ALGORITHM,
     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", 'expiration': expire.isoformat()}
