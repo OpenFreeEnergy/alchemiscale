@@ -9,7 +9,7 @@ alchemiscale: a high-throughput alchemical free energy execution system
 
 **alchemiscale** is a service-oriented execution system for ``AlchemicalNetworks``,
 suitable for utilizing multiple compute resources,
-such as HPC clusters, individual hosts, Kubernetes clusters, Folding@Home work servers, etc., 
+such as HPC clusters, individual hosts, Kubernetes clusters, `Folding@Home`_ work servers, etc.,
 to support large campaigns requiring high-throughput.
 
 **alchemiscale** is designed for maximum interoperability with the `Open Molecular Software Foundation`_ stack,
@@ -32,6 +32,7 @@ and the :ref:`developer-guide` for details on how the components of this archite
    This software is pre-alpha and under active development. It is not yet ready
    for production use and the API is liable to change rapidly at any time. 
 
+.. _Folding@Home: https://foldingathome.org
 .. _Open Molecular Software Foundation: https://omsf.io
 .. _OpenForceField: https://openforcefield.org
 .. _OpenFreeEnergy: https://openfree.energy/
