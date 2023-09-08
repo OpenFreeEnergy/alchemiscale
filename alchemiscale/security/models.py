@@ -1,5 +1,5 @@
 """
-Data models for security components --- :mod:`alchemiscale.security.models`
+:mod:`alchemiscale.security.models` --- data models for security components
 ===========================================================================
 
 """

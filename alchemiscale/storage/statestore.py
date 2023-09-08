@@ -1,5 +1,5 @@
 """
-Node4js state storage --- :mod:`alchemiscale.storage.statestore`
+:mod:`alchemiscale.storage.statestore` --- state store interface
 ================================================================
 
 """
