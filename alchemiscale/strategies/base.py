@@ -1,6 +1,6 @@
 """
-Alchemical strategy base class. --- :mod:`alchemiscale.strategies.base`
-=======================================================================
+:mod:`alchemiscale.strategies.base` --- alchemical strategy base class
+======================================================================
 
 """
 

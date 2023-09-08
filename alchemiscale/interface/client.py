@@ -1,6 +1,6 @@
 """
-Client for interacting with user-facing API. --- :mod:`alchemiscale.interface.client`
-=====================================================================================
+:mod:`alchemiscale.interface.client` --- client for interacting with user-facing API
+====================================================================================
 
 """
 
@@ -67,7 +67,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             )
 
     def check_exists(self, scoped_key: Scope) -> bool:
-        """Returns `True` if the given ScopedKey represents an object in the database."""
+        """Returns ``True`` if the given ScopedKey represents an object in the database."""
         return self._get_resource("/exists/{scoped_key}")
 
     def create_network(
@@ -464,7 +464,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             extend from the given Task.
         return_as : ['list', 'graph']
             If 'list', Tasks will be returned in no particular order.
-            If `graph`, Tasks will be returned in a `networkx.DiGraph`, with a
+            If 'graph', Tasks will be returned in a `networkx.DiGraph`, with a
             directed edge pointing from a given Task to the Task it extends.
 
         """
@@ -621,7 +621,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         -------
         List[Optional[ScopedKey]]
             ScopedKeys for Tasks actioned, in the same order as given as
-            `tasks` on input. If a Task couldn't be actioned, then `None` will
+            `tasks` on input. If a Task couldn't be actioned, then ``None`` will
             be returned in its place.
 
         """
@@ -651,7 +651,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         -------
         List[Optional[ScopedKey]]
             ScopedKeys for Tasks canceled, in the same order as given as
-            `tasks` on input. If a Task couldn't be canceled, then `None` will
+            `tasks` on input. If a Task couldn't be canceled, then ``None`` will
             be returned in its place.
 
         """

@@ -1,5 +1,5 @@
 """
-Base class for API clients --- :mod:`alchemiscale.base.client`
+:mod:`alchemiscale.base.client` --- base class for API clients
 ==============================================================
 
 """

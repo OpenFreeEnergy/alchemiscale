@@ -1,6 +1,6 @@
 """
-S3 Object storage --- :mod:`alchemiscale.storage.objectstore`
-=============================================================
+:mod:`alchemiscale.storage.objectstore` --- object store interface
+==================================================================
 
 """
 

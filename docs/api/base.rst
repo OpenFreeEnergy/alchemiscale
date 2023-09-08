@@ -6,6 +6,8 @@ base
     :members:
     :show-inheritance:
 
+----
+
 .. automodule:: alchemiscale.base.client
     :members:
     :show-inheritance:
