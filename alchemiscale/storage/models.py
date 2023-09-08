@@ -1,6 +1,6 @@
 """
 Data models for storage components --- :mod:`alchemiscale.storage.models`
-========================================================================
+=========================================================================
 
 """
 
@@ -30,7 +30,7 @@ class ComputeServiceRegistration(BaseModel):
     heartbeat: datetime
 
     def __repr__(self):  # pragma: no cover
-        return f"<ComputeServiceIdentity('{str(self)}')>"
+        return f"<ComputeServiceRegistration('{str(self)}')>"
 
     def __str__(self):
         return "-".join([self.identifier])
@@ -55,7 +55,7 @@ class ComputeServiceRegistration(BaseModel):
 
 
 class TaskProvenance(BaseModel):
-    computekey: ComputeServiceID
+    computeserviceid: ComputeServiceID
     datetime_start: datetime
     datetime_end: datetime
 
@@ -240,15 +240,19 @@ class ProtocolDAGResultRef(ObjectStoreRef):
     def __init__(
         self,
         *,
-        location: str = None,
+        location: Optional[str] = None,
         obj_key: GufeKey,
         scope: Scope,
         ok: bool,
+        datetime_created: Optional[datetime] = None,
+        creator: Optional[str] = None,
     ):
         self.location = location
         self.obj_key = GufeKey(obj_key)
         self.scope = scope
         self.ok = ok
+        self.datetime_created = datetime_created
+        self.creator = creator
 
     def _to_dict(self):
         return {
@@ -256,7 +260,22 @@ class ProtocolDAGResultRef(ObjectStoreRef):
             "obj_key": str(self.obj_key),
             "scope": str(self.scope),
             "ok": self.ok,
+            "datetime_created": self.datetime_created.isoformat()
+            if self.datetime_created is not None
+            else None,
+            "creator": self.creator,
         }
+
+    @classmethod
+    def _from_dict(cls, d):
+        d_ = copy(d)
+        d_["datetime_created"] = (
+            datetime.fromisoformat(d["datetime_created"])
+            if d.get("received") is not None
+            else None
+        )
+
+        return super()._from_dict(d_)
 
 
 class TaskArchive(GufeTokenizable):

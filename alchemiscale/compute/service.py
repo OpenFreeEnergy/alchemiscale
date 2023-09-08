@@ -1,10 +1,11 @@
 """
 AlchemiscaleComputeService --- :mod:`alchemiscale.compute.service`
-===============================================================
+==================================================================
 
 """
 
 import os
+import gc
 import asyncio
 import sched
 import time
@@ -15,6 +16,7 @@ import threading
 from typing import Union, Optional, List, Dict, Tuple
 from pathlib import Path
 from threading import Thread
+import shutil
 
 import requests
 
@@ -79,12 +81,18 @@ class SynchronousComputeService:
         name: str,
         shared_basedir: os.PathLike,
         scratch_basedir: os.PathLike,
+        keep_shared: bool = False,
         keep_scratch: bool = False,
         sleep_interval: int = 30,
         heartbeat_interval: int = 300,
         scopes: Optional[List[Scope]] = None,
-        limit: int = 1,
+        claim_limit: int = 1,
         loglevel="WARN",
+        logfile: Optional[Path] = None,
+        client_max_retries=5,
+        client_retry_base_seconds=2.0,
+        client_retry_max_seconds=60.0,
+        client_verify=True,
     ):
         """Create a `SynchronousComputeService` instance.
 
@@ -104,6 +112,9 @@ class SynchronousComputeService:
             Filesystem path to use for `ProtocolDAG` `shared` space.
         scratch_basedir
             Filesystem path to use for `ProtocolUnit` `scratch` space.
+        keep_shared
+            If True, don't remove shared directories for `ProtocolDAG`s after
+            completion.
         keep_scratch
             If True, don't remove scratch directories for `ProtocolUnit`s after
             completion.
@@ -114,43 +125,86 @@ class SynchronousComputeService:
         scopes
             Scopes to limit Task claiming to; defaults to all Scopes accessible
             by compute identity.
-        limit
+        claim_limit
             Maximum number of Tasks to claim at a time from a TaskHub.
+        loglevel
+            The loglevel at which to report; see the :mod:`logging` docs for
+            available levels.
+        logfile
+            Path to file for logging output; if not set, logging will only go
+            to STDOUT.
+        client_max_retries
+            Maximum number of times to retry a request. In the case the API
+            service is unresponsive an expoenential backoff is applied with
+            retries until this number is reached. If set to -1, retries will
+            continue indefinitely until success.
+        client_retry_base_seconds
+            The base number of seconds to use for exponential backoff.
+            Must be greater than 1.0.
+        client_retry_max_seconds
+            Maximum number of seconds to sleep between retries; avoids runaway
+            exponential backoff while allowing for many retries.
+        client_verify
+            Whether to verify SSL certificate presented by the API server.
 
         """
         self.api_url = api_url
         self.name = name
         self.sleep_interval = sleep_interval
         self.heartbeat_interval = heartbeat_interval
-        self.limit = limit
+        self.claim_limit = claim_limit
 
-        self.client = AlchemiscaleComputeClient(api_url, identifier, key)
+        self.client = AlchemiscaleComputeClient(
+            api_url,
+            identifier,
+            key,
+            max_retries=client_max_retries,
+            retry_base_seconds=client_retry_base_seconds,
+            retry_max_seconds=client_retry_max_seconds,
+            verify=client_verify,
+        )
 
         if scopes is None:
             self.scopes = [Scope()]
         else:
             self.scopes = scopes
 
-        self.shared_basedir = Path(shared_basedir)
+        self.shared_basedir = Path(shared_basedir).absolute()
         self.shared_basedir.mkdir(exist_ok=True)
+        self.keep_shared = keep_shared
 
-        self.scratch_basedir = Path(scratch_basedir)
+        self.scratch_basedir = Path(scratch_basedir).absolute()
         self.scratch_basedir.mkdir(exist_ok=True)
         self.keep_scratch = keep_scratch
 
         self.scheduler = sched.scheduler(time.monotonic, time.sleep)
 
-        self.counter = 0
-
         self.compute_service_id = ComputeServiceID(f"{self.name}-{uuid4()}")
 
         self.int_sleep = InterruptableSleep()
-        self.logger = logging.getLogger("AlchemiscaleSynchronousComputeService")
-        self.logger.setLevel(loglevel)
-
-        self.logger.addHandler(logging.StreamHandler())
 
         self._stop = False
+
+        # logging
+        extra = {"compute_service_id": str(self.compute_service_id)}
+        logger = logging.getLogger("AlchemiscaleSynchronousComputeService")
+        logger.setLevel(loglevel)
+
+        formatter = logging.Formatter(
+            "[%(asctime)s] [%(compute_service_id)s] [%(levelname)s] %(message)s"
+        )
+        formatter.converter = time.gmtime  # use utc time for logging timestamps
+
+        sh = logging.StreamHandler()
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
+
+        if logfile is not None:
+            fh = logging.FileHandler(logfile)
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
+
+        self.logger = logging.LoggerAdapter(logger, extra)
 
     def _register(self):
         """Register this compute service with the compute API."""
@@ -163,7 +217,7 @@ class SynchronousComputeService:
     def beat(self):
         """Deliver a heartbeat to the compute API, indicating this service is still alive."""
         self.client.heartbeat(self.compute_service_id)
-        self.logger.info("Updated heartbeat")
+        self.logger.debug("Updated heartbeat")
 
     def heartbeat(self):
         """Start up the heartbeat, sleeping for `self.heartbeat_interval`"""
@@ -194,7 +248,7 @@ class SynchronousComputeService:
         while len(tasks) < count and len(taskhubs) > 0:
             # based on weights, choose taskhub to draw from
             taskhub: List[ScopedKey] = random.choices(
-                list(taskhubs.keys()), weights=[tq.weight for tq in taskhubs.values()]
+                list(taskhubs.keys()), weights=[th.weight for th in taskhubs.values()]
             )[0]
 
             # claim tasks from the taskhub
@@ -263,7 +317,9 @@ class SynchronousComputeService:
             terminal_pur._outputs = processed_outputs
 
         # finally, push ProtocolDAGResult
-        sk: ScopedKey = self.client.set_task_result(task, protocoldagresult)
+        sk: ScopedKey = self.client.set_task_result(
+            task, protocoldagresult, self.compute_service_id
+        )
 
         return sk
 
@@ -276,37 +332,85 @@ class SynchronousComputeService:
 
         """
         # obtain a ProtocolDAG from the task
+        self.logger.info("Creating ProtocolDAG from '%s'...", task)
         protocoldag, transformation, extends = self.task_to_protocoldag(task)
+        self.logger.info(
+            "Created '%s' from '%s' performing '%s'",
+            protocoldag,
+            task,
+            transformation.protocol,
+        )
 
         # execute the task; this looks the same whether the ProtocolDAG is a
         # success or failure
-        shared = self.shared_basedir / str(protocoldag.key) / str(self.counter)
-        shared.mkdir(parents=True)
 
-        protocoldagresult = execute_DAG(
-            protocoldag,
-            shared=shared,
-            scratch_basedir=self.scratch_basedir,
-            keep_scratch=self.keep_scratch,
-            raise_error=False,
-        )
+        shared = self.shared_basedir / str(protocoldag.key)
+        shared.mkdir()
+        scratch = self.scratch_basedir / str(protocoldag.key)
+        scratch.mkdir()
+
+        self.logger.info("Executing '%s'...", protocoldag)
+        try:
+            protocoldagresult = execute_DAG(
+                protocoldag,
+                shared_basedir=shared,
+                scratch_basedir=scratch,
+                keep_scratch=self.keep_scratch,
+                raise_error=False,
+            )
+        finally:
+            if not self.keep_shared:
+                shutil.rmtree(shared)
+
+            if not self.keep_scratch:
+                shutil.rmtree(scratch)
+
+        if protocoldagresult.ok():
+            self.logger.info("'%s' -> '%s' : SUCCESS", protocoldag, protocoldagresult)
+        else:
+            for failure in protocoldagresult.protocol_unit_failures:
+                self.logger.info(
+                    "'%s' -> '%s' : FAILURE :: '%s' : %s",
+                    protocoldag,
+                    protocoldagresult,
+                    failure,
+                    failure.exception,
+                )
 
         # push the result (or failure) back to the compute API
         result_sk = self.push_result(task, protocoldagresult)
+        self.logger.info("Pushed result `%s'", protocoldagresult)
 
         return result_sk
 
-    def cycle(self, task_limit):
-        if task_limit is not None:
-            if self.counter >= task_limit:
+    def _check_max_tasks(self, max_tasks):
+        if max_tasks is not None:
+            if self._tasks_counter >= max_tasks:
                 self.logger.info(
-                    "Performed %s tasks; beyond task limit %s", self.counter, task_limit
+                    "Performed %s tasks; at or beyond max tasks = %s",
+                    self._tasks_counter,
+                    max_tasks,
                 )
-                return
+                raise KeyboardInterrupt
+
+    def _check_max_time(self, max_time):
+        if max_time is not None:
+            run_time = time.time() - self._start_time
+            if run_time >= max_time:
+                self.logger.info(
+                    "Ran for %s seconds; at or beyond max time = %s seconds",
+                    run_time,
+                    max_time,
+                )
+                raise KeyboardInterrupt
+
+    def cycle(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
+        self._check_max_tasks(max_tasks)
+        self._check_max_time(max_time)
 
         # claim tasks from the compute API
         self.logger.info("Claiming tasks")
-        tasks: List[ScopedKey] = self.claim_tasks(self.limit)
+        tasks: List[ScopedKey] = self.claim_tasks(self.claim_limit)
         self.logger.info("Claimed %d tasks", len([t for t in tasks if t is not None]))
 
         # if no tasks claimed, sleep
@@ -326,17 +430,33 @@ class SynchronousComputeService:
             # execute each task
             self.logger.info("Executing task '%s'...", task)
             self.execute(task)
-            self.logger.info("Completed task '%s'", task)
-            self.counter += 1
+            self.logger.info("Finished task '%s'", task)
 
-    def start(self, task_limit: Optional[int] = None):
+            if max_tasks is not None:
+                self._tasks_counter += 1
+
+            # stop checks
+            self._check_max_tasks(max_tasks)
+            self._check_max_time(max_time)
+
+        self._check_max_tasks(max_tasks)
+        self._check_max_time(max_time)
+
+    def start(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
         """Start the service.
+
+        Limits to the maximum number of executed tasks or seconds to run for
+        can be set. The first maximum to be hit will trigger the service to
+        exit.
 
         Parameters
         ----------
-        task_limit
-            Number of Tasks to complete before exiting.
-            If `None`, the service will continue until told to stop.
+        max_tasks
+            Max number of Tasks to execute before exiting.
+            If `None`, the service will have no task limit.
+        max_time
+            Max number of seconds to run before exiting.
+            If `None`, the service will have no time limit.
 
         """
         # add ComputeServiceRegistration
@@ -350,9 +470,13 @@ class SynchronousComputeService:
         self.heartbeat_thread = threading.Thread(target=self.heartbeat, daemon=True)
         self.heartbeat_thread.start()
 
+        # stop conditions will use these
+        self._tasks_counter = 0
+        self._start_time = time.time()
+
         try:
             self.logger.info("Starting main loop")
-            while True:
+            while not self._stop:
                 # check that heartbeat is still alive; if not, resurrect it
                 if not self.heartbeat_thread.is_alive():
                     self.heartbeat_thread = threading.Thread(
@@ -361,7 +485,10 @@ class SynchronousComputeService:
                     self.heartbeat_thread.start()
 
                 # perform main loop cycle
-                self.cycle(task_limit=task_limit)
+                self.cycle(max_tasks, max_time)
+
+                # force a garbage collection to avoid consuming too much memory
+                gc.collect()
         except KeyboardInterrupt:
             self.logger.info("Caught SIGINT/Keyboard interrupt.")
         except SleepInterrupted:

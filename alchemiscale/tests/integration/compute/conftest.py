@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from gufe import AlchemicalNetwork
 
 from alchemiscale.settings import get_base_api_settings
-from alchemiscale.storage import Neo4jStore
+from alchemiscale.storage.statestore import Neo4jStore
 from alchemiscale.compute import api, client
 from alchemiscale.security.models import CredentialedComputeIdentity, TokenData
 from alchemiscale.security.auth import hash_key

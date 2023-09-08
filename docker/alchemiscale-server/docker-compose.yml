@@ -1,0 +1,204 @@
+version: '3.8'
+
+# Custom top-level network
+networks:
+  internal:
+  db:
+  web:
+
+services:
+  neo4j:
+    image: ${NEO4J_DOCKER_IMAGE:-neo4j:4.4}
+    hostname: neo4j
+    # Service-level network, which specifies the networks, from the list of the top-level networks (in this case only neo4j-internal), that the server will connect to.
+    # Adds a network alias (used in neo4j.conf when configuring the discovery members)
+    networks:
+      db:
+        aliases:
+          - neo4j-network
+    # The ports that will be accessible from outside the container - HTTP (7474) and Bolt (7687).
+    ports:
+      - 7687:7687
+      - 7474:7474
+    # Uncomment the volumes to be mounted to make them accessible from outside the container.
+    volumes:
+      #- ./neo4j.conf:/conf/neo4j.conf # This is the main configuration file.
+      - ${NEO4J_DATA_STORE:?err}:/var/lib/neo4j/data
+      #- ./data/server:/var/lib/neo4j/data
+      #- ./logs/neo4j:/var/lib/neo4j/logs
+      #- ./conf/neo4j:/var/lib/neo4j/conf
+      #- ./import/neo4j:/var/lib/neo4j/import
+      #- ./metrics/neo4j:/var/lib/neo4j/metrics
+      #- ./licenses/neo4j:/var/lib/neo4j/licenses
+      #- ./ssl/neo4j:/var/lib/neo4j/ssl
+    # Passes the following environment variables to the container
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:?err}/${NEO4J_PASS:?err}
+      - NEO4J_EDITION=docker_compose
+    # Simple check testing whether the port 7474 is opened.
+    # If so, the instance running inside the container is considered as "healthy".
+    # This status can be checked using the "docker ps" command.
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
+    # Set up the user
+    user: ${USER_ID:?err}:${GROUP_ID:?err}
+    labels:
+      - "traefik.enable=false"
+    logging:
+       driver: "awslogs"
+       options:
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
+          awslogs-group: "alchemiscale"
+          tag: "{{.Name}}/{{.ID}}"
+
+  alchemiscale-client-API:
+    image: ${ALCHEMISCALE_DOCKER_IMAGE:?err}
+    hostname: api
+    networks:
+      - internal
+      - db
+    expose:
+      - 1840
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?err}
+      - JWT_EXPIRE_SECONDS=${JWT_EXPIRE_SECONDS:-1800}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:?err}
+      - AWS_S3_PREFIX=${AWS_S3_PREFIX:?err}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:?err}
+      - NEO4J_URL=${NEO4J_URL:?err}
+      - NEO4J_USER=${NEO4J_USER:?err}
+      - NEO4J_PASS=${NEO4J_PASS:?err}
+    depends_on: 
+      - neo4j
+      - alchemiscale-db-init
+    command: "api --host 0.0.0.0 --port 1840 --workers 2"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.alchemiscale-client-API.rule=Host(`api.${HOST_DOMAIN:?err}`)"
+      - "traefik.http.routers.alchemiscale-client-API.entrypoints=websecure"
+      - "traefik.http.routers.alchemiscale-client-API.tls.certresolver=myresolver"
+      - "traefik.docker.network=docker_internal"
+    healthcheck:
+      test: ["CMD", "/opt/conda/bin/curl", "-f", "http://localhost:1840/ping"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+       driver: "awslogs"
+       options:
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
+          awslogs-group: "alchemiscale"
+          tag: "{{.Name}}/{{.ID}}"
+
+  alchemiscale-compute-API:
+    image: ${ALCHEMISCALE_DOCKER_IMAGE:?err}
+    hostname: compute
+    networks:
+      - internal
+      - db
+    expose:
+      - 1841
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?err}
+      - JWT_EXPIRE_SECONDS=${JWT_EXPIRE_SECONDS:-1800}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:?err}
+      - AWS_S3_PREFIX=${AWS_S3_PREFIX:?err}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:?err}
+      - NEO4J_URL=${NEO4J_URL:?err}
+      - NEO4J_USER=${NEO4J_USER:?err}
+      - NEO4J_PASS=${NEO4J_PASS:?err}
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      alchemiscale-db-init:
+        condition: service_completed_successfully
+    command: "compute api --host 0.0.0.0 --port 1841 --workers 2"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.alchemiscale-compute-API.rule=Host(`compute.${HOST_DOMAIN:?err}`)"
+      - "traefik.docker.network=docker_internal"
+      - "traefik.http.routers.alchemiscale-compute-API.entrypoints=websecure"
+      - "traefik.http.routers.alchemiscale-compute-API.tls.certresolver=myresolver"
+    healthcheck:
+      test: ["CMD", "/opt/conda/bin/curl", "-f", "http://localhost:1841/ping"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+       driver: "awslogs"
+       options:
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
+          awslogs-group: "alchemiscale"
+          tag: "{{.Name}}/{{.ID}}"
+
+  alchemiscale-db-init:
+    image: ${ALCHEMISCALE_DOCKER_IMAGE:?err}
+    networks:
+      - db
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?err}
+      - JWT_EXPIRE_SECONDS=${JWT_EXPIRE_SECONDS:-1800}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:?err}
+      - AWS_S3_PREFIX=${AWS_S3_PREFIX:?err}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:?err}
+      - NEO4J_URL=${NEO4J_URL:?err}
+      - NEO4J_USER=${NEO4J_USER:?err}
+      - NEO4J_PASS=${NEO4J_PASS:?err}
+    depends_on: 
+      neo4j:
+        condition: service_healthy
+    command: "database init"
+    logging:
+       driver: "awslogs"
+       options:
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
+          awslogs-group: "alchemiscale"
+          tag: "{{.Name}}/{{.ID}}"
+
+  reverse-proxy:
+    # The official v2 Traefik docker image
+    image: traefik:v2.9
+    networks:
+      - internal
+      - web
+      # Enables the web UI and tells Traefik to listen to docker
+    depends_on: 
+      - alchemiscale-client-API
+      - alchemiscale-compute-API
+    command: 
+      - "--log.level=DEBUG"
+      - "--providers.docker"
+      # Do not expose containers unless explicitly told so
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=internal"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "443:443"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./letsencrypt:/letsencrypt
+    logging:
+       driver: "awslogs"
+       options:
+          awslogs-region: "${AWS_DEFAULT_REGION:?err}"
+          awslogs-group: "alchemiscale"
+          tag: "{{.Name}}/{{.ID}}"

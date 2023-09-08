@@ -4,16 +4,16 @@ channels:
   - conda-forge
   - openeye
 dependencies:
-  - python =3.9
+  - pip
 
   # gufe dependencies
-  - numpy
+  - numpy<1.24  # https://github.com/numba/numba/issues/8615#issuecomment-1360792615
   - networkx
   - rdkit
-  - pip
-  - pydantic
+  - pydantic<2.0
   - openff-toolkit
-  - openff-units
+  - openff-units >=0.2.0
+  - openff-models >=0.0.4
   - openeye-toolkits
   - typing-extensions
 
@@ -23,6 +23,9 @@ dependencies:
   - py2neo
   - monotonic    # needed by py2neo, but not pulled in
   - docker-py    # for grolt
+
+  # user client printing 
+  - rich
 
   ## object store
   - boto3        # aws s3
@@ -55,9 +58,10 @@ dependencies:
   - openmmforcefields
 
   - pip:
+    - async_lru
     - git+https://github.com/dotsdl/grolt@relax-cryptography # neo4j test server deployment
-    - git+https://github.com/OpenFreeEnergy/gufe@alchemiscale-compute
+    - git+https://github.com/OpenFreeEnergy/gufe
     - git+https://github.com/OpenFreeEnergy/openfe
-    - git+https://github.com/dotsdl/openfe-benchmarks@ligandnetwork
-    - git+https://github.com/mikemhenry/openff-models.git@support_nested_models
+    - git+https://github.com/OpenFreeEnergy/openfe-benchmarks
+    #- git+https://github.com/mikemhenry/openff-models.git@support_nested_models
     #- git+https://github.com/openforcefield/protein-ligand-benchmark

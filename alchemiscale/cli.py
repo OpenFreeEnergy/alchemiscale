@@ -1,16 +1,15 @@
 """
 Command line interface --- :mod:`alchemiscale.cli`
-=================================================
+==================================================
 
 """
 
 import click
 import yaml
+import json
 import signal
-import gunicorn.app.base
 from typing import Type
 
-from .security.auth import hash_key
 from .security.models import (
     CredentialedEntity,
     CredentialedUserIdentity,
@@ -72,7 +71,19 @@ def api_starting_params(envvar_host, envvar_port, envvar_loglevel):
             envvar=envvar_loglevel,
             **SETTINGS_OPTION_KWARGS,
         )
-        return workers(host(port(loglevel(func))))
+        config_file = click.option(
+            "--config-file",
+            "-c",
+            type=click.File(),
+            help="YAML-based configuration file giving additional settings for gunicorn",
+        )
+        config_json = click.option(
+            "--config-json",
+            "-j",
+            type=str,
+            help="inline JSON giving additional settings for gunicorn; these take precedence over options given with `--config-file`",
+        )
+        return workers(host(port(loglevel(config_file(config_json(func))))))
 
     return inner
 
@@ -192,28 +203,12 @@ def s3os_params(func):
     )
 
 
-class ApiApplication(gunicorn.app.base.BaseApplication):
-    def __init__(self, app, workers, bind):
-        self.app = app
-        self.workers = workers
-        self.bind = bind
-        super().__init__()
+def start_api(api_app, workers, host, port, options):
+    from .cli_utils import ApiApplication
 
-    @classmethod
-    def from_parameters(cls, app, workers, host, port):
-        return cls(app, workers, bind=f"{host}:{port}")
-
-    def load(self):
-        return self.app
-
-    def load_config(self):
-        self.cfg.set("workers", self.workers)
-        self.cfg.set("bind", self.bind)
-        self.cfg.set("worker_class", "uvicorn.workers.UvicornWorker")
-
-
-def start_api(api_app, workers, host, port):
-    gunicorn_app = ApiApplication(api_app, workers, bind=f"{host}:{port}")
+    gunicorn_app = ApiApplication(
+        api_app, workers, bind=f"{host}:{port}", options=options
+    )
     gunicorn_app.run()
 
 
@@ -236,7 +231,7 @@ def cli():
 @s3os_params
 @jwt_params
 def api(
-    workers, host, port, loglevel,  # API
+    workers, host, port, loglevel, config_file, config_json,  # API
     url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  # JWT
     access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
@@ -251,6 +246,13 @@ def api(
     # HOW-TO: modify the callback in jwt_secret (defined in jwt_params) to
     # do this. See comment there. Use that instead of the callback in
     # SETTINGS_OPTION_KWARGS
+
+    options = {}
+    if config_file is not None:
+        options.update(yaml.safe_load(config_file))
+
+    if config_json is not None:
+        options.update(json.loads(config_json))
 
     def get_settings_override():
         # inject settings from CLI arguments
@@ -272,7 +274,11 @@ def api(
     app.dependency_overrides[get_base_api_settings] = get_settings_override
 
     start_api(
-        app, workers, host["ALCHEMISCALE_API_HOST"], port["ALCHEMISCALE_API_PORT"]
+        app,
+        workers,
+        host["ALCHEMISCALE_API_HOST"],
+        port["ALCHEMISCALE_API_PORT"],
+        options=options,
     )
 
 
@@ -299,7 +305,7 @@ def compute():
 @s3os_params
 @jwt_params
 def api(
-    workers, host, port, loglevel, registration_expire_seconds, # API
+    workers, host, port, loglevel, config_file, config_json, registration_expire_seconds, # API
     url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  #JWT
     access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
@@ -311,6 +317,13 @@ def api(
     # CONSIDER GENERATING A JWT_SECRET_KEY if none provided with
     # key = generate_secret_key()
     # CONVENIENT FOR THE SINGLE-SERVER CASE HERE
+
+    options = {}
+    if config_file is not None:
+        options.update(yaml.safe_load(config_file))
+
+    if config_json is not None:
+        options.update(json.loads(config_json))
 
     def get_settings_override():
         # inject settings from CLI arguments
@@ -336,6 +349,7 @@ def api(
         workers,
         host["ALCHEMISCALE_COMPUTE_API_HOST"],
         port["ALCHEMISCALE_COMPUTE_API_PORT"],
+        options=options,
     )
 
 
@@ -351,12 +365,17 @@ def synchronous(config_file):
     from alchemiscale.models import Scope
     from alchemiscale.compute.service import SynchronousComputeService
 
-    params = yaml.load(config_file, Loader=yaml.Loader)
+    params = yaml.safe_load(config_file)
 
-    if "scopes" in params:
-        params["scopes"] = [Scope.from_str(scope) for scope in params["scopes"]]
+    params_init = params.get("init", {})
+    params_start = params.get("start", {})
 
-    service = SynchronousComputeService(**params)
+    if "scopes" in params_init:
+        params_init["scopes"] = [
+            Scope.from_str(scope) for scope in params_init["scopes"]
+        ]
+
+    service = SynchronousComputeService(**params_init)
 
     # add signal handling
     for signame in {"SIGHUP", "SIGINT", "SIGTERM"}:
@@ -368,7 +387,7 @@ def synchronous(config_file):
         signal.signal(getattr(signal, signame), stop)
 
     try:
-        service.start()
+        service.start(**params_start)
     except KeyboardInterrupt:
         pass
 
@@ -469,7 +488,9 @@ def key(func):
 
 
 def scope(func):
-    scope = click.option("--scope", "-s", help="scope", required=True, type=str)
+    scope = click.option(
+        "--scope", "-s", help="scope", required=True, type=str, multiple=True
+    )
     return scope(func)
 
 
@@ -485,6 +506,7 @@ def identity():
 @key
 def add(url, user, password, dbname, identity_type, identifier, key):
     """Add a credentialed identity to the database."""
+    from .security.auth import hash_key
     from .storage.statestore import get_n4js
     from .settings import Neo4jStoreSettings
 
@@ -549,10 +571,10 @@ def add_scope(url, user, password, dbname, identity_type, identifier, scope):
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
 
-    scope = Scope.from_str(scope)
     identity_type_cls = _identity_type_string_to_cls(identity_type)
-
-    n4js.add_scope(identifier, identity_type_cls, scope)
+    for s in scope:
+        s_ = Scope.from_str(s)
+        n4js.add_scope(identifier, identity_type_cls, s_)
 
 
 @identity.command()
@@ -591,7 +613,8 @@ def remove_scope(url, user, password, dbname, identity_type, identifier, scope):
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
     n4js = get_n4js(settings)
 
-    scope = Scope.from_str(scope)
     identity_type_cls = _identity_type_string_to_cls(identity_type)
 
-    n4js.remove_scope(identifier, identity_type_cls, scope)
+    for s in scope:
+        s_ = Scope.from_str(s)
+        n4js.remove_scope(identifier, identity_type_cls, s_)

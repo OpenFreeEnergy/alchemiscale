@@ -1,6 +1,6 @@
 """
 Security components for APIs. --- :mod:`alchemiscale.security.auth`
-==================================================================
+===================================================================
 
 """
 
@@ -47,7 +47,7 @@ def create_access_token(
     data: dict,
     secret_key: str,
     expires_seconds: Optional[int] = 900,
-    jwt_algorithm: Optional[str] = "HS256"
+    jwt_algorithm: Optional[str] = "HS256",
 ) -> str:
     to_encode = data.copy()
 

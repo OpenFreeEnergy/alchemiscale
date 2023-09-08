@@ -25,7 +25,8 @@ from openfe_benchmarks import tyk2
 
 from alchemiscale.models import Scope
 from alchemiscale.settings import Neo4jStoreSettings, S3ObjectStoreSettings
-from alchemiscale.storage import Neo4jStore, S3ObjectStore, get_s3os
+from alchemiscale.storage.statestore import Neo4jStore
+from alchemiscale.storage.objectstore import S3ObjectStore, get_s3os
 from alchemiscale.storage.models import ComputeServiceID
 
 
@@ -246,6 +247,7 @@ def network_tyk2():
             stateA=complexes[edge[0]],
             stateB=complexes[edge[1]],
             protocol=DummyProtocol(settings=DummyProtocol.default_settings()),
+            name=f"{edge[0]}_to_{edge[1]}_complex",
         )
         for edge in tyk2s.connections
     ]
@@ -254,6 +256,7 @@ def network_tyk2():
             stateA=solvated[edge[0]],
             stateB=solvated[edge[1]],
             protocol=DummyProtocol(settings=DummyProtocol.default_settings()),
+            name=f"{edge[0]}_to_{edge[1]}_solvent",
         )
         for edge in tyk2s.connections
     ]
@@ -269,6 +272,11 @@ def transformation(network_tyk2):
 
 
 @fixture(scope="session")
+def chemicalsystem(network_tyk2):
+    return list(network_tyk2.nodes)[0]
+
+
+@fixture(scope="session")
 def protocoldagresults(tmpdir_factory, transformation):
     pdrs = []
     for i in range(3):
@@ -277,7 +285,16 @@ def protocoldagresults(tmpdir_factory, transformation):
 
         # execute the task
         with tmpdir_factory.mktemp("protocol_dag").as_cwd():
-            protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
+            shared_basedir = Path("shared").absolute()
+            shared_basedir.mkdir()
+            scratch_basedir = Path("scratch").absolute()
+            scratch_basedir.mkdir()
+
+            protocoldagresult = execute_DAG(
+                protocoldag,
+                shared_basedir=shared_basedir,
+                scratch_basedir=scratch_basedir,
+            )
 
         pdrs.append(protocoldagresult)
     return pdrs
@@ -313,8 +330,16 @@ def protocoldagresults_failure(tmpdir_factory, transformation_failure):
 
         # execute the task
         with tmpdir_factory.mktemp("protocol_dag").as_cwd():
+            shared_basedir = Path("shared").absolute()
+            shared_basedir.mkdir()
+            scratch_basedir = Path("scratch").absolute()
+            scratch_basedir.mkdir()
+
             protocoldagresult = execute_DAG(
-                protocoldag, shared=Path(".").absolute(), raise_error=False
+                protocoldag,
+                shared_basedir=shared_basedir,
+                scratch_basedir=scratch_basedir,
+                raise_error=False,
             )
 
         pdrs.append(protocoldagresult)

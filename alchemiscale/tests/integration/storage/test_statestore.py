@@ -9,7 +9,7 @@ from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
-from alchemiscale.storage import Neo4jStore
+from alchemiscale.storage.statestore import Neo4jStore
 from alchemiscale.storage.models import (
     Task,
     TaskHub,
@@ -126,28 +126,150 @@ class TestNeo4jStore(TestStateStore):
 
         assert an3 == an2 == an
 
-    def test_query_network(self, n4js, network_tyk2, scope_test):
+    def test_query_networks(self, n4js, network_tyk2, scope_test, multiple_scopes):
         an = network_tyk2
         an2 = AlchemicalNetwork(edges=list(an.edges)[:-2], name="incomplete")
 
         sk: ScopedKey = n4js.create_network(an, scope_test)
         sk2: ScopedKey = n4js.create_network(an2, scope_test)
 
-        networks_sk: List[ScopedKey] = n4js.query_networks()
+        an_sks: List[ScopedKey] = n4js.query_networks()
 
-        assert sk in networks_sk
-        assert sk2 in networks_sk
-        assert len(networks_sk) == 2
+        assert sk in an_sks
+        assert sk2 in an_sks
+        assert len(an_sks) == 2
 
-        # TODO: add in a scope test
+        # test scopes query
+        an_sks = n4js.query_networks(scope=scope_test)
+        assert len(an_sks) == 2
 
-        # TODO: add in a name test
+        an_sks = n4js.query_networks(scope=multiple_scopes[1])
+        assert len(an_sks) == 0
 
-    def test_query_transformations(self):
-        ...
+        # test name query
+        an_sks = n4js.query_networks(name="tyk2_relative_benchmark")
+        assert len(an_sks) == 1
 
-    def test_query_chemicalsystems(self):
-        ...
+    def test_query_transformations(self, n4js, network_tyk2, multiple_scopes):
+        an = network_tyk2
+
+        sk: ScopedKey = n4js.create_network(an, multiple_scopes[0])
+        sk2: ScopedKey = n4js.create_network(an, multiple_scopes[1])
+
+        transformation_sks = n4js.query_transformations()
+
+        assert len(transformation_sks) == len(network_tyk2.edges) * 2
+        assert len(n4js.query_transformations(scope=multiple_scopes[0])) == len(
+            network_tyk2.edges
+        )
+        assert (
+            len(n4js.query_transformations(name="lig_ejm_31_to_lig_ejm_50_complex"))
+            == 2
+        )
+        assert (
+            len(
+                n4js.query_transformations(
+                    scope=multiple_scopes[0], name="lig_ejm_31_to_lig_ejm_50_complex"
+                )
+            )
+            == 1
+        )
+
+    def test_query_chemicalsystems(self, n4js, network_tyk2, multiple_scopes):
+        an = network_tyk2
+
+        sk: ScopedKey = n4js.create_network(an, multiple_scopes[0])
+        sk2: ScopedKey = n4js.create_network(an, multiple_scopes[1])
+
+        chemicalsystem_sks = n4js.query_chemicalsystems()
+
+        assert len(chemicalsystem_sks) == len(network_tyk2.nodes) * 2
+        assert len(n4js.query_chemicalsystems(scope=multiple_scopes[0])) == len(
+            network_tyk2.nodes
+        )
+        assert len(n4js.query_chemicalsystems(name="lig_ejm_31_complex")) == 2
+        assert (
+            len(
+                n4js.query_chemicalsystems(
+                    scope=multiple_scopes[0], name="lig_ejm_31_complex"
+                )
+            )
+            == 1
+        )
+
+    def test_get_network_transformations(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        sk: ScopedKey = n4js.create_network(an, scope_test)
+
+        tf_sks = n4js.get_network_transformations(sk)
+
+        assert len(tf_sks) == len(network_tyk2.edges)
+        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(
+            t.key for t in network_tyk2.edges
+        )
+
+    def test_get_transformation_networks(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        sk: ScopedKey = n4js.create_network(an, scope_test)
+
+        tf_sks = n4js.get_network_transformations(sk)
+        an_sks = n4js.get_transformation_networks(tf_sks[0])
+
+        assert sk in an_sks
+        assert len(an_sks) == 1
+
+    def test_get_network_chemicalsystems(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        sk: ScopedKey = n4js.create_network(an, scope_test)
+
+        cs_sks = n4js.get_network_chemicalsystems(sk)
+
+        assert len(cs_sks) == len(network_tyk2.nodes)
+        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(
+            cs.key for cs in network_tyk2.nodes
+        )
+
+    def test_get_chemicalsystem_networks(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        sk: ScopedKey = n4js.create_network(an, scope_test)
+
+        cs_sks = n4js.get_network_chemicalsystems(sk)
+        an_sks = n4js.get_chemicalsystem_networks(cs_sks[0])
+
+        assert sk in an_sks
+        assert len(an_sks) == 1
+
+    def test_get_transformation_chemicalsystems(
+        self, n4js, network_tyk2, scope_test, transformation
+    ):
+        an = network_tyk2
+        sk: ScopedKey = n4js.create_network(an, scope_test)
+
+        tf_sk = ScopedKey(gufe_key=transformation.key, **scope_test.dict())
+
+        cs_sks = n4js.get_transformation_chemicalsystems(tf_sk)
+
+        assert len(cs_sks) == 2
+        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(
+            [transformation.stateA.key, transformation.stateB.key]
+        )
+
+    def test_get_chemicalsystem_transformations(
+        self, n4js, network_tyk2, scope_test, chemicalsystem
+    ):
+        an = network_tyk2
+        sk: ScopedKey = n4js.create_network(an, scope_test)
+
+        cs_sk = ScopedKey(gufe_key=chemicalsystem.key, **scope_test.dict())
+
+        tf_sks = n4js.get_chemicalsystem_transformations(cs_sk)
+
+        tfs = []
+        for tf in network_tyk2.edges:
+            if chemicalsystem in (tf.stateA, tf.stateB):
+                tfs.append(tf)
+
+        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(t.key for t in tfs)
 
     def test_get_transformation_results(
         self,
@@ -172,23 +294,23 @@ class TestNeo4jStore(TestStateStore):
         )
 
         # push the result
-        n4js.set_task_result(task_sk, pdr_ref)
+        pdr_ref_sk = n4js.set_task_result(task_sk, pdr_ref)
 
         # get the result back, at the transformation level
-        pdr_refs = n4js.get_transformation_results(transformation_sk)
+        pdr_ref_sks = n4js.get_transformation_results(transformation_sk)
 
-        assert len(pdr_refs) == 1
-        assert pdr_ref in pdr_refs
+        assert len(pdr_ref_sks) == 1
+        assert pdr_ref_sk in pdr_ref_sks
 
         # try adding a new task, then adding the same result to it
         # should result in two tasks pointing to the same result, and yield
         # only one
         task_sk2 = n4js.create_task(transformation_sk)
         n4js.set_task_result(task_sk2, pdr_ref)
-        pdr_refs2 = n4js.get_transformation_results(transformation_sk)
+        pdr_ref_sks_2 = n4js.get_transformation_results(transformation_sk)
 
-        assert len(pdr_refs2) == 1
-        assert pdr_ref in pdr_refs2
+        assert len(pdr_ref_sks_2) == 1
+        assert pdr_ref_sk in pdr_ref_sks_2
 
         # try adding additional unique results to one of the tasks
         for pdr in protocoldagresults[1:]:
@@ -199,10 +321,10 @@ class TestNeo4jStore(TestStateStore):
             n4js.set_task_result(task_sk, pdr_ref_)
 
         # now get all results back for this transformation
-        pdr_refs3 = n4js.get_transformation_results(transformation_sk)
+        pdr_ref_sks_3 = n4js.get_transformation_results(transformation_sk)
 
-        assert len(pdr_refs3) == 3
-        assert set([p.obj_key for p in pdr_refs3]) == set(
+        assert len(pdr_ref_sks_3) == 3
+        assert set([n4js.get_gufe(p).obj_key for p in pdr_ref_sks_3]) == set(
             [p.key for p in protocoldagresults]
         )
 
@@ -229,28 +351,28 @@ class TestNeo4jStore(TestStateStore):
         )
 
         # push the result
-        n4js.set_task_result(task_sk, pdr_ref)
+        pdr_ref_sk = n4js.set_task_result(task_sk, pdr_ref)
 
         # try to get the result back, at the transformation level
-        pdr_refs = n4js.get_transformation_results(transformation_sk)
+        pdr_ref_sks = n4js.get_transformation_results(transformation_sk)
 
-        assert len(pdr_refs) == 0
+        assert len(pdr_ref_sks) == 0
 
         # try to get failure back
-        failure_pdr_refs = n4js.get_transformation_failures(transformation_sk)
+        failure_pdr_ref_sks = n4js.get_transformation_failures(transformation_sk)
 
-        assert len(failure_pdr_refs) == 1
-        assert pdr_ref in failure_pdr_refs
+        assert len(failure_pdr_ref_sks) == 1
+        assert pdr_ref_sk in failure_pdr_ref_sks
 
         # try adding a new task, then adding the same result to it
         # should result in two tasks pointing to the same result, and yield
         # only one
         task_sk2 = n4js.create_task(transformation_sk)
         n4js.set_task_result(task_sk2, pdr_ref)
-        pdr_refs2 = n4js.get_transformation_failures(transformation_sk)
+        pdr_ref_sks_2 = n4js.get_transformation_failures(transformation_sk)
 
-        assert len(pdr_refs2) == 1
-        assert pdr_ref in pdr_refs2
+        assert len(pdr_ref_sks_2) == 1
+        assert pdr_ref_sk in pdr_ref_sks_2
 
         # try adding additional unique results to one of the tasks
         for pdr in protocoldagresults_failure[1:]:
@@ -264,10 +386,10 @@ class TestNeo4jStore(TestStateStore):
         assert len(n4js.get_transformation_results(transformation_sk)) == 0
 
         # but should get 3 failures back if we ask for those
-        pdr_refs3 = n4js.get_transformation_failures(transformation_sk)
+        pdr_ref_sks_3 = n4js.get_transformation_failures(transformation_sk)
 
-        assert len(pdr_refs3) == 3
-        assert set([p.obj_key for p in pdr_refs3]) == set(
+        assert len(pdr_ref_sks_3) == 3
+        assert set([n4js.get_gufe(p).obj_key for p in pdr_ref_sks_3]) == set(
             [p.key for p in protocoldagresults_failure]
         )
 
@@ -279,7 +401,9 @@ class TestNeo4jStore(TestStateStore):
             identifier=compute_service_id, registered=now, heartbeat=now
         )
 
-        n4js.register_computeservice(registration)
+        compute_service_id_ = n4js.register_computeservice(registration)
+
+        assert compute_service_id == compute_service_id_
 
         csreg = n4js.graph.run(
             f"""
@@ -289,10 +413,14 @@ class TestNeo4jStore(TestStateStore):
         ).to_subgraph()
 
         assert csreg["identifier"] == compute_service_id
-        assert csreg["registered"] == now
-        assert csreg["heartbeat"] == now
 
-    def test_deregister(self, n4js, compute_service_id):
+        # we round to integer seconds from epoch to avoid somewhat different
+        # floats on either side of comparison even if practically the same
+        # straight datetime comparisons would sometimes fail depending on timing
+        assert int(csreg["registered"].to_native().timestamp()) == int(now.timestamp())
+        assert int(csreg["heartbeat"].to_native().timestamp()) == int(now.timestamp())
+
+    def test_deregister_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
         registration = ComputeServiceRegistration(
             identifier=compute_service_id, registered=now, heartbeat=now
@@ -301,7 +429,9 @@ class TestNeo4jStore(TestStateStore):
         n4js.register_computeservice(registration)
 
         # try deregistering
-        n4js.deregister_computeservice(compute_service_id)
+        compute_service_id_ = n4js.deregister_computeservice(compute_service_id)
+
+        assert compute_service_id == compute_service_id_
 
         csreg = n4js.graph.run(
             f"""
@@ -312,7 +442,7 @@ class TestNeo4jStore(TestStateStore):
 
         assert csreg is None
 
-    def test_heartbeat(self, n4js, compute_service_id):
+    def test_heartbeat_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
         registration = ComputeServiceRegistration(
             identifier=compute_service_id, registered=now, heartbeat=now
@@ -331,8 +461,13 @@ class TestNeo4jStore(TestStateStore):
             """
         ).to_subgraph()
 
-        assert csreg["registered"] == now
-        assert csreg["heartbeat"] == tomorrow
+        # we round to integer seconds from epoch to avoid somewhat different
+        # floats on either side of comparison even if practically the same
+        # straight datetime comparisons would sometimes fail depending on timing
+        assert int(csreg["registered"].to_native().timestamp()) == int(now.timestamp())
+        assert int(csreg["heartbeat"].to_native().timestamp()) == int(
+            tomorrow.timestamp()
+        )
 
     def test_expire_registrations(self, n4js, compute_service_id):
         now = datetime.utcnow()
@@ -347,7 +482,7 @@ class TestNeo4jStore(TestStateStore):
         # expire any compute service that had a heartbeat more than 30 mins ago
         thirty_mins_ago = now - timedelta(minutes=30)
 
-        n4js.expire_registrations(expire_time=thirty_mins_ago)
+        identities = n4js.expire_registrations(expire_time=thirty_mins_ago)
 
         csreg = n4js.graph.run(
             f"""
@@ -357,6 +492,7 @@ class TestNeo4jStore(TestStateStore):
         ).to_subgraph()
 
         assert csreg is None
+        assert compute_service_id in identities
 
     def test_create_task(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try generating task
@@ -401,7 +537,85 @@ class TestNeo4jStore(TestStateStore):
             # try and create a task that extends a deleted task
             _ = n4js.create_task(transformation_sk, extends=task_sk_deleted)
 
-    def test_get_tasks(self, n4js, network_tyk2, scope_test):
+    def test_query_tasks(self, n4js, network_tyk2, scope_test, multiple_scopes):
+        an = network_tyk2
+        n4js.create_network(an, scope_test)
+
+        task_sks = n4js.query_tasks()
+        assert len(task_sks) == 0
+
+        tf_sks = n4js.query_transformations(scope=scope_test)
+
+        for tf_sk in tf_sks[:10]:
+            [n4js.create_task(tf_sk) for i in range(3)]
+
+        task_sks = n4js.query_tasks()
+        assert len(task_sks) == 10 * 3
+
+        task_sks = n4js.query_tasks(scope=scope_test)
+        assert len(task_sks) == 10 * 3
+
+        task_sks = n4js.query_tasks(scope=multiple_scopes[1])
+        assert len(task_sks) == 0
+
+        # check that we can query by status
+        task_sks = n4js.query_tasks()
+        n4js.set_task_invalid(task_sks[:10])
+
+        task_sks = n4js.query_tasks(status="waiting")
+        assert len(task_sks) == 10 * 3 - 10
+
+        task_sks = n4js.query_tasks(status="invalid")
+        assert len(task_sks) == 10
+
+        task_sks = n4js.query_tasks(status="complete")
+        assert len(task_sks) == 0
+
+    def test_get_network_tasks(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        n4js.create_network(an, scope_test)
+
+        an_sk = n4js.query_networks(scope=scope_test)[0]
+        tf_sks = n4js.get_network_transformations(an_sk)
+
+        task_sks = []
+        for tf_sk in tf_sks[:10]:
+            task_sks.extend([n4js.create_task(tf_sk) for i in range(3)])
+
+        task_sks_network = n4js.get_network_tasks(an_sk)
+        assert set(task_sks_network) == set(task_sks)
+        assert len(task_sks_network) == len(task_sks)
+
+        n4js.set_task_invalid(task_sks[:10])
+
+        task_sks = n4js.get_network_tasks(an_sk, status=TaskStatusEnum.waiting)
+        assert len(task_sks) == len(task_sks_network) - 10
+
+        task_sks = n4js.get_network_tasks(an_sk, status=TaskStatusEnum.invalid)
+        assert len(task_sks) == 10
+
+        task_sks = n4js.get_network_tasks(an_sk, status=TaskStatusEnum.complete)
+        assert len(task_sks) == 0
+
+    def test_get_task_networks(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        n4js.create_network(an, scope_test)
+        n4js.create_network(AlchemicalNetwork(edges=list(an.edges)[:-2]), scope_test)
+
+        an_sk = n4js.query_networks(scope=scope_test)[0]
+        tf_sks = n4js.get_network_transformations(an_sk)
+
+        task_sks = []
+        for tf_sk in tf_sks[:10]:
+            task_sks.extend([n4js.create_task(tf_sk) for i in range(3)])
+
+        for task_sk in task_sks:
+            an_sks = n4js.get_task_networks(task_sk)
+            assert an_sk in an_sks
+            for an_sk in an_sks:
+                assert task_sk in n4js.get_network_tasks(an_sk)
+
+    def test_get_transformation_tasks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
 
@@ -421,7 +635,7 @@ class TestNeo4jStore(TestStateStore):
                     task_sks.append(task_k)
 
         # get all tasks for the transformation
-        all_task_sks: List[ScopedKey] = n4js.get_tasks(transformation_sk)
+        all_task_sks: List[ScopedKey] = n4js.get_transformation_tasks(transformation_sk)
 
         f = lambda x, y: x**y + x ** (y - 1) + x ** (y - 2)
 
@@ -429,18 +643,67 @@ class TestNeo4jStore(TestStateStore):
         assert set(task_sks) == set(all_task_sks)
 
         # try getting back only tasks extending from a given one
-        subtree = n4js.get_tasks(transformation_sk, extends=task_sks[0])
+        subtree = n4js.get_transformation_tasks(transformation_sk, extends=task_sks[0])
 
         assert len(subtree) == f(3, 2) - 1
         assert set(subtree) == set(task_sks[1:13])
 
         # try getting tasks back in the "graph" representation instead
         # this is a mapping of each Task to the Task they extend, if applicable
-        graph = n4js.get_tasks(transformation_sk, return_as="graph")
+        graph = n4js.get_transformation_tasks(transformation_sk, return_as="graph")
 
         assert len(graph) == len(task_sks)
         assert set(graph.keys()) == set(task_sks)
         assert all([graph[t] == task_sks[0] for t in task_sks[1:13:4]])
+
+    def test_get_task_transformation(
+        self,
+        n4js: Neo4jStore,
+        network_tyk2,
+        scope_test,
+        protocoldagresults,
+    ):
+        # create a network with just the transformation we care about
+        transformation = list(network_tyk2.edges)[0]
+        network_sk = n4js.create_network(
+            AlchemicalNetwork(edges=[transformation]), scope_test
+        )
+
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create a task; use its scoped key to get its transformation
+        # this should be the same one we used to spawn the task
+        task_sk = n4js.create_task(transformation_sk)
+
+        # get transformations back as both gufe objects and scoped keys
+        tf, _ = n4js.get_task_transformation(task_sk)
+        tf_sk, _ = n4js.get_task_transformation(task_sk, return_gufe=False)
+
+        assert tf == transformation
+        assert tf_sk == transformation_sk
+
+        # pretend we completed this one, and we have a protocoldagresult for it
+        pdr_ref = ProtocolDAGResultRef(
+            scope=task_sk.scope, obj_key=protocoldagresults[0].key, ok=True
+        )
+
+        # try to push the result
+        pdr_ref_sk = n4js.set_task_result(task_sk, pdr_ref)
+
+        # create a task that extends the previous one
+        task_sk2 = n4js.create_task(transformation_sk, extends=task_sk)
+
+        # get transformations and protocoldagresultrefs as both gufe objects and scoped keys
+        tf, protocoldagresultref = n4js.get_task_transformation(task_sk2)
+        tf_sk, protocoldagresultref_sk = n4js.get_task_transformation(
+            task_sk2, return_gufe=False
+        )
+
+        assert pdr_ref == protocoldagresultref
+        assert pdr_ref_sk == protocoldagresultref_sk
+
+        assert tf == transformation
+        assert tf_sk == transformation_sk
 
     def test_create_taskhub(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try adding a taskhub
@@ -558,6 +821,35 @@ class TestNeo4jStore(TestStateStore):
 
         task_sks_fail = n4js.action_tasks(task_sks, taskhub_sk2)
         assert all([i is None for i in task_sks_fail])
+
+    def test_action_task_other_statuses(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create 10 tasks
+        task_sks = [n4js.create_task(transformation_sk) for i in range(6)]
+
+        # set all but first task to running
+        n4js.set_task_running(task_sks[1:])
+
+        # set 1 task for each available status
+        n4js.set_task_error(task_sks[2:3])
+        n4js.set_task_complete(task_sks[3:4])
+        n4js.set_task_invalid(task_sks[4:5])
+        n4js.set_task_deleted(task_sks[5:6])
+
+        # action all tasks; only those that are 'waiting', 'running', or
+        # 'error' should be actioned
+        actioned = n4js.action_tasks(task_sks, taskhub_sk)
+
+        assert actioned[:3] == task_sks[:3]
+        assert actioned[3:] == [None] * 3
 
     def test_action_task_extends(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
@@ -956,54 +1248,83 @@ class TestNeo4jStore(TestStateStore):
         claimed_again = n4js.claim_taskhub_tasks(taskhub_sk, csid)
         assert claimed_again[0] == None
 
-    def test_get_task_transformation(
-        self,
-        n4js: Neo4jStore,
-        network_tyk2,
-        scope_test,
-        protocoldagresults,
+    def test_get_scope_status(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        an_sk = n4js.create_network(an, scope_test)
+
+        tf_sks = n4js.get_network_transformations(an_sk)
+
+        task_sks = []
+        for tf_sk in tf_sks:
+            task_sks.append(n4js.create_task(tf_sk))
+
+        # try all scopes first
+        status = n4js.get_scope_status(Scope())
+        assert len(status) == 1
+        assert len(task_sks) == status["waiting"]
+
+        # try specific scope
+        status = n4js.get_scope_status(scope_test)
+        assert len(status) == 1
+        assert len(task_sks) == status["waiting"]
+
+        # try a different scope
+        status = n4js.get_scope_status(Scope(org="test_org_1"))
+        assert status == {}
+
+        # change some task statuses
+        n4js.set_task_invalid(task_sks[:10])
+
+        # try specific scope
+        status = n4js.get_scope_status(scope_test)
+        assert len(status) == 2
+        assert status["waiting"] == len(task_sks) - 10
+        assert status["invalid"] == 10
+
+    def test_get_network_status(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        an = network_tyk2
+        an_sk = n4js.create_network(an, scope_test)
+
+        tf_sks = n4js.get_network_transformations(an_sk)
+
+        task_sks = []
+        for tf_sk in tf_sks:
+            task_sks.append(n4js.create_task(tf_sk))
+
+        status = n4js.get_network_status(an_sk)
+        assert len(status) == 1
+        assert status["waiting"] == len(task_sks)
+
+        # change some task statuses
+        n4js.set_task_invalid(task_sks[:10])
+
+        status = n4js.get_network_status(an_sk)
+        assert len(status) == 2
+        assert status["waiting"] == len(task_sks) - 10
+        assert status["invalid"] == 10
+
+    def test_get_transformation_status(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
     ):
-        # create a network with just the transformation we care about
-        transformation = list(network_tyk2.edges)[0]
-        network_sk = n4js.create_network(
-            AlchemicalNetwork(edges=[transformation]), scope_test
-        )
+        an = network_tyk2
+        an_sk = n4js.create_network(an, scope_test)
 
-        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+        tf_sks = n4js.get_network_transformations(an_sk)[:3]
 
-        # create a task; use its scoped key to get its transformation
-        # this should be the same one we used to spawn the task
-        task_sk = n4js.create_task(transformation_sk)
+        task_sks = []
+        for tf_sk in tf_sks:
+            task_sks.append([n4js.create_task(tf_sk) for i in range(3)])
 
-        # get transformations back as both gufe objects and scoped keys
-        tf, _ = n4js.get_task_transformation(task_sk)
-        tf_sk, _ = n4js.get_task_transformation(task_sk, return_gufe=False)
+            status = n4js.get_transformation_status(tf_sk)
+            assert status == {"waiting": 3}
 
-        assert tf == transformation
-        assert tf_sk == transformation_sk
+        for tf_task_sks in task_sks:
+            # change some task statuses
+            n4js.set_task_invalid(tf_task_sks[:1])
 
-        # pretend we completed this one, and we have a protocoldagresult for it
-        pdr_ref = ProtocolDAGResultRef(
-            scope=task_sk.scope, obj_key=protocoldagresults[0].key, ok=True
-        )
-
-        # try to push the result
-        pdr_ref_sk = n4js.set_task_result(task_sk, pdr_ref)
-
-        # create a task that extends the previous one
-        task_sk2 = n4js.create_task(transformation_sk, extends=task_sk)
-
-        # get transformations and protocoldagresultrefs as both gufe objects and scoped keys
-        tf, protocoldagresultref = n4js.get_task_transformation(task_sk2)
-        tf_sk, protocoldagresultref_sk = n4js.get_task_transformation(
-            task_sk2, return_gufe=False
-        )
-
-        assert pdr_ref == protocoldagresultref
-        assert pdr_ref_sk == protocoldagresultref_sk
-
-        assert tf == transformation
-        assert tf_sk == transformation_sk
+        for tf_sk in tf_sks:
+            status = n4js.get_transformation_status(tf_sk)
+            assert status == {"waiting": 2, "invalid": 1}
 
     def test_set_task_result(self, n4js: Neo4jStore, network_tyk2, scope_test, tmpdir):
         an = network_tyk2
@@ -1024,7 +1345,16 @@ class TestNeo4jStore(TestStateStore):
 
         # execute the task
         with tmpdir.as_cwd():
-            protocoldagresult = execute_DAG(protocoldag, shared=Path(".").absolute())
+            shared_basedir = Path("shared").absolute()
+            shared_basedir.mkdir()
+            scratch_basedir = Path("scratch").absolute()
+            scratch_basedir.mkdir()
+
+            protocoldagresult = execute_DAG(
+                protocoldag,
+                shared_basedir=shared_basedir,
+                scratch_basedir=scratch_basedir,
+            )
 
         pdr_ref = ProtocolDAGResultRef(
             scope=task_sk.scope, obj_key=protocoldagresult.key, ok=True
@@ -1066,20 +1396,20 @@ class TestNeo4jStore(TestStateStore):
         )
 
         # push the result
-        n4js.set_task_result(task_sk, pdr_ref)
+        pdr_ref_sk = n4js.set_task_result(task_sk, pdr_ref)
 
         # get the result back
-        pdr_refs = n4js.get_task_results(task_sk)
+        pdr_ref_sks = n4js.get_task_results(task_sk)
 
-        assert len(pdr_refs) == 1
-        assert pdr_ref in pdr_refs
+        assert len(pdr_ref_sks) == 1
+        assert pdr_ref_sk in pdr_ref_sks
 
         # try doing it again; should be idempotent
         n4js.set_task_result(task_sk, pdr_ref)
-        pdr_refs = n4js.get_task_results(task_sk)
+        pdr_ref_sks = n4js.get_task_results(task_sk)
 
-        assert len(pdr_refs) == 1
-        assert pdr_ref in pdr_refs
+        assert len(pdr_ref_sks) == 1
+        assert pdr_ref_sk in pdr_ref_sks
 
         # if we add a different result, should now have 2
         pdr_ref2 = ProtocolDAGResultRef(
@@ -1089,14 +1419,14 @@ class TestNeo4jStore(TestStateStore):
         )
 
         # push the result
-        n4js.set_task_result(task_sk, pdr_ref2)
+        pdr_ref2_sk = n4js.set_task_result(task_sk, pdr_ref2)
 
         # get the result back
-        pdr_refs = n4js.get_task_results(task_sk)
+        pdr_ref_sks = n4js.get_task_results(task_sk)
 
-        assert len(pdr_refs) == 2
-        assert pdr_ref in pdr_refs
-        assert pdr_ref2 in pdr_refs
+        assert len(pdr_ref_sks) == 2
+        assert pdr_ref_sk in pdr_ref_sks
+        assert pdr_ref2_sk in pdr_ref_sks
 
     def test_get_task_failures(
         self,
@@ -1121,26 +1451,26 @@ class TestNeo4jStore(TestStateStore):
         )
 
         # push the result
-        n4js.set_task_result(task_sk, pdr_ref)
+        pdr_ref_sk = n4js.set_task_result(task_sk, pdr_ref)
 
         # try get results back
-        pdr_refs = n4js.get_task_results(task_sk)
+        pdr_ref_sks = n4js.get_task_results(task_sk)
 
-        assert len(pdr_refs) == 0
-        assert pdr_ref not in pdr_refs
+        assert len(pdr_ref_sks) == 0
+        assert pdr_ref_sk not in pdr_ref_sks
 
         # try to get failure back
-        failure_pdr_refs = n4js.get_task_failures(task_sk)
+        failure_pdr_ref_sks = n4js.get_task_failures(task_sk)
 
-        assert len(failure_pdr_refs) == 1
-        assert pdr_ref in failure_pdr_refs
+        assert len(failure_pdr_ref_sks) == 1
+        assert pdr_ref_sk in failure_pdr_ref_sks
 
         # try doing it again; should be idempotent
         n4js.set_task_result(task_sk, pdr_ref)
-        failure_pdr_refs = n4js.get_task_failures(task_sk)
+        failure_pdr_ref_sks = n4js.get_task_failures(task_sk)
 
-        assert len(failure_pdr_refs) == 1
-        assert pdr_ref in failure_pdr_refs
+        assert len(failure_pdr_ref_sks) == 1
+        assert pdr_ref_sk in failure_pdr_ref_sks
 
         # if we add a different failure, should now have 2
         pdr_ref2 = ProtocolDAGResultRef(
@@ -1150,14 +1480,14 @@ class TestNeo4jStore(TestStateStore):
         )
 
         # push the result
-        n4js.set_task_result(task_sk, pdr_ref2)
+        pdr_ref2_sk = n4js.set_task_result(task_sk, pdr_ref2)
 
         # get the result back
-        failure_pdr_refs2 = n4js.get_task_failures(task_sk)
+        failure_pdr_ref_sks = n4js.get_task_failures(task_sk)
 
-        assert len(failure_pdr_refs2) == 2
-        assert pdr_ref in failure_pdr_refs2
-        assert pdr_ref2 in failure_pdr_refs2
+        assert len(failure_pdr_ref_sks) == 2
+        assert pdr_ref_sk in failure_pdr_ref_sks
+        assert pdr_ref2_sk in failure_pdr_ref_sks
 
     ### authentication
 
@@ -1628,14 +1958,14 @@ class TestNeo4jStore(TestStateStore):
         ],
     )
     @pytest.mark.parametrize(
-        "status_func, allowed, result_status",
+        "status_func, result_status",
         [
-            ("f_set_task_waiting", False, None),
-            ("f_set_task_running", False, None),
-            ("f_set_task_complete", False, None),
-            ("f_set_task_error", False, None),
-            ("f_set_task_invalid", True, TaskStatusEnum.invalid),
-            ("f_set_task_deleted", True, TaskStatusEnum.deleted),
+            ("f_set_task_waiting", None),
+            ("f_set_task_running", None),
+            ("f_set_task_complete", None),
+            ("f_set_task_error", None),
+            ("f_set_task_invalid", TaskStatusEnum.invalid),
+            ("f_set_task_deleted", TaskStatusEnum.deleted),
         ],
     )
     def test_set_task_status_from_terminals(
@@ -1646,7 +1976,6 @@ class TestNeo4jStore(TestStateStore):
         terminal_status_func,
         terminal_status,
         status_func,
-        allowed,
         result_status,
         request,
     ):
@@ -1667,14 +1996,14 @@ class TestNeo4jStore(TestStateStore):
         # move it to one of the terminal statuses
         neo4j_terminal_op(task_sks)
 
-        if not allowed:
+        if not neo4j_status_op == neo4j_terminal_op:
             with pytest.raises(ValueError, match="Cannot set task"):
                 neo4j_status_op(task_sks, raise_error=True)
 
         tasks_statused = neo4j_status_op(task_sks)
         all_status = n4js.get_task_status(task_sks)
 
-        if not allowed:
+        if not neo4j_status_op == neo4j_terminal_op:
             assert all(s == terminal_status for s in all_status)
             assert all(t is None for t in tasks_statused)
         else:

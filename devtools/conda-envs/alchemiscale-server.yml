@@ -1,0 +1,48 @@
+name: alchemiscale-server
+channels:
+  - jaimergp/label/unsupported-cudatoolkit-shim
+  - conda-forge
+  - openeye
+dependencies:
+  - pip
+  - python =3.10
+
+  # alchemiscale dependencies
+  - gufe=0.9.1
+  - openfe=0.11.0
+  - requests
+  - click
+  - pydantic<2.0
+
+  ## state store
+  - py2neo
+  - monotonic    # needed by py2neo, but not pulled in
+
+  ## object store
+  - boto3        # aws s3
+
+  ## api(s)
+  - fastapi
+  - uvicorn
+  - gunicorn
+  - python-jose
+  - passlib
+  - bcrypt
+  - python-multipart
+  - starlette
+  - httpx
+  - cryptography
+
+  # perses dependencies
+  - openeye-toolkits
+  - openmoltools
+  - cloudpathlib
+  - dask
+  - distributed
+  - numba
+  - pymbar >=3.0.6,<4
+
+  - pip:
+    - async_lru
+    - git+https://github.com/openforcefield/alchemiscale.git@v0.1.4
+    - git+https://github.com/choderalab/perses.git@protocol-neqcyc

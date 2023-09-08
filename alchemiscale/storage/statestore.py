@@ -1,6 +1,6 @@
 """
 Node4js state storage --- :mod:`alchemiscale.storage.statestore`
-===============================================================
+================================================================
 
 """
 
@@ -160,6 +160,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             self.graph.rollback(tx)
             if not ignore_exceptions:
                 raise
+
         else:
             self.graph.commit(tx)
 
@@ -173,7 +174,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         for label, values in self.constraints.items():
             self.graph.run(
                 f"""
-                CREATE CONSTRAINT {values['name']} IF NOT EXISTS 
+                CREATE CONSTRAINT {values['name']} IF NOT EXISTS
                 FOR (n:{label}) REQUIRE n.{values['property']} is unique
             """
             )
@@ -232,7 +233,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         for label, values in self.constraints.items():
             self.graph.run(
                 f"""
-                DROP CONSTRAINT {values['name']} IF EXISTS 
+                DROP CONSTRAINT {values['name']} IF EXISTS
             """
             )
 
@@ -377,7 +378,8 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> Dict[Node, GufeTokenizable]:
         """Get a Dict `GufeTokenizable` objects within the given subgraph.
 
-        Any `GufeTokenizable` that requires nodes or relationships missing from the subgraph will not be returned.
+        Any `GufeTokenizable` that requires nodes or relationships missing from
+        the subgraph will not be returned.
 
         """
         nxg = self._subgraph_to_networkx(subgraph)
@@ -477,7 +479,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         if return_subgraph:
             q += """
-            OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m) 
+            OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m)
             WHERE NOT (m)-[:DEPENDS_ON]->()
             RETURN n,p
             """
@@ -548,22 +550,23 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         if return_gufe:
             q += """
-            OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m) 
+            OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m)
             WHERE NOT (m)-[:DEPENDS_ON]->()
             RETURN n,p
             """
         else:
             q += """
-            RETURN n
+            RETURN DISTINCT n
+            ORDER BY n._org, n._campaign, n._project, n._gufe_key
             """
         with self.transaction() as tx:
             res = tx.run(q)
 
-        nodes = set()
+        nodes = list()
         subgraph = Subgraph()
 
         for record in res:
-            nodes.add(record["n"])
+            nodes.append(record["n"])
             if return_gufe and record["p"] is not None:
                 subgraph = subgraph | record["p"]
             else:
@@ -627,7 +630,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> ScopedKey:
         """Delete the given `AlchemicalNetwork` from the database.
 
-        This will not remove any `Transformation`s or `ChemicalSystem`s
+        This will not remove any `Transformation`\s or `ChemicalSystem`\s
         associated with the `AlchemicalNetwork`, since these may be associated
         with other `AlchemicalNetwork`s in the same `Scope`.
 
@@ -663,7 +666,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         scope: Optional[Scope] = Scope(),
         return_gufe: bool = False,
     ):
-        """Query for `AlchemicalNetwork`s matching given attributes."""
+        """Query for `AlchemicalNetwork`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="AlchemicalNetwork",
@@ -673,67 +676,150 @@ class Neo4jStore(AlchemiscaleStateStore):
             return_gufe=return_gufe,
         )
 
-    def query_transformations(
-        self, *, name=None, key=None, scope: Scope = Scope(), chemical_systems=None
-    ):
-        """Query for `Transformation`s matching given attributes."""
+    def query_transformations(self, *, name=None, key=None, scope: Scope = Scope()):
+        """Query for `Transformation`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="Transformation", additional=additional, key=key, scope=scope
         )
 
-    def query_chemicalsystems(
-        self, *, name=None, key=None, scope: Scope = Scope(), transformations=None
-    ):
-        """Query for `ChemicalSystem`s matching given attributes."""
+    def query_chemicalsystems(self, *, name=None, key=None, scope: Scope = Scope()):
+        """Query for `ChemicalSystem`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="ChemicalSystem", additional=additional, key=key, scope=scope
         )
 
-    def get_transformations_for_chemicalsystem(self):
-        ...
-
-    def get_networks_for_transformation(self):
-        ...
-
-    def _get_protocoldagresultrefs(self, q):
+    def get_network_transformations(self, network: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
+        q = f"""
+        MATCH (:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(t:Transformation)
+        WITH t._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
         with self.transaction() as tx:
             res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
 
-        protocoldagresultrefs = []
-        subgraph = Subgraph()
-        for record in res:
-            protocoldagresultrefs.append(record["res"])
-            subgraph = subgraph | record["res"]
+        return [ScopedKey.from_str(sk) for sk in sks]
 
-        return list(self._subgraph_to_gufe(protocoldagresultrefs, subgraph).values())
+    def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
+        q = f"""
+        MATCH (:Transformation {{_scoped_key: '{transformation}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        WITH an._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_network_chemicalsystems(self, network: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for ChemicalSystems associated with the given AlchemicalNetwork."""
+        q = f"""
+        MATCH (:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        WITH cs._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_chemicalsystem_networks(self, chemicalsystem: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for AlchemicalNetworks associated with the given ChemicalSystem."""
+        q = f"""
+        MATCH (:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        WITH an._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_transformation_chemicalsystems(
+        self, transformation: ScopedKey
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
+        q = f"""
+        MATCH (:Transformation {{_scoped_key: '{transformation}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        WITH cs._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_chemicalsystem_transformations(
+        self, chemicalsystem: ScopedKey
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for the Transformations associated with the given ChemicalSystem."""
+        q = f"""
+        MATCH (:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(t:Transformation)
+        WITH t._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def _get_protocoldagresultrefs(self, q: str, scoped_key: ScopedKey):
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q, scoped_key=str(scoped_key))
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
 
     def get_transformation_results(
         self, transformation: ScopedKey
     ) -> List[ProtocolDAGResultRef]:
         # get all task result protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
-        q = f"""
-        MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
+        q = """
+        MATCH (trans:Transformation {_scoped_key: $scoped_key}),
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = true
-        RETURN res
+        WITH res._scoped_key as sk
+        RETURN DISTINCT sk
         """
-        return self._get_protocoldagresultrefs(q)
+        return self._get_protocoldagresultrefs(q, transformation)
 
     def get_transformation_failures(
         self, transformation: ScopedKey
     ) -> List[ProtocolDAGResultRef]:
         # get all task failure protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
-        q = f"""
-        MATCH (trans:Transformation {{_scoped_key: "{transformation}"}}),
+        q = """
+        MATCH (trans:Transformation {_scoped_key: $scoped_key}),
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = false
-        RETURN res
+        WITH res._scoped_key as sk
+        RETURN DISTINCT sk
         """
-        return self._get_protocoldagresultrefs(q)
+        return self._get_protocoldagresultrefs(q, transformation)
 
     ## compute
 
@@ -743,7 +829,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         network: ScopedKey,
     ) -> ScopedKey:
         """Set the compute Strategy for the given AlchemicalNetwork."""
-        ...
+
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+        raise NotImplementedError
 
     def register_computeservice(
         self, compute_service_registration: ComputeServiceRegistration
@@ -761,11 +852,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         with self.transaction() as tx:
-            tx.merge(
-                node,
-                primary_label="ComputeServiceRegistration",
-                primary_key="identifier",
-            )
+            tx.create(node)
+
+        return compute_service_registration.identifier
 
     def deregister_computeservice(self, compute_service_id: ComputeServiceID):
         """Remove the registration for the given ComputeServiceID from the
@@ -778,22 +867,31 @@ class Neo4jStore(AlchemiscaleStateStore):
         and with status `running` will have their status set to `waiting`.
 
         """
+
         q = f"""
         MATCH (n:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
 
         OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: 'running'}})
         SET t.status = 'waiting'
 
+        WITH n, n.identifier as identifier
+
         DETACH DELETE n
+
+        RETURN identifier
         """
 
         with self.transaction() as tx:
-            tx.run(q)
+            res = tx.run(q)
+            identifier = next(res)["identifier"]
+
+        return ComputeServiceID(identifier)
 
     def heartbeat_computeservice(
         self, compute_service_id: ComputeServiceID, heartbeat: datetime
     ):
         """Update the heartbeat for the given ComputeServiceID."""
+
         q = f"""
         MATCH (n:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
         SET n.heartbeat = localdatetime('{heartbeat.isoformat()}')
@@ -802,6 +900,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         with self.transaction() as tx:
             tx.run(q)
+
+        return compute_service_id
 
     def expire_registrations(self, expire_time: datetime):
         """Remove all registrations with last heartbeat prior to the given `expire_time`."""
@@ -814,10 +914,20 @@ class Neo4jStore(AlchemiscaleStateStore):
         OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: 'running'}})
         SET t.status = 'waiting'
 
+        WITH n, n.identifier as ident
+
         DETACH DELETE n
+
+        RETURN ident
         """
         with self.transaction() as tx:
-            tx.run(q)
+            res = tx.run(q)
+
+            identities = set()
+            for rec in res:
+                identities.add(rec["ident"])
+
+        return [ComputeServiceID(i) for i in identities]
 
     ## task hubs
 
@@ -835,6 +945,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         either way.
 
         """
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
         scope = network.scope
         network_node = self._get_node(network)
 
@@ -866,13 +981,13 @@ class Neo4jStore(AlchemiscaleStateStore):
     def query_taskhubs(
         self, scope: Optional[Scope] = Scope(), return_gufe: bool = False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskHub]]:
-        """Query for `TaskHub`s matching the given criteria.
+        """Query for `TaskHub`\s matching the given criteria.
 
         Parameters
         ----------
         return_gufe
             If True, return a dict with `ScopedKey`s as keys, `TaskHub`
-            instances as values. Otherwise, return a list of `ScopedKey`s.
+            instances as values. Otherwise, return a list of `ScopedKey`\s.
 
         """
         return self._query(qualname="TaskHub", scope=scope, return_gufe=return_gufe)
@@ -889,6 +1004,11 @@ class Neo4jStore(AlchemiscaleStateStore):
             Otherwise, return a `ScopedKey`.
 
         """
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
         node = self.graph.run(
             f"""
                 match (th:TaskHub {{network: "{network}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
@@ -906,6 +1026,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         network: ScopedKey,
     ) -> ScopedKey:
         """Delete a TaskHub for a given AlchemicalNetwork."""
+
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
         taskhub = self.get_taskhub(network)
 
         q = f"""
@@ -917,6 +1043,16 @@ class Neo4jStore(AlchemiscaleStateStore):
         return taskhub
 
     def set_taskhub_weight(self, network: ScopedKey, weight: float):
+        """Set the weight for the TaskHub associated with the given
+        AlchemicalNetwork.
+
+        """
+
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
         q = f"""
         MATCH (th:TaskHub {{network: "{network}"}})
         SET th.weight = {weight}
@@ -938,6 +1074,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         A given compute task can be represented in any number of
         AlchemicalNetwork TaskHubs, or none at all.
 
+        Only Tasks with status 'waiting', 'running', or 'error' can be
+        actioned.
+
         """
         with self.transaction() as tx:
             actioned_sks = []
@@ -945,13 +1084,15 @@ class Neo4jStore(AlchemiscaleStateStore):
                 q = f"""
                 // get our TaskHub
                 MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:PERFORMS]->(an:AlchemicalNetwork)
-                
+
                 // get the task we want to add to the hub; check that it connects to same network
                 MATCH (task:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
 
                 // only proceed for cases where task is not already actioned on hub
+                // and where the task is either in 'waiting', 'running', or 'error' status
                 WITH th, an, task
                 WHERE NOT (th)-[:ACTIONS]->(task)
+                  AND task.status IN ['waiting', 'running', 'error']
 
                 // create the connection
                 CREATE (th)-[ar:ACTIONS {{weight: 1.0}}]->(task)
@@ -1156,7 +1297,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Get a list of unclaimed Tasks in the TaskHub."""
 
         q = f"""
-        // get list of all unclaimed tasks in the hub 
+        // get list of all unclaimed tasks in the hub
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task)
         WHERE NOT (task)<-[:CLAIMS]-(:ComputeServiceRegistration)
         RETURN task
@@ -1184,6 +1325,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Claim a TaskHub Task.
 
         This method will claim Tasks from a TaskHub according to the following process:
+
         1. `waiting` Tasks with the highest priority are selected for consideration.
         2. Tasks with an `EXTENDS` relationship to an incomplete Task are dropped
            from consideration.
@@ -1202,7 +1344,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         taskpool_q = f"""
-        // get list of all eligible 'waiting' tasks in the hub 
+        // get list of all eligible 'waiting' tasks in the hub
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
         WHERE task.status = 'waiting'
         AND actions.weight > 0
@@ -1287,8 +1429,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             `extends` input for the Task's eventual call to `Protocol.create`.
 
         """
-        scope = transformation.scope
-        if "Transformation" not in transformation.qualname:
+        if transformation.qualname not in ["Transformation", "NonTransformation"]:
             raise ValueError(
                 "`transformation` ScopedKey does not correspond to a `Transformation`"
             )
@@ -1296,6 +1437,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         if extends is not None and extends.qualname != "Task":
             raise ValueError("`extends` ScopedKey does not correspond to a `Task`")
 
+        scope = transformation.scope
         transformation_node = self._get_node(transformation)
 
         # create a new task for the supplied transformation
@@ -1342,52 +1484,59 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return scoped_key
 
-    def set_tasks(
-        self,
-        transformation: ScopedKey,
-        extends: Optional[Task] = None,
-        count: int = 1,
-    ) -> ScopedKey:
-        """Set a fixed number of Tasks against the given Transformation if not
-        already present.
+    def query_tasks(self, *, status=None, key=None, scope: Scope = Scope()):
+        """Query for `Task`\s matching given attributes."""
+        additional = {"status": status}
+        return self._query(qualname="Task", additional=additional, key=key, scope=scope)
 
-        Note: Tasks created by this method are not added to any TaskHubs.
-
-        Parameters
-        ----------
-        transformation
-            The Transformation to compute.
-        scope
-            The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
-        extends
-            The Task to use as a starting point for this Task.
-            Will use the `ProtocolDAGResult` from the given Task as the
-            `extends` input for the Task's eventual call to `Protocol.create`.
-        count
-            The total number of tasks that should exist corresponding to the
-            specified `transformation`, `scope`, and `extends`.
-        """
-        raise NotImplementedError
-        # TODO: finish this one out when we have a reasonable approach to locking
-        # too hard to perform in a single Cypher query; unclear how to create many nodes in a loop
-        transformation_node = self._get_node_from_obj_or_sk(
-            transformation, Transformation, scope
-        )
-
-    def set_task_priority(self, task: ScopedKey, priority: int):
+    def get_network_tasks(
+        self, network: ScopedKey, status: Optional[TaskStatusEnum] = None
+    ) -> List[ScopedKey]:
+        """List ScopedKeys for all Tasks associated with the given AlchemicalNetwork."""
         q = f"""
-        MATCH (t:Task {{_scoped_key: "{task}"}})
-        SET t.priority = {priority}
-        RETURN t
+        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
+              (tf)<-[:PERFORMS]-(t:Task)
         """
-        with self.transaction() as tx:
-            tx.run(q)
 
-    def get_tasks(
+        if status is not None:
+            q += f"""
+            WHERE t.status = '{status.value}'
+            """
+
+        q += """
+        WITH t._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_task_networks(self, task: ScopedKey) -> List[ScopedKey]:
+        """List ScopedKeys for AlchemicalNetworks associated with the given Task."""
+        q = f"""
+        MATCH (t:Task {{_scoped_key: '{task}'}})-[:PERFORMS]->(tf:Transformation),
+              (tf)<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        WITH an._scoped_key as sk
+        RETURN sk
+        """
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q)
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_transformation_tasks(
         self,
         transformation: ScopedKey,
         extends: Optional[ScopedKey] = None,
         return_as: str = "list",
+        status: Optional[TaskStatusEnum] = None,
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Optional[ScopedKey]]]:
         """Get all Tasks that perform the given Transformation.
 
@@ -1408,6 +1557,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         q = f"""
         MATCH (trans:Transformation {{_scoped_key: '{transformation}'}})<-[:PERFORMS]-(task:Task)
         """
+
+        if status is not None:
+            q += f"""
+            WHERE task.status = '{status.value}'
+            """
 
         if extends:
             q += f"""
@@ -1437,30 +1591,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                 for t in tasks
             }
 
-    def query_tasks(
-        self,
-        scope: Optional[Scope] = None,
-        network: Optional[ScopedKey] = None,
-        transformation: Optional[ScopedKey] = None,
-        extends: Optional[ScopedKey] = None,
-        status: Optional[List[TaskStatusEnum]] = None,
-    ):
-        raise NotImplementedError
-
-    def delete_task(
-        self,
-        task: ScopedKey,
-    ) -> Task:
-        """Remove a compute Task from a Transformation.
-
-        This will also remove the Task from all TaskHubs it is a part of.
-
-        This method is intended for administrator use; generally Tasks should
-        instead have their tasks set to 'deleted' and retained.
-
-        """
-        raise NotImplementedError
-
     def get_task_transformation(
         self,
         task: ScopedKey,
@@ -1474,7 +1604,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         If `return_gufe` is `True`, returns actual `Transformation` and
         `ProtocolDAGResultRef` object (`None` if not present); if `False`, returns
-        `ScopedKey`s for these instead.
+        `ScopedKey`\s for these instead.
 
         """
         q = f"""
@@ -1517,10 +1647,119 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return transformation, protocoldagresultref
 
+    def set_tasks(
+        self,
+        transformation: ScopedKey,
+        extends: Optional[Task] = None,
+        count: int = 1,
+    ) -> ScopedKey:
+        """Set a fixed number of Tasks against the given Transformation if not
+        already present.
+
+        Note: Tasks created by this method are not added to any TaskHubs.
+
+        Parameters
+        ----------
+        transformation
+            The Transformation to compute.
+        scope
+            The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
+        extends
+            The Task to use as a starting point for this Task.
+            Will use the `ProtocolDAGResult` from the given Task as the
+            `extends` input for the Task's eventual call to `Protocol.create`.
+        count
+            The total number of tasks that should exist corresponding to the
+            specified `transformation`, `scope`, and `extends`.
+        """
+        raise NotImplementedError
+        # TODO: finish this one out when we have a reasonable approach to locking
+        # too hard to perform in a single Cypher query; unclear how to create many nodes in a loop
+        transformation_node = self._get_node_from_obj_or_sk(
+            transformation, Transformation, scope
+        )
+
+    def set_task_priority(self, task: ScopedKey, priority: int):
+        q = f"""
+        MATCH (t:Task {{_scoped_key: "{task}"}})
+        SET t.priority = {priority}
+        RETURN t
+        """
+        with self.transaction() as tx:
+            tx.run(q)
+
+    def delete_task(
+        self,
+        task: ScopedKey,
+    ) -> Task:
+        """Remove a compute Task from a Transformation.
+
+        This will also remove the Task from all TaskHubs it is a part of.
+
+        This method is intended for administrator use; generally Tasks should
+        instead have their tasks set to 'deleted' and retained.
+
+        """
+        raise NotImplementedError
+
+    def get_scope_status(self, scope: Scope) -> Dict[str, int]:
+        """Return status counts for all Tasks within the given Scope."""
+
+        properties = {
+            "_org": scope.org,
+            "_campaign": scope.campaign,
+            "_project": scope.project,
+        }
+
+        prop_string = ", ".join(
+            "{}: '{}'".format(key, value)
+            for key, value in properties.items()
+            if value is not None
+        )
+
+        q = f"""
+        MATCH (n:Task {{{prop_string}}})
+        RETURN n.status AS status, count(n) as counts
+        """
+        with self.transaction() as tx:
+            res = tx.run(q)
+            counts = {rec["status"]: rec["counts"] for rec in res}
+
+        return counts
+
+    def get_network_status(self, network: ScopedKey) -> Dict[str, int]:
+        """Return status counts for all Tasks associated with the given AlchemicalNetwork."""
+        q = f"""
+        MATCH (:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
+              (tf)<-[:PERFORMS]-(t:Task)
+        RETURN t.status AS status, count(t) as counts
+        """
+        with self.transaction() as tx:
+            res = tx.run(q)
+            counts = {rec["status"]: rec["counts"] for rec in res}
+
+        return counts
+
+    def get_transformation_status(self, transformation: ScopedKey) -> Dict[str, int]:
+        """Return status counts for all Tasks associated with the given Transformation."""
+        q = f"""
+        MATCH (:Transformation {{_scoped_key: "{transformation}"}})<-[:PERFORMS]-(t:Task)
+        RETURN t.status AS status, count(t) as counts
+        """
+        with self.transaction() as tx:
+            res = tx.run(q)
+            counts = {rec["status"]: rec["counts"] for rec in res}
+
+        return counts
+
     def set_task_result(
         self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
     ) -> ScopedKey:
         """Set a `ProtocolDAGResultRef` pointing to a `ProtocolDAGResult` for the given `Task`."""
+
+        if task.qualname != "Task":
+            raise ValueError("`task` ScopedKey does not correspond to a `Task`")
+
         scope = task.scope
         task_node = self._get_node(task)
 
@@ -1547,24 +1786,26 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_task_results(self, task: ScopedKey) -> List[ProtocolDAGResultRef]:
         # get all task result protocoldagresultrefs corresponding to given task
         # returned in no particular order
-        q = f"""
-        MATCH (task:Task {{_scoped_key: "{task}"}}),
+        q = """
+        MATCH (task:Task {_scoped_key: $scoped_key}),
               (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = true
-        RETURN res
+        WITH res._scoped_key as sk
+        RETURN DISTINCT sk
         """
-        return self._get_protocoldagresultrefs(q)
+        return self._get_protocoldagresultrefs(q, task)
 
     def get_task_failures(self, task: ScopedKey) -> List[ProtocolDAGResultRef]:
         # get all task failure protocoldagresultrefs corresponding to given task
         # returned in no particular order
-        q = f"""
-        MATCH (task:Task {{_scoped_key: "{task}"}}),
+        q = """
+        MATCH (task:Task {_scoped_key: $scoped_key}),
               (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = false
-        RETURN res
+        WITH res._scoped_key as sk
+        RETURN DISTINCT sk
         """
-        return self._get_protocoldagresultrefs(q)
+        return self._get_protocoldagresultrefs(q, task)
 
     def set_task_status(
         self, tasks: List[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
@@ -1606,45 +1847,46 @@ class Neo4jStore(AlchemiscaleStateStore):
         Dict[ScopedKey,TaskStatusEnum]
             A dictionary of Tasks and their statuses.
         """
-
         statuses = []
         with self.transaction() as tx:
-            for t in tasks:
-                q = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
-                RETURN t
-                """
-                task = tx.run(q).to_subgraph()
-                if task is None:
-                    statuses.append(None)
-                else:
-                    status = task.get("status")
-                    statuses.append(TaskStatusEnum(status))
+            q = """
+            WITH $scoped_keys AS batch
+            UNWIND batch AS scoped_key
+            OPTIONAL MATCH (t:Task)
+            WHERE t._scoped_key = scoped_key
+            RETURN t.status as status
+            """
+            res = tx.run(q, scoped_keys=[str(t) for t in tasks])
+
+            for rec in res:
+                status = rec["status"]
+                statuses.append(TaskStatusEnum(status) if status is not None else None)
 
         return statuses
 
-    def _set_task_status(self, tasks, q_func, err_msg_func, raise_error):
+    def _set_task_status(
+        self, tasks, q: str, err_msg_func, raise_error
+    ) -> List[Optional[ScopedKey]]:
         tasks_statused = []
         with self.transaction() as tx:
-            for t in tasks:
-                res = tx.run(q_func(t))
-                # we only need the first record to get the info we need
-                for record in res:
-                    task_i = record["t"]
-                    task_set = record["t_"]
-                    break
+            res = tx.run(q, scoped_keys=[str(t) for t in tasks])
+
+            for record in res:
+                task_i = record["t"]
+                task_set = record["t_"]
+                scoped_key = record["scoped_key"]
 
                 if task_set is None:
                     if raise_error:
                         status = task_i["status"]
-                        raise ValueError(err_msg_func(t, status))
+                        raise ValueError(err_msg_func(scoped_key, status))
                     tasks_statused.append(None)
                 elif task_i is None:
                     if raise_error:
                         raise ValueError("No such task {t}")
                     tasks_statused.append(None)
                 else:
-                    tasks_statused.append(t)
+                    tasks_statused.append(ScopedKey.from_str(scoped_key))
 
         return tasks_statused
 
@@ -1657,23 +1899,25 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        def q(t):
-            return f"""
-            MATCH (t:Task {{_scoped_key: '{t}'}})
+        q = """
+        WITH $scoped_keys AS batch
+        UNWIND batch AS scoped_key
 
-            OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
-            WHERE t_.status IN ['waiting', 'running', 'error']
-            SET t_.status = '{TaskStatusEnum.waiting.value}'
+        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
-            WITH t, t_
+        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
+        WHERE t_.status IN ['waiting', 'running', 'error']
+        SET t_.status = 'waiting'
 
-            // if we changed the status to waiting,
-            // drop CLAIMS relationship
-            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
-            DELETE cl
+        WITH scoped_key, t, t_
 
-            RETURN t, t_
-            """
+        // if we changed the status to waiting,
+        // drop CLAIMS relationship
+        OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        DELETE cl
+
+        RETURN scoped_key, t, t_
+        """
 
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `waiting` as it is not currently `error` or `running`."
@@ -1689,16 +1933,18 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        def q(t):
-            return f"""
-            MATCH (t:Task {{_scoped_key: '{t}'}})
+        q = """
+        WITH $scoped_keys AS batch
+        UNWIND batch AS scoped_key
 
-            OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
-            WHERE t_.status IN ['running', 'waiting']
-            SET t_.status = '{TaskStatusEnum.running.value}'
+        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
-            RETURN t, t_
-            """
+        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
+        WHERE t_.status IN ['running', 'waiting']
+        SET t_.status = 'running'
+
+        RETURN scoped_key, t, t_
+        """
 
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `running` as it is not currently `waiting`."
@@ -1714,30 +1960,32 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        def q(t):
-            return f"""
-            MATCH (t:Task {{_scoped_key: '{t}'}})
+        q = """
+        WITH $scoped_keys AS batch
+        UNWIND batch AS scoped_key
 
-            OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
-            WHERE t_.status IN ['complete', 'running']
-            SET t_.status = '{TaskStatusEnum.complete.value}'
+        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
-            WITH t, t_
+        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
+        WHERE t_.status IN ['complete', 'running']
+        SET t_.status = 'complete'
 
-            // if we changed the status to complete,
-            // drop all ACTIONS relationships
-            OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
-            DELETE ar
+        WITH scoped_key, t, t_
 
-            WITH t, t_
+        // if we changed the status to complete,
+        // drop all ACTIONS relationships
+        OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
+        DELETE ar
 
-            // if we changed the status to complete,
-            // drop CLAIMS relationship
-            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
-            DELETE cl
+        WITH scoped_key, t, t_
 
-            RETURN t, t_
-            """
+        // if we changed the status to complete,
+        // drop CLAIMS relationship
+        OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        DELETE cl
+
+        RETURN scoped_key, t, t_
+        """
 
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `complete` as it is not currently `running`."
@@ -1753,23 +2001,25 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        def q(t):
-            return f"""
-            MATCH (t:Task {{_scoped_key: '{t}'}})
+        q = """
+        WITH $scoped_keys AS batch
+        UNWIND batch AS scoped_key
 
-            OPTIONAL MATCH (t_:Task {{_scoped_key: '{t}'}})
-            WHERE t_.status IN ['error', 'running']
-            SET t_.status = '{TaskStatusEnum.error.value}'
+        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
-            WITH t, t_
+        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
+        WHERE t_.status IN ['error', 'running']
+        SET t_.status = 'error'
 
-            // if we changed the status to error,
-            // drop CLAIMS relationship
-            OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
-            DELETE cl
+        WITH scoped_key, t, t_
 
-            RETURN t, t_
-            """
+        // if we changed the status to error,
+        // drop CLAIMS relationship
+        OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        DELETE cl
+
+        RETURN scoped_key, t, t_
+        """
 
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `error` as it is not currently `running`."
@@ -1786,35 +2036,45 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        with self.transaction() as tx:
-            for t in tasks:
-                # set the status and delete the ACTIONS relationship
-                # make sure we follow the extends chain and set all tasks to invalid
-                # and remove actions relationships
-                q = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
+        # set the status and delete the ACTIONS relationship
+        # make sure we follow the extends chain and set all tasks to invalid
+        # and remove actions relationships
+        q = """
+        WITH $scoped_keys AS batch
+        UNWIND batch AS scoped_key
 
-                // EXTENDS* used to get all tasks in the extends chain
-                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task) 
-                SET t.status = '{TaskStatusEnum.invalid.value}'
-                SET extends_task.status = '{TaskStatusEnum.invalid.value}'
-                WITH t, extends_task
+        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
-                OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
-                OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
+        WHERE NOT t_.status IN ['deleted']
+        SET t_.status = 'invalid'
 
-                DELETE ar
-                DELETE are
+        WITH scoped_key, t, t_
 
-                WITH t
+        OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
+        SET extends_task.status = 'invalid'
 
-                // drop CLAIMS relationship if present
-                OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
-                DELETE cl
-                """
-                tx.run(q)
+        WITH scoped_key, t, t_, extends_task
 
-        return tasks
+        OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
+
+        DELETE ar
+        DELETE are
+
+        WITH scoped_key, t, t_
+
+        // drop CLAIMS relationship if present
+        OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        DELETE cl
+
+        RETURN scoped_key, t, t_
+        """
+
+        def err_msg(t, status):
+            return f"Cannot set task {t} with current status: {status} to `invalid` as it is `deleted`."
+
+        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_deleted(
         self, tasks: List[ScopedKey], raise_error: bool = False
@@ -1826,35 +2086,45 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        with self.transaction() as tx:
-            for t in tasks:
-                # set the status and delete the ACTIONS relationship
-                # make sure we follow the extends chain and set all tasks to deleted
-                # and remove actions relationships
-                q = f"""
-                MATCH (t:Task {{_scoped_key: '{t}'}})
+        # set the status and delete the ACTIONS relationship
+        # make sure we follow the extends chain and set all tasks to deleted
+        # and remove actions relationships
+        q = """
+        WITH $scoped_keys AS batch
+        UNWIND batch AS scoped_key
 
-                // EXTENDS* used to get all tasks in the extends chain
-                OPTIONAL MATCH (t)<-[er:EXTENDS*]-(extends_task:Task) 
-                SET t.status = '{TaskStatusEnum.deleted.value}'
-                SET extends_task.status = '{TaskStatusEnum.deleted.value}'
-                WITH t, extends_task
+        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
 
-                OPTIONAL MATCH (t)<-[ar:ACTIONS]-(th:TaskHub)
-                OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
+        WHERE NOT t_.status IN ['invalid']
+        SET t_.status = 'deleted'
 
-                DELETE ar
-                DELETE are
+        WITH scoped_key, t, t_
 
-                WITH t
+        OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
+        SET extends_task.status = 'deleted'
 
-                // drop CLAIMS relationship if present
-                OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
-                DELETE cl
-                """
-                tx.run(q)
+        WITH scoped_key, t, t_, extends_task
 
-        return tasks
+        OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
+
+        DELETE ar
+        DELETE are
+
+        WITH scoped_key, t, t_
+
+        // drop CLAIMS relationship if present
+        OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        DELETE cl
+
+        RETURN scoped_key, t, t_
+        """
+
+        def err_msg(t, status):
+            return f"Cannot set task {t} with current status: {status} to `deleted` as it is `invalid`."
+
+        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     ## authentication
 

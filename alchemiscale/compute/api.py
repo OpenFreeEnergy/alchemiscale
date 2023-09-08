@@ -1,16 +1,16 @@
 """
 AlchemiscaleComputeAPI --- :mod:`alchemiscale.compute.api`
-=======================================================
+==========================================================
 
 """
 
-import asyncio
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import os
 import json
 from datetime import datetime, timedelta
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
+from fastapi.middleware.gzip import GZipMiddleware
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from ..base.api import (
@@ -26,6 +26,7 @@ from ..base.api import (
     validate_scopes_query,
     _check_store_connectivity,
     gufe_to_json,
+    GzipRoute,
 )
 from ..settings import (
     get_base_api_settings,
@@ -52,6 +53,7 @@ from ..security.models import (
 app = FastAPI(title="AlchemiscaleComputeAPI")
 app.dependency_overrides[get_base_api_settings] = get_compute_api_settings
 app.include_router(base_router)
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
 
 def get_cred_compute():
@@ -64,20 +66,21 @@ app.dependency_overrides[get_cred_entity] = get_cred_compute
 router = APIRouter(
     dependencies=[Depends(get_token_data_depends)],
 )
+router.route_class = GzipRoute
 
 
 @app.get("/ping")
-async def ping():
+def ping():
     return {"api": "AlchemiscaleComputeAPI"}
 
 
 @router.get("/info")
-async def info():
+def info():
     return {"message": "nothing yet"}
 
 
 @router.get("/check")
-async def check(
+def check(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
 ):
@@ -87,7 +90,7 @@ async def check(
 
 
 @router.get("/identities/{identity_identifier}/scopes")
-async def list_scopes(
+def list_scopes(
     *,
     identity_identifier,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -98,7 +101,7 @@ async def list_scopes(
 
 
 @router.post("/computeservice/{compute_service_id}/register")
-async def register_computeservice(
+def register_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
@@ -107,23 +110,25 @@ async def register_computeservice(
         identifier=compute_service_id, registered=now, heartbeat=now
     )
 
-    n4js.register_computeservice(csreg)
+    compute_service_id_ = n4js.register_computeservice(csreg)
 
-    return compute_service_id
+    return compute_service_id_
 
 
 @router.post("/computeservice/{compute_service_id}/deregister")
-async def deregister_computeservice(
+def deregister_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    n4js.deregister_computeservice(ComputeServiceID(compute_service_id))
+    compute_service_id_ = n4js.deregister_computeservice(
+        ComputeServiceID(compute_service_id)
+    )
 
-    return compute_service_id
+    return compute_service_id_
 
 
 @router.post("/computeservice/{compute_service_id}/heartbeat")
-async def heartbeat_computeservice(
+def heartbeat_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     settings: ComputeAPISettings = Depends(get_base_api_settings),
@@ -137,13 +142,13 @@ async def heartbeat_computeservice(
     expire_time = now - expire_delta
     n4js.expire_registrations(expire_time)
 
-    n4js.heartbeat_computeservice(compute_service_id, now)
+    compute_service_id_ = n4js.heartbeat_computeservice(compute_service_id, now)
 
-    return compute_service_id
+    return compute_service_id_
 
 
 @router.get("/taskhubs")
-async def query_taskhubs(
+def query_taskhubs(
     *,
     return_gufe: bool = False,
     scope: Scope = Depends(scope_params),
@@ -168,7 +173,7 @@ async def query_taskhubs(
 
 
 @router.post("/taskhubs/{taskhub_scoped_key}/claim")
-async def claim_taskhub_tasks(
+def claim_taskhub_tasks(
     taskhub_scoped_key,
     *,
     compute_service_id: str = Body(),
@@ -189,7 +194,7 @@ async def claim_taskhub_tasks(
 
 
 @router.get("/tasks/{task_scoped_key}/transformation", response_class=GufeJSONResponse)
-async def get_task_transformation(
+def get_task_transformation(
     task_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -199,16 +204,30 @@ async def get_task_transformation(
     sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(sk.scope, token)
 
-    transformation, protocoldagresultref = n4js.get_task_transformation(
-        task=task_scoped_key
+    transformation_sk, protocoldagresultref_sk = n4js.get_task_transformation(
+        task=task_scoped_key, return_gufe=False
     )
 
-    if protocoldagresultref:
-        tf_sk = ScopedKey(gufe_key=transformation.key, **sk.scope.dict())
+    transformation = n4js.get_gufe(transformation_sk)
+
+    if protocoldagresultref_sk:
+        protocoldagresultref = n4js.get_gufe(protocoldagresultref_sk)
         pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.dict())
 
         # we keep this as a string to avoid useless deserialization/reserialization here
-        pdr: str = s3os.pull_protocoldagresult(pdr_sk, tf_sk, return_as="json", ok=True)
+        try:
+            pdr: str = s3os.pull_protocoldagresult(
+                pdr_sk, transformation_sk, return_as="json", ok=True
+            )
+        except:
+            # if we fail to get the object with the above, fall back to
+            # location-based retrieval
+            pdr: str = s3os.pull_protocoldagresult(
+                location=protocoldagresultref.location,
+                return_as="json",
+                ok=True,
+            )
+
     else:
         pdr = None
 
@@ -221,6 +240,7 @@ def set_task_result(
     task_scoped_key,
     *,
     protocoldagresult: str = Body(embed=True),
+    compute_service_id: Optional[str] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
@@ -231,10 +251,14 @@ def set_task_result(
     pdr = json.loads(protocoldagresult, cls=JSON_HANDLER.decoder)
     pdr = GufeTokenizable.from_dict(pdr)
 
+    tf_sk, _ = n4js.get_task_transformation(
+        task=task_scoped_key,
+        return_gufe=False,
+    )
+
     # push the ProtocolDAGResult to the object store
     protocoldagresultref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
-        pdr,
-        scope=task_sk.scope,
+        pdr, transformation=tf_sk, creator=compute_service_id
     )
 
     # push the reference to the state store

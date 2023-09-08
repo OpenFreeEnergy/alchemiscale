@@ -1,15 +1,21 @@
 import pytest
 from click.testing import CliRunner
 
+import time
 import contextlib
 import os
 import traceback
+import multiprocessing
+from datetime import datetime, timedelta
+
+import yaml
 
 import requests
 from fastapi import FastAPI
 from alchemiscale.tests.integration.utils import running_service
 
-from alchemiscale.cli import get_settings_from_options, cli, ApiApplication
+from alchemiscale.cli import get_settings_from_options, cli
+from alchemiscale.cli_utils import ApiApplication
 from alchemiscale.models import Scope
 from alchemiscale.security.auth import hash_key, authenticate, AuthenticationError
 from alchemiscale.security.models import (
@@ -106,7 +112,8 @@ def test_api(n4js, s3os):
     assert response.json() == expected_ping
 
 
-def test_compute_api(n4js, s3os):
+@pytest.fixture
+def compute_api_args():
     workers = 2
     host = "127.0.0.1"
     port = 50100
@@ -136,16 +143,90 @@ def test_compute_api(n4js, s3os):
     ]
     jwt_opts = []  # leaving empty, we have default behavior for these
 
+    return host, port, (command + api_opts + db_opts + s3_opts + jwt_opts)
+
+
+@pytest.fixture
+def compute_service_config(compute_api_args):
+    host, port, _ = compute_api_args
+
+    config = {
+        "init": {
+            "api_url": f"http://{host}:{port}",
+            "identifier": "test-compute-user",
+            "key": "test-comute-user-key",
+            "name": "test-compute-service",
+            "shared_basedir": "./shared",
+            "scratch_basedir": "./scratch",
+            "loglevel": "INFO",
+        },
+        "start": {"max_time": None},
+    }
+
+    return config
+
+
+def test_compute_api(n4js, s3os, compute_api_args):
+    host, port, args = compute_api_args
+
     expected_ping = {"api": "AlchemiscaleComputeAPI"}
 
     runner = CliRunner()
-    with running_service(
-        runner.invoke, port, (cli, command + api_opts + db_opts + s3_opts + jwt_opts)
-    ):
+    with running_service(runner.invoke, port, (cli, args)):
         response = requests.get(f"http://{host}:{port}/ping")
 
     assert response.status_code == 200
     assert response.json() == expected_ping
+
+
+def test_compute_synchronous(
+    n4js_fresh, s3os, compute_api_args, compute_service_config, tmpdir
+):
+    host, port, args = compute_api_args
+    n4js = n4js_fresh
+
+    # create compute identity; add all scope access
+    identity = CredentialedComputeIdentity(
+        identifier=compute_service_config["init"]["identifier"],
+        hashed_key=hash_key(compute_service_config["init"]["key"]),
+    )
+
+    n4js.create_credentialed_entity(identity)
+    n4js.add_scope(identity.identifier, CredentialedComputeIdentity, Scope())
+
+    # start up compute API
+    runner = CliRunner()
+    with running_service(runner.invoke, port, (cli, args)):
+        # start up compute service
+        with tmpdir.as_cwd():
+            command = ["compute", "synchronous"]
+            opts = ["--config-file", "config.yaml"]
+
+            with open("config.yaml", "w") as f:
+                yaml.dump(compute_service_config, f)
+
+            multiprocessing.set_start_method("fork", force=True)
+            proc = multiprocessing.Process(
+                target=runner.invoke, args=(cli, command + opts), daemon=True
+            )
+            proc.start()
+
+            q = f"""
+            match (csreg:ComputeServiceRegistration)
+            where csreg.identifier =~ "{compute_service_config['init']['name']}.*"
+            return csreg
+            """
+            while True:
+                csreg = n4js.graph.run(q).to_subgraph()
+                if csreg is None:
+                    time.sleep(1)
+                else:
+                    break
+
+            assert csreg["registered"] > datetime.utcnow() - timedelta(seconds=30)
+
+            proc.terminate()
+            proc.join()
 
 
 @pytest.mark.parametrize(
@@ -183,9 +264,10 @@ def test_get_settings_from_options(cli_vars):
         assert expected[key] == settings_dict[key]
 
 
-def test_database_init(n4js):
+def test_database_init(n4js_fresh):
+    n4js = n4js_fresh
     # ensure the database is empty
-    n4js.graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
+    n4js.reset()
 
     with pytest.raises(Neo4JStoreError):
         n4js.check()
@@ -410,7 +492,17 @@ def test_scope_list(n4js_fresh):
         assert "org7-*-*" in result.output
 
 
-def test_scope_add(n4js_fresh):
+@pytest.mark.parametrize(
+    "scopes",
+    [
+        ("org1-campaign2-project3",),
+        (
+            "org1-campaign2-project3",
+            "org1-campaign2-project4",
+        ),
+    ],
+)
+def test_scope_add(n4js_fresh, scopes):
     n4js = n4js_fresh
     env_vars = {
         "NEO4J_URL": n4js.graph.service.uri,
@@ -429,6 +521,11 @@ def test_scope_add(n4js_fresh):
 
         n4js.create_credentialed_entity(identity)
 
+        scopes_cli = []
+        for scope in scopes:
+            scopes_cli.append("--scope")
+            scopes_cli.append(scope)
+
         result = runner.invoke(
             cli,
             [
@@ -438,17 +535,26 @@ def test_scope_add(n4js_fresh):
                 "user",
                 "--identifier",
                 ident,
-                "--scope",
-                "org1-campaign2-project3",
-            ],
+            ]
+            + scopes_cli,
         )
         assert click_success(result)
-        scopes = n4js.list_scopes("bill", CredentialedUserIdentity)
-        assert len(scopes) == 1
-        assert scopes[0] == Scope.from_str("org1-campaign2-project3")
+        scopes_ = n4js.list_scopes("bill", CredentialedUserIdentity)
+        assert len(scopes_) == len(scopes)
+        assert set(scopes_) == set([Scope.from_str(scope) for scope in scopes])
 
 
-def test_scope_remove(n4js_fresh):
+@pytest.mark.parametrize(
+    "scopes_remove",
+    [
+        ("org1-campaign2-project3",),
+        (
+            "org1-campaign2-project3",
+            "org1-campaign2-project4",
+        ),
+    ],
+)
+def test_scope_remove(n4js_fresh, scopes_remove):
     n4js = n4js_fresh
     env_vars = {
         "NEO4J_URL": n4js.graph.service.uri,
@@ -470,8 +576,16 @@ def test_scope_remove(n4js_fresh):
             ident, CredentialedUserIdentity, Scope.from_str("org1-campaign2-project3")
         )
         n4js.add_scope(
+            ident, CredentialedUserIdentity, Scope.from_str("org1-campaign2-project4")
+        )
+        n4js.add_scope(
             ident, CredentialedUserIdentity, Scope.from_str("org4-campaign5-project6")
         )
+
+        scopes_cli = []
+        for scope in scopes_remove:
+            scopes_cli.append("--scope")
+            scopes_cli.append(scope)
 
         result = runner.invoke(
             cli,
@@ -482,12 +596,12 @@ def test_scope_remove(n4js_fresh):
                 "user",
                 "--identifier",
                 ident,
-                "--scope",
-                "org1-campaign2-project3",
-            ],
+            ]
+            + scopes_cli,
         )
         assert click_success(result)
         scopes = n4js.list_scopes("bill", CredentialedUserIdentity)
         scope_strs = [str(s) for s in scopes]
-        assert "org1-campaign2-project3" not in scope_strs
+        for scope in scopes_remove:
+            assert scope not in scope_strs
         assert "org4-campaign5-project6" in scope_strs

@@ -1,0 +1,81 @@
+---
+# options for service initialization
+init:
+
+  # URL of the compute API to execute Tasks for.
+  api_url: https://compute.alchemiscale-instance.localdomain
+
+  # Identifier for the compute identity used for authentication.
+  identifier: compute-identity
+
+  # Credential for the compute identity used for authentication.
+  key: "compute-identity-key"
+
+  # The name to give this compute service; used for Task provenance, so
+  # typically set to a distinct value to distinguish different compute
+  # resources, e.g. different hosts or HPC clusters.
+  name: compute-resource-name
+  
+  # Filesystem path to use for `ProtocolDAG` `shared` space.
+  shared_basedir: "./shared"
+
+  # Filesystem path to use for `ProtocolUnit` `scratch` space.
+  scratch_basedir: "./scratch"
+
+  # If True, don't remove shared directories for `ProtocolDAG`s after
+  # completion.
+  keep_shared: False
+
+  # If True, don't remove scratch directories for `ProtocolUnit`s after
+  # completion.
+  keep_scratch: False
+
+  # Time in seconds to sleep if no Tasks claimed from compute API.
+  sleep_interval: 30
+
+  # Frequency at which to send heartbeats to compute API.
+  heartbeat_interval: 300
+
+  # Scopes to limit Task claiming to; defaults to all Scopes accessible by
+  # compute identity.
+  scopes:
+    - '*-*-*'
+
+  # Maximum number of Tasks to claim at a time from a TaskHub.
+  claim_limit: 1
+
+  # The loglevel at which to report via STDOUT; see the :mod:`logging` docs for
+  # available levels.
+  loglevel: 'WARN'
+
+  # Path to file for logging output; if not set, logging will only go to
+  # STDOUT.
+  logfile: null
+
+  # Maximum number of times to retry a request. In the case the API service is
+  # unresponsive an expoenential backoff is applied with retries until this
+  # number is reached. If set to -1, retries will continue indefinitely until
+  # success.
+  client_max_retries: 5
+
+  # The base number of seconds to use for exponential backoff. Must be greater
+  # than 1.0. 
+  client_retry_base_seconds: 2.0
+ 
+  # Maximum number of seconds to sleep between retries; avoids runaway
+  # exponential backoff while allowing for many retries.
+  client_retry_max_seconds: 60.0
+
+  # Whether to verify SSL certificate presented by the API server.
+  client_verify: true
+
+# options for service execution
+start:
+
+  # Max number of Tasks to execute before exiting. If `null`, the service will
+  # have no task limit.
+  max_tasks: null
+
+  # Max number of seconds to run before exiting. If `null`, the service will
+  # have no time limit.
+  max_time: null

@@ -16,6 +16,7 @@ import sphinx_rtd_theme
 
 sys.path.insert(0, os.path.abspath("."))
 
+
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
@@ -23,15 +24,40 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.githubpages",
+    "sphinx.ext.intersphinx"
 ]
+
+numfig = True
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
+autodoc_mock_imports = [
+    "async_lru",
+    "boto3",
+    "click",
+    "fastapi",
+    "gufe",
+    "httpx",
+    "jose",
+    "networkx",
+    "numpy",
+    "passlib",
+    "py2neo",
+    "pydantic",
+    "starlette",
+    "yaml",
+]
+
+intersphinx_mapping = {
+    'gufe': ('https://gufe.readthedocs.io/en/latest/', None),
+    'openfe': ('https://docs.openfree.energy/en/stable/', None),
+    'perses': ('https://perses.readthedocs.io/en/latest/', None),
+    'python': ('https://docs.python.org/3', None),
+}
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = "sphinx_rtd_theme"
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
-html_static_path = ["_static"]

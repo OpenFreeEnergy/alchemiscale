@@ -1,6 +1,6 @@
 """
 Data models --- :mod:`alchemiscale.models`
-=========================================
+==========================================
 
 """
 from typing import Optional, Union
@@ -23,6 +23,15 @@ class Scope(BaseModel):
             i if i is not None else "*" for i in (self.org, self.campaign, self.project)
         )
         return "-".join(triple)
+
+    def __lt__(self, other):
+        return str(self) < str(other)
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+
+        return str(self) == str(other)
 
     class Config:
         frozen = True
