@@ -1,8 +1,8 @@
-.. _developers:
+.. _developer-guide:
 
-##############
-For Developers
-##############
+###############
+Developer Guide
+###############
 
 ``alchemiscale`` is an open-source project, and we invite developers to contribute to its advancement and to extend its functionality.
 This document provides some guidance on:
