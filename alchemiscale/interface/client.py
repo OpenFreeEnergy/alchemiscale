@@ -909,8 +909,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 compress=compress,
                 visualize=False,
             )
+            route = "results"
         else:
             kwargs = dict(compress=compress, visualize=False)
+            route = "failures"
 
         with ProcessPoolExecutor(mp_context=ctx) as executor:
             futures = []
@@ -934,7 +936,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     *self._rich_progress_columns(), transient=False
                 ) as progress:
                     task = progress.add_task(
-                        f"Retrieving [bold]Transformation[/bold] results",
+                        f"Retrieving [bold]Transformation[/bold] {route}",
                         total=len(tf_sks),
                     )
 
