@@ -1,6 +1,6 @@
 """
-Security components for APIs. --- :mod:`alchemiscale.security.auth`
-===================================================================
+:mod:`alchemiscale.security.auth` --- security components for API services
+==========================================================================
 
 """
 

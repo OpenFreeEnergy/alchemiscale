@@ -16,7 +16,7 @@ To add a new user identity, you will generally use the ``alchemiscale`` CLI::
     $ # add a user identity, with key
     $ alchemiscale identity add -t user -i <user identity> -k <user key>
     $
-    $ add one or more scopes the user should have access to
+    $ # add one or more scopes the user should have access to
     $ alchemiscale identity add-scope -t user -i <user identity> -s <org-campaign-project> -s ...
 
 To add a new compute identity, perform the same operation as for user identities given above, **but replace ``-t user`` with ``-t compute``**.

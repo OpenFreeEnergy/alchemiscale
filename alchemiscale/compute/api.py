@@ -1,5 +1,5 @@
 """
-AlchemiscaleComputeAPI --- :mod:`alchemiscale.compute.api`
+:mod:`alchemiscale.compute.api` --- compute API components
 ==========================================================
 
 """

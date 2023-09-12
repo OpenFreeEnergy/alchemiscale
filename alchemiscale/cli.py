@@ -1,5 +1,5 @@
 """
-Command line interface --- :mod:`alchemiscale.cli`
+:mod:`alchemiscale.cli` --- command line interface
 ==================================================
 
 """
