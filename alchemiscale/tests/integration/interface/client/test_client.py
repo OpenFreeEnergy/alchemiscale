@@ -797,6 +797,12 @@ class TestClient:
 
         return protocoldagresults
 
+    def test_get_network_results():
+        ...
+
+    def test_get_network_failures():
+        ...
+
     def test_get_transformation_results(
         self,
         scope_test,

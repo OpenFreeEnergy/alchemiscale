@@ -35,9 +35,12 @@ class AlchemiscaleClientError(AlchemiscaleBaseClientError):
     ...
 
 
-def _get_transformation_results(client_settings, tf_sk, kwargs):
+def _get_transformation_results(client_settings, tf_sk, ok: bool, kwargs):
     client = AlchemiscaleClient(**client_settings)
-    return tf_sk, client.get_transformation_results(tf_sk, **kwargs)
+    if ok:
+        return tf_sk, client.get_transformation_results(tf_sk, **kwargs)
+    else:
+        return tf_sk, client.get_transformation_failures(tf_sk, **kwargs)
 
 
 class AlchemiscaleClient(AlchemiscaleBaseClient):
@@ -887,13 +890,70 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             nest_asyncio.apply()
             return asyncio.run(coro)
 
+
+    def _get_network_results(
+        self,
+        network: ScopedKey,
+        ok: bool = True,
+        return_protocoldagresults: bool = False,
+        compress: bool = True,
+        visualize: bool = True,
+    ) -> Dict[str, Union[Optional[ProtocolResult], List[ProtocolDAGResult]]]:
+        import multiprocessing as mp
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+
+        ctx = mp.get_context("spawn")
+
+        with ProcessPoolExecutor(mp_context=ctx) as executor:
+            futures = []
+            tf_sks = self.get_network_transformations(network)
+            for tf_sk in tf_sks:
+                futures.append(
+                    executor.submit(
+                        _get_transformation_results,
+                        self._settings(),
+                        tf_sk,
+                        ok,
+                        dict(
+                            return_protocoldagresults=return_protocoldagresults,
+                            compress=compress,
+                            visualize=False,
+                        ),
+                    )
+                )
+
+            results = {}
+            if visualize:
+                from rich.progress import Progress
+
+                with Progress(
+                    *self._rich_progress_columns(), transient=False
+                ) as progress:
+                    task = progress.add_task(
+                        f"Retrieving [bold]Transformation[/bold] results",
+                        total=len(tf_sks),
+                    )
+
+                    for future in as_completed(futures):
+                        tf_sk, result = future.result()
+                        results[tf_sk] = result
+                        progress.update(task, advance=1)
+                    progress.refresh()
+            else:
+                for future in as_completed(futures):
+                    tf_sk, result = future.result()
+                    results[tf_sk] = result
+
+        return results
+    
     def get_network_results(
         self,
         network: ScopedKey,
         return_protocoldagresults: bool = False,
         compress: bool = True,
+        visualize: bool = True,
     ) -> Dict[str, Union[Optional[ProtocolResult], List[ProtocolDAGResult]]]:
-        """Get all a `ProtocolResult` for every `Transformation` in the given
+        """Get a `ProtocolResult` for every `Transformation` in the given
         `AlchemicalNetwork`.
 
         A dict giving the `ScopedKey` of each `Transformation` in the network
@@ -923,33 +983,45 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             If ``True``, show retrieval progress indicators.
 
         """
-        import multiprocessing as mp
-        from concurrent.futures import ProcessPoolExecutor, as_completed
+        return self._get_network_results(
+        network=network,
+        ok=True,
+        return_protocoldagresults=return_protocoldagresults,
+        compress=compress,
+        visualize=visualize)
 
-        ctx = mp.get_context("spawn")
+    def get_network_failures(
+        self,
+        network: ScopedKey,
+        compress: bool = True,
+        visualize: bool = True,
+    ) -> Dict[str, List[ProtocolDAGResult]]:
+        """Get all failed `ProtocolDAGResult`s for every `Transformation` in
+        the given `AlchemicalNetwork`.
 
-        with ProcessPoolExecutor(mp_context=ctx) as executor:
-            futures = []
-            for tf_sk in self.get_network_transformations(network):
-                futures.append(
-                    executor.submit(
-                        _get_transformation_results,
-                        self._settings(),
-                        tf_sk,
-                        dict(
-                            return_protocoldagresults=return_protocoldagresults,
-                            compress=compress,
-                            visualize=False,
-                        ),
-                    )
-                )
+        A dict giving the `ScopedKey` of each `Transformation` in the network
+        as keys, a list of the `ProtocolDAGResult`\s as values, is returned.
 
-            results = {}
-            for future in as_completed(futures):
-                tf_sk, result = future.result()
-                results[tf_sk] = result
+        Parameters
+        ----------
+        network
+            The `ScopedKey` of the `AlchemicalNetwork` to retrieve results for.
+        compress
+            If ``True``, compress the ProtocolDAGResults server-side before
+            shipping them to the client. This can reduce retrieval time depending
+            on the bandwidth of your connection to the API service. Set to
+            ``False`` to retrieve without compressing. This is a performance
+            optimization; it has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicators.
 
-        return results
+        """
+        return self._get_network_results(
+        network=network,
+        ok=False,
+        return_protocoldagresults=False,
+        compress=compress,
+        visualize=visualize)
 
     def get_transformation_results(
         self,
