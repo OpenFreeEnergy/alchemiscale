@@ -923,9 +923,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             If ``True``, show retrieval progress indicators.
 
         """
+        import multiprocessing as mp
         from concurrent.futures import ProcessPoolExecutor, as_completed
 
-        with ProcessPoolExecutor() as executor:
+        ctx = mp.get_context('spawn')
+
+        with ProcessPoolExecutor(mp_context=ctx) as executor:
             futures = []
             for tf_sk in self.get_network_transformations(network):
                 futures.append(
