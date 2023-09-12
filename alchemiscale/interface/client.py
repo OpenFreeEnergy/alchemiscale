@@ -890,7 +890,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             nest_asyncio.apply()
             return asyncio.run(coro)
 
-
     def _get_network_results(
         self,
         network: ScopedKey,
@@ -904,6 +903,15 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         ctx = mp.get_context("spawn")
 
+        if ok:
+            kwargs = dict(
+                return_protocoldagresults=return_protocoldagresults,
+                compress=compress,
+                visualize=False,
+            )
+        else:
+            kwargs = dict(compress=compress, visualize=False)
+
         with ProcessPoolExecutor(mp_context=ctx) as executor:
             futures = []
             tf_sks = self.get_network_transformations(network)
@@ -914,11 +922,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                         self._settings(),
                         tf_sk,
                         ok,
-                        dict(
-                            return_protocoldagresults=return_protocoldagresults,
-                            compress=compress,
-                            visualize=False,
-                        ),
+                        kwargs,
                     )
                 )
 
@@ -945,7 +949,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     results[tf_sk] = result
 
         return results
-    
+
     def get_network_results(
         self,
         network: ScopedKey,
@@ -984,11 +988,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         """
         return self._get_network_results(
-        network=network,
-        ok=True,
-        return_protocoldagresults=return_protocoldagresults,
-        compress=compress,
-        visualize=visualize)
+            network=network,
+            ok=True,
+            return_protocoldagresults=return_protocoldagresults,
+            compress=compress,
+            visualize=visualize,
+        )
 
     def get_network_failures(
         self,
@@ -1017,11 +1022,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         """
         return self._get_network_results(
-        network=network,
-        ok=False,
-        return_protocoldagresults=False,
-        compress=compress,
-        visualize=visualize)
+            network=network, ok=False, compress=compress, visualize=visualize
+        )
 
     def get_transformation_results(
         self,
