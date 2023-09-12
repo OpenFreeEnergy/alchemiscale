@@ -926,7 +926,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         import multiprocessing as mp
         from concurrent.futures import ProcessPoolExecutor, as_completed
 
-        ctx = mp.get_context('spawn')
+        ctx = mp.get_context("spawn")
 
         with ProcessPoolExecutor(mp_context=ctx) as executor:
             futures = []
