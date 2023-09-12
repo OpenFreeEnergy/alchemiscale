@@ -863,13 +863,17 @@ class TestClient:
             else:
                 assert pr is None
 
-        network_results = user_client.get_network_results(network_sk, return_protocoldagresults=True)
+        network_results = user_client.get_network_results(
+            network_sk, return_protocoldagresults=True
+        )
         for tf_sk, pdrs in network_results.items():
             if tf_sk == transformation_sk:
                 assert set(pdrs) == set(protocoldagresults)
                 for pdr in pdrs:
                     assert pdr.transformation_key == transformation.key
-                    assert isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
+                    assert (
+                        isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
+                    )
                     assert pdr.ok()
             else:
                 assert pdrs == []
@@ -942,7 +946,9 @@ class TestClient:
 
                 for pdr in pdrs:
                     assert pdr.transformation_key == transformation.key
-                    assert isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
+                    assert (
+                        isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
+                    )
                     assert not pdr.ok()
                     assert len(pdr.protocol_unit_failures) == 1
             else:
