@@ -3,21 +3,36 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to alchemiscale's documentation!
-========================================
+#######################################################################
+alchemiscale: a high-throughput alchemical free energy execution system
+#######################################################################
 
 **alchemiscale** is a service-oriented execution system for ``AlchemicalNetworks``,
 suitable for utilizing multiple compute resources,
-such as HPC clusters, individual hosts, Kubernetes clusters, Folding@Home work servers, etc., 
+such as HPC clusters, individual hosts, Kubernetes clusters, `Folding@Home`_ work servers, etc.,
 to support large campaigns requiring high-throughput.
 
-It is designed for maximum interoperability with the `Open Molecular Software Foundation`_ stack,
+**alchemiscale** is designed for maximum interoperability with the `Open Molecular Software Foundation`_ stack,
 in particular the `OpenForceField`_ and `OpenFreeEnergy`_ ecosystems. 
+**alchemiscale** is fully open source under the permissive **MIT license**.
+
+The overall architecture for **alchemiscale** is shown visually in :numref:`system-architecture-figure-overview`.
+See the :ref:`user-guide` for details on what interaction with **alchemiscale** looks like from a user's perspective,
+and the :ref:`developer-guide` for details on how the components of this architecture work together to execute free energy calculations and yield their results.
+
+.. _system-architecture-figure-overview:
+.. figure:: assets/system-architecture.png
+   :alt: alchemiscale system architecture
+
+   Diagram of the system architecture for ``alchemiscale``.
+   Colored arrows on the diagram correspond to descriptions on the right.
+
 
 .. note::
    This software is pre-alpha and under active development. It is not yet ready
    for production use and the API is liable to change rapidly at any time. 
 
+.. _Folding@Home: https://foldingathome.org
 .. _Open Molecular Software Foundation: https://omsf.io
 .. _OpenForceField: https://openforcefield.org
 .. _OpenFreeEnergy: https://openfree.energy/
@@ -27,7 +42,6 @@ in particular the `OpenForceField`_ and `OpenFreeEnergy`_ ecosystems.
    :caption: Contents:
 
 
-   ./overview
    ./user_guide
    ./tutorials/index
    ./deployment

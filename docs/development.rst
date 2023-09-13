@@ -1,8 +1,8 @@
-.. _developers:
+.. _developer-guide:
 
-##############
-For Developers
-##############
+###############
+Developer Guide
+###############
 
 ``alchemiscale`` is an open-source project, and we invite developers to contribute to its advancement and to extend its functionality.
 This document provides some guidance on:
@@ -183,6 +183,8 @@ Like the ``AlchemiscaleClient``, the ``AlchemiscaleComputeClient`` automatically
 .. _this template configuration: https://github.com/openforcefield/alchemiscale/blob/main/devtools/configs/synchronous-compute-settings.yaml
 
 
+.. _library-layout:
+
 **************
 Library layout
 **************
@@ -191,7 +193,7 @@ The ``alchemiscale`` codebase is generally organized according to the components
 At the top level of the source tree, we have:
 
 ``models``
-    user-facing ``alchemiscale`` data models, in particular :py:class:`~alchemiscale.models.Scope` and :py:class:`~alchemiscale.models.ScopedKey`
+    common ``alchemiscale`` data models, in particular :py:class:`~alchemiscale.models.Scope` and :py:class:`~alchemiscale.models.ScopedKey`
 
 ``settings``
     settings data models for configurable components
