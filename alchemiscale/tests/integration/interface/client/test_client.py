@@ -797,7 +797,7 @@ class TestClient:
 
         return protocoldagresults
 
-    def test_get_transformation_results(
+    def test_get_transformation_and_network_results(
         self,
         scope_test,
         n4js_preloaded,
@@ -851,7 +851,34 @@ class TestClient:
             assert isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
             assert pdr.ok()
 
-    def test_get_transformation_failures(
+        # so we don't have to recompute the above, which depends on
+        # function-scoped fixtures, we also test getting all network results
+        # here too
+        network_results = user_client.get_network_results(network_sk)
+        for tf_sk, pr in network_results.items():
+            if tf_sk == transformation_sk:
+                assert pr.get_estimate() == 95500.0
+                assert set(pr.data.keys()) == {"logs", "key_results"}
+                assert len(pr.data["key_results"]) == 3
+            else:
+                assert pr is None
+
+        network_results = user_client.get_network_results(
+            network_sk, return_protocoldagresults=True
+        )
+        for tf_sk, pdrs in network_results.items():
+            if tf_sk == transformation_sk:
+                assert set(pdrs) == set(protocoldagresults)
+                for pdr in pdrs:
+                    assert pdr.transformation_key == transformation.key
+                    assert (
+                        isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
+                    )
+                    assert pdr.ok()
+            else:
+                assert pdrs == []
+
+    def test_get_transformation_and_network_failures(
         self,
         scope_test,
         n4js_preloaded,
@@ -907,6 +934,25 @@ class TestClient:
             assert pdr.transformation_key == transformation.key
             assert isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
             assert not pdr.ok()
+
+        # so we don't have to recompute the above, which depends on
+        # function-scoped fixtures, we also test getting all network failures
+        # here too
+        network_failures = user_client.get_network_failures(network_sk)
+        for tf_sk, pdrs in network_failures.items():
+            if tf_sk == transformation_sk:
+                assert set(pdrs) == set(protocoldagresults)
+                assert len(pdrs) == 2
+
+                for pdr in pdrs:
+                    assert pdr.transformation_key == transformation.key
+                    assert (
+                        isinstance(pdr.extends_key, GufeKey) or pdr.extends_key is None
+                    )
+                    assert not pdr.ok()
+                    assert len(pdr.protocol_unit_failures) == 1
+            else:
+                assert pdrs == []
 
     def test_get_task_results(
         self,
