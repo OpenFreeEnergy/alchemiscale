@@ -303,18 +303,6 @@ class SynchronousComputeService:
     def push_result(
         self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
     ) -> ScopedKey:
-        
-        # for each terminal protocolunitresult, process Paths present
-        # push the file represented by each path to the object store, and replace
-        # the Path in the prototocolunitresult with an ObjectStoreRef
-        terminal_purs = protocoldagresult.terminal_protocol_unit_results
-        for terminal_pur in terminal_purs:
-            outputs = terminal_pur.outputs
-            processed_outputs = self._paths_to_objectstorerefs(outputs, task, protocoldagresult)
-
-            # TODO: this is a little dirty; consider putting in a proper way to
-            # do this in gufe
-            terminal_pur._outputs = processed_outputs
 
         # finally, push ProtocolDAGResult
         sk: ScopedKey = self.client.set_task_result(

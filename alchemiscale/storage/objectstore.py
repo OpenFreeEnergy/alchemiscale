@@ -230,6 +230,7 @@ class S3ObjectStore:
             ok=ok,
         )
 
+    
 
     def push_protocoldagresult(
         self,

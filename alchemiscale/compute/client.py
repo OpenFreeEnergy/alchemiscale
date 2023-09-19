@@ -110,7 +110,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
         return ScopedKey.from_dict(pdr_sk)
 
-    def push_result_path(
+    def push_resultfile(
         self, task: ScopedKey, 
         protocoldagresult: ProtocolDAGResult,
         path: Path
@@ -124,3 +124,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         pdr_sk = self._post_resource(f"tasks/{task}/results", data)
 
         return ScopedKey.from_dict(pdr_sk)
+
+
+    def check_exists_resultfile(self, location):
+        ...
