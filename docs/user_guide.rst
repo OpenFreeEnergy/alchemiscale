@@ -201,8 +201,6 @@ The more :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s a :py:class
 In this way, actioning is an indicator of demand for a given :py:class:`~alchemiscale.storage.models.Task` and its corresponding :external+gufe:py:class:`~gufe.transformations.Transformation`.
 
 .. note:: 
-   About :py:class:`~alchemiscale.storage.models.Task`\s
-
    Alchemiscale :py:class:`~alchemiscale.storage.models.Task`\s can be considered a single independent “repeat” of an alchemical transformation, or a :external+gufe:py:class:`~gufe.protocols.ProtocolDAG` as defined in :py:mod:`gufe`.
    What this exactly means will be subtly different depending on the type of alchemical :external+gufe:py:class:`~gufe.protocols.Protocol` employed.
 
