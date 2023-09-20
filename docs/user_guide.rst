@@ -200,15 +200,16 @@ If we submit another :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` i
 The more :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s a :py:class:`~alchemiscale.storage.models.Task` is actioned to, the higher its chances of being picked up by a compute service.
 In this way, actioning is an indicator of demand for a given :py:class:`~alchemiscale.storage.models.Task` and its corresponding :external+gufe:py:class:`~gufe.transformations.Transformation`.
 
-.. note:: About :py:class:`~alchemiscale.storage.models.Task`\s
+.. note:: 
+   About :py:class:`~alchemiscale.storage.models.Task`\s
 
-Alchemiscale :py:class:`~alchemiscale.storage.models.Task`\s can be considered a single independent “repeat” of an alchemical transformation, or a :external+gufe:py:class:`~gufe.protocols.ProtocolDAG` as defined in :py:mod:`gufe`.
-    What this exactly means will be subtly different depending on the type of alchemical :external+gufe:py:class:`~gufe.protocols.Protocol` employed.
-    
-    In the case of the :py:class:`~openfe.protocols.openmm_rfe.RelativeHybridTopologyProtocol` (i.e. for HREX, and SAMS), this effectively means that each :py:class:`~alchemiscale.storage.models.Task` carries out all the computation required to obtain a single estimate of the free energy (in practice one would want to do several repeats to get an idea of the sampling error).
-    
-    In the case of the :py:class:`~perses.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`, a :py:class:`~alchemiscale.storage.models.Task` instead encompasses a non-equilibrium cycle and will return a single work estimate.
-    The work values of multiple :py:class:`~alchemiscale.storage.models.Task`\s can then be gathered to obtain a free energy estimate, and more :py:class:`~alchemiscale.storage.models.Task`\s will improve the convergence of the estimate.
+   Alchemiscale :py:class:`~alchemiscale.storage.models.Task`\s can be considered a single independent “repeat” of an alchemical transformation, or a :external+gufe:py:class:`~gufe.protocols.ProtocolDAG` as defined in :py:mod:`gufe`.
+   What this exactly means will be subtly different depending on the type of alchemical :external+gufe:py:class:`~gufe.protocols.Protocol` employed.
+
+   In the case of the :py:class:`~openfe.protocols.openmm_rfe.RelativeHybridTopologyProtocol` (i.e. for HREX, and SAMS), this effectively means that each :py:class:`~alchemiscale.storage.models.Task` carries out all the computation required to obtain a single estimate of the free energy (in practice one would want to do several repeats to get an idea of the sampling error).
+
+   In the case of the :py:class:`~perses.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`, a :py:class:`~alchemiscale.storage.models.Task` instead encompasses a non-equilibrium cycle and will return a single work estimate.
+   The work values of multiple :py:class:`~alchemiscale.storage.models.Task`\s can then be gathered to obtain a free energy estimate, and more :py:class:`~alchemiscale.storage.models.Task`\s will improve the convergence of the estimate.
 
 
 ********************************

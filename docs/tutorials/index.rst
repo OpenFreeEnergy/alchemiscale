@@ -10,7 +10,5 @@ These are meant to supplement the :ref:`user-guide`, which focuses on the genera
 
 .. toctree::
    :maxdepth: 1
-   :caption: Contents:
-
 
    ./demo/Alchemiscale Demo.ipynb
