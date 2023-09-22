@@ -67,7 +67,7 @@ Creating a database dump
                -v ${BACKUPS_DIR}:/tmp \
                --entrypoint /bin/bash \
                neo4j:${NEO4J_VERSION} \
-               neo4j-admin dump --to /tmp/neo4j-$(date -I).dump
+               -c "neo4j-admin dump --to /tmp/neo4j-$(date -I).dump"
 
 This will create a new database dump in the ``$BACKUPS_DIR`` directory.
 
@@ -84,6 +84,8 @@ To later restore from a database dump, navigate to the directory containing your
                -v ${BACKUPS_DIR}:/tmp \
                --entrypoint /bin/bash \
                neo4j:${NEO4J_VERSION} \
-               neo4j-admin load --from /tmp/neo4j-${DUMP_DATE}.dump
+               -c "neo4j-admin load --from /tmp/neo4j-${DUMP_DATE}.dump"
+
+You may need to perform a ``chown -R`` following this operation to set correct ownership of the newly-loaded database contents.
 
 Automating the backup process to perform regular backups without human intervention for your deployment is ideal, but out of scope for this document.
