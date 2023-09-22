@@ -9,7 +9,7 @@ dependencies:
 
   # alchemiscale dependencies
   - gufe=0.9.4
-  - openfe=0.14.0
+  - openfe=0.13.0
   - requests
   - click
   - httpx
