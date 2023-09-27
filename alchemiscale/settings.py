@@ -1,5 +1,5 @@
 """
-Settings --- :mod:`alchemiscale.settings`
+:mod:`alchemiscale.settings` --- settings
 =========================================
 
 """

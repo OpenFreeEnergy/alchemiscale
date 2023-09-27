@@ -1,9 +1,8 @@
 """
-Reusable components for API services. --- :mod:`alchemiscale.base.api`
-======================================================================
+:mod:`alchemiscale.base.api` --- reusable components for API services
+=====================================================================
 
 """
-
 
 from functools import lru_cache
 from typing import Any, Union, Dict, List, Callable

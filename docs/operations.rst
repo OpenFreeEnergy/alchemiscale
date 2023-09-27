@@ -16,7 +16,7 @@ To add a new user identity, you will generally use the ``alchemiscale`` CLI::
     $ # add a user identity, with key
     $ alchemiscale identity add -t user -i <user identity> -k <user key>
     $
-    $ add one or more scopes the user should have access to
+    $ # add one or more scopes the user should have access to
     $ alchemiscale identity add-scope -t user -i <user identity> -s <org-campaign-project> -s ...
 
 To add a new compute identity, perform the same operation as for user identities given above, **but replace ``-t user`` with ``-t compute``**.
@@ -67,7 +67,7 @@ Creating a database dump
                -v ${BACKUPS_DIR}:/tmp \
                --entrypoint /bin/bash \
                neo4j:${NEO4J_VERSION} \
-               neo4j-admin dump --to /tmp/neo4j-$(date -I).dump
+               -c "neo4j-admin dump --to /tmp/neo4j-$(date -I).dump"
 
 This will create a new database dump in the ``$BACKUPS_DIR`` directory.
 
@@ -84,6 +84,8 @@ To later restore from a database dump, navigate to the directory containing your
                -v ${BACKUPS_DIR}:/tmp \
                --entrypoint /bin/bash \
                neo4j:${NEO4J_VERSION} \
-               neo4j-admin load --from /tmp/neo4j-${DUMP_DATE}.dump
+               -c "neo4j-admin load --from /tmp/neo4j-${DUMP_DATE}.dump"
+
+You may need to perform a ``chown -R`` following this operation to set correct ownership of the newly-loaded database contents.
 
 Automating the backup process to perform regular backups without human intervention for your deployment is ideal, but out of scope for this document.

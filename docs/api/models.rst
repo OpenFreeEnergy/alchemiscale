@@ -1,5 +1,5 @@
 ######
-Models
+models
 ######
 
 .. automodule:: alchemiscale.models

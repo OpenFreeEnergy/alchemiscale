@@ -25,8 +25,11 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.githubpages",
-    "sphinx.ext.intersphinx"
+    "sphinx.ext.intersphinx",
+    "myst_nb",
 ]
+
+numfig = True
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
@@ -60,3 +63,29 @@ intersphinx_mapping = {
 
 html_theme = "sphinx_rtd_theme"
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+
+
+# -- Options for MystNB ------------------------------------------------------
+
+myst_url_schemes = [
+    "http",
+    "https",
+]
+
+myst_enable_extensions = [
+    "amsmath",
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "html_image",
+    "smartquotes",
+    "replacements",
+]
+
+myst_heading_anchors = 2
+
+# Never execute notebooks
+# Output is stored in the notebook itself
+# Remember `Widgets -> Save Notebook Widget State` in the notebook.
+# See: https://myst-nb.readthedocs.io/en/latest/computation/execute.html
+nb_execution_mode = "off"

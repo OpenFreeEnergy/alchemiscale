@@ -4,7 +4,7 @@
 Compute
 #######
 
-In order to actually execute ``Transformation``\s to obtain free energy estimates, you must deploy compute services to resources suitable for executing these types of calculations.
+In order to actually execute :external+gufe:py:class:`~gufe.transformations.Transformation`\s to obtain free energy estimates, you must deploy compute services to resources suitable for executing these types of calculations.
 This document details how to do this on several different types of compute resources.
 
 There currently exists a single implementation of an ``alchemiscale`` compute service: the :py:class:`~alchemiscale.compute.service.SynchronousComputeService`.
@@ -127,9 +127,9 @@ A subset of options used in the config file are given below::
       max_time: 300
 
 
-For HPC job-based execution, we recommend limiting the number of ``Task``\s the compute service executes to a small number, preferrably 1, and setting a time limit beyond which the compute service will shut down.
-With this configuration, when a compute service comes up and claims a ``Task``, it will have nearly the full walltime of its job to execute it.
-Any compute service that fails to claim a ``Task`` will shut itself down, and the job will exit, avoiding waste and a scenario where a ``Task`` is claimed without enough walltime left on the job to complete it.
+For HPC job-based execution, we recommend limiting the number of :py:class:`~alchemiscale.storage.models.Task`\s the compute service executes to a small number, preferrably 1, and setting a time limit beyond which the compute service will shut down.
+With this configuration, when a compute service comes up and claims a :py:class:`~alchemiscale.storage.models.Task`, it will have nearly the full walltime of its job to execute it.
+Any compute service that fails to claim a :py:class:`~alchemiscale.storage.models.Task` will shut itself down, and the job will exit, avoiding waste and a scenario where a :py:class:`~alchemiscale.storage.models.Task` is claimed without enough walltime left on the job to complete it.
 
 
 ******************

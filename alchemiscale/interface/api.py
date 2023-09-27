@@ -1,10 +1,8 @@
 """
-AlchemiscaleClientAPI --- :mod:`alchemiscale.interface.api`
-===========================================================
-
+:mod:`alchemiscale.interface.api` --- user-facing API components
+================================================================
 
 """
-
 
 from typing import Any, Dict, List, Optional, Union
 import os

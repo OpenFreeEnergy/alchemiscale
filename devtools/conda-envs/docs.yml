@@ -5,3 +5,4 @@ dependencies:
   - sphinx >=7.2.1
   - sphinx_rtd_theme
   - async-lru
+  - myst-nb

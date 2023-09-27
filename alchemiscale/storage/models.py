@@ -1,5 +1,5 @@
 """
-Data models for storage components --- :mod:`alchemiscale.storage.models`
+:mod:`alchemiscale.storage.models` --- data models for storage components
 =========================================================================
 
 """
