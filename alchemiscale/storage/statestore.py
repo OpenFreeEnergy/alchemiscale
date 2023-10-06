@@ -36,6 +36,7 @@ from ..models import Scope, ScopedKey
 
 from ..security.models import CredentialedEntity
 from ..settings import Neo4jStoreSettings, get_neo4jstore_settings
+from ..validators import validate_network_nonself
 
 
 @lru_cache()
@@ -610,6 +611,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         some of its components already exist in the database.
 
         """
+        validate_network_nonself(network)
 
         ndict = network.to_shallow_dict()
 

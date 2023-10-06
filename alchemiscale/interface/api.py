@@ -116,7 +116,15 @@ def create_network(
     validate_scopes(scope, token)
 
     an = AlchemicalNetwork.from_dict(network)
-    an_sk = n4js.create_network(network=an, scope=scope)
+
+    try:
+        an_sk = n4js.create_network(network=an, scope=scope)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=e.args[0],
+        )
+
 
     # create taskhub for this network
     n4js.create_taskhub(an_sk)
