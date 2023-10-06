@@ -30,6 +30,9 @@ init:
   # completion.
   keep_scratch: False
 
+  # Number of times to attempt a given Task on failure
+  n_retries: 3
+
   # Time in seconds to sleep if no Tasks claimed from compute API.
   sleep_interval: 30
 
