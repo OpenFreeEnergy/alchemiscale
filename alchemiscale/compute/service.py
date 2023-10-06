@@ -83,6 +83,7 @@ class SynchronousComputeService:
         scratch_basedir: os.PathLike,
         keep_shared: bool = False,
         keep_scratch: bool = False,
+        n_retries: int = 3,
         sleep_interval: int = 30,
         heartbeat_interval: int = 300,
         scopes: Optional[List[Scope]] = None,
@@ -118,6 +119,8 @@ class SynchronousComputeService:
         keep_scratch
             If True, don't remove scratch directories for `ProtocolUnit`s after
             completion.
+        n_retries
+            Number of times to attempt a given Task on failure.
         sleep_interval
             Time in seconds to sleep if no Tasks claimed from compute API.
         heartbeat_interval
@@ -176,6 +179,8 @@ class SynchronousComputeService:
         self.scratch_basedir = Path(scratch_basedir).absolute()
         self.scratch_basedir.mkdir(exist_ok=True)
         self.keep_scratch = keep_scratch
+
+        self.n_retries = n_retries
 
         self.scheduler = sched.scheduler(time.monotonic, time.sleep)
 
@@ -336,6 +341,7 @@ class SynchronousComputeService:
                 scratch_basedir=scratch,
                 keep_scratch=self.keep_scratch,
                 raise_error=False,
+                n_retries=self.n_retries,
             )
         finally:
             if not self.keep_shared:
