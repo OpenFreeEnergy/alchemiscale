@@ -30,5 +30,5 @@ dependencies:
   - pip:
     - nest_asyncio
     - async_lru
-    - git+https://github.com/openforcefield/alchemiscale.git@v0.2.0
+    - git+https://github.com/openforcefield/alchemiscale.git@v0.2.1
     - git+https://github.com/choderalab/perses.git@protocol-neqcyc
