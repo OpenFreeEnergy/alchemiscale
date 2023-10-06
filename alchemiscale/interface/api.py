@@ -125,7 +125,6 @@ def create_network(
             detail=e.args[0],
         )
 
-
     # create taskhub for this network
     n4js.create_taskhub(an_sk)
 

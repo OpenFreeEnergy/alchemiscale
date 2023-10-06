@@ -16,5 +16,7 @@ def validate_network_nonself(network: AlchemicalNetwork):
     """
     for transformation in network.edges:
         if transformation.stateA == transformation.stateB:
-            raise ValueError(f"`Transformation` '{transformation.key}' uses the same `ChemicalSystem` '{transformation.stateA.key}' for both states; "
-                             "this is currently not supported in `alchemiscale`")
+            raise ValueError(
+                f"`Transformation` '{transformation.key}' uses the same `ChemicalSystem` '{transformation.stateA.key}' for both states; "
+                "this is currently not supported in `alchemiscale`"
+            )
