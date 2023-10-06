@@ -29,6 +29,7 @@ from ..models import Scope, ScopedKey
 from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
 from ..strategies import Strategy
 from ..security.models import CredentialedUserIdentity
+from ..validators import validate_network_nonself
 
 
 class AlchemiscaleClientError(AlchemiscaleBaseClientError):
@@ -115,6 +116,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             raise ValueError(
                 f"`scope` '{scope}' contains wildcards ('*'); `scope` must be *specific*"
             )
+
+        validate_network_nonself(network)
 
         from rich.progress import Progress
 
