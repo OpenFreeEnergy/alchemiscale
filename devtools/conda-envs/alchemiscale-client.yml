@@ -13,7 +13,7 @@ dependencies:
   - requests
   - click
   - httpx
-  - pydantic<2.0
+  - pydantic >1
 
   ## user client printing
   - rich

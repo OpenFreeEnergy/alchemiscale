@@ -12,7 +12,7 @@ dependencies:
   - openfe=0.13.0
   - requests
   - click
-  - pydantic<2.0
+  - pydantic >1
 
   ## state store
   - py2neo
