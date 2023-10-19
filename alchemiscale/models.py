@@ -4,7 +4,7 @@
 
 """
 from typing import Optional, Union
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from gufe.tokenization import GufeKey
 from re import fullmatch
 
@@ -60,19 +60,19 @@ class Scope(BaseModel):
 
         return v
 
-    @validator("org")
+    @field_validator("org")
     def valid_org(cls, v):
         return cls._validate_component(v, "org")
 
-    @validator("campaign")
+    @field_validator("campaign")
     def valid_campaign(cls, v):
         return cls._validate_component(v, "campaign")
 
-    @validator("project")
+    @field_validator("project")
     def valid_project(cls, v):
         return cls._validate_component(v, "project")
 
-    @root_validator
+    @model_validator
     def check_scope_hierarchy(cls, values):
         if not _hierarchy_valid(values):
             raise InvalidScopeError(
@@ -129,7 +129,7 @@ class ScopedKey(BaseModel):
     class Config:
         frozen = True
 
-    @validator("gufe_key")
+    @field_validator("gufe_key")
     def cast_gufe_key(cls, v):
         return GufeKey(v)
 

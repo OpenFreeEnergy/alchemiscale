@@ -7,7 +7,7 @@
 from datetime import datetime, timedelta
 from typing import List, Union, Optional
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 
 from ..models import Scope
 
@@ -32,7 +32,7 @@ class ScopedIdentity(BaseModel):
     disabled: bool = False
     scopes: List[str] = []
 
-    @validator("scopes", pre=True, each_item=True)
+    @field_validator("scopes", pre=True, each_item=True)
     def cast_scopes_to_str(cls, scope):
         """Ensure that each scope object is correctly cast to its str representation"""
         if isinstance(scope, Scope):
