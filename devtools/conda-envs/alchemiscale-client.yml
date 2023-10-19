@@ -5,7 +5,7 @@ channels:
   - openeye
 dependencies:
   - pip
-  - python =3.11
+  - python =3.10
 
   # alchemiscale dependencies
   - gufe=0.9.4
