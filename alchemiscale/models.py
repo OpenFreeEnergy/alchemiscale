@@ -34,8 +34,8 @@ class Scope(BaseModel):
         return str(self) == str(other)
 
     model_config: ConfigDict(
-            frozen = True,
-            )
+        frozen=True,
+    )
 
     @staticmethod
     def _validate_component(v, component):
@@ -73,7 +73,7 @@ class Scope(BaseModel):
     def valid_project(cls, v):
         return cls._validate_component(v, "project")
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def check_scope_hierarchy(cls, values):
         if not _hierarchy_valid(values):
@@ -128,10 +128,7 @@ class ScopedKey(BaseModel):
     campaign: str
     project: str
 
-    model_config: ConfigDict(
-            frozen = True,
-            arbitrary_types_allowed = True
-            )
+    model_config: ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     @field_validator("gufe_key")
     def cast_gufe_key(cls, v):

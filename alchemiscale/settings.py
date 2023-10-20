@@ -12,8 +12,9 @@ from pydantic import BaseSettings, ConfigDict
 
 class FrozenSettings(BaseSettings):
     model_config: ConfigDict(
-            frozen = True,
-            )
+        frozen=True,
+    )
+
 
 class Neo4jStoreSettings(FrozenSettings):
     """Automatically populates settings from environment variables where they
