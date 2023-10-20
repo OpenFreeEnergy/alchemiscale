@@ -22,7 +22,7 @@ If this doesn’t work, clone alchemiscale from Github, and install from there::
 
     $ git clone https://github.com/openforcefield/alchemiscale.git
     $ cd alchemiscale
-    $ git checkout v0.2.1
+    $ git checkout v0.2.1-2
 
     $ conda env create -f devtools/conda-envs/alchemiscale-client.yml
 
