@@ -11,7 +11,7 @@ from pydantic import BaseSettings, ConfigDict
 
 
 class FrozenSettings(BaseSettings):
-    model_config: ConfigDict(
+    model_config = ConfigDict(
         frozen=True,
     )
 

@@ -33,7 +33,7 @@ class Scope(BaseModel):
 
         return str(self) == str(other)
 
-    model_config: ConfigDict(
+    model_config = ConfigDict(
         frozen=True,
     )
 
@@ -128,7 +128,7 @@ class ScopedKey(BaseModel):
     campaign: str
     project: str
 
-    model_config: ConfigDict(frozen=True, arbitrary_types_allowed=True)
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     @field_validator("gufe_key")
     def cast_gufe_key(cls, v):
