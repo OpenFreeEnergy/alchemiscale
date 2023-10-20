@@ -7,13 +7,13 @@
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import BaseSettings
+from pydantic import BaseSettings, ConfigDict
 
 
 class FrozenSettings(BaseSettings):
-    class Config:
-        frozen = True
-
+    model_config: ConfigDict(
+            frozen = True,
+            )
 
 class Neo4jStoreSettings(FrozenSettings):
     """Automatically populates settings from environment variables where they

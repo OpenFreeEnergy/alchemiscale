@@ -4,7 +4,7 @@
 
 """
 from typing import Optional, Union
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from gufe.tokenization import GufeKey
 from re import fullmatch
 
@@ -33,8 +33,9 @@ class Scope(BaseModel):
 
         return str(self) == str(other)
 
-    class Config:
-        frozen = True
+    model_config: ConfigDict(
+            frozen = True,
+            )
 
     @staticmethod
     def _validate_component(v, component):
@@ -127,8 +128,10 @@ class ScopedKey(BaseModel):
     campaign: str
     project: str
 
-    class Config:
-        frozen = True
+    model_config: ConfigDict(
+            frozen = True,
+            arbitrary_types_allowed = True
+            )
 
     @field_validator("gufe_key")
     def cast_gufe_key(cls, v):
