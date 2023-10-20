@@ -74,7 +74,6 @@ class Scope(BaseModel):
         return cls._validate_component(v, "project")
 
     @model_validator(mode="before")
-    @classmethod
     def check_scope_hierarchy(cls, values):
         if not _hierarchy_valid(values):
             raise InvalidScopeError(

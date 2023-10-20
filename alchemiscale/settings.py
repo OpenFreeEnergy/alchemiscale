@@ -7,11 +7,11 @@
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import BaseSettings, ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class FrozenSettings(BaseSettings):
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         frozen=True,
     )
 

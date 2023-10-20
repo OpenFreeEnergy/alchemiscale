@@ -15,6 +15,7 @@ dependencies:
   - click
   - httpx
   - pydantic >1
+  - pydantic-settings
 
   # perses dependencies
   - openeye-toolkits

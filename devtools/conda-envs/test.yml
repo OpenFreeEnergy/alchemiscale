@@ -11,6 +11,7 @@ dependencies:
   - networkx
   - rdkit
   - pydantic >1
+  - pydantic-settings
   - openff-toolkit
   - openff-units >=0.2.0
   - openff-models >=0.0.4
