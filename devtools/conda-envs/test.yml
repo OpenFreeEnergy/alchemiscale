@@ -55,7 +55,7 @@ dependencies:
   # needed for openfe-benchmark tests
   - lomap2>=2.1.0
   - openmmtools
-  - openmmforcefields
+  - openmmforcefields>=0.12.0
 
   - pip:
     - async_lru
