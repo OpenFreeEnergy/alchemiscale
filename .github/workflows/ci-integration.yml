@@ -35,14 +35,10 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - uses: conda-incubator/setup-miniconda@v2
+      - name: Install environment
+        uses: mamba-org/setup-micromamba@v1
         with:
-            auto-update-conda: true
-            use-mamba: true
-            python-version: ${{ matrix.python-version }}
-            miniforge-variant: Mambaforge
-            environment-file: devtools/conda-envs/test.yml
-            activate-environment: alchemiscale-test
+          environment-file: devtools/conda-envs/test.yml
 
       - name: Decrypt OpenEye license
         if: ${{ !github.event.pull_request.head.repo.fork }}
