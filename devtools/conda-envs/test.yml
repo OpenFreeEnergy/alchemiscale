@@ -14,7 +14,7 @@ dependencies:
   - pydantic-settings
   - openff-toolkit
   - openff-units >=0.2.0
-  - openff-models >=0.0.4
+  - openff-models >=0.1.1
   - openeye-toolkits
   - typing-extensions
 
