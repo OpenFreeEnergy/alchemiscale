@@ -122,7 +122,7 @@ class ScopedKey(BaseModel):
 
     """
 
-    gufe_key: GufeKey
+    gufe_key: Union[GufeKey, str]
     org: str
     campaign: str
     project: str

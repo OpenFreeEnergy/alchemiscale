@@ -30,7 +30,7 @@ class CredentialedEntity(BaseModel):
 class ScopedIdentity(BaseModel):
     identifier: str
     disabled: bool = False
-    scopes: List[str] = []
+    scopes: List[Union[Scope, str]] = []
 
     @field_validator("scopes")
     def cast_scopes_to_str(cls, scopes):
@@ -41,7 +41,7 @@ class ScopedIdentity(BaseModel):
                 scopes_.append(str(scope))
             elif isinstance(scope, str):
                 try:
-                    scopes_.append(Scope.from_str(scope))
+                    scopes_.append(str(Scope.from_str(scope)))
                 except:
                     raise ValueError(f"Invalid scope `{scope}` set for `{cls}`")
             else:
