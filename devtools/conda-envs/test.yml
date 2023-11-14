@@ -53,7 +53,7 @@ dependencies:
   - moto
 
   # needed for openfe-benchmark tests
-  - lomap2>=2.1.0
+  - lomap2>=3.0
   - openmmtools
   - openmmforcefields>=0.12.0
 
