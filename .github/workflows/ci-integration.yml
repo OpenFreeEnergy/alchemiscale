@@ -39,6 +39,9 @@ jobs:
         uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: devtools/conda-envs/test.yml
+          create-args: >-
+            python=${{ matrix.python-version }}
+          cache-environment: true
 
       - name: Decrypt OpenEye license
         if: ${{ !github.event.pull_request.head.repo.fork }}
@@ -53,8 +56,8 @@ jobs:
 
       - name: "Environment Information"
         run: |
-          mamba info -a
-          mamba list
+          conda info -a
+          conda list
 
       - name: "Run tests"
         run: |
