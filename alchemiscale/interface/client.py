@@ -84,6 +84,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         network: AlchemicalNetwork,
         scope: Scope,
         compress: Union[bool, int] = True,
+        visualize: bool = True,
     ) -> ScopedKey:
         """Submit an AlchemicalNetwork to a specific Scope.
 
@@ -105,6 +106,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             Use an integer between 0 and 9 for finer control over
             the degree of compression; 0 means no compression, 9 means max
             compression. ``True`` is synonymous with level 5 compression.
+        visualize
+            If ``True``, show retrieval progress indicator.
 
         Returns
         -------
@@ -119,16 +122,23 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         validate_network_nonself(network)
 
-        from rich.progress import Progress
-
         sk = self.get_scoped_key(network, scope)
-        with Progress(*self._rich_waiting_columns(), transient=False) as progress:
-            task = progress.add_task(f"Submitting [bold]'{sk}'[/bold]...", total=None)
 
+        def post():
             data = dict(network=network.to_dict(), scope=scope.dict())
-            scoped_key = self._post_resource("/networks", data, compress=compress)
-            progress.start_task(task)
-            progress.update(task, total=1, completed=1)
+            return self._post_resource("/networks", data, compress=compress)
+        
+        if visualize:
+            from rich.progress import Progress
+
+            with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+                task = progress.add_task(f"Submitting [bold]'{sk}'[/bold]...", total=None)
+
+                scoped_key = post()
+                progress.start_task(task)
+                progress.update(task, total=1, completed=1)
+        else:
+            scoped_key = get_scoped_key()
 
         return ScopedKey.from_dict(scoped_key)
 
