@@ -138,7 +138,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 progress.start_task(task)
                 progress.update(task, total=1, completed=1)
         else:
-            scoped_key = get_scoped_key()
+            scoped_key = post()
 
         return ScopedKey.from_dict(scoped_key)
 
