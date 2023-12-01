@@ -127,12 +127,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         def post():
             data = dict(network=network.to_dict(), scope=scope.dict())
             return self._post_resource("/networks", data, compress=compress)
-        
+
         if visualize:
             from rich.progress import Progress
 
             with Progress(*self._rich_waiting_columns(), transient=False) as progress:
-                task = progress.add_task(f"Submitting [bold]'{sk}'[/bold]...", total=None)
+                task = progress.add_task(
+                    f"Submitting [bold]'{sk}'[/bold]...", total=None
+                )
 
                 scoped_key = post()
                 progress.start_task(task)
