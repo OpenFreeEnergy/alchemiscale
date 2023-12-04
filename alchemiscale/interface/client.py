@@ -136,7 +136,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         name: Optional[str] = None,
         scope: Optional[Scope] = None,
-    ) -> Union[List[ScopedKey], Dict[ScopedKey, AlchemicalNetwork]]:
+    ) -> List[ScopedKey]:
         """Query for AlchemicalNetworks, optionally by name or Scope.
 
         Calling this method with no query arguments will return ScopedKeys for
@@ -144,15 +144,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         to.
 
         """
-        networks = []
-
         if scope is None:
             scope = Scope()
 
         params = dict(name=name, **scope.dict())
-        networks.extend(self._query_resource("/networks", params=params))
 
-        return networks
+        return self._query_resource("/networks", params=params)
 
     def query_transformations(
         self,
