@@ -139,6 +139,15 @@ class ScopedKey(BaseModel):
     def __str__(self):
         return "-".join([self.gufe_key, self.org, self.campaign, self.project])
 
+    def __lt__(self, other):
+        return str(self) < str(other)
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+
+        return str(self) == str(other)
+
     @classmethod
     def from_str(cls, string):
         prefix, token, org, campaign, project = string.split("-")
