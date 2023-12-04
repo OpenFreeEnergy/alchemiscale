@@ -107,7 +107,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             the degree of compression; 0 means no compression, 9 means max
             compression. ``True`` is synonymous with level 5 compression.
         visualize
-            If ``True``, show retrieval progress indicator.
+            If ``True``, show submission progress indicator.
 
         Returns
         -------
