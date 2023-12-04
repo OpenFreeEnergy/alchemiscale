@@ -918,12 +918,12 @@ class TestNeo4jStore(TestStateStore):
 
         # weights should all be the default 1.0
         weights = n4js.get_task_weights(task_sks, taskhub_sk)
-        assert all([w == 1.0 for w in weights])
+        assert all([w == 0.5 for w in weights])
 
         # set weights on the tasks to be all 10
-        n4js.set_task_weights(task_sks, taskhub_sk, weight=10)
+        n4js.set_task_weights(task_sks, taskhub_sk, weight=1.0)
         weights = n4js.get_task_weights(task_sks, taskhub_sk)
-        assert all([w == 10 for w in weights])
+        assert all([w == 1.0 for w in weights])
 
     def test_cancel_task(self, n4js, network_tyk2, scope_test):
         an = network_tyk2

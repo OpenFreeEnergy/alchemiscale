@@ -1067,6 +1067,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         tasks: List[ScopedKey],
         taskhub: ScopedKey,
+        weight: float = 0.5,
     ) -> List[Union[ScopedKey, None]]:
         """Add Tasks to the TaskHub for a given AlchemicalNetwork.
 
@@ -1097,7 +1098,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                   AND task.status IN ['waiting', 'running', 'error']
 
                 // create the connection
-                CREATE (th)-[ar:ACTIONS {{weight: 1.0}}]->(task)
+                CREATE (th)-[ar:ACTIONS {{weight: {weight}}}]->(task)
 
                 // set the task property to the scoped key of the Task
                 // this is a convenience for when we have to loop over relationships in Python

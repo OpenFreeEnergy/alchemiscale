@@ -622,7 +622,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return status_counts
 
     def action_tasks(
-        self, tasks: List[ScopedKey], network: ScopedKey
+        self, tasks: List[ScopedKey], network: ScopedKey, weight: float = 0.5
     ) -> List[Optional[ScopedKey]]:
         """Action Tasks for execution via the given AlchemicalNetwork's
         TaskHub.
@@ -639,6 +639,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         network
             The AlchemicalNetwork ScopedKey to action the Tasks for.
             The Tasks will be added to the network's associated TaskHub.
+        weight
+            Task weight to be applied to all :class:``Task``s in an
+            :class:``AlchemicalNetwork``. Only values between 0 and 1 are
+            valid. The default weight is 0.5.
 
         Returns
         -------
@@ -648,7 +652,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             be returned in its place.
 
         """
-        data = dict(tasks=[t.dict() for t in tasks])
+        data = dict(tasks=[t.dict() for t in tasks], weight=weight)
         actioned_sks = self._post_resource(f"/networks/{network}/tasks/action", data)
 
         return [ScopedKey.from_str(i) if i is not None else None for i in actioned_sks]
