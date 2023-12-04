@@ -29,11 +29,11 @@ jobs:
         python-version:
           - "3.9"
           - "3.10"
-        openfe-latest: ['false']
+        deps-versions: ['pinned']
         include:
           - os: 'ubuntu'
             python-version: "3.10"
-            openfe-latest: 'true'
+            deps-versions: 'openfe-latest'
 
     steps:
       - uses: actions/checkout@v2
@@ -48,7 +48,7 @@ jobs:
             activate-environment: alchemiscale-test
 
       - name: "Install openfe & gufe from latest source"
-        if: ${{ matrix.openfe-latest == 'true' }}
+        if: ${{ matrix.deps-versions == 'openfe-latest' }}
         run: pip install --no-deps git+https://github.com/OpenFreeEnergy/gufe git+https://github.com/OpenFreeEnergy/openfe
 
       - name: "Install"
