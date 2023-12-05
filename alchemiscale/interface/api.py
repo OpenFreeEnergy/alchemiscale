@@ -524,6 +524,13 @@ def set_network_weights(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> None:
+    if not 0 <= weight <= 1:
+        raise HTTPException(
+            status_code=status.HTTPS_400_BAD_REQUEST,
+            detail=f"weight must between 0.0 and 1.0 (inclusive), the "
+            "provided weight was: {weight}",
+        )
+
     n4js.set_taskhub_weight(network_scoped_key, weight)
 
 
