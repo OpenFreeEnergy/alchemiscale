@@ -196,6 +196,20 @@ def query_chemicalsystems(
     return [str(sk) for sk in results]
 
 
+@router.get("/networks/{network_scoped_key}/weights")
+def get_network_weights(
+    network_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Union[float, None]]:
+    sk = ScopedKey.from_str(network_scoped_key)
+    taskhub = n4js.get_taskhub(sk)
+    tasks = n4js.get_taskhub_tasks(taskhub)
+    weights = n4js.get_task_weights(tasks, taskhub)
+    return weights
+
+
 @router.get("/networks/{network_scoped_key}/transformations")
 def get_network_transformations(
     network_scoped_key,
@@ -500,6 +514,17 @@ def action_tasks(
     actioned_sks = n4js.action_tasks(tasks, taskhub_sk)
 
     return [str(sk) if sk is not None else None for sk in actioned_sks]
+
+
+@router.post("/network/{network_scoped_key}/weights")
+def set_network_weights(
+    network_scoped_key,
+    *,
+    weight: float = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> None:
+    n4js.set_taskhub_weight(network_scoped_key, weight)
 
 
 @router.post("/networks/{network_scoped_key}/tasks/cancel")
