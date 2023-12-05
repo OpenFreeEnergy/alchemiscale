@@ -24,7 +24,7 @@ from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from .client import AlchemiscaleComputeClient
-from ..storage.models import Task, TaskHub, ComputeServiceID
+from ..storage.models import Task, TaskHub, ComputeServiceID, ObjectStoreRef
 from ..models import Scope, ScopedKey
 
 
@@ -294,13 +294,20 @@ class SynchronousComputeService:
         )
         return protocoldag, transformation, extends_protocoldagresult
 
+
+    def _paths_to_objectstorerefs(self, outputs, task, protocoldagresult):
+        if isinstance(outputs, dict):
+            return {key: self.paths_to_objectstorerefs(value, task, protocoldagresult) for key, value in outputs.items()}
+        elif isinstance(outputs, list):
+            return [self.paths_to_objectstorerefs(value, task, protocoldagresult) for value in outputs]
+        elif isinstance(outputs, Path):
+            return self.client.push_result_path(task, protocoldagresult, outputs)
+        else:
+            return outputs
+    
     def push_result(
         self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
     ) -> ScopedKey:
-        # TODO: this method should postprocess any paths,
-        # leaf nodes in DAG for blob results that should go to object store
-
-        # TODO: ship paths to object store
 
         # finally, push ProtocolDAGResult
         sk: ScopedKey = self.client.set_task_result(
@@ -308,6 +315,8 @@ class SynchronousComputeService:
         )
 
         return sk
+
+
 
     def execute(self, task: ScopedKey) -> ScopedKey:
         """Executes given Task.
