@@ -815,11 +815,19 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_tasks_priority(
         self,
         tasks: List[ScopedKey],
-    ):
-        raise NotImplementedError
+    ) -> List[int]:
+        data = dict(tasks=tasks)
+        tasks_priority = self._post_resource(f"/bulk/tasks/priority/get", data)
+        return tasks_priority
 
-    def set_tasks_priority(self, tasks: List[ScopedKey], priority: int):
-        raise NotImplementedError
+    def set_tasks_priority(
+        self,
+        tasks: List[ScopedKey],
+        priority: int,
+    ) -> List[Optional[ScopedKey]]:
+        data = dict(tasks=tasks, priority=priority)
+        task_sks = self._post_resource(f"/bulk/tasks/priority/set", data)
+        return task_sks
 
     ### results
 

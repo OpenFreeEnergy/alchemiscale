@@ -519,6 +519,27 @@ def cancel_tasks(
     return [str(sk) if sk is not None else None for sk in canceled_sks]
 
 
+@router.post("/bulk/tasks/priority/get")
+def tasks_priority_get(
+    *,
+    tasks: List[ScopedKey] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[int]:
+    raise NotImplementedError
+
+
+@router.post("/bulk/tasks/priority/set")
+def tasks_priority_set(
+    *,
+    tasks: List[ScopedKey] = Body(embed=True),
+    priority: int = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Optional[ScopedKey]]:
+    raise NotImplementedError
+
+
 @router.post("/bulk/tasks/status/get")
 def tasks_status_get(
     *,
