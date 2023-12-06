@@ -520,7 +520,7 @@ def cancel_tasks(
 
 
 @router.post("/bulk/tasks/priority/get")
-def get_tasks_priority(
+def tasks_priority_get(
     *,
     tasks: List[ScopedKey] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -530,7 +530,7 @@ def get_tasks_priority(
 
 
 @router.post("/bulk/tasks/priority/set")
-def set_tasks_priority(
+def tasks_priority_set(
     *,
     tasks: List[ScopedKey] = Body(embed=True),
     priority: int = Body(embed=True),
