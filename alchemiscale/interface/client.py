@@ -213,16 +213,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
         return self._query_resource(f"/networks/{network}/transformations")
 
-    def get_network_weights(self, network: ScopedKey) -> List[float]:
-        """Get the weight of actioned :class:`Task`s in an :class:`AlchemicalNetwork`"""
-        # TODO: _get_resource will return a list of weights, I assume this is more useful
-        return self._get_resource(f"/networks/{network}/weights")
+    def get_network_weight(self, network: ScopedKey) -> float:
+        """Get the weight of the TaskHub associated with a given AlchemicalNetwork."""
+        return self._get_resource(f"/networks/{network}/weight")
 
-    def set_network_weights(self, network: ScopedKey, weight: float) -> List[ScopedKey]:
-        """Set the weights of actioned :class:`Task`s in an :class:`AlchemicalNetwork`"""
+    def set_network_weight(self, network: ScopedKey, weight: float) -> None:
+        """Set the weight of the TaskHub associated with a given AlchemicalNetwork."""
         data = dict(weight=weight)
-        task_sks = self._post_resource(f"/networks/{network}/weights", data)
-        return [ScopedKey.from_str(i) for i in task_sks]
+        self._post_resource(f"/networks/{network}/weight", data)
 
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
