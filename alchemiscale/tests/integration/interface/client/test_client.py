@@ -725,10 +725,33 @@ class TestClient:
             statuses = user_client.get_tasks_status(all_tasks)
             assert all([s == status.value for s in statuses])
 
-    def test_get_tasks_priority(self):
-        ...
+    def test_get_tasks_priority(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+        uvicorn_server,
+    ):
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
-    def test_set_tasks_priority(self):
+        all_tasks = user_client.create_tasks(transformation_sk, count=5)
+        priorities = user_client.get_tasks_priority(all_tasks)
+
+        assert all([p == 10 for p in priorities])
+
+    def test_set_tasks_priority(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+        uvicorn_server,
+        status,
+        should_raise,
+    ):
         ...
 
     ### results

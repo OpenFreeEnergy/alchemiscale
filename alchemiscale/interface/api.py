@@ -526,7 +526,17 @@ def tasks_priority_get(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> List[int]:
-    raise NotImplementedError
+    valid_tasks = []
+    for task_sk in tasks:
+        try:
+            validate_scopes(task_sk.scope, token)
+            valid_tasks.append(task_sk)
+        except HTTPException:
+            valid_tasks.append(None)
+
+    priorities = n4js.get_task_priority(valid_tasks)
+
+    return priorities
 
 
 @router.post("/bulk/tasks/priority/set")

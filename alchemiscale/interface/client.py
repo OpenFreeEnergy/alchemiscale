@@ -812,13 +812,60 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             nest_asyncio.apply()
             return asyncio.run(async_request(self))
 
+    async def _get_task_priority(self, tasks: List[ScopedKey]) -> List[int]:
+        """Get the priority for many Tasks"""
+        data = dict(tasks=[t.dict() for t in tasks])
+        priorities = await self._post_resource_async(
+            f"/bulk/tasks/priority/get", data=data
+        )
+        return priorities
+
     def get_tasks_priority(
         self,
         tasks: List[ScopedKey],
+        batch_size: int = 1000,
     ) -> List[int]:
-        data = dict(tasks=tasks)
-        tasks_priority = self._post_resource(f"/bulk/tasks/priority/get", data)
-        return tasks_priority
+        """Get the priority of multiple Tasks.
+
+        Parameters
+        ----------
+        tasks
+            The Tasks to get the priority of.
+        batch_size
+            The number of Tasks to include in a single request; use to tune
+            method call speed when requesting many priorities at once.
+
+        Returns
+        -------
+        priorities
+            The priority of each Task in the same order as given in `tasks`. If a
+            given Task doesn't exist, ``None`` will be returned in its place.
+
+        """
+
+        tasks = [
+            ScopedKey.from_str(task) if isinstance(task, str) else task
+            for task in tasks
+        ]
+
+        @use_session
+        async def async_request(self):
+            priorities = await asyncio.gather(
+                *[
+                    self._get_task_priority(task_batch)
+                    for task_batch in self._batched(tasks, batch_size)
+                ]
+            )
+
+            return list(chain.from_iterable(priorities))
+
+        try:
+            return asyncio.run(async_request(self))
+        except RuntimeError:
+            import nest_asyncio
+
+            nest_asyncio.apply()
+            return asyncio.run(async_request(self))
 
     def set_tasks_priority(
         self,

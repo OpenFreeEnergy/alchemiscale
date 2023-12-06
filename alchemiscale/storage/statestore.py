@@ -1690,6 +1690,21 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
+    def get_task_priority(self, tasks: List[ScopedKey]) -> List[Optional[int]]:
+        priorities = []
+        with self.transaction() as tx:
+            q = """
+            WITH $scoped_keys AS batch
+            UNWIND batch AS scoped_key
+            OPTIONAL MATCH (t:Task)
+            WHERE t._scoped_key = scoped_key
+            RETURN t.priority as priority
+            """
+            res = tx.run(q, scoped_keys=[str(t) for t in tasks])
+            priorities = [rec["priority"] for rec in res]
+
+        return priorities
+
     def delete_task(
         self,
         task: ScopedKey,
