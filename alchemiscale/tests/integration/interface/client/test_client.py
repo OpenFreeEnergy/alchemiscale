@@ -257,6 +257,46 @@ class TestClient:
         assert an == network_tyk2
         assert an is network_tyk2
 
+    def test_get_network_weight(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        an_sk = user_client.get_scoped_key(network_tyk2, scope_test)
+        client_query_result = user_client.get_network_weight(an_sk)
+        preloaded_taskhub_weight = n4js_preloaded.get_taskhub_weight(an_sk)
+
+        assert preloaded_taskhub_weight == client_query_result
+        assert client_query_result == 0.5
+
+    def test_set_network_weight(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        an_sk = user_client.get_scoped_key(network_tyk2, scope_test)
+        user_client.set_network_weight(an_sk, 1.0)
+
+        assert user_client.get_network_weight(an_sk) == 1.0
+
+    def test_set_network_weight_invalid(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        an_sk = user_client.get_scoped_key(network_tyk2, scope_test)
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : weight must be",
+        ):
+            user_client.set_network_weight(an_sk, 1.5)
+
     def test_get_transformation(
         self,
         scope_test,

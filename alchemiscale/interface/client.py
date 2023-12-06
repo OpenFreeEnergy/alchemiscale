@@ -219,8 +219,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def set_network_weight(self, network: ScopedKey, weight: float) -> None:
         """Set the weight of the TaskHub associated with a given AlchemicalNetwork."""
-        data = dict(weight=weight)
-        self._post_resource(f"/networks/{network}/weight", data)
+        self._post_resource(f"/networks/{network}/weight", weight)
 
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""

@@ -204,8 +204,8 @@ def get_network_weight(
     token: TokenData = Depends(get_token_data_depends),
 ) -> float:
     sk = ScopedKey.from_str(network_scoped_key)
-    taskhub = n4js.get_taskhub(sk)
-    return taskhub.weight
+    validate_scopes(sk.scope, token)
+    return n4js.get_taskhub_weight(sk)
 
 
 @router.get("/networks/{network_scoped_key}/transformations")
@@ -514,22 +514,21 @@ def action_tasks(
     return [str(sk) if sk is not None else None for sk in actioned_sks]
 
 
-@router.post("/network/{network_scoped_key}/weight")
+@router.post("/networks/{network_scoped_key}/weight")
 def set_network_weight(
     network_scoped_key,
     *,
-    weight: float = Body(embed=True),
+    weight: float = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> None:
-    if not 0 <= weight <= 1:
-        raise HTTPException(
-            status_code=status.HTTPS_400_BAD_REQUEST,
-            detail=f"weight must between 0.0 and 1.0 (inclusive), the "
-            "provided weight was: {weight}",
-        )
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
 
-    n4js.set_taskhub_weight(network_scoped_key, weight)
+    try:
+        n4js.set_taskhub_weight(sk, weight)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/networks/{network_scoped_key}/tasks/cancel")
