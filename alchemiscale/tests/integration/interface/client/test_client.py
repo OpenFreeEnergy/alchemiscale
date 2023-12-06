@@ -749,8 +749,6 @@ class TestClient:
         network_tyk2,
         user_client: client.AlchemiscaleClient,
         uvicorn_server,
-        status,
-        should_raise,
     ):
         ...
 
