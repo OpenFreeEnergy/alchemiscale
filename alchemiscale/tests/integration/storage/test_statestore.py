@@ -807,6 +807,7 @@ class TestNeo4jStore(TestStateStore):
     def test_set_taskhub_weight(self, n4js: Neo4jStore, network_tyk2, scope_test):
         network_sk = n4js.create_network(network_tyk2, scope_test)
         n4js.create_taskhub(network_sk)
+
         n4js.set_taskhub_weight(network_sk, 1.0)
         weight = n4js.get_taskhub_weight(network_sk)
 
