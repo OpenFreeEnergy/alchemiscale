@@ -135,25 +135,25 @@ def create_network(
 def query_networks(
     *,
     name: str = None,
-    return_gufe: bool = False,
     scope: Scope = Depends(scope_params),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
     # Intersect query scopes with accessible scopes in the token
     query_scopes = validate_scopes_query(scope, token)
-    networks_handler = QueryGUFEHandler(return_gufe)
 
     # query each scope
     # loop might be removable in the future with a Union like operator on scopes
+    results = []
     for single_query_scope in query_scopes:
-        networks_handler.update_results(
+        results.extend(
             n4js.query_networks(
-                name=name, scope=single_query_scope, return_gufe=return_gufe
+                name=name,
+                scope=single_query_scope,
             )
         )
 
-    return networks_handler.format_return()
+    return [str(sk) for sk in results]
 
 
 @router.get("/transformations")
