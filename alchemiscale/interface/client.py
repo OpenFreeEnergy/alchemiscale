@@ -218,7 +218,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The weight to set for the network. This must be between 0 and
             1 (inclusive). Setting the value to 0 will effectively disable
             computations on the :class:`AlchemicalNetwork` without cancelling
-            its actioned :class:`Task`s.
+            its actioned :class:`Task`\s.
         """
         self._post_resource(f"/networks/{network}/weight", weight)
 
