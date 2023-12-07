@@ -608,6 +608,55 @@ class TestClient:
 
         assert set(task_sks_e) == set(actioned_sks_e)
 
+    @pytest.mark.parametrize(
+        "weight,shouldfail",
+        [
+            (None, False),
+            (1.0, False),
+            ([1.0], False),
+            (-1, True),
+            (1.5, True),
+        ],
+    )
+    def test_action_tasks_with_weights(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+        weight,
+        shouldfail,
+    ):
+        n4js = n4js_preloaded
+
+        # select the transformation we want to compute
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        task_sks = user_client.create_tasks(transformation_sk, count=3)
+
+        if isinstance(weight, list):
+            weight = weight * len(task_sks)
+
+        # action these task for this network, in reverse order
+
+        if shouldfail:
+            with pytest.raises(AlchemiscaleClientError):
+                actioned_sks = user_client.action_tasks(
+                    task_sks,
+                    network_sk,
+                    weight,
+                )
+        else:
+            actioned_sks = user_client.action_tasks(
+                task_sks,
+                network_sk,
+                weight,
+            )
+
     def test_cancel_tasks(
         self,
         scope_test,

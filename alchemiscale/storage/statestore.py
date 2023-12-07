@@ -1067,7 +1067,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         tasks: List[ScopedKey],
         taskhub: ScopedKey,
-        weight: float = 0.5,
     ) -> List[Union[ScopedKey, None]]:
         """Add Tasks to the TaskHub for a given AlchemicalNetwork.
 
@@ -1098,7 +1097,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                   AND task.status IN ['waiting', 'running', 'error']
 
                 // create the connection
-                CREATE (th)-[ar:ACTIONS {{weight: {weight}}}]->(task)
+                CREATE (th)-[ar:ACTIONS {{weight: 0.5}}]->(task)
 
                 // set the task property to the scoped key of the Task
                 // this is a convenience for when we have to loop over relationships in Python
@@ -1164,6 +1163,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                         "Cannot set `weight` to a scalar if `tasks` is a dict"
                     )
 
+                if not all([0 <= weight <= 1 for weight in tasks.values()]):
+                    raise ValueError("weights must be between 0 and 1 (inclusive)")
+
                 for t, w in tasks.items():
                     q = f"""
                     MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
@@ -1177,6 +1179,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                     raise ValueError(
                         "Must set `weight` to a scalar if `tasks` is a list"
                     )
+
+                if not 0 <= weight <= 1:
+                    raise ValueError("weight must be between 0 and 1 (inclusive)")
 
                 for t in tasks:
                     q = f"""

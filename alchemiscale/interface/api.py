@@ -490,22 +490,32 @@ def action_tasks(
     network_scoped_key,
     *,
     tasks: List[ScopedKey] = Body(embed=True),
-    weight: float = Body(embed=True),
+    weight: Optional[Union[float, List[float]]] = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> List[Union[str, None]]:
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
-    if not 0 <= weight <= 1:
-        raise HTTPException(
-            status_code=status.HTTPS_400_BAD_REQUEST,
-            detail=f"weight must between 0.0 and 1.0 (inclusive), the "
-            "provided weight was: {weight}",
-        )
-
     taskhub_sk = n4js.get_taskhub(sk)
-    actioned_sks = n4js.action_tasks(tasks, taskhub_sk, weight=weight)
+    actioned_sks = n4js.action_tasks(tasks, taskhub_sk)
+
+    try:
+        if isinstance(weight, float):
+            n4js.set_task_weights(tasks, taskhub_sk, weight)
+        elif isinstance(weight, list):
+            if len(weight) != len(tasks):
+                detail = "weight (when in a list) must have the same length as tasks"
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=detail,
+                )
+
+            n4js.set_task_weights(
+                {task: weight for task, weight in zip(tasks, weight)}, taskhub_sk, None
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return [str(sk) if sk is not None else None for sk in actioned_sks]
 
