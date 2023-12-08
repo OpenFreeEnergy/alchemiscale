@@ -768,15 +768,45 @@ class TestClient:
         all_tasks = user_client.create_tasks(transformation_sk, count=5)
         priorities = user_client.get_tasks_priority(all_tasks)
 
-        # baseline, we need to confirm that values are different after set
+        # baseline, we need to confirm that values are different after set call
         assert all([p == 10 for p in priorities])
 
         if should_raise:
-            with pytest.raises(AlchemiscaleClientError, match="!!!!"):
-                user_client.set_tasks_priority(all_tasks, 1)
+            with pytest.raises(
+                AlchemiscaleClientError, match="Status Code 400 : Bad Request"
+            ):
+                user_client.set_tasks_priority(all_tasks, priority)
+        else:
+            user_client.set_tasks_priority(all_tasks, priority)
+            priorities = user_client.get_tasks_priority(all_tasks)
+            assert all([p == priority for p in priorities])
 
-        priorities = user_client.get_tasks_priority(all_tasks)
-        assert all([p == 1 for p in priorities])
+    def test_set_tasks_priority_missing_tasks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+        uvicorn_server,
+    ):
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        all_tasks = user_client.create_tasks(transformation_sk, count=5)
+
+        fake_tasks = [
+            ScopedKey.from_str(t)
+            for t in [
+                "Task-FAKE1-test_org-test_campaign-test_projec",
+                "Task-FAKE2-test_org-test_campaign-test_projec",
+            ]
+        ]
+
+        updated_tasks = user_client.set_tasks_priority(fake_tasks + all_tasks, 10)
+        assert all([p is None for p in updated_tasks])
 
     ### results
 

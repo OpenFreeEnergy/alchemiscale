@@ -1681,14 +1681,36 @@ class Neo4jStore(AlchemiscaleStateStore):
             transformation, Transformation, scope
         )
 
-    def set_task_priority(self, task: ScopedKey, priority: int):
-        q = f"""
-        MATCH (t:Task {{_scoped_key: "{task}"}})
-        SET t.priority = {priority}
-        RETURN t
-        """
+    def set_task_priority(self, task: Union[ScopedKey, List[ScopedKey]], priority: int):
+        if not priority >= 0:
+            raise ValueError("priority cannot be negative")
+
+        if isinstance(task, ScopedKey):
+            task = [task]
+
         with self.transaction() as tx:
-            tx.run(q)
+            q = """
+            WITH $scoped_keys AS batch
+            UNWIND batch AS scoped_key
+
+            OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
+            SET   t.priority =  $priority
+            
+            RETURN scoped_key, t
+            """
+            res = tx.run(q, scoped_keys=[str(t) for t in task], priority=priority)
+
+        task_results = []
+        for record in res:
+            task_i = record["t"]
+            scoped_key = record["scoped_key"]
+
+            # catch missing tasks
+            if task_i is None:
+                task_results.append(None)
+            else:
+                task_results.append(ScopedKey.from_str(scoped_key))
+        return task_results
 
     def get_task_priority(self, tasks: List[ScopedKey]) -> List[Optional[int]]:
         priorities = []

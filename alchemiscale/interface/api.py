@@ -546,8 +546,21 @@ def tasks_priority_set(
     priority: int = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[Optional[ScopedKey]]:
-    raise NotImplementedError
+) -> List[Union[str, None]]:
+    valid_tasks = []
+    for task_sk in tasks:
+        try:
+            validate_scopes(task_sk.scope, token)
+            valid_tasks.append(task_sk)
+        except HTTPException:
+            valid_tasks.append(None)
+
+    try:
+        tasks_updated = n4js.set_task_priority(valid_tasks, priority)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    return [str(t) if t is not None else None for t in tasks_updated]
 
 
 @router.post("/bulk/tasks/status/get")
