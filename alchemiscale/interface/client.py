@@ -5,7 +5,7 @@
 """
 
 import asyncio
-from typing import Union, List, Dict, Optional, Tuple
+from typing import Union, List, Dict, Optional, Tuple, Any
 import json
 from itertools import chain
 from collections import Counter
@@ -703,6 +703,37 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             for task_sk in tasks_updated
         ]
 
+    def _task_attribute_getter(
+        self, tasks: List[ScopedKey], getter_function, batch_size
+    ) -> List[Any]:
+        tasks = [
+            ScopedKey.from_str(task) if isinstance(task, str) else task
+            for task in tasks
+        ]
+
+        @use_session
+        async def async_request(self):
+            values = await asyncio.gather(
+                *[
+                    getter_function(task_batch)
+                    for task_batch in self._batched(tasks, batch_size)
+                ]
+            )
+
+            return list(chain.from_iterable(values))
+
+        coro = async_request(self)
+
+        try:
+            return asyncio.run(coro)
+        except RuntimeError:
+            # we use nest_asyncio to support environments where an event loop
+            # is already running, such as in a Jupyter notebook
+            import nest_asyncio
+
+            nest_asyncio.apply()
+            return asyncio.run(coro)
+
     async def _get_task_status(self, tasks: List[ScopedKey]) -> List[TaskStatusEnum]:
         """Get the statuses for many Tasks"""
         data = dict(tasks=[t.dict() for t in tasks])
@@ -786,31 +817,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             given Task doesn't exist, ``None`` will be returned in its place.
 
         """
-        tasks = [
-            ScopedKey.from_str(task) if isinstance(task, str) else task
-            for task in tasks
-        ]
-
-        @use_session
-        async def async_request(self):
-            statuses = await asyncio.gather(
-                *[
-                    self._get_task_status(task_batch)
-                    for task_batch in self._batched(tasks, batch_size)
-                ]
-            )
-
-            return list(chain.from_iterable(statuses))
-
-        try:
-            return asyncio.run(async_request(self))
-        except RuntimeError:
-            # we use nest_asyncio to support environments where an event loop
-            # is already running, such as in a Jupyter notebook
-            import nest_asyncio
-
-            nest_asyncio.apply()
-            return asyncio.run(async_request(self))
+        return self._task_attribute_getter(tasks, self._get_task_status, batch_size)
 
     async def _get_task_priority(self, tasks: List[ScopedKey]) -> List[int]:
         """Get the priority for many Tasks"""
@@ -842,30 +849,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             given Task doesn't exist, ``None`` will be returned in its place.
 
         """
-
-        tasks = [
-            ScopedKey.from_str(task) if isinstance(task, str) else task
-            for task in tasks
-        ]
-
-        @use_session
-        async def async_request(self):
-            priorities = await asyncio.gather(
-                *[
-                    self._get_task_priority(task_batch)
-                    for task_batch in self._batched(tasks, batch_size)
-                ]
-            )
-
-            return list(chain.from_iterable(priorities))
-
-        try:
-            return asyncio.run(async_request(self))
-        except RuntimeError:
-            import nest_asyncio
-
-            nest_asyncio.apply()
-            return asyncio.run(async_request(self))
+        return self._task_attribute_getter(tasks, self._get_task_priority, batch_size)
 
     def set_tasks_priority(
         self,
