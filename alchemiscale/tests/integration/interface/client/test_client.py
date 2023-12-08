@@ -742,6 +742,13 @@ class TestClient:
 
         assert all([p == 10 for p in priorities])
 
+    @pytest.mark.parametrize(
+        "priority, should_raise",
+        [
+            (1, False),
+            (-1, True),
+        ],
+    )
     def test_set_tasks_priority(
         self,
         scope_test,
@@ -749,8 +756,27 @@ class TestClient:
         network_tyk2,
         user_client: client.AlchemiscaleClient,
         uvicorn_server,
+        priority,
+        should_raise,
     ):
-        ...
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        all_tasks = user_client.create_tasks(transformation_sk, count=5)
+        priorities = user_client.get_tasks_priority(all_tasks)
+
+        # baseline, we need to confirm that values are different after set
+        assert all([p == 10 for p in priorities])
+
+        if should_raise:
+            with pytest.raises(AlchemiscaleClientError, match="!!!!"):
+                user_client.set_tasks_priority(all_tasks, 1)
+
+        priorities = user_client.get_tasks_priority(all_tasks)
+        assert all([p == 1 for p in priorities])
 
     ### results
 
