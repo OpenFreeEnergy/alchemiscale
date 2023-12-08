@@ -806,7 +806,8 @@ class TestClient:
         ]
 
         updated_tasks = user_client.set_tasks_priority(fake_tasks + all_tasks, 10)
-        assert all([p is None for p in updated_tasks])
+        assert updated_tasks[0:2] == [None, None]
+        assert [t is not None for t in updated_tasks[2:]]
 
     ### results
 
