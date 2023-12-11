@@ -204,21 +204,21 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return self._query_resource(f"/networks/{network}/transformations")
 
     def get_network_weight(self, network: ScopedKey) -> float:
-        """Get the weight of the TaskHub associated with a given AlchemicalNetwork."""
+        """Get the weight of the TaskHub associated with the given AlchemicalNetwork."""
         return self._get_resource(f"/networks/{network}/weight")
 
     def set_network_weight(self, network: ScopedKey, weight: float) -> None:
-        """Set the weight of the TaskHub associated with a given AlchemicalNetwork.
+        """Set the weight of the TaskHub associated with the given AlchemicalNetwork.
 
         Parameters
         ----------
         network
-            The ScopedKey of the AlchemicalNetwork to modify.
+            The ScopedKey of the AlchemicalNetwork to set the weight for.
         weight
-            The weight to set for the network. This must be between 0 and
-            1 (inclusive). Setting the value to 0 will effectively disable
-            computations on the :class:`AlchemicalNetwork` without cancelling
-            its actioned :class:`Task`\s.
+            The weight to set for the network. This must be between 0 and 1
+            (inclusive). Setting the value to 0 will effectively disable
+            compute on this network without cancelling its actioned Tasks.
+
         """
         self._post_resource(f"/networks/{network}/weight", weight)
 
