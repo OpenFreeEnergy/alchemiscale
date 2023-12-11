@@ -621,8 +621,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         TaskHub.
 
         A Task cannot be actioned:
-            - to an AlchemicalNetwork in a different Scope.
-            - if it extends another Task that is not complete.
+            - to an AlchemicalNetwork in a different Scope
             - if it has any status other than 'waiting', 'running', or 'error'
 
         Parameters
@@ -633,22 +632,22 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The AlchemicalNetwork ScopedKey to action the Tasks for.
             The Tasks will be added to the network's associated TaskHub.
         weight
-            Task weight to be applied to all :class:`Task`s in
-            an :class:`AlchemicalNetwork`. Only values between 0 and 1 are valid
-            weights. Weights can also be provided as a list of floats with the
-            same length as ``tasks``.
+            Weight to be applied to the actioned Tasks. Only values between 0
+            and 1 are valid weights. Weights can also be provided as a list of
+            floats with the same length as `tasks`.
 
-            Setting ``weight`` to ``None`` will apply the default weight of 0.5
-            to newly actioned tasks, while leaving the weights of any previously
-            actioned tasks unchanged. Setting ``weight`` to anything other than
-            ``None`` can change the weights of previously actioned tasks.
+            Setting `weight` to ``None`` will apply the default weight of 0.5
+            to newly actioned Tasks, while leaving the weights of any previously
+            actioned Tasks unchanged. Setting `weight` to anything other than
+            ``None`` will change the weights of previously actioned Tasks
+            included in `tasks`.
 
         Returns
         -------
         List[Optional[ScopedKey]]
             ScopedKeys for Tasks actioned, in the same order as given as
-            `tasks` on input. If a Task couldn't be actioned, then ``None`` will
-            be returned in its place.
+            `tasks` on input. If a Task couldn't be actioned, then ``None``
+            will be returned in its place.
 
         """
         data = dict(tasks=[t.dict() for t in tasks], weight=weight)
