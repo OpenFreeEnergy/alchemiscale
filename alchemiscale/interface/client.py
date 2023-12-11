@@ -204,11 +204,31 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return self._query_resource(f"/networks/{network}/transformations")
 
     def get_network_weight(self, network: ScopedKey) -> float:
-        """Get the weight of the TaskHub associated with the given AlchemicalNetwork."""
+        """Get the weight of the TaskHub associated with the given AlchemicalNetwork.
+
+        Compute services perform a weighted selection of the AlchemicalNetworks
+        visible to them before claiming Tasks actioned on those networks.
+        Networks with higher weight are more likely to be selected than those
+        with lower weight, and so will generally get more compute attention
+        over time.
+
+        A weight of ``0`` means the AlchemicalNetwork will not receive any
+        compute for its actioned Tasks.
+
+        """
         return self._get_resource(f"/networks/{network}/weight")
 
     def set_network_weight(self, network: ScopedKey, weight: float) -> None:
         """Set the weight of the TaskHub associated with the given AlchemicalNetwork.
+
+        Compute services perform a weighted selection of the AlchemicalNetworks
+        visible to them before claiming Tasks actioned on those networks.
+        Networks with higher weight are more likely to be selected than those
+        with lower weight, and so will generally get more compute attention
+        over time.
+
+        A weight of ``0`` means the AlchemicalNetwork will not receive any
+        compute for its actioned Tasks.
 
         Parameters
         ----------
