@@ -1050,6 +1050,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
+        if not 0 <= weight <= 1:
+            raise ValueError("weight must be between 0 and 1 (inclusive)")
+
         if network.qualname != "AlchemicalNetwork":
             raise ValueError(
                 "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
@@ -1062,6 +1065,26 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         with self.transaction() as tx:
             tx.run(q)
+
+    def get_taskhub_weight(self, network: ScopedKey) -> float:
+        """Get the weight for the TaskHub associated with the given
+        AlchemicalNetwork.
+
+        """
+
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
+        q = f"""
+        MATCH (th:TaskHub {{network: "{network}"}})
+        RETURN th.weight
+        """
+        with self.transaction() as tx:
+            weight = tx.evaluate(q)
+
+        return weight
 
     def action_tasks(
         self,

@@ -789,6 +789,30 @@ class TestNeo4jStore(TestStateStore):
         assert len(tq_dict) == 2
         assert all([isinstance(i, TaskHub) for i in tq_dict.values()])
 
+    def test_get_taskhub_weight(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        network_sk = n4js.create_network(network_tyk2, scope_test)
+        n4js.create_taskhub(network_sk)
+
+        q = f"""
+        MATCH (network:AlchemicalNetwork {{_scoped_key: '{network_sk}'}})--(taskhub:TaskHub)
+        return taskhub.weight
+        """
+
+        weight = n4js.graph.evaluate(q)
+        weight_ = n4js.get_taskhub_weight(network_sk)
+
+        assert weight == 0.5
+        assert weight_ == 0.5
+
+    def test_set_taskhub_weight(self, n4js: Neo4jStore, network_tyk2, scope_test):
+        network_sk = n4js.create_network(network_tyk2, scope_test)
+        n4js.create_taskhub(network_sk)
+
+        n4js.set_taskhub_weight(network_sk, 1.0)
+        weight = n4js.get_taskhub_weight(network_sk)
+
+        assert weight == 1.0
+
     def test_action_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
