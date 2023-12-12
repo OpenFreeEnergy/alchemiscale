@@ -705,6 +705,113 @@ class TestNeo4jStore(TestStateStore):
         assert tf == transformation
         assert tf_sk == transformation_sk
 
+    def test_set_task_priority(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+
+        base_case = n4js.get_task_priority(task_sks)
+        assert [10, 10, 10] == base_case
+
+        n4js.set_task_priority(task_sks[0], 20)
+        single_change = n4js.get_task_priority(task_sks)
+        assert [20, 10, 10] == single_change
+
+        n4js.set_task_priority(task_sks, 30)
+        change_all = n4js.get_task_priority(task_sks)
+        assert [30, 30, 30] == change_all
+
+    def test_set_task_priority_returned_keys(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+
+        updated = n4js.set_task_priority(task_sks, 1)
+        assert updated == task_sks
+
+        # "updating" includes setting the priority to itself
+        # None is only returned when a task doesn't exist
+        # run the above block again to check this
+        updated = n4js.set_task_priority(task_sks, 1)
+        assert updated == task_sks
+
+    def test_set_task_priority_missing_task(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+        task_sks_with_fake = task_sks + [
+            ScopedKey.from_str("Task-FAKE-test_org-test_campaign-test_project")
+        ]
+
+        updated = n4js.set_task_priority(task_sks_with_fake, 1)
+        assert updated == task_sks + [None]
+
+    def test_set_task_priority_negative(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+
+        msg = "priority cannot be negative"
+
+        # should raise ValueError when providing list
+        # of ScopedKeys
+        with pytest.raises(ValueError, match=msg):
+            n4js.set_task_priority(task_sks, -1)
+
+        # should raise ValueError when providing single
+        # task ScopedKey
+        with pytest.raises(ValueError, match=msg):
+            n4js.set_task_priority(task_sks[0], -1)
+
+    def test_get_task_priority(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+
+        result = n4js.get_task_priority(task_sks)
+        assert result == [10, 10, 10]
+
+    def test_get_task_priority_missing_task(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk = n4js.create_taskhub(network_sk)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+        task_sks_with_fake = task_sks + [
+            ScopedKey.from_str("Task-FAKE-test_org-test_campaign-test_project")
+        ]
+
+        result = n4js.get_task_priority(task_sks_with_fake)
+        assert result == [10, 10, 10] + [None]
+
     def test_create_taskhub(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try adding a taskhub
         an = network_tyk2

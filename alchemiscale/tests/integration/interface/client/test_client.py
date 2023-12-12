@@ -818,7 +818,8 @@ class TestClient:
 
         if should_raise:
             with pytest.raises(
-                AlchemiscaleClientError, match="Status Code 400 : Bad Request"
+                AlchemiscaleClientError,
+                match="Status Code 400 : Bad Request : priority cannot be negative",
             ):
                 user_client.set_tasks_priority(all_tasks, priority)
         else:
@@ -845,8 +846,8 @@ class TestClient:
         fake_tasks = [
             ScopedKey.from_str(t)
             for t in [
-                "Task-FAKE1-test_org-test_campaign-test_projec",
-                "Task-FAKE2-test_org-test_campaign-test_projec",
+                "Task-FAKE1-test_org-test_campaign-test_project",
+                "Task-FAKE2-test_org-test_campaign-test_project",
             ]
         ]
 

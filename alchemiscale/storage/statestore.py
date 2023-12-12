@@ -1736,7 +1736,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         return task_results
 
     def get_task_priority(self, tasks: List[ScopedKey]) -> List[Optional[int]]:
-        priorities = []
         with self.transaction() as tx:
             q = """
             WITH $scoped_keys AS batch
