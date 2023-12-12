@@ -203,6 +203,45 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
         return self._query_resource(f"/networks/{network}/transformations")
 
+    def get_network_weight(self, network: ScopedKey) -> float:
+        """Get the weight of the TaskHub associated with the given AlchemicalNetwork.
+
+        Compute services perform a weighted selection of the AlchemicalNetworks
+        visible to them before claiming Tasks actioned on those networks.
+        Networks with higher weight are more likely to be selected than those
+        with lower weight, and so will generally get more compute attention
+        over time.
+
+        A weight of ``0`` means the AlchemicalNetwork will not receive any
+        compute for its actioned Tasks.
+
+        """
+        return self._get_resource(f"/networks/{network}/weight")
+
+    def set_network_weight(self, network: ScopedKey, weight: float) -> None:
+        """Set the weight of the TaskHub associated with the given AlchemicalNetwork.
+
+        Compute services perform a weighted selection of the AlchemicalNetworks
+        visible to them before claiming Tasks actioned on those networks.
+        Networks with higher weight are more likely to be selected than those
+        with lower weight, and so will generally get more compute attention
+        over time.
+
+        A weight of ``0`` means the AlchemicalNetwork will not receive any
+        compute for its actioned Tasks.
+
+        Parameters
+        ----------
+        network
+            The ScopedKey of the AlchemicalNetwork to set the weight for.
+        weight
+            The weight to set for the network. This must be between 0 and 1
+            (inclusive). Setting the value to 0 will effectively disable
+            compute on this network without cancelling its actioned Tasks.
+
+        """
+        self._post_resource(f"/networks/{network}/weight", weight)
+
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
         return self._query_resource(f"/transformations/{transformation}/networks")

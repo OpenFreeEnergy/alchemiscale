@@ -196,6 +196,18 @@ def query_chemicalsystems(
     return [str(sk) for sk in results]
 
 
+@router.get("/networks/{network_scoped_key}/weight")
+def get_network_weight(
+    network_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> float:
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+    return n4js.get_taskhub_weight(sk)
+
+
 @router.get("/networks/{network_scoped_key}/transformations")
 def get_network_transformations(
     network_scoped_key,
@@ -500,6 +512,23 @@ def action_tasks(
     actioned_sks = n4js.action_tasks(tasks, taskhub_sk)
 
     return [str(sk) if sk is not None else None for sk in actioned_sks]
+
+
+@router.post("/networks/{network_scoped_key}/weight")
+def set_network_weight(
+    network_scoped_key,
+    *,
+    weight: float = Body(),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> None:
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    try:
+        n4js.set_taskhub_weight(sk, weight)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/networks/{network_scoped_key}/tasks/cancel")
