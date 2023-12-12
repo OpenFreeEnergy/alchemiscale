@@ -148,8 +148,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         name: Optional[str] = None,
         scope: Optional[Scope] = None,
-        return_gufe=False,
-    ) -> Union[List[ScopedKey], Dict[ScopedKey, AlchemicalNetwork]]:
+    ) -> List[ScopedKey]:
         """Query for AlchemicalNetworks, optionally by name or Scope.
 
         Calling this method with no query arguments will return ScopedKeys for
@@ -157,21 +156,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         to.
 
         """
-        if return_gufe:
-            networks = {}
-        else:
-            networks = []
-
         if scope is None:
             scope = Scope()
 
-        params = dict(name=name, return_gufe=return_gufe, **scope.dict())
-        if return_gufe:
-            networks.update(self._query_resource("/networks", params=params))
-        else:
-            networks.extend(self._query_resource("/networks", params=params))
+        params = dict(name=name, **scope.dict())
 
-        return networks
+        return self._query_resource("/networks", params=params)
 
     def query_transformations(
         self,
@@ -212,6 +202,45 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_network_transformations(self, network: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
         return self._query_resource(f"/networks/{network}/transformations")
+
+    def get_network_weight(self, network: ScopedKey) -> float:
+        """Get the weight of the TaskHub associated with the given AlchemicalNetwork.
+
+        Compute services perform a weighted selection of the AlchemicalNetworks
+        visible to them before claiming Tasks actioned on those networks.
+        Networks with higher weight are more likely to be selected than those
+        with lower weight, and so will generally get more compute attention
+        over time.
+
+        A weight of ``0`` means the AlchemicalNetwork will not receive any
+        compute for its actioned Tasks.
+
+        """
+        return self._get_resource(f"/networks/{network}/weight")
+
+    def set_network_weight(self, network: ScopedKey, weight: float) -> None:
+        """Set the weight of the TaskHub associated with the given AlchemicalNetwork.
+
+        Compute services perform a weighted selection of the AlchemicalNetworks
+        visible to them before claiming Tasks actioned on those networks.
+        Networks with higher weight are more likely to be selected than those
+        with lower weight, and so will generally get more compute attention
+        over time.
+
+        A weight of ``0`` means the AlchemicalNetwork will not receive any
+        compute for its actioned Tasks.
+
+        Parameters
+        ----------
+        network
+            The ScopedKey of the AlchemicalNetwork to set the weight for.
+        weight
+            The weight to set for the network. This must be between 0 and 1
+            (inclusive). Setting the value to 0 will effectively disable
+            compute on this network without cancelling its actioned Tasks.
+
+        """
+        self._post_resource(f"/networks/{network}/weight", weight)
 
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
