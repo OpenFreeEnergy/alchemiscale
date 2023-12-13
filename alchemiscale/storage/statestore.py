@@ -1063,6 +1063,61 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             tx.run(q)
 
+    def get_taskhub_actioned_tasks(
+        self,
+        taskhub: ScopedKey,
+    ) -> List[ScopedKey]:
+        """Get the tasks that a given TaskHub ACTIONS.
+
+        Parameters
+        ----------
+        taskhub
+            The ScopedKey of the taskhub to query.
+
+        Returns
+        -------
+        tasks
+            The Tasks that are actioned by the given TaskHub.
+        """
+
+        q = """
+           MATCH (th: TaskHub {_scoped_key: $th_sk})-[:ACTIONS]->(t:Task)
+           RETURN t._scoped_key
+        """
+
+        with self.transaction() as tx:
+            results = tx.run(q, th_sk=str(taskhub))
+
+        tasks = [ScopedKey.from_str(record.get("t._scoped_key")) for record in results]
+        return tasks
+
+    def get_task_actioned_networks(self, task: ScopedKey) -> Optional[List[ScopedKey]]:
+        """Get all network scoped keys whose TaskHub actions a given Task.
+
+        Parameters
+        ----------
+        task
+            ScopedKey of the Task for determining the networks.
+
+        Returns
+        -------
+        networks
+            A list of network ScopedKeys whose TaskHub actions a given Task.
+            If no TaskHubs action the Task, then None is returned.
+        """
+        q = """
+           MATCH (an:AlchemicalNetwork)<-[:PERFORMS]-(TaskHub)-[:ACTIONS]->(Task {_scoped_key: $scoped_key})
+           RETURN an._scoped_key
+        """
+
+        with self.transaction() as tx:
+            results = tx.run(q, scoped_key=str(task))
+
+        networks = [
+            ScopedKey.from_str(record.get("an._scoped_key")) for record in results
+        ]
+        return networks
+
     def action_tasks(
         self,
         tasks: List[ScopedKey],

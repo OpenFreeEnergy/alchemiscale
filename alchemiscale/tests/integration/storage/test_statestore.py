@@ -789,6 +789,48 @@ class TestNeo4jStore(TestStateStore):
         assert len(tq_dict) == 2
         assert all([isinstance(i, TaskHub) for i in tq_dict.values()])
 
+    def test_get_taskhub_actioned_tasks(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
+        an = network_tyk2
+        network_sk = n4js.create_network(an, scope_test)
+        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        task_sks = [n4js.create_task(transformation_sk) for i in range(5)]
+        # action 3 of 5 tasks
+        n4js.action_tasks(task_sks[:3], taskhub_sk)
+
+        actioned_tasks = n4js.get_taskhub_actioned_tasks(taskhub_sk)
+
+        assert len(actioned_tasks) == 3
+        assert all([task_i in task_sks for task_i in actioned_tasks])
+
+    def test_get_task_actioned_networks(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
+        an_1 = network_tyk2
+        an_2 = network_tyk2.copy_with_replacements(name=an_1.name + "_2")
+
+        network_sk_1 = n4js.create_network(an_1, scope_test)
+        network_sk_2 = n4js.create_network(an_2, scope_test)
+
+        taskhub_sk_1 = n4js.create_taskhub(network_sk_1)
+        taskhub_sk_2 = n4js.create_taskhub(network_sk_2)
+
+        transformation = list(an_1.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        task_sk = n4js.create_task(transformation_sk)
+
+        n4js.action_tasks([task_sk], taskhub_sk_1)
+        n4js.action_tasks([task_sk], taskhub_sk_2)
+
+        an_sks = n4js.get_task_actioned_networks(task_sk)
+
+        assert all([an_sk in an_sks for an_sk in [network_sk_1, network_sk_2]])
+
     def test_action_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
