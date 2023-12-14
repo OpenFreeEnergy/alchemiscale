@@ -485,6 +485,35 @@ def get_transformation_status(
     return status_counts
 
 
+@router.post("/networks/{network_scoped_key}/tasks/actioned")
+def get_network_actioned_tasks(
+    network_scoped_key,
+    *,
+    get_weights: bool = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> Union[Dict[str, float], List[str]]:
+    network_sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(network_sk.scope, token)
+
+    taskhub_sk = n4js.get_taskhub(network_sk)
+    tasks = n4js.get_taskhub_actioned_tasks(taskhub_sk)
+
+    if get_weights:
+        results = {}
+        weights = n4js.get_task_weights(tasks, taskhub_sk)
+        for weight, task in zip(weights, tasks):
+            if weight is None:
+                msg = f"Could not find a weight for task ({task}). "
+                "This should not happen for actioned tasks, "
+                "raise an issue at https://github.com/openforcefield/alchemiscale/issues."
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+            results[str(task)] = weight
+        return results
+    else:
+        return [str(task) for task in tasks]
+
+
 @router.post("/networks/{network_scoped_key}/tasks/action")
 def action_tasks(
     network_scoped_key,

@@ -611,6 +611,39 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return status_counts
 
+    def get_network_actioned_tasks(
+        self,
+        network: ScopedKey,
+        task_weights: bool = False,
+    ) -> Union[Dict[ScopedKey, float], List[ScopedKey]]:
+        """Return all networks given an actioned Task.
+
+        Parameters
+        ----------
+        network
+            ScopedKey for an AlchemicalNetwork.
+        task_weights
+            If ``True``, return a Dict whose keys and values are the Task
+            ScopedKeys and the Task weight, respectively.
+
+        Returns
+        -------
+        tasks
+            A List of Task ScopedKeys. If ``task_weights`` is ``True``, then
+            the returned type is a Dict whose keys and values are the
+            Task ScopedKeys and the Task weight, respectively.
+        """
+        data = {"get_weights": task_weights}
+        results = self._post_resource(f"/networks/{network}/tasks/actioned", data)
+
+        if task_weights:
+            return {ScopedKey.from_str(t): w for t, w in results.items()}
+        else:
+            return [ScopedKey.from_str(t) for t in results]
+
+    def get_task_actioned_networks(self, task: ScopedKey) -> List[Optional[ScopedKey]]:
+        raise NotImplementedError
+
     def action_tasks(
         self, tasks: List[ScopedKey], network: ScopedKey
     ) -> List[Optional[ScopedKey]]:

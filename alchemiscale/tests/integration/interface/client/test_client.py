@@ -571,6 +571,44 @@ class TestClient:
         stat = user_client.get_transformation_status(transformation_sk)
         assert stat == {"complete": 5}
 
+    @pytest.mark.parametrize(
+        "get_weights",
+        [
+            (True),
+            (False),
+        ],
+    )
+    def test_get_network_actioned_tasks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client,
+        network_tyk2,
+        get_weights,
+    ):
+        n4js = n4js_preloaded
+
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        task_sks = user_client.create_tasks(transformation_sk, count=3)
+        user_client.action_tasks(task_sks[:2], network_sk)
+
+        results = user_client.get_network_actioned_tasks(
+            network_sk, task_weights=get_weights
+        )
+
+        if get_weights:
+            assert list(results.values()) == [1.0, 1.0]
+        else:
+            assert results == task_sks[:2]
+
+    def test_get_task_actioned_networks(self):
+        raise NotImplementedError
+
     def test_action_tasks(
         self,
         scope_test,
