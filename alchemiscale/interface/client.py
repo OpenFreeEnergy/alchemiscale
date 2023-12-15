@@ -616,7 +616,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         network: ScopedKey,
         task_weights: bool = False,
     ) -> Union[Dict[ScopedKey, float], List[ScopedKey]]:
-        """Return all networks given an actioned Task.
+        """Return all actioned Tasks for a given AlchemicalNetwork.
 
         Parameters
         ----------
@@ -641,8 +641,21 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         else:
             return [ScopedKey.from_str(t) for t in results]
 
-    def get_task_actioned_networks(self, task: ScopedKey) -> List[Optional[ScopedKey]]:
-        raise NotImplementedError
+    def get_task_actioned_networks(self, task: ScopedKey) -> List[ScopedKey]:
+        """Return all AlchemicalNetworks associated with a Task.
+
+        Parameters
+        ----------
+        task
+            ScopedKey of a task which may or may
+
+        Returns
+        -------
+        networks
+            List of networks which action the provided Task.
+        """
+        networks = self._get_resource(f"/tasks/{task}/networks/actioned")
+        return [ScopedKey.from_str(n) for n in networks]
 
     def action_tasks(
         self, tasks: List[ScopedKey], network: ScopedKey

@@ -11,7 +11,9 @@ import networkx as nx
 from alchemiscale.models import ScopedKey, Scope
 from alchemiscale.storage.models import TaskStatusEnum
 from alchemiscale.interface import client
-from alchemiscale.tests.integration.interface.utils import get_user_settings_override
+from alchemiscale.tests.integration.interface.utils import (
+    get_user_settings_override,
+)
 from alchemiscale.interface.client import AlchemiscaleClientError
 
 
@@ -606,8 +608,46 @@ class TestClient:
         else:
             assert results == task_sks[:2]
 
-    def test_get_task_actioned_networks(self):
-        raise NotImplementedError
+    @pytest.mark.parametrize(
+        ("actioned_tasks"),
+        [
+            (True),
+            (False),
+        ],
+    )
+    def test_get_task_actioned_networks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client,
+        network_tyk2,
+        actioned_tasks,
+    ):
+        n4js = n4js_preloaded
+        an = network_tyk2
+
+        transformation = list(an.edges)[0]
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        networks = user_client.get_transformation_networks(transformation_sk)
+
+        task_sks = user_client.create_tasks(transformation_sk)
+
+        if actioned_tasks:
+            for network in networks:
+                user_client.action_tasks(task_sks, network)
+
+        results = user_client.get_task_actioned_networks(task_sks[0])
+
+        # no promise keys will be in order
+        results.sort()
+        networks.sort()
+
+        if actioned_tasks:
+            assert len(results) == 2
+            assert results == networks
+        else:
+            assert results == []
 
     def test_action_tasks(
         self,

@@ -514,6 +514,19 @@ def get_network_actioned_tasks(
         return [str(task) for task in tasks]
 
 
+@router.get("/tasks/{task_sk}/networks/actioned")
+def get_task_actioned_networks(
+    task_sk,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[str]:
+    task_sk = ScopedKey.from_str(task_sk)
+    validate_scopes(task_sk.scope, token)
+    networks = n4js.get_task_actioned_networks(task_sk)
+    return [str(n) for n in networks]
+
+
 @router.post("/networks/{network_scoped_key}/tasks/action")
 def action_tasks(
     network_scoped_key,
