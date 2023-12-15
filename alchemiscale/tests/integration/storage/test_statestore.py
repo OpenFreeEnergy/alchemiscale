@@ -940,14 +940,14 @@ class TestNeo4jStore(TestStateStore):
         task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
         n4js.action_tasks(task_sks, taskhub_sk)
 
-        # weights should all be the default 1.0
+        # weights should all be the default 0.5
+        weights = n4js.get_task_weights(task_sks, taskhub_sk)
+        assert all([w == 0.5 for w in weights])
+
+        # set weights on the tasks to be all 1.0
+        n4js.set_task_weights(task_sks, taskhub_sk, weight=1.0)
         weights = n4js.get_task_weights(task_sks, taskhub_sk)
         assert all([w == 1.0 for w in weights])
-
-        # set weights on the tasks to be all 10
-        n4js.set_task_weights(task_sks, taskhub_sk, weight=10)
-        weights = n4js.get_task_weights(task_sks, taskhub_sk)
-        assert all([w == 10 for w in weights])
 
     def test_cancel_task(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -1257,8 +1257,8 @@ class TestNeo4jStore(TestStateStore):
         # set weights on the tasks to be all 0, disabling them
         n4js.set_task_weights(task_sks, taskhub_sk, weight=0)
 
-        # set the weight of the first task to be 10
-        weight_dict = {task_sks[0]: 10}
+        # set the weight of the first task to be 1
+        weight_dict = {task_sks[0]: 1.0}
         n4js.set_task_weights(weight_dict, taskhub_sk)
 
         csid = ComputeServiceID("the best task handler")
