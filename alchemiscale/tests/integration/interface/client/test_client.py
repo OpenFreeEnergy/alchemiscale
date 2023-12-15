@@ -739,10 +739,18 @@ class TestClient:
         # base case
         assert [0.5, 0.5, 0.5] == n4js.get_task_weights(task_sks, th_sk)
 
-        new_weights = [1.0, 1.0, 1.0]
+        new_weights = [1.0, 0.7, 0.4]
         user_client.action_tasks(task_sks, network_sk, new_weights)
 
         assert new_weights == n4js.get_task_weights(task_sks, th_sk)
+
+        # action a couple more tasks along with existing ones, then check weights as expected
+        new_task_sks = user_client.create_tasks(transformation_sk, count=2)
+        user_client.action_tasks(task_sks + new_task_sks, network_sk)
+
+        assert new_weights + [0.5] * 2 == n4js.get_task_weights(
+            task_sks + new_task_sks, th_sk
+        )
 
     def test_cancel_tasks(
         self,
