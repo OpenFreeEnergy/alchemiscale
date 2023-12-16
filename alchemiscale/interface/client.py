@@ -724,13 +724,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return [ScopedKey.from_str(i) if i is not None else None for i in canceled_sks]
 
-    def _set_task_status(
-        self, task: ScopedKey, status: TaskStatusEnum
-    ) -> Optional[ScopedKey]:
-        """Set the status of a `Task`."""
-        task_sk = self._post_resource(f"/tasks/{task}/status", status.value)
-        return ScopedKey.from_str(task_sk) if task_sk is not None else None
-
     def _task_attribute_getter(
         self, tasks: List[ScopedKey], getter_function, batch_size
     ) -> List[Any]:
@@ -761,6 +754,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             nest_asyncio.apply()
             return asyncio.run(coro)
+
+    def _set_task_status(
+        self, task: ScopedKey, status: TaskStatusEnum
+    ) -> Optional[ScopedKey]:
+        """Set the status of a `Task`."""
+        task_sk = self._post_resource(f"/tasks/{task}/status", status.value)
+        return ScopedKey.from_str(task_sk) if task_sk is not None else None
 
     async def _set_task_status(
         self, tasks: List[ScopedKey], status: TaskStatusEnum
@@ -860,38 +860,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         return self._task_attribute_getter(tasks, self._get_task_status, batch_size)
 
-    async def _get_task_priority(self, tasks: List[ScopedKey]) -> List[int]:
-        """Get the priority for many Tasks"""
-        data = dict(tasks=[t.dict() for t in tasks])
-        priorities = await self._post_resource_async(
-            f"/bulk/tasks/priority/get", data=data
-        )
-        return priorities
-
-    def get_tasks_priority(
-        self,
-        tasks: List[ScopedKey],
-        batch_size: int = 1000,
-    ) -> List[int]:
-        """Get the priority of multiple Tasks.
-
-        Parameters
-        ----------
-        tasks
-            The Tasks to get the priority of.
-        batch_size
-            The number of Tasks to include in a single request; use to tune
-            method call speed when requesting many priorities at once.
-
-        Returns
-        -------
-        priorities
-            The priority of each Task in the same order as given in `tasks`. If a
-            given Task doesn't exist, ``None`` will be returned in its place.
-
-        """
-        return self._task_attribute_getter(tasks, self._get_task_priority, batch_size)
-
     async def _set_task_priority(
         self, tasks: List[ScopedKey], priority: int
     ) -> List[Optional[ScopedKey]]:
@@ -956,6 +924,38 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             nest_asyncio.apply()
             return asyncio.run(coro)
+
+    async def _get_task_priority(self, tasks: List[ScopedKey]) -> List[int]:
+        """Get the priority for many Tasks"""
+        data = dict(tasks=[t.dict() for t in tasks])
+        priorities = await self._post_resource_async(
+            f"/bulk/tasks/priority/get", data=data
+        )
+        return priorities
+
+    def get_tasks_priority(
+        self,
+        tasks: List[ScopedKey],
+        batch_size: int = 1000,
+    ) -> List[int]:
+        """Get the priority of multiple Tasks.
+
+        Parameters
+        ----------
+        tasks
+            The Tasks to get the priority of.
+        batch_size
+            The number of Tasks to include in a single request; use to tune
+            method call speed when requesting many priorities at once.
+
+        Returns
+        -------
+        priorities
+            The priority of each Task in the same order as given in `tasks`. If a
+            given Task doesn't exist, ``None`` will be returned in its place.
+
+        """
+        return self._task_attribute_getter(tasks, self._get_task_priority, batch_size)
 
     ### results
 
