@@ -755,13 +755,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             nest_asyncio.apply()
             return asyncio.run(coro)
 
-    def _set_task_status(
-        self, task: ScopedKey, status: TaskStatusEnum
-    ) -> Optional[ScopedKey]:
-        """Set the status of a `Task`."""
-        task_sk = self._post_resource(f"/tasks/{task}/status", status.value)
-        return ScopedKey.from_str(task_sk) if task_sk is not None else None
-
     async def _set_task_status(
         self, tasks: List[ScopedKey], status: TaskStatusEnum
     ) -> List[Optional[ScopedKey]]:
