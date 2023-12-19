@@ -621,17 +621,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         Parameters
         ----------
         network
-            ScopedKey for an AlchemicalNetwork.
+            The ScopedKey for the AlchemicalNetwork to get actioned Tasks for.
         task_weights
-            If ``True``, return a Dict whose keys and values are the Task
-            ScopedKeys and the Task weight, respectively.
+            If ``True``, return a dict with Task ScopedKeys as keys, Task
+            weights as values.
 
         Returns
         -------
         tasks
-            A List of Task ScopedKeys. If ``task_weights`` is ``True``, then
-            the returned type is a Dict whose keys and values are the
-            Task ScopedKeys and the Task weight, respectively.
+            A list of Task ScopedKeys. If ``task_weights`` is ``True``, then
+            the returned type is a dict with Task ScopedKeys as keys, Task
+            weights as values.
         """
         data = {"get_weights": task_weights}
         results = self._post_resource(f"/networks/{network}/tasks/actioned", data)
@@ -642,17 +642,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             return [ScopedKey.from_str(t) for t in results]
 
     def get_task_actioned_networks(self, task: ScopedKey) -> List[ScopedKey]:
-        """Return all AlchemicalNetworks associated with a Task.
+        """Return all AlchemicalNetworks the given Task is actioned on.
 
         Parameters
         ----------
         task
-            ScopedKey of a task which may or may
+            The ScopedKey for the Task to get actioned AlchemicalNetworks for.
 
         Returns
         -------
         networks
-            List of networks which action the provided Task.
+            A list of AlchemicalNetwork ScopedKeys which action the given Task.
         """
         networks = self._get_resource(f"/tasks/{task}/networks/actioned")
         return [ScopedKey.from_str(n) for n in networks]
