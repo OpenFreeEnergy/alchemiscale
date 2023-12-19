@@ -718,7 +718,7 @@ class TestNeo4jStore(TestStateStore):
         base_case = n4js.get_task_priority(task_sks)
         assert [10, 10, 10] == base_case
 
-        n4js.set_task_priority(task_sks[0], 20)
+        n4js.set_task_priority([task_sks[0]], 20)
         single_change = n4js.get_task_priority(task_sks)
         assert [20, 10, 10] == single_change
 
@@ -777,11 +777,6 @@ class TestNeo4jStore(TestStateStore):
         # of ScopedKeys
         with pytest.raises(ValueError, match=msg):
             n4js.set_task_priority(task_sks, -1)
-
-        # should raise ValueError when providing single
-        # task ScopedKey
-        with pytest.raises(ValueError, match=msg):
-            n4js.set_task_priority(task_sks[0], -1)
 
     def test_get_task_priority(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -1152,9 +1147,8 @@ class TestNeo4jStore(TestStateStore):
 
         # set all tasks to priority 5, first task to priority 1; claim should
         # yield first task
-        for task_sk in remaining_tasks:
-            n4js.set_task_priority(task_sk, 5)
-        n4js.set_task_priority(remaining_tasks[0], 1)
+        n4js.set_task_priority(remaining_tasks, 5)
+        n4js.set_task_priority([remaining_tasks[0]], 1)
 
         csid = ComputeServiceID("another task handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))

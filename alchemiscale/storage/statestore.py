@@ -1710,12 +1710,26 @@ class Neo4jStore(AlchemiscaleStateStore):
             transformation, Transformation, scope
         )
 
-    def set_task_priority(self, task: Union[ScopedKey, List[ScopedKey]], priority: int):
+    def set_task_priority(
+        self, tasks: List[ScopedKey], priority: int
+    ) -> List[Optional[ScopedKey]]:
+        """Set the priority of a list of Tasks.
+
+        Parameters
+        ----------
+        tasks
+            The list of Tasks to set the priority of.
+        priority
+            The priority to set the task to.
+
+        Returns
+        -------
+        List[Optional[ScopedKey]]
+            A list of the Task ScopedKeys for which priority was changed; `None`
+            is given for any Tasks for which the priority could not be changed.
+        """
         if not priority >= 0:
             raise ValueError("priority cannot be negative")
-
-        if isinstance(task, ScopedKey):
-            task = [task]
 
         with self.transaction() as tx:
             q = """
@@ -1724,10 +1738,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
             SET t.priority = $priority
-            
+
             RETURN scoped_key, t
             """
-            res = tx.run(q, scoped_keys=[str(t) for t in task], priority=priority)
+            res = tx.run(q, scoped_keys=[str(t) for t in tasks], priority=priority)
 
         task_results = []
         for record in res:
@@ -1742,6 +1756,19 @@ class Neo4jStore(AlchemiscaleStateStore):
         return task_results
 
     def get_task_priority(self, tasks: List[ScopedKey]) -> List[Optional[int]]:
+        """Get the priority of a list of Tasks.
+
+        Parameters
+        ----------
+        tasks
+            The list of Tasks to get the priority for.
+
+        Returns
+        -------
+        List[Optional[int]]
+            A list of priorities in the same order as the provided Tasks.
+            If an element is ``None``, the Task could not be found.
+        """
         with self.transaction() as tx:
             q = """
             WITH $scoped_keys AS batch
