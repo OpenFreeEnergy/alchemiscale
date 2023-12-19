@@ -1723,7 +1723,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             UNWIND batch AS scoped_key
 
             OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
-            SET   t.priority =  $priority
+            SET t.priority = $priority
             
             RETURN scoped_key, t
             """
