@@ -259,6 +259,51 @@ class TestClient:
         assert an == network_tyk2
         assert an is network_tyk2
 
+    def test_get_network_weight(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        an_sk = user_client.get_scoped_key(network_tyk2, scope_test)
+        client_query_result = user_client.get_network_weight(an_sk)
+        preloaded_taskhub_weight = n4js_preloaded.get_taskhub_weight(an_sk)
+
+        assert preloaded_taskhub_weight == client_query_result
+        assert client_query_result == 0.5
+
+    @pytest.mark.parametrize(
+        "weight, shouldfail",
+        [
+            (0.0, False),
+            (0.5, False),
+            (1.0, False),
+            (-1.0, True),
+            (-1.5, True),
+        ],
+    )
+    def test_set_network_weight(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+        weight,
+        shouldfail,
+    ):
+        an_sk = user_client.get_scoped_key(network_tyk2, scope_test)
+
+        if shouldfail:
+            with pytest.raises(
+                AlchemiscaleClientError,
+                match="Status Code 400 : Bad Request : weight must be",
+            ):
+                user_client.set_network_weight(an_sk, weight)
+        else:
+            user_client.set_network_weight(an_sk, weight)
+            assert user_client.get_network_weight(an_sk) == weight
+
     def test_get_transformation(
         self,
         scope_test,
@@ -702,6 +747,105 @@ class TestClient:
         actioned_sks_e = user_client.action_tasks(task_sks_e, network_sk)
 
         assert set(task_sks_e) == set(actioned_sks_e)
+
+    @pytest.mark.parametrize(
+        "weight,shouldfail",
+        [
+            (None, False),
+            (1.0, False),
+            ([0.25, 0.5, 0.75], False),
+            (-1, True),
+            (1.5, True),
+        ],
+    )
+    def test_action_tasks_with_weights(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+        weight,
+        shouldfail,
+    ):
+        n4js = n4js_preloaded
+
+        # select the transformation we want to compute
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        task_sks = user_client.create_tasks(transformation_sk, count=3)
+
+        if shouldfail:
+            with pytest.raises(AlchemiscaleClientError):
+                actioned_sks = user_client.action_tasks(
+                    task_sks,
+                    network_sk,
+                    weight,
+                )
+        else:
+            actioned_sks = user_client.action_tasks(
+                task_sks,
+                network_sk,
+                weight,
+            )
+
+            th_sk = n4js.get_taskhub(network_sk)
+            task_weights = n4js.get_task_weights(task_sks, th_sk)
+
+            _weight = weight
+
+            if weight is None:
+                _weight = [0.5] * len(task_sks)
+            elif not isinstance(weight, list):
+                _weight = [weight] * len(task_sks)
+
+            assert task_weights == _weight
+
+            # actioning tasks again with None should preserve
+            # task weights
+            user_client.action_tasks(task_sks, network_sk, weight=None)
+
+            task_weights = n4js.get_task_weights(task_sks, th_sk)
+            assert task_weights == _weight
+
+    def test_action_tasks_update_weights(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        n4js = n4js_preloaded
+
+        # select the transformation we want to compute
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        th_sk = n4js.get_taskhub(network_sk)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        task_sks = user_client.create_tasks(transformation_sk, count=3)
+        user_client.action_tasks(task_sks, network_sk)
+
+        # base case
+        assert [0.5, 0.5, 0.5] == n4js.get_task_weights(task_sks, th_sk)
+
+        new_weights = [1.0, 0.7, 0.4]
+        user_client.action_tasks(task_sks, network_sk, new_weights)
+
+        assert new_weights == n4js.get_task_weights(task_sks, th_sk)
+
+        # action a couple more tasks along with existing ones, then check weights as expected
+        new_task_sks = user_client.create_tasks(transformation_sk, count=2)
+        user_client.action_tasks(task_sks + new_task_sks, network_sk)
+
+        assert new_weights + [0.5] * 2 == n4js.get_task_weights(
+            task_sks + new_task_sks, th_sk
+        )
 
     def test_cancel_tasks(
         self,

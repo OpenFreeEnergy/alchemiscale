@@ -1050,6 +1050,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
+        if not 0 <= weight <= 1:
+            raise ValueError("weight must be between 0 and 1 (inclusive)")
+
         if network.qualname != "AlchemicalNetwork":
             raise ValueError(
                 "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
@@ -1120,6 +1123,26 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return networks
 
+    def get_taskhub_weight(self, network: ScopedKey) -> float:
+        """Get the weight for the TaskHub associated with the given
+        AlchemicalNetwork.
+
+        """
+
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
+        q = f"""
+        MATCH (th:TaskHub {{network: "{network}"}})
+        RETURN th.weight
+        """
+        with self.transaction() as tx:
+            weight = tx.evaluate(q)
+
+        return weight
+
     def action_tasks(
         self,
         tasks: List[ScopedKey],
@@ -1154,7 +1177,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                   AND task.status IN ['waiting', 'running', 'error']
 
                 // create the connection
-                CREATE (th)-[ar:ACTIONS {{weight: 1.0}}]->(task)
+                CREATE (th)-[ar:ACTIONS {{weight: 0.5}}]->(task)
 
                 // set the task property to the scoped key of the Task
                 // this is a convenience for when we have to loop over relationships in Python
@@ -1220,6 +1243,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                         "Cannot set `weight` to a scalar if `tasks` is a dict"
                     )
 
+                if not all([0 <= weight <= 1 for weight in tasks.values()]):
+                    raise ValueError("weights must be between 0 and 1 (inclusive)")
+
                 for t, w in tasks.items():
                     q = f"""
                     MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
@@ -1233,6 +1259,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                     raise ValueError(
                         "Must set `weight` to a scalar if `tasks` is a list"
                     )
+
+                if not 0 <= weight <= 1:
+                    raise ValueError("weight must be between 0 and 1 (inclusive)")
 
                 for t in tasks:
                     q = f"""

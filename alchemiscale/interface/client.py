@@ -203,6 +203,45 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
         return self._query_resource(f"/networks/{network}/transformations")
 
+    def get_network_weight(self, network: ScopedKey) -> float:
+        """Get the weight of the TaskHub associated with the given AlchemicalNetwork.
+
+        Compute services perform a weighted selection of the AlchemicalNetworks
+        visible to them before claiming Tasks actioned on those networks.
+        Networks with higher weight are more likely to be selected than those
+        with lower weight, and so will generally get more compute attention
+        over time.
+
+        A weight of ``0`` means the AlchemicalNetwork will not receive any
+        compute for its actioned Tasks.
+
+        """
+        return self._get_resource(f"/networks/{network}/weight")
+
+    def set_network_weight(self, network: ScopedKey, weight: float) -> None:
+        """Set the weight of the TaskHub associated with the given AlchemicalNetwork.
+
+        Compute services perform a weighted selection of the AlchemicalNetworks
+        visible to them before claiming Tasks actioned on those networks.
+        Networks with higher weight are more likely to be selected than those
+        with lower weight, and so will generally get more compute attention
+        over time.
+
+        A weight of ``0`` means the AlchemicalNetwork will not receive any
+        compute for its actioned Tasks.
+
+        Parameters
+        ----------
+        network
+            The ScopedKey of the AlchemicalNetwork to set the weight for.
+        weight
+            The weight to set for the network. This must be between 0 and 1
+            (inclusive). Setting the value to 0 will effectively disable
+            compute on this network without cancelling its actioned Tasks.
+
+        """
+        self._post_resource(f"/networks/{network}/weight", weight)
+
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
         return self._query_resource(f"/transformations/{transformation}/networks")
@@ -668,14 +707,16 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return [ScopedKey.from_str(n) for n in networks]
 
     def action_tasks(
-        self, tasks: List[ScopedKey], network: ScopedKey
+        self,
+        tasks: List[ScopedKey],
+        network: ScopedKey,
+        weight: Optional[Union[float, List[float]]] = None,
     ) -> List[Optional[ScopedKey]]:
         """Action Tasks for execution via the given AlchemicalNetwork's
         TaskHub.
 
         A Task cannot be actioned:
-            - to an AlchemicalNetwork in a different Scope.
-            - if it extends another Task that is not complete.
+            - to an AlchemicalNetwork in a different Scope
             - if it has any status other than 'waiting', 'running', or 'error'
 
         Parameters
@@ -685,16 +726,26 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         network
             The AlchemicalNetwork ScopedKey to action the Tasks for.
             The Tasks will be added to the network's associated TaskHub.
+        weight
+            Weight to be applied to the actioned Tasks. Only values between 0
+            and 1 are valid weights. Weights can also be provided as a list of
+            floats with the same length as `tasks`.
+
+            Setting `weight` to ``None`` will apply the default weight of 0.5
+            to newly actioned Tasks, while leaving the weights of any previously
+            actioned Tasks unchanged. Setting `weight` to anything other than
+            ``None`` will change the weights of previously actioned Tasks
+            included in `tasks`.
 
         Returns
         -------
         List[Optional[ScopedKey]]
             ScopedKeys for Tasks actioned, in the same order as given as
-            `tasks` on input. If a Task couldn't be actioned, then ``None`` will
-            be returned in its place.
+            `tasks` on input. If a Task couldn't be actioned, then ``None``
+            will be returned in its place.
 
         """
-        data = dict(tasks=[t.dict() for t in tasks])
+        data = dict(tasks=[t.dict() for t in tasks], weight=weight)
         actioned_sks = self._post_resource(f"/networks/{network}/tasks/action", data)
 
         return [ScopedKey.from_str(i) if i is not None else None for i in actioned_sks]
