@@ -636,8 +636,10 @@ class TestClient:
         if actioned_tasks:
             for network in networks:
                 user_client.action_tasks(task_sks, network)
-
-        results = user_client.get_task_actioned_networks(task_sks[0])
+        # without requesting weights, default
+        results = user_client.get_task_actioned_networks(
+            task_sks[0], task_weights=False
+        )
 
         # no promise keys will be in order
         results.sort()
@@ -648,6 +650,21 @@ class TestClient:
             assert results == networks
         else:
             assert results == []
+
+        # requesting weights
+        results = user_client.get_task_actioned_networks(task_sks[0], task_weights=True)
+
+        _networks = list(results.keys())
+        # networks has already been sorted above
+        _networks.sort()
+
+        if actioned_tasks:
+            assert len(results) == 2
+            assert _networks == networks
+            assert list(results.values()) == [1.0, 1.0]
+        else:
+            assert len(results) == 0
+            assert _networks == []
 
     def test_action_tasks(
         self,
