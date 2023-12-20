@@ -649,7 +649,7 @@ class TestClient:
         )
 
         if get_weights:
-            assert list(results.values()) == [1.0, 1.0]
+            assert list(results.values()) == [0.5, 0.5]
         else:
             assert results == task_sks[:2]
 
@@ -706,7 +706,7 @@ class TestClient:
         if actioned_tasks:
             assert len(results) == 2
             assert _networks == networks
-            assert list(results.values()) == [1.0, 1.0]
+            assert list(results.values()) == [0.5, 0.5]
         else:
             assert len(results) == 0
             assert _networks == []
