@@ -761,7 +761,7 @@ class TestNeo4jStore(TestStateStore):
         updated = n4js.set_task_priority(task_sks_with_fake, 1)
         assert updated == task_sks + [None]
 
-    def test_set_task_priority_negative(self, n4js, network_tyk2, scope_test):
+    def test_set_task_priority_out_of_bounds(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
         network_sk = n4js.create_network(an, scope_test)
         taskhub_sk = n4js.create_taskhub(network_sk)
@@ -771,12 +771,15 @@ class TestNeo4jStore(TestStateStore):
 
         task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
 
-        msg = "priority cannot be negative"
+        msg = "priority must be between"
 
         # should raise ValueError when providing list
         # of ScopedKeys
         with pytest.raises(ValueError, match=msg):
             n4js.set_task_priority(task_sks, -1)
+
+        with pytest.raises(ValueError, match=msg):
+            n4js.set_task_priority(task_sks, 2**63)
 
     def test_get_task_priority(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
