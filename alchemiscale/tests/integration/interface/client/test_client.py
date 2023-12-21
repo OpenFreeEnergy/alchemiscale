@@ -918,7 +918,7 @@ class TestClient:
         if should_raise:
             with pytest.raises(
                 AlchemiscaleClientError,
-                match="Status Code 400 : Bad Request : priority must be between 1 and 2**63 - 1, inclusive",
+                match="Status Code 400 : Bad Request : priority must be between",
             ):
                 user_client.set_tasks_priority(all_tasks, priority)
         else:
