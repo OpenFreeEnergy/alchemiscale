@@ -1710,14 +1710,77 @@ class Neo4jStore(AlchemiscaleStateStore):
             transformation, Transformation, scope
         )
 
-    def set_task_priority(self, task: ScopedKey, priority: int):
-        q = f"""
-        MATCH (t:Task {{_scoped_key: "{task}"}})
-        SET t.priority = {priority}
-        RETURN t
+    def set_task_priority(
+        self, tasks: List[ScopedKey], priority: int
+    ) -> List[Optional[ScopedKey]]:
+        """Set the priority of a list of Tasks.
+
+        Parameters
+        ----------
+        tasks
+            The list of Tasks to set the priority of.
+        priority
+            The priority to set the Tasks to.
+
+        Returns
+        -------
+        List[Optional[ScopedKey]]
+            A list of the Task ScopedKeys for which priority was changed; `None`
+            is given for any Tasks for which the priority could not be changed.
+        """
+        if not (1 <= priority <= 2**63 - 1):
+            raise ValueError("priority must be between 1 and 2**63 - 1, inclusive")
+
+        with self.transaction() as tx:
+            q = """
+            WITH $scoped_keys AS batch
+            UNWIND batch AS scoped_key
+
+            OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
+            SET t.priority = $priority
+
+            RETURN scoped_key, t
+            """
+            res = tx.run(q, scoped_keys=[str(t) for t in tasks], priority=priority)
+
+        task_results = []
+        for record in res:
+            task_i = record["t"]
+            scoped_key = record["scoped_key"]
+
+            # catch missing tasks
+            if task_i is None:
+                task_results.append(None)
+            else:
+                task_results.append(ScopedKey.from_str(scoped_key))
+        return task_results
+
+    def get_task_priority(self, tasks: List[ScopedKey]) -> List[Optional[int]]:
+        """Get the priority of a list of Tasks.
+
+        Parameters
+        ----------
+        tasks
+            The list of Tasks to get the priority for.
+
+        Returns
+        -------
+        List[Optional[int]]
+            A list of priorities in the same order as the provided Tasks.
+            If an element is ``None``, the Task could not be found.
         """
         with self.transaction() as tx:
-            tx.run(q)
+            q = """
+            WITH $scoped_keys AS batch
+            UNWIND batch AS scoped_key
+            OPTIONAL MATCH (t:Task)
+            WHERE t._scoped_key = scoped_key
+            RETURN t.priority as priority
+            """
+            res = tx.run(q, scoped_keys=[str(t) for t in tasks])
+            priorities = [rec["priority"] for rec in res]
+
+        return priorities
 
     def delete_task(
         self,
