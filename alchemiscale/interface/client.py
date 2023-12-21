@@ -663,7 +663,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The ScopedKey for the AlchemicalNetwork to get actioned Tasks for.
         task_weights
             If ``True``, return a dict with Task ScopedKeys as keys, Task
-            weights as values.
+            weights on the AlchemicalNetwork as values.
 
         Returns
         -------
@@ -672,13 +672,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             the returned type is a dict with Task ScopedKeys as keys, Task
             weights as values.
         """
-        data = {"get_weights": task_weights}
-        results = self._post_resource(f"/networks/{network}/tasks/actioned", data)
+        data = dict(task_weights=task_weights)
+        tasks = self._post_resource(f"/networks/{network}/tasks/actioned", data)
 
         if task_weights:
-            return {ScopedKey.from_str(t): w for t, w in results.items()}
-        else:
-            return [ScopedKey.from_str(t) for t in results]
+            return {ScopedKey.from_str(t): w for t, w in tasks.items()}
+        
+        return [ScopedKey.from_str(t) for t in tasks]
 
     def get_task_actioned_networks(
         self, task: ScopedKey, task_weights: bool = False
@@ -690,20 +690,23 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task
             The ScopedKey for the Task to get actioned AlchemicalNetworks for.
         task_weights
-            If ``True``, return a dictionary whose keys are the ScopedKeys
-            of the AlchemicalNetworks that the ``Task`` ACTIONS and the
-            values are the weights of the ACTIONS relationship.
+            If ``True``, return a dict with AlchemicalNetwork ScopedKeys as
+            keys, the given Task's weights on each AlchemicalNetwork as values.
 
         Returns
         -------
         networks
             A list of AlchemicalNetwork ScopedKeys which action the given Task.
-            If task_weights is ``True``, a dictionary is returned.
+            If task_weights is ``True``, a dict is returned with
+            AlchemicalNetwork ScopedKeys as keys, Task weights as values.
+
         """
         data = dict(task_weights=task_weights)
         networks = self._post_resource(f"/tasks/{task}/networks/actioned", data)
+
         if task_weights:
             return {ScopedKey.from_str(n): weight for n, weight in networks.items()}
+
         return [ScopedKey.from_str(n) for n in networks]
 
     def action_tasks(

@@ -799,6 +799,11 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         task_sks = [n4js.create_task(transformation_sk) for i in range(5)]
+
+        # do not action the tasks yet; should get back nothing
+        actioned_tasks = n4js.get_taskhub_actioned_tasks(taskhub_sk)
+        assert actioned_tasks == {}
+
         # action 3 of 5 tasks
         n4js.action_tasks(task_sks[:3], taskhub_sk)
 
@@ -806,6 +811,9 @@ class TestNeo4jStore(TestStateStore):
 
         assert len(actioned_tasks) == 3
         assert all([task_i in task_sks for task_i in actioned_tasks])
+
+        # check that we get back expected weights
+        all([w == 0.5 for w in actioned_tasks.values()])
 
     def test_get_task_actioned_networks(
         self, n4js: Neo4jStore, network_tyk2, scope_test
@@ -824,6 +832,10 @@ class TestNeo4jStore(TestStateStore):
 
         task_sk = n4js.create_task(transformation_sk)
 
+        # do not action the task yet; should get back nothing
+        an_sks = n4js.get_task_actioned_networks(task_sk)
+        assert an_sks == {}
+
         n4js.action_tasks([task_sk], taskhub_sk_1)
         n4js.action_tasks([task_sk], taskhub_sk_2)
 
@@ -831,25 +843,8 @@ class TestNeo4jStore(TestStateStore):
 
         assert all([an_sk in an_sks for an_sk in [network_sk_1, network_sk_2]])
 
-    def test_get_task_actioned_networks_not_actioned(
-        self,
-        n4js,
-        network_tyk2,
-        scope_test,
-    ):
-        an = network_tyk2
-        network_sk = n4js.create_network(an, scope_test)
-        taskhub_sk = n4js.create_taskhub(network_sk)
-
-        transformation = list(an.edges)[0]
-        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
-
-        task_sk = n4js.create_task(transformation_sk)
-
-        # do not action the task and try and get the network
-        an_sks = n4js.get_task_actioned_networks(task_sk)
-
-        assert an_sks == []
+        # check that we get back expected weights
+        all([w == 0.5 for w in an_sks.values()])
 
     def test_get_taskhub_weight(self, n4js: Neo4jStore, network_tyk2, scope_test):
         network_sk = n4js.create_network(network_tyk2, scope_test)

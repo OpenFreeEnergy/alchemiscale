@@ -1069,7 +1069,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_taskhub_actioned_tasks(
         self,
         taskhub: ScopedKey,
-    ) -> List[ScopedKey]:
+    ) -> Dict[ScopedKey, float]:
         """Get the Tasks that a given TaskHub ACTIONS.
 
         Parameters
@@ -1080,20 +1080,23 @@ class Neo4jStore(AlchemiscaleStateStore):
         Returns
         -------
         tasks
-            The Tasks that are actioned on the given TaskHub.
+            A dict with Task ScopedKeys that are actioned on the given TaskHub
+            as keys, Task weights as values.
         """
 
         q = """
-           MATCH (th: TaskHub {_scoped_key: $th_sk})-[:ACTIONS]->(t:Task)
-           RETURN t._scoped_key
+           MATCH (th: TaskHub {_scoped_key: $th_sk})-[a:ACTIONS]->(t:Task)
+           RETURN t._scoped_key, a.weight
         """
 
         with self.transaction() as tx:
             results = tx.run(q, th_sk=str(taskhub))
 
-        return [ScopedKey.from_str(record.get("t._scoped_key")) for record in results]
+        return {
+            ScopedKey.from_str(record.get("t._scoped_key")): record.get("a.weight") 
+            for record in results}
 
-    def get_task_actioned_networks(self, task: ScopedKey) -> List[ScopedKey]:
+    def get_task_actioned_networks(self, task: ScopedKey) -> Dict[ScopedKey, float]:
         """Get all AlchemicalNetwork ScopedKeys whose TaskHub ACTIONS a given Task.
 
         Parameters
@@ -1105,23 +1108,21 @@ class Neo4jStore(AlchemiscaleStateStore):
         Returns
         -------
         networks
-            A list of AlchemicalNetwork ScopedKeys whose TaskHub actions a
-            given Task. If no TaskHubs action the Task, then an empty list is
-            returned.
+            A dict with AlchemicalNetwork ScopedKeys whose TaskHub actions a
+            given Task as keys, Task weights as values.
         """
+
         q = """
-           MATCH (an:AlchemicalNetwork)<-[:PERFORMS]-(TaskHub)-[:ACTIONS]->(Task {_scoped_key: $scoped_key})
-           RETURN an._scoped_key
+           MATCH (an:AlchemicalNetwork)<-[:PERFORMS]-(TaskHub)-[a:ACTIONS]->(Task {_scoped_key: $scoped_key})
+           RETURN an._scoped_key, a.weight
         """
 
         with self.transaction() as tx:
             results = tx.run(q, scoped_key=str(task))
 
-        networks = [
-            ScopedKey.from_str(record.get("an._scoped_key")) for record in results
-        ]
-
-        return networks
+        return {
+            ScopedKey.from_str(record.get("an._scoped_key")): record.get("a.weight") 
+            for record in results}
 
     def get_taskhub_weight(self, network: ScopedKey) -> float:
         """Get the weight for the TaskHub associated with the given
