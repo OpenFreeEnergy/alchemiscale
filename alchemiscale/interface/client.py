@@ -650,6 +650,65 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return status_counts
 
+    def get_network_actioned_tasks(
+        self,
+        network: ScopedKey,
+        task_weights: bool = False,
+    ) -> Union[Dict[ScopedKey, float], List[ScopedKey]]:
+        """Return all actioned Tasks for a given AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network
+            The ScopedKey for the AlchemicalNetwork to get actioned Tasks for.
+        task_weights
+            If ``True``, return a dict with Task ScopedKeys as keys, Task
+            weights on the AlchemicalNetwork as values.
+
+        Returns
+        -------
+        tasks
+            A list of Task ScopedKeys actioned on the given AlchemicalNetwork.
+            If ``task_weights`` is ``True``, a dict is returned with Task
+            ScopedKeys as keys, Task weights as values.
+        """
+        data = dict(task_weights=task_weights)
+        tasks = self._post_resource(f"/networks/{network}/tasks/actioned", data)
+
+        if task_weights:
+            return {ScopedKey.from_str(t): w for t, w in tasks.items()}
+
+        return [ScopedKey.from_str(t) for t in tasks]
+
+    def get_task_actioned_networks(
+        self, task: ScopedKey, task_weights: bool = False
+    ) -> Union[Dict[ScopedKey, float], List[ScopedKey]]:
+        """Return all AlchemicalNetworks the given Task is actioned on.
+
+        Parameters
+        ----------
+        task
+            The ScopedKey for the Task to get actioned AlchemicalNetworks for.
+        task_weights
+            If ``True``, return a dict with AlchemicalNetwork ScopedKeys as
+            keys, the given Task's weights on each AlchemicalNetwork as values.
+
+        Returns
+        -------
+        networks
+            A list of AlchemicalNetwork ScopedKeys which action the given Task.
+            If task_weights is ``True``, a dict is returned with
+            AlchemicalNetwork ScopedKeys as keys, Task weights as values.
+
+        """
+        data = dict(task_weights=task_weights)
+        networks = self._post_resource(f"/tasks/{task}/networks/actioned", data)
+
+        if task_weights:
+            return {ScopedKey.from_str(n): weight for n, weight in networks.items()}
+
+        return [ScopedKey.from_str(n) for n in networks]
+
     def action_tasks(
         self,
         tasks: List[ScopedKey],

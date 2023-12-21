@@ -497,6 +497,45 @@ def get_transformation_status(
     return status_counts
 
 
+@router.post("/networks/{network_scoped_key}/tasks/actioned")
+def get_network_actioned_tasks(
+    network_scoped_key,
+    *,
+    task_weights: bool = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> Union[Dict[str, float], List[str]]:
+    network_sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(network_sk.scope, token)
+
+    taskhub_sk = n4js.get_taskhub(network_sk)
+    task_sks = n4js.get_taskhub_actioned_tasks(taskhub_sk)
+
+    if task_weights:
+        return {str(task_sk): weight for task_sk, weight in task_sks.items()}
+
+    return [str(task_sk) for task_sk in task_sks]
+
+
+@router.post("/tasks/{task_scoped_key}/networks/actioned")
+def get_task_actioned_networks(
+    task_scoped_key,
+    *,
+    task_weights: bool = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> Union[Dict[str, float], List[str]]:
+    task_sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(task_sk.scope, token)
+
+    network_sks = n4js.get_task_actioned_networks(task_sk)
+
+    if task_weights:
+        return {str(network_sk): weight for network_sk, weight in network_sks.items()}
+
+    return [str(network_sk) for network_sk in network_sks]
+
+
 @router.post("/networks/{network_scoped_key}/tasks/action")
 def action_tasks(
     network_scoped_key,

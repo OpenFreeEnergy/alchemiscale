@@ -11,7 +11,9 @@ import networkx as nx
 from alchemiscale.models import ScopedKey, Scope
 from alchemiscale.storage.models import TaskStatusEnum
 from alchemiscale.interface import client
-from alchemiscale.tests.integration.interface.utils import get_user_settings_override
+from alchemiscale.tests.integration.interface.utils import (
+    get_user_settings_override,
+)
 from alchemiscale.interface.client import AlchemiscaleClientError
 
 
@@ -615,6 +617,101 @@ class TestClient:
         assert set(ret_task) == set(all_tasks)
         stat = user_client.get_transformation_status(transformation_sk)
         assert stat == {"complete": 5}
+
+    @pytest.mark.parametrize(
+        "get_weights",
+        [
+            (True),
+            (False),
+        ],
+    )
+    def test_get_network_actioned_tasks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client,
+        network_tyk2,
+        get_weights,
+    ):
+        n4js = n4js_preloaded
+
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        # if no tasks actioned, should get nothing back
+        assert (
+            len(
+                user_client.get_network_actioned_tasks(
+                    network_sk, task_weights=get_weights
+                )
+            )
+            == 0
+        )
+
+        task_sks = user_client.create_tasks(transformation_sk, count=3)
+        user_client.action_tasks(task_sks[:2], network_sk)
+
+        results = user_client.get_network_actioned_tasks(
+            network_sk, task_weights=get_weights
+        )
+
+        if get_weights:
+            assert list(results.values()) == [0.5, 0.5]
+
+        assert set(results) == set(task_sks[:2])
+
+    @pytest.mark.parametrize(
+        ("actioned_tasks"),
+        [
+            (True),
+            (False),
+        ],
+    )
+    def test_get_task_actioned_networks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client,
+        network_tyk2,
+        actioned_tasks,
+    ):
+        n4js = n4js_preloaded
+        an = network_tyk2
+
+        transformation = list(an.edges)[0]
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        networks = user_client.get_transformation_networks(transformation_sk)
+
+        task_sks = user_client.create_tasks(transformation_sk)
+
+        if actioned_tasks:
+            for network in networks:
+                user_client.action_tasks(task_sks, network)
+
+        # without requesting weights, default
+        results = user_client.get_task_actioned_networks(
+            task_sks[0], task_weights=False
+        )
+
+        if actioned_tasks:
+            assert len(results) == 2
+            assert set(results) == set(networks)
+        else:
+            assert results == []
+
+        # requesting weights
+        results = user_client.get_task_actioned_networks(task_sks[0], task_weights=True)
+
+        if actioned_tasks:
+            assert len(results) == 2
+            assert set(results) == set(networks)
+            assert list(results.values()) == [0.5, 0.5]
+        else:
+            assert len(results) == 0
 
     def test_action_tasks(
         self,
