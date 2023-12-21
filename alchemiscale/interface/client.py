@@ -677,7 +677,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         if task_weights:
             return {ScopedKey.from_str(t): w for t, w in tasks.items()}
-        
+
         return [ScopedKey.from_str(t) for t in tasks]
 
     def get_task_actioned_networks(

@@ -1093,8 +1093,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             results = tx.run(q, th_sk=str(taskhub))
 
         return {
-            ScopedKey.from_str(record.get("t._scoped_key")): record.get("a.weight") 
-            for record in results}
+            ScopedKey.from_str(record.get("t._scoped_key")): record.get("a.weight")
+            for record in results
+        }
 
     def get_task_actioned_networks(self, task: ScopedKey) -> Dict[ScopedKey, float]:
         """Get all AlchemicalNetwork ScopedKeys whose TaskHub ACTIONS a given Task.
@@ -1121,8 +1122,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             results = tx.run(q, scoped_key=str(task))
 
         return {
-            ScopedKey.from_str(record.get("an._scoped_key")): record.get("a.weight") 
-            for record in results}
+            ScopedKey.from_str(record.get("an._scoped_key")): record.get("a.weight")
+            for record in results
+        }
 
     def get_taskhub_weight(self, network: ScopedKey) -> float:
         """Get the weight for the TaskHub associated with the given
