@@ -1720,7 +1720,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         tasks
             The list of Tasks to set the priority of.
         priority
-            The priority to set the task to.
+            The priority to set the Tasks to.
 
         Returns
         -------
@@ -1728,8 +1728,8 @@ class Neo4jStore(AlchemiscaleStateStore):
             A list of the Task ScopedKeys for which priority was changed; `None`
             is given for any Tasks for which the priority could not be changed.
         """
-        if not priority >= 0:
-            raise ValueError("priority cannot be negative")
+        if not (1 <= priority <= 2**63 - 1):
+            raise ValueError("priority must be between 1 and 2**63 - 1, inclusive")
 
         with self.transaction() as tx:
             q = """

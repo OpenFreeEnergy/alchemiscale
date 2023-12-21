@@ -886,7 +886,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The Tasks to set the priority of.
         priority
             The priority to set for the Task. This value must be between 1 and
-            2**64 / 2, with lower values indicating an increased priority.
+            2**63 - 1, with lower values indicating an increased priority.
         batch_size
             The number of Tasks to include in a single request; use to tune
             method call speed when requesting many priorities at once.
