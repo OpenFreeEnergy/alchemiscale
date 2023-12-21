@@ -641,6 +641,16 @@ class TestClient:
         network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
+        # if no tasks actioned, should get nothing back
+        assert (
+            len(
+                user_client.get_network_actioned_tasks(
+                    network_sk, task_weights=get_weights
+                )
+            )
+            == 0
+        )
+
         task_sks = user_client.create_tasks(transformation_sk, count=3)
         user_client.action_tasks(task_sks[:2], network_sk)
 
@@ -650,8 +660,8 @@ class TestClient:
 
         if get_weights:
             assert list(results.values()) == [0.5, 0.5]
-        else:
-            assert results == task_sks[:2]
+
+        assert set(results) == set(task_sks[:2])
 
     @pytest.mark.parametrize(
         ("actioned_tasks"),
@@ -681,35 +691,27 @@ class TestClient:
         if actioned_tasks:
             for network in networks:
                 user_client.action_tasks(task_sks, network)
+
         # without requesting weights, default
         results = user_client.get_task_actioned_networks(
             task_sks[0], task_weights=False
         )
 
-        # no promise keys will be in order
-        results.sort()
-        networks.sort()
-
         if actioned_tasks:
             assert len(results) == 2
-            assert results == networks
+            assert set(results) == set(networks)
         else:
             assert results == []
 
         # requesting weights
         results = user_client.get_task_actioned_networks(task_sks[0], task_weights=True)
 
-        _networks = list(results.keys())
-        # networks has already been sorted above
-        _networks.sort()
-
         if actioned_tasks:
             assert len(results) == 2
-            assert _networks == networks
+            assert set(results) == set(networks)
             assert list(results.values()) == [0.5, 0.5]
         else:
             assert len(results) == 0
-            assert _networks == []
 
     def test_action_tasks(
         self,

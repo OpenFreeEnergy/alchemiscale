@@ -668,9 +668,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         Returns
         -------
         tasks
-            A list of Task ScopedKeys. If ``task_weights`` is ``True``, then
-            the returned type is a dict with Task ScopedKeys as keys, Task
-            weights as values.
+            A list of Task ScopedKeys actioned on the given AlchemicalNetwork.
+            If ``task_weights`` is ``True``, a dict is returned with Task
+            ScopedKeys as keys, Task weights as values.
         """
         data = dict(task_weights=task_weights)
         tasks = self._post_resource(f"/networks/{network}/tasks/actioned", data)
