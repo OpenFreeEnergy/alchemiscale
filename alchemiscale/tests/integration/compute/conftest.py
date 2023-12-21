@@ -112,7 +112,7 @@ def n4js_preloaded(
 
         # set task priority higher the first transformation
         # used for claim determinism in some tests
-        n4js.set_task_priority(task_sks[transformations[0]][0], 1)
+        n4js.set_task_priority([task_sks[transformations[0]][0]], 1)
 
         # add tasks from each transformation selected to each task hubs
         n4js.action_tasks(

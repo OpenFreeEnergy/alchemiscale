@@ -5,7 +5,7 @@
 """
 
 import asyncio
-from typing import Union, List, Dict, Optional, Tuple
+from typing import Union, List, Dict, Optional, Tuple, Any
 import json
 from itertools import chain
 from collections import Counter
@@ -783,12 +783,67 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return [ScopedKey.from_str(i) if i is not None else None for i in canceled_sks]
 
-    def _set_task_status(
-        self, task: ScopedKey, status: TaskStatusEnum
-    ) -> Optional[ScopedKey]:
-        """Set the status of a `Task`."""
-        task_sk = self._post_resource(f"/tasks/{task}/status", status.value)
-        return ScopedKey.from_str(task_sk) if task_sk is not None else None
+    def _task_attribute_getter(
+        self, tasks: List[ScopedKey], getter_function, batch_size
+    ) -> List[Any]:
+        tasks = [
+            ScopedKey.from_str(task) if isinstance(task, str) else task
+            for task in tasks
+        ]
+
+        @use_session
+        async def async_request(self):
+            values = await asyncio.gather(
+                *[
+                    getter_function(task_batch)
+                    for task_batch in self._batched(tasks, batch_size)
+                ]
+            )
+
+            return list(chain.from_iterable(values))
+
+        coro = async_request(self)
+
+        try:
+            return asyncio.run(coro)
+        except RuntimeError:
+            # we use nest_asyncio to support environments where an event loop
+            # is already running, such as in a Jupyter notebook
+            import nest_asyncio
+
+            nest_asyncio.apply()
+            return asyncio.run(coro)
+
+    def _task_attribute_setter(
+        self, tasks: List[ScopedKey], setter_function, setter_args, batch_size
+    ) -> List[Optional[ScopedKey]]:
+        tasks = [
+            ScopedKey.from_str(task) if isinstance(task, str) else task
+            for task in tasks
+        ]
+
+        @use_session
+        async def async_request(self):
+            scoped_keys = await asyncio.gather(
+                *[
+                    setter_function(task_batch, *setter_args)
+                    for task_batch in self._batched(tasks, batch_size)
+                ]
+            )
+
+            return list(chain.from_iterable(scoped_keys))
+
+        coro = async_request(self)
+
+        try:
+            return asyncio.run(coro)
+        except RuntimeError:
+            # we use nest_asyncio to support environments where an event loop
+            # is already running, such as in a Jupyter notebook
+            import nest_asyncio
+
+            nest_asyncio.apply()
+            return asyncio.run(coro)
 
     async def _set_task_status(
         self, tasks: List[ScopedKey], status: TaskStatusEnum
@@ -802,12 +857,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             ScopedKey.from_str(task_sk) if task_sk is not None else None
             for task_sk in tasks_updated
         ]
-
-    async def _get_task_status(self, tasks: List[ScopedKey]) -> List[TaskStatusEnum]:
-        """Get the statuses for many Tasks"""
-        data = dict(tasks=[t.dict() for t in tasks])
-        statuses = await self._post_resource_async(f"/bulk/tasks/status/get", data=data)
-        return statuses
 
     def set_tasks_status(
         self,
@@ -838,33 +887,15 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         status = TaskStatusEnum(status)
 
-        tasks = [
-            ScopedKey.from_str(task) if isinstance(task, str) else task
-            for task in tasks
-        ]
+        return self._task_attribute_setter(
+            tasks, self._set_task_status, (status,), batch_size
+        )
 
-        @use_session
-        async def async_request(self):
-            scoped_keys = await asyncio.gather(
-                *[
-                    self._set_task_status(task_batch, status)
-                    for task_batch in self._batched(tasks, batch_size)
-                ]
-            )
-
-            return list(chain.from_iterable(scoped_keys))
-
-        coro = async_request(self)
-
-        try:
-            return asyncio.run(coro)
-        except RuntimeError:
-            # we use nest_asyncio to support environments where an event loop
-            # is already running, such as in a Jupyter notebook
-            import nest_asyncio
-
-            nest_asyncio.apply()
-            return asyncio.run(coro)
+    async def _get_task_status(self, tasks: List[ScopedKey]) -> List[TaskStatusEnum]:
+        """Get the statuses for many Tasks"""
+        data = dict(tasks=[t.dict() for t in tasks])
+        statuses = await self._post_resource_async(f"/bulk/tasks/status/get", data=data)
+        return statuses
 
     def get_tasks_status(
         self, tasks: List[ScopedKey], batch_size: int = 1000
@@ -886,40 +917,81 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             given Task doesn't exist, ``None`` will be returned in its place.
 
         """
-        tasks = [
-            ScopedKey.from_str(task) if isinstance(task, str) else task
-            for task in tasks
+        return self._task_attribute_getter(tasks, self._get_task_status, batch_size)
+
+    async def _set_task_priority(
+        self, tasks: List[ScopedKey], priority: int
+    ) -> List[Optional[ScopedKey]]:
+        data = dict(tasks=[t.dict() for t in tasks], priority=priority)
+        tasks_updated = await self._post_resource_async(
+            f"/bulk/tasks/priority/set", data=data
+        )
+        return [
+            ScopedKey.from_str(task_sk) if task_sk is not None else None
+            for task_sk in tasks_updated
         ]
 
-        @use_session
-        async def async_request(self):
-            statuses = await asyncio.gather(
-                *[
-                    self._get_task_status(task_batch)
-                    for task_batch in self._batched(tasks, batch_size)
-                ]
-            )
+    def set_tasks_priority(
+        self,
+        tasks: List[ScopedKey],
+        priority: int,
+        batch_size: int = 1000,
+    ) -> List[Optional[ScopedKey]]:
+        """Set the priority of multiple Tasks.
 
-            return list(chain.from_iterable(statuses))
+        Parameters
+        ----------
+        tasks
+            The Tasks to set the priority of.
+        priority
+            The priority to set for the Task. This value must be between 1 and
+            2**63 - 1, with lower values indicating an increased priority.
+        batch_size
+            The number of Tasks to include in a single request; use to tune
+            method call speed when requesting many priorities at once.
 
-        try:
-            return asyncio.run(async_request(self))
-        except RuntimeError:
-            # we use nest_asyncio to support environments where an event loop
-            # is already running, such as in a Jupyter notebook
-            import nest_asyncio
+        Returns
+        -------
+        updated
+            The ScopedKeys of the Tasks that were updated, in the same order
+            as given in `tasks`. If a given Task doesn't exist, ``None`` will
+            be returned in its place.
+        """
+        return self._task_attribute_setter(
+            tasks, self._set_task_priority, (priority,), batch_size
+        )
 
-            nest_asyncio.apply()
-            return asyncio.run(async_request(self))
+    async def _get_task_priority(self, tasks: List[ScopedKey]) -> List[int]:
+        """Get the priority for many Tasks"""
+        data = dict(tasks=[t.dict() for t in tasks])
+        priorities = await self._post_resource_async(
+            f"/bulk/tasks/priority/get", data=data
+        )
+        return priorities
 
     def get_tasks_priority(
         self,
         tasks: List[ScopedKey],
-    ):
-        raise NotImplementedError
+        batch_size: int = 1000,
+    ) -> List[int]:
+        """Get the priority of multiple Tasks.
 
-    def set_tasks_priority(self, tasks: List[ScopedKey], priority: int):
-        raise NotImplementedError
+        Parameters
+        ----------
+        tasks
+            The Tasks to get the priority of.
+        batch_size
+            The number of Tasks to include in a single request; use to tune
+            method call speed when requesting many priorities at once.
+
+        Returns
+        -------
+        priorities
+            The priority of each Task in the same order as given in `tasks`. If a
+            given Task doesn't exist, ``None`` will be returned in its place.
+
+        """
+        return self._task_attribute_getter(tasks, self._get_task_priority, batch_size)
 
     ### results
 
