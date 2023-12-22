@@ -6,6 +6,9 @@ from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
 from alchemiscale.models import ScopedKey
 from alchemiscale.base.client import json_to_gufe
+from alchemiscale.utils import gufe_to_digraph
+
+import networkx as nx
 
 
 def pre_load_payload(network, scope, name="incomplete 2"):
@@ -14,7 +17,9 @@ def pre_load_payload(network, scope, name="incomplete 2"):
         edges=list(network.edges)[:-3], nodes=network.nodes, name=name
     )
     headers = {"Content-type": "application/json"}
-    data = dict(network=new_network.to_dict(), scope=scope.dict())
+    tokenizables = nx.topological_sort(gufe_to_digraph(new_network))
+    keyed_dicts = [t.to_keyed_dict() for t in tokenizables][::-1]
+    data = dict(network=keyed_dicts, scope=scope.dict())
     jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
 
     return new_network, headers, jsondata

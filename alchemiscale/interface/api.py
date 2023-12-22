@@ -14,6 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.protocols import ProtocolDAGResult
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
+import networkx as nx
 
 from ..base.api import (
     GufeJSONResponse,
@@ -38,6 +39,7 @@ from ..storage.models import ProtocolDAGResultRef, TaskStatusEnum
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedUserIdentity
+from ..utils import gufe_to_digraph
 
 
 app = FastAPI(title="AlchemiscaleAPI")
@@ -108,14 +110,18 @@ def check_existence(
 @router.post("/networks", response_model=ScopedKey)
 def create_network(
     *,
-    network: Dict = Body(...),
+    network: List = Body(...),
     scope: Scope,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
     validate_scopes(scope, token)
 
-    an = AlchemicalNetwork.from_dict(network)
+    tokenizables = []
+    for i in network:
+        tokenizables.append(GufeTokenizable.from_keyed_dict(i))
+
+    an = tokenizables[-1]
 
     try:
         an_sk = n4js.create_network(network=an, scope=scope)
@@ -301,7 +307,10 @@ def get_network(
     validate_scopes(sk.scope, token)
 
     network = n4js.get_gufe(scoped_key=sk)
-    return gufe_to_json(network)
+
+    tokenizables = nx.topological_sort(gufe_to_digraph(network))
+    keyed_dicts = [t.to_keyed_dict() for t in tokenizables][::-1]
+    return json.dumps(keyed_dicts, cls=JSON_HANDLER.encoder)
 
 
 @router.get(

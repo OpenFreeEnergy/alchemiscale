@@ -17,6 +17,7 @@ import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
+import networkx as nx
 
 
 from ..base.client import (
@@ -30,6 +31,7 @@ from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
 from ..strategies import Strategy
 from ..security.models import CredentialedUserIdentity
 from ..validators import validate_network_nonself
+from ..utils import gufe_to_digraph
 
 
 class AlchemiscaleClientError(AlchemiscaleBaseClientError):
@@ -125,7 +127,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         sk = self.get_scoped_key(network, scope)
 
         def post():
-            data = dict(network=network.to_dict(), scope=scope.dict())
+            tokenizables = nx.topological_sort(gufe_to_digraph(network))
+            keyed_dicts = [t.to_keyed_dict() for t in tokenizables][::-1]
+            data = dict(network=keyed_dicts, scope=scope.dict())
             return self._post_resource("/networks", data, compress=compress)
 
         if visualize:
@@ -310,17 +314,24 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 task = progress.add_task(
                     f"Retrieving [bold]'{network}'[/bold]...", total=None
                 )
+                data = self._get_resource(f"/networks/{network}", compress=compress)
+                content = json.loads(data, cls=JSON_HANDLER.decoder)
+                tokenizables = []
+                for i in content:
+                    tokenizables.append(GufeTokenizable.from_keyed_dict(i))
 
-                an = json_to_gufe(
-                    self._get_resource(f"/networks/{network}", compress=compress)
-                )
+                an = tokenizables[-1]
+
                 progress.start_task(task)
                 progress.update(task, total=1, completed=1)
         else:
-            an = json_to_gufe(
-                self._get_resource(f"/networks/{network}", compress=compress)
-            )
+            data = self._get_resource(f"/networks/{network}", compress=compress)
+            content = json.loads(data, cls=JSON_HANDLER.decoder)
+            tokenizables = []
+            for i in content:
+                tokenizables.append(GufeTokenizable.from_keyed_dict(i))
 
+            an = tokenizables[-1]
         return an
 
     @lru_cache(maxsize=10000)
