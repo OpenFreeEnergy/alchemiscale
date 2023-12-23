@@ -39,7 +39,7 @@ from ..storage.models import ProtocolDAGResultRef, TaskStatusEnum
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedUserIdentity
-from ..utils import gufe_to_digraph
+from ..utils import gufe_to_keyed_dicts, keyed_dicts_to_gufe
 
 
 app = FastAPI(title="AlchemiscaleAPI")
@@ -117,11 +117,7 @@ def create_network(
 ):
     validate_scopes(scope, token)
 
-    tokenizables = []
-    for i in network:
-        tokenizables.append(GufeTokenizable.from_keyed_dict(i))
-
-    an = tokenizables[-1]
+    an = keyed_dicts_to_gufe(network)
 
     try:
         an_sk = n4js.create_network(network=an, scope=scope)
@@ -307,9 +303,7 @@ def get_network(
     validate_scopes(sk.scope, token)
 
     network = n4js.get_gufe(scoped_key=sk)
-
-    tokenizables = nx.topological_sort(gufe_to_digraph(network))
-    return [t.to_keyed_dict() for t in tokenizables][::-1]
+    return gufe_to_keyed_dicts(network)
 
 
 @router.get(
@@ -325,7 +319,7 @@ def get_transformation(
     validate_scopes(sk.scope, token)
 
     transformation = n4js.get_gufe(scoped_key=sk)
-    return gufe_to_json(transformation)
+    return gufe_to_keyed_dicts(transformation)
 
 
 @router.get(
@@ -341,7 +335,7 @@ def get_chemicalsystem(
     validate_scopes(sk.scope, token)
 
     chemicalsystem = n4js.get_gufe(scoped_key=sk)
-    return gufe_to_json(chemicalsystem)
+    return gufe_to_keyed_dicts(chemicalsystem)
 
 
 ### compute

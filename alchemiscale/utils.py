@@ -68,3 +68,18 @@ def gufe_to_digraph(gufe_obj):
     )
 
     return graph
+
+
+def gufe_to_keyed_dicts(gufe_obj):
+    keyed_dicts = [
+        gt.to_keyed_dict() for gt in nx.topological_sort(gufe_to_digraph(gufe_obj))
+    ][::-1]
+    return keyed_dicts
+
+
+def keyed_dicts_to_gufe(keyed_dicts):
+    gts = []
+    for gt in keyed_dicts:
+        gts.append(GufeTokenizable.from_keyed_dict(gt))
+
+    return gts[-1]
