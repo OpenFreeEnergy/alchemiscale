@@ -309,8 +309,7 @@ def get_network(
     network = n4js.get_gufe(scoped_key=sk)
 
     tokenizables = nx.topological_sort(gufe_to_digraph(network))
-    keyed_dicts = [t.to_keyed_dict() for t in tokenizables][::-1]
-    return json.dumps(keyed_dicts, cls=JSON_HANDLER.encoder)
+    return [t.to_keyed_dict() for t in tokenizables][::-1]
 
 
 @router.get(

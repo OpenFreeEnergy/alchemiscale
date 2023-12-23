@@ -314,8 +314,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 task = progress.add_task(
                     f"Retrieving [bold]'{network}'[/bold]...", total=None
                 )
-                data = self._get_resource(f"/networks/{network}", compress=compress)
-                content = json.loads(data, cls=JSON_HANDLER.decoder)
+                content = self._get_resource(f"/networks/{network}", compress=compress)
                 tokenizables = []
                 for i in content:
                     tokenizables.append(GufeTokenizable.from_keyed_dict(i))

@@ -111,8 +111,12 @@ class TestAPI:
 
         assert response.status_code == 200
 
-        content = json.loads(response.text, cls=JSON_HANDLER.decoder)
-        network_ = json_to_gufe(content)
+        content = json.loads(response.content, cls=JSON_HANDLER.decoder)
+        tokenizables = []
+        for i in content:
+            tokenizables.append(GufeTokenizable.from_keyed_dict(i))
+
+        network_ = tokenizables[-1]
 
         assert network_.key == network.key
         assert network_ is network
