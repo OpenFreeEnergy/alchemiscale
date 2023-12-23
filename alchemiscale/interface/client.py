@@ -127,8 +127,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         sk = self.get_scoped_key(network, scope)
 
         def post():
-            tokenizables = nx.topological_sort(gufe_to_digraph(network))
-            keyed_dicts = [t.to_keyed_dict() for t in tokenizables][::-1]
+            keyed_dicts = keyed_dicts_to_gufe(network)
             data = dict(network=keyed_dicts, scope=scope.dict())
             return self._post_resource("/networks", data, compress=compress)
 
