@@ -50,11 +50,11 @@ def gufe_to_digraph(gufe_obj):
     graph = nx.DiGraph()
 
     def add_edges(o):
-        # graph.add_node(o)
+        # add the object node in case there aren't any connections
+        graph.add_node(o)
         connections = gufe_objects_from_shallow_dict(o.to_shallow_dict())
 
         for c in connections:
-            # graph.add_node(c)
             graph.add_edge(o, c)
 
     add_edges(gufe_obj)

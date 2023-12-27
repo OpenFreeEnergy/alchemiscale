@@ -94,7 +94,7 @@ def list_scopes(
 ### inputs
 
 
-@router.get("/exists/{scoped_key}", response_class=GufeJSONResponse)
+@router.get("/exists/{scoped_key}")
 def check_existence(
     scoped_key,
     *,
@@ -133,7 +133,7 @@ def create_network(
     return an_sk
 
 
-@router.get("/networks", response_class=GufeJSONResponse)
+@router.get("/networks")
 def query_networks(
     *,
     name: str = None,
@@ -292,7 +292,7 @@ def get_chemicalsystem_transformations(
     ]
 
 
-@router.get("/networks/{network_scoped_key}", response_class=GufeJSONResponse)
+@router.get("/networks/{network_scoped_key}")
 def get_network(
     network_scoped_key,
     *,
@@ -303,12 +303,10 @@ def get_network(
     validate_scopes(sk.scope, token)
 
     network = n4js.get_gufe(scoped_key=sk)
-    return gufe_to_keyed_dicts(network)
+    return GufeJSONResponse(network)
 
 
-@router.get(
-    "/transformations/{transformation_scoped_key}", response_class=GufeJSONResponse
-)
+@router.get("/transformations/{transformation_scoped_key}")
 def get_transformation(
     transformation_scoped_key,
     *,
@@ -319,12 +317,10 @@ def get_transformation(
     validate_scopes(sk.scope, token)
 
     transformation = n4js.get_gufe(scoped_key=sk)
-    return gufe_to_keyed_dicts(transformation)
+    return GufeJSONResponse(content=transformation)
 
 
-@router.get(
-    "/chemicalsystems/{chemicalsystem_scoped_key}", response_class=GufeJSONResponse
-)
+@router.get("/chemicalsystems/{chemicalsystem_scoped_key}")
 def get_chemicalsystem(
     chemicalsystem_scoped_key,
     *,
@@ -335,7 +331,7 @@ def get_chemicalsystem(
     validate_scopes(sk.scope, token)
 
     chemicalsystem = n4js.get_gufe(scoped_key=sk)
-    return gufe_to_keyed_dicts(chemicalsystem)
+    return GufeJSONResponse(chemicalsystem)
 
 
 ### compute
@@ -741,7 +737,7 @@ def get_task_status(
     return status[0].value
 
 
-@router.get("/tasks/{task_scoped_key}/transformation", response_class=GufeJSONResponse)
+@router.get("/tasks/{task_scoped_key}/transformation")
 def get_task_transformation(
     task_scoped_key,
     *,
@@ -764,10 +760,7 @@ def get_task_transformation(
 ### results
 
 
-@router.get(
-    "/transformations/{transformation_scoped_key}/results",
-    response_class=GufeJSONResponse,
-)
+@router.get("/transformations/{transformation_scoped_key}/results")
 def get_transformation_results(
     transformation_scoped_key,
     *,
@@ -780,10 +773,7 @@ def get_transformation_results(
     return [str(sk) for sk in n4js.get_transformation_results(sk)]
 
 
-@router.get(
-    "/transformations/{transformation_scoped_key}/failures",
-    response_class=GufeJSONResponse,
-)
+@router.get("/transformations/{transformation_scoped_key}/failures")
 def get_transformation_failures(
     transformation_scoped_key,
     *,
@@ -797,8 +787,7 @@ def get_transformation_failures(
 
 
 @router.get(
-    "/transformations/{transformation_scoped_key}/{route}/{protocoldagresultref_scoped_key}",
-    response_class=GufeJSONResponse,
+    "/transformations/{transformation_scoped_key}/{route}/{protocoldagresultref_scoped_key}"
 )
 def get_protocoldagresult(
     protocoldagresultref_scoped_key,
@@ -846,10 +835,7 @@ def get_protocoldagresult(
     return [pdr]
 
 
-@router.get(
-    "/tasks/{task_scoped_key}/results",
-    response_class=GufeJSONResponse,
-)
+@router.get("/tasks/{task_scoped_key}/results")
 def get_task_results(
     task_scoped_key,
     *,
@@ -862,10 +848,7 @@ def get_task_results(
     return [str(sk) for sk in n4js.get_task_results(sk)]
 
 
-@router.get(
-    "/tasks/{task_scoped_key}/failures",
-    response_class=GufeJSONResponse,
-)
+@router.get("/tasks/{task_scoped_key}/failures")
 def get_task_failures(
     task_scoped_key,
     *,

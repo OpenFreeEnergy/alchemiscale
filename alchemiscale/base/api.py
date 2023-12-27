@@ -34,6 +34,7 @@ from ..security.auth import (
     oauth2_scheme,
 )
 from ..security.models import Token, TokenData, CredentialedEntity
+from ..utils import gufe_to_keyed_dicts
 
 
 def validate_scopes(scope: Scope, token: TokenData) -> None:
@@ -144,7 +145,8 @@ class GufeJSONResponse(JSONResponse):
     media_type = "application/json"
 
     def render(self, content: Any) -> bytes:
-        return json.dumps(content, cls=JSON_HANDLER.encoder).encode("utf-8")
+        keyed_dicts = gufe_to_keyed_dicts(content)
+        return json.dumps(keyed_dicts, cls=JSON_HANDLER.encoder).encode("utf-8")
 
 
 class GzipRequest(Request):

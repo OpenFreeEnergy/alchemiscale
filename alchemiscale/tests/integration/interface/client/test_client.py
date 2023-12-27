@@ -3,7 +3,7 @@ from time import sleep
 from pathlib import Path
 
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
-from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey
+from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey, get_all_gufe_objs
 from gufe.protocols.protocoldag import execute_DAG
 from gufe.tests.test_protocol import BrokenProtocol
 import networkx as nx
@@ -11,6 +11,7 @@ import networkx as nx
 from alchemiscale.models import ScopedKey, Scope
 from alchemiscale.storage.models import TaskStatusEnum
 from alchemiscale.interface import client
+from alchemiscale.utils import gufe_to_keyed_dicts
 from alchemiscale.tests.integration.interface.utils import (
     get_user_settings_override,
 )
@@ -1151,6 +1152,13 @@ class TestClient:
         # instead of our instances already in memory post-pull
         for pdr in protocoldagresults:
             TOKENIZABLE_REGISTRY.pop(pdr.key, None)
+
+        # get_transformation_results constructs the GufeTokenizable objects
+        # needed to create the transformation. Therefore we need to clear the registry
+        # of these objects to be sure that the correct objects are returned from the
+        # database.
+        for gt in get_all_gufe_objs(transformation):
+            TOKENIZABLE_REGISTRY.pop(gt.key, None)
 
         # user client : pull transformation results, evaluate
         protocolresult = user_client.get_transformation_results(transformation_sk)

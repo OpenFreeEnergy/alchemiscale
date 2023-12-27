@@ -31,7 +31,7 @@ from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
 from ..strategies import Strategy
 from ..security.models import CredentialedUserIdentity
 from ..validators import validate_network_nonself
-from ..utils import gufe_to_digraph, keyed_dicts_to_gufe
+from ..utils import gufe_to_keyed_dicts, keyed_dicts_to_gufe
 
 
 class AlchemiscaleClientError(AlchemiscaleBaseClientError):
@@ -127,7 +127,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         sk = self.get_scoped_key(network, scope)
 
         def post():
-            keyed_dicts = keyed_dicts_to_gufe(network)
+            keyed_dicts = gufe_to_keyed_dicts(network)
             data = dict(network=keyed_dicts, scope=scope.dict())
             return self._post_resource("/networks", data, compress=compress)
 
