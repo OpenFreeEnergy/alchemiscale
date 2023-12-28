@@ -20,12 +20,10 @@ class RegistryBackup(object):
         self.clear_gufe_deps()
         return self.registry_backup
 
-    def __exit__(self, type, value, traceback):
-        if self.keep_changes:
-            TOKENIZABLE_REGISTRY.update(self.registry_backup)
-        else:
+    def __exit__(self, exception, value, traceback):
+        if not self.keep_changes or exception is not None:
             TOKENIZABLE_REGISTRY.clear()
-            TOKENIZABLE_REGISTRY.update(self.registry_backup)
+        TOKENIZABLE_REGISTRY.update(self.registry_backup)
 
     def clear_gufe_deps(self):
         if self.gufe_object is not None:
