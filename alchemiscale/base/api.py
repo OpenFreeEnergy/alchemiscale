@@ -144,7 +144,7 @@ class QueryGUFEHandler:
 class GufeJSONResponse(JSONResponse):
     media_type = "application/json"
 
-    def render(self, content: Any) -> bytes:
+    def render(self, content: GufeTokenizable) -> bytes:
         keyed_dicts = gufe_to_keyed_dicts(content)
         return json.dumps(keyed_dicts, cls=JSON_HANDLER.encoder).encode("utf-8")
 

@@ -17,7 +17,6 @@ import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
-import networkx as nx
 
 
 from ..base.client import (

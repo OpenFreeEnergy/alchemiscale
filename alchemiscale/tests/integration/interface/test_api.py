@@ -8,8 +8,6 @@ from alchemiscale.models import ScopedKey
 from alchemiscale.base.client import json_to_gufe
 from alchemiscale.utils import keyed_dicts_to_gufe, gufe_to_keyed_dicts
 
-import networkx as nx
-
 
 def pre_load_payload(network, scope, name="incomplete 2"):
     """Helper function to spin up networks for testing"""

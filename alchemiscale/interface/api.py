@@ -14,7 +14,6 @@ from fastapi.middleware.gzip import GZipMiddleware
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.protocols import ProtocolDAGResult
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
-import networkx as nx
 
 from ..base.api import (
     GufeJSONResponse,
@@ -317,7 +316,7 @@ def get_transformation(
     validate_scopes(sk.scope, token)
 
     transformation = n4js.get_gufe(scoped_key=sk)
-    return GufeJSONResponse(content=transformation)
+    return GufeJSONResponse(transformation)
 
 
 @router.get("/chemicalsystems/{chemicalsystem_scoped_key}")
