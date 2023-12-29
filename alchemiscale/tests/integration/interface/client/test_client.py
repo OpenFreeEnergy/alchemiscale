@@ -1159,7 +1159,7 @@ class TestClient:
         # database.
         # with RegistryBackup(gufe_object=transformation):
         # user client : pull transformation results, evaluate
-        # protocolresult = user_client.get_transformation_results(transformation_sk)
+        protocolresult = user_client.get_transformation_results(transformation_sk)
 
         assert protocolresult.get_estimate() == 95500.0
         assert set(protocolresult.data.keys()) == {"logs", "key_results"}
