@@ -11,7 +11,7 @@ import networkx as nx
 from alchemiscale.models import ScopedKey, Scope
 from alchemiscale.storage.models import TaskStatusEnum
 from alchemiscale.interface import client
-from alchemiscale.utils import gufe_to_keyed_dicts
+from alchemiscale.utils import gufe_to_keyed_dicts, RegistryBackup
 from alchemiscale.tests.integration.interface.utils import (
     get_user_settings_override,
 )
@@ -1157,11 +1157,9 @@ class TestClient:
         # needed to create the transformation. Therefore we need to clear the registry
         # of these objects to be sure that the correct objects are returned from the
         # database.
-        for gt in get_all_gufe_objs(transformation):
-            TOKENIZABLE_REGISTRY.pop(gt.key, None)
-
-        # user client : pull transformation results, evaluate
-        protocolresult = user_client.get_transformation_results(transformation_sk)
+        with RegistryBackup(gufe_object=transformation):
+            # user client : pull transformation results, evaluate
+            protocolresult = user_client.get_transformation_results(transformation_sk)
 
         assert protocolresult.get_estimate() == 95500.0
         assert set(protocolresult.data.keys()) == {"logs", "key_results"}
