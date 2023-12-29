@@ -51,9 +51,13 @@ jobs:
           mamba info -a
           mamba list
 
-      - name: "Run tests"
+      - name: "Run unit tests"
         run: |
-          pytest -v --cov=alchemiscale --cov-report=xml alchemiscale/tests
+          pytests -v alchemiscale/tests/unit
+
+      - name: "Run integration tests"
+        run: |
+          pytest -v --cov=alchemiscale --cov-report=xml alchemiscale/tests/integration
 
       - name: codecov
         if: ${{ github.repository == 'openforcefield/alchemiscale'
