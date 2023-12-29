@@ -6,7 +6,17 @@ from alchemiscale.utils import (
     keyed_dicts_to_gufe,
     RegistryBackup,
 )
-from gufe.tokenization import GufeTokenizable
+from gufe.tokenization import GufeTokenizable, get_all_gufe_objs
+
+
+def test_keyed_dicts_full_network(network):
+    objects = get_all_gufe_objs(network)
+
+    for o in objects:
+        with RegistryBackup():
+            keyed_dicts = gufe_to_keyed_dicts(o)
+            _o = keyed_dicts_to_gufe(keyed_dicts)
+            assert o == _o
 
 
 def test_gufe_objects_from_shallow_dict(chemicalsystem_lig_emj_50_complex):
