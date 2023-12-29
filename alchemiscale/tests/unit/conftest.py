@@ -1,32 +1,30 @@
 from pytest import fixture
 from openfe_benchmarks import tyk2
 from gufe import ChemicalSystem, Transformation, AlchemicalNetwork
-
-# from gufe.protocols.protocoldag import execute_DAG
-from gufe.tests.test_protocol import DummyProtocol, BrokenProtocol
+from gufe.tests.test_protocol import DummyProtocol
 
 
-@fixture(scope="session")
-def network_tyk2():
+@fixture(scope="module")
+def network():
     tyk2s = tyk2.get_system()
 
     solvated = {
-        l.name: ChemicalSystem(
-            components={"ligand": l, "solvent": tyk2s.solvent_component},
-            name=f"{l.name}_water",
+        lig.name: ChemicalSystem(
+            components={"ligand": lig, "solvent": tyk2s.solvent_component},
+            name=f"{lig.name}_water",
         )
-        for l in tyk2s.ligand_components
+        for lig in tyk2s.ligand_components
     }
     complexes = {
-        l.name: ChemicalSystem(
+        lig.name: ChemicalSystem(
             components={
-                "ligand": l,
+                "ligand": lig,
                 "solvent": tyk2s.solvent_component,
                 "protein": tyk2s.protein_component,
             },
-            name=f"{l.name}_complex",
+            name=f"{lig.name}_complex",
         )
-        for l in tyk2s.ligand_components
+        for lig in tyk2s.ligand_components
     }
 
     complex_network = [
@@ -49,20 +47,21 @@ def network_tyk2():
     ]
 
     return AlchemicalNetwork(
-        edges=(solvent_network + complex_network), name="tyk2_relative_benchmark"
+        edges=(solvent_network + complex_network), name="tyk2_relative_unit"
     )
 
 
-@fixture(scope="session")
-def chemical_system(network_tyk2):
+@fixture(scope="module")
+def chemicalsystem_lig_emj_50_complex(network):
     system_name = "lig_ejm_50_complex"
-    for n in network_tyk2.nodes:
+    for n in network.nodes:
         if n.name == system_name:
             cs = n
             break
     else:
         raise ValueError(
-            f"Could not find the target chemical system {system_name}. Has the benchmark system changed?"
+            f"Could not find the target chemical system {system_name}. Has the"
+            " benchmark system changed?"
         )
 
     return cs
