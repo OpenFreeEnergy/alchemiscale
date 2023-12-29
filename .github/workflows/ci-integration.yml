@@ -53,7 +53,7 @@ jobs:
 
       - name: "Run unit tests"
         run: |
-          pytests -v alchemiscale/tests/unit
+          pytest -v alchemiscale/tests/unit
 
       - name: "Run integration tests"
         run: |
