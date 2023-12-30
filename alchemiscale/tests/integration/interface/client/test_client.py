@@ -1157,7 +1157,7 @@ class TestClient:
         # needed to create the transformation. Therefore we need to clear the registry
         # of these objects to be sure that the correct objects are returned from the
         # database.
-        with RegistryBackup(gufe_object=transformation):
+        with RegistryBackup(gufe_object=transformation, keep_changes=True):
             # user client : pull transformation results, evaluate
             protocolresult = user_client.get_transformation_results(transformation_sk)
 
