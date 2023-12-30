@@ -11,7 +11,7 @@ import networkx as nx
 from alchemiscale.models import ScopedKey, Scope
 from alchemiscale.storage.models import TaskStatusEnum
 from alchemiscale.interface import client
-from alchemiscale.utils import gufe_to_keyed_dicts, RegistryBackup
+from alchemiscale.utils import RegistryBackup
 from alchemiscale.tests.integration.interface.utils import (
     get_user_settings_override,
 )

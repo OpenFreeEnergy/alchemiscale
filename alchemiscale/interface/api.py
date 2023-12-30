@@ -38,7 +38,7 @@ from ..storage.models import ProtocolDAGResultRef, TaskStatusEnum
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedUserIdentity
-from ..utils import gufe_to_keyed_dicts, keyed_dicts_to_gufe
+from ..utils import keyed_dicts_to_gufe
 
 
 app = FastAPI(title="AlchemiscaleAPI")

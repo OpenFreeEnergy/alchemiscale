@@ -88,3 +88,7 @@ def test_registry_backup_partial_clear(network, chemicalsystem_lig_emj_50_comple
 
     with RegistryBackup(gufe_object=chemicalsystem_lig_emj_50_complex):
         assert len(TOKENIZABLE_REGISTRY) == expected_len != 0
+
+
+def test_registry_keep_changes(network, chemicalsystem_lig_emj_50_complex):
+    pass

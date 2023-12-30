@@ -268,16 +268,12 @@ def network_tyk2():
 
 @fixture(scope="module")
 def transformation(network_tyk2):
-    transformations = list(network_tyk2.edges)[0]
-    print(f"{transformations} -- debug")
-    return transformations
+    return list(network_tyk2.edges)[0]
 
 
 @fixture(scope="module")
 def chemicalsystem(network_tyk2):
-    chemical_system = list(network_tyk2.nodes)[0]
-    print(chemical_system)
-    return chemical_system
+    return list(network_tyk2.nodes)[0]
 
 
 @fixture(scope="module")
@@ -307,7 +303,6 @@ def protocoldagresults(tmpdir_factory, transformation):
 @fixture(scope="module")
 def network_tyk2_failure(network_tyk2):
     transformation = list(network_tyk2.edges)[0]
-    print(transformation, transformation.key)
 
     broken_transformation = Transformation(
         stateA=transformation.stateA,
