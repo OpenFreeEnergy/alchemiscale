@@ -7,6 +7,7 @@ from alchemiscale.utils import (
     RegistryBackup,
 )
 from gufe.tokenization import GufeTokenizable, get_all_gufe_objs, TOKENIZABLE_REGISTRY
+import pytest
 
 
 def test_keyed_dicts_full_network(network):
@@ -90,5 +91,20 @@ def test_registry_backup_partial_clear(network, chemicalsystem_lig_emj_50_comple
         assert len(TOKENIZABLE_REGISTRY) == expected_len != 0
 
 
-def test_registry_keep_changes(network, chemicalsystem_lig_emj_50_complex):
-    pass
+@pytest.mark.parametrize(
+    "keep_changes",
+    [
+        (True),
+        (False),
+    ],
+)
+def test_registry_keep_changes(
+    keep_changes, network, chemicalsystem_lig_emj_50_complex
+):
+    with RegistryBackup(keep_changes=keep_changes):
+        an = network.copy_with_replacements(name="new_network")
+
+    if keep_changes:
+        assert an in TOKENIZABLE_REGISTRY.values()
+    else:
+        assert an not in TOKENIZABLE_REGISTRY.values()
