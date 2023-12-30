@@ -1153,13 +1153,7 @@ class TestClient:
         for pdr in protocoldagresults:
             TOKENIZABLE_REGISTRY.pop(pdr.key, None)
 
-        # get_transformation_results constructs the GufeTokenizable objects
-        # needed to create the transformation. Therefore we need to clear the registry
-        # of these objects to be sure that the correct objects are returned from the
-        # database.
-        with RegistryBackup(gufe_object=transformation, keep_changes=True):
-            # user client : pull transformation results, evaluate
-            protocolresult = user_client.get_transformation_results(transformation_sk)
+        protocolresult = user_client.get_transformation_results(transformation_sk)
 
         assert protocolresult.get_estimate() == 95500.0
         assert set(protocolresult.data.keys()) == {"logs", "key_results"}
