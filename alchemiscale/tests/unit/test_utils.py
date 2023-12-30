@@ -6,7 +6,7 @@ from alchemiscale.utils import (
     keyed_dicts_to_gufe,
     RegistryBackup,
 )
-from gufe.tokenization import GufeTokenizable, get_all_gufe_objs
+from gufe.tokenization import GufeTokenizable, get_all_gufe_objs, TOKENIZABLE_REGISTRY
 
 
 def test_keyed_dicts_full_network(network):
@@ -59,3 +59,32 @@ def test_keyed_dicts_to_gufe(network):
     with RegistryBackup(network):
         keyed_dicts = gufe_to_keyed_dicts(network)
         assert keyed_dicts_to_gufe(keyed_dicts) == network
+
+
+def test_registry_backup_enter_return(network):
+    direct_copy = TOKENIZABLE_REGISTRY.copy()
+
+    with RegistryBackup() as original:
+        assert direct_copy == original
+        assert len(direct_copy) != 0
+
+
+def test_registry_backup_full_clear(network):
+    original_length = len(TOKENIZABLE_REGISTRY)
+
+    assert original_length != 0
+
+    with RegistryBackup():
+        assert len(TOKENIZABLE_REGISTRY) == 0
+
+    assert len(TOKENIZABLE_REGISTRY) != 0
+
+
+def test_registry_backup_partial_clear(network, chemicalsystem_lig_emj_50_complex):
+    original_len = len(TOKENIZABLE_REGISTRY)
+    removed_objects = get_all_gufe_objs(chemicalsystem_lig_emj_50_complex)
+
+    expected_len = original_len - len(removed_objects)
+
+    with RegistryBackup(gufe_object=chemicalsystem_lig_emj_50_complex):
+        assert len(TOKENIZABLE_REGISTRY) == expected_len != 0

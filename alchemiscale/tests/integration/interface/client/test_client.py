@@ -3,7 +3,7 @@ from time import sleep
 from pathlib import Path
 
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
-from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey, get_all_gufe_objs
+from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey
 from gufe.protocols.protocoldag import execute_DAG
 from gufe.tests.test_protocol import BrokenProtocol
 import networkx as nx
@@ -1157,9 +1157,9 @@ class TestClient:
         # needed to create the transformation. Therefore we need to clear the registry
         # of these objects to be sure that the correct objects are returned from the
         # database.
-        # with RegistryBackup(gufe_object=transformation):
-        # user client : pull transformation results, evaluate
-        protocolresult = user_client.get_transformation_results(transformation_sk)
+        with RegistryBackup(gufe_object=transformation):
+            # user client : pull transformation results, evaluate
+            protocolresult = user_client.get_transformation_results(transformation_sk)
 
         assert protocolresult.get_estimate() == 95500.0
         assert set(protocolresult.data.keys()) == {"logs", "key_results"}
@@ -1353,8 +1353,6 @@ class TestClient:
                 break
 
         network_sk = an_sk
-        # network_sk = user_client.get_scoped_key(an, scope_test)
-        # transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
         # user client : create tasks for the transformation
         tasks = user_client.create_tasks(transformation_sk, count=2)
