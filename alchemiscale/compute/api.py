@@ -14,7 +14,6 @@ from fastapi.middleware.gzip import GZipMiddleware
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from ..base.api import (
-    GufeJSONResponse,
     QueryGUFEHandler,
     scope_params,
     get_token_data_depends,
@@ -193,7 +192,7 @@ def claim_taskhub_tasks(
     return [str(t) if t is not None else None for t in tasks]
 
 
-@router.get("/tasks/{task_scoped_key}/transformation", response_class=GufeJSONResponse)
+@router.get("/tasks/{task_scoped_key}/transformation")
 def get_task_transformation(
     task_scoped_key,
     *,
