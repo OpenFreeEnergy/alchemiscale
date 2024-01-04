@@ -172,7 +172,7 @@ def n4js_fresh(graph):
     return n4js
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def s3objectstore_settings():
     os.environ["AWS_ACCESS_KEY_ID"] = "test-key-id"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "test-key"
@@ -219,7 +219,7 @@ def s3os(s3objectstore_settings):
 # TODO: add in atom mapping once `gufe`#35 is settled
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def network_tyk2():
     tyk2s = tyk2.get_system()
 
@@ -266,17 +266,17 @@ def network_tyk2():
     )
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def transformation(network_tyk2):
     return list(network_tyk2.edges)[0]
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def chemicalsystem(network_tyk2):
     return list(network_tyk2.nodes)[0]
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def protocoldagresults(tmpdir_factory, transformation):
     pdrs = []
     for i in range(3):
@@ -300,7 +300,7 @@ def protocoldagresults(tmpdir_factory, transformation):
     return pdrs
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def network_tyk2_failure(network_tyk2):
     transformation = list(network_tyk2.edges)[0]
 
@@ -316,12 +316,12 @@ def network_tyk2_failure(network_tyk2):
     )
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def transformation_failure(network_tyk2_failure):
     return [t for t in network_tyk2_failure.edges if t.name == "broken"][0]
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def protocoldagresults_failure(tmpdir_factory, transformation_failure):
     pdrs = []
     for i in range(3):
@@ -346,13 +346,13 @@ def protocoldagresults_failure(tmpdir_factory, transformation_failure):
     return pdrs
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def scope_test():
     """Primary scope for individual tests"""
     return Scope(org="test_org", campaign="test_campaign", project="test_project")
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def multiple_scopes(scope_test):
     scopes = [scope_test]  # Append initial test
     # Augment

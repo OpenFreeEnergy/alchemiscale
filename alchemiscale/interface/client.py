@@ -30,6 +30,7 @@ from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
 from ..strategies import Strategy
 from ..security.models import CredentialedUserIdentity
 from ..validators import validate_network_nonself
+from ..utils import gufe_to_keyed_dicts, keyed_dicts_to_gufe
 
 
 class AlchemiscaleClientError(AlchemiscaleBaseClientError):
@@ -125,7 +126,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         sk = self.get_scoped_key(network, scope)
 
         def post():
-            data = dict(network=network.to_dict(), scope=scope.dict())
+            keyed_dicts = gufe_to_keyed_dicts(network)
+            data = dict(network=keyed_dicts, scope=scope.dict())
             return self._post_resource("/networks", data, compress=compress)
 
         if visualize:
@@ -298,6 +300,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The retrieved AlchemicalNetwork.
 
         """
+
+        def _get_network():
+            content = self._get_resource(f"/networks/{network}", compress=compress)
+            return keyed_dicts_to_gufe(content)
+
         if visualize:
             from rich.progress import (
                 Progress,
@@ -311,16 +318,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     f"Retrieving [bold]'{network}'[/bold]...", total=None
                 )
 
-                an = json_to_gufe(
-                    self._get_resource(f"/networks/{network}", compress=compress)
-                )
+                an = _get_network()
+
                 progress.start_task(task)
                 progress.update(task, total=1, completed=1)
         else:
-            an = json_to_gufe(
-                self._get_resource(f"/networks/{network}", compress=compress)
-            )
-
+            an = _get_network()
         return an
 
     @lru_cache(maxsize=10000)
@@ -351,6 +354,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The retrieved Transformation.
 
         """
+
+        def _get_transformation():
+            content = self._get_resource(
+                f"/transformations/{transformation}", compress=compress
+            )
+            return keyed_dicts_to_gufe(content)
+
         if visualize:
             from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
 
@@ -359,19 +369,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     f"Retrieving [bold]'{transformation}'[/bold]...", total=None
                 )
 
-                tf = json_to_gufe(
-                    self._get_resource(
-                        f"/transformations/{transformation}", compress=compress
-                    )
-                )
+                tf = _get_transformation()
                 progress.start_task(task)
                 progress.update(task, total=1, completed=1)
         else:
-            tf = json_to_gufe(
-                self._get_resource(
-                    f"/transformations/{transformation}", compress=compress
-                )
-            )
+            tf = _get_transformation()
 
         return tf
 
@@ -403,6 +405,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The retrieved ChemicalSystem.
 
         """
+
+        def _get_chemicalsystem():
+            content = self._get_resource(
+                f"/chemicalsystems/{chemicalsystem}", compress=compress
+            )
+            return keyed_dicts_to_gufe(content)
+
         if visualize:
             from rich.progress import Progress
 
@@ -411,20 +420,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     f"Retrieving [bold]'{chemicalsystem}'[/bold]...", total=None
                 )
 
-                cs = json_to_gufe(
-                    self._get_resource(
-                        f"/chemicalsystems/{chemicalsystem}", compress=compress
-                    )
-                )
+                cs = _get_chemicalsystem()
 
                 progress.start_task(task)
                 progress.update(task, total=1, completed=1)
         else:
-            cs = json_to_gufe(
-                self._get_resource(
-                    f"/chemicalsystems/{chemicalsystem}", compress=compress
-                )
-            )
+            cs = _get_chemicalsystem()
 
         return cs
 
