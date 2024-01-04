@@ -284,7 +284,7 @@ class SynchronousComputeService:
 
         """
 
-        transformation, extends_protocoldagresult = self.client.get_task_transformation(
+        transformation, extends_protocoldagresult = self.client.retrieve_task_transformation(
             task
         )
 
