@@ -211,7 +211,7 @@ def get_task_transformation(
 
     return str(transformation)
 
-@router.get("/tasks/{task_scoped_key}/transformation/gufe", response_class=GufeJSONResponse)
+@router.get("/tasks/{task_scoped_key}/transformation/gufe")
 def retrieve_task_transformation(
     task_scoped_key,
     *,

@@ -201,7 +201,7 @@ class TestComputeClient:
         (
             transformation_,
             extends_protocoldagresult,
-        ) = compute_client.get_task_transformation(task_sks[0])
+        ) = compute_client.retrieve_task_transformation(task_sks[0])
 
         assert transformation_ == transformation
         assert extends_protocoldagresult is None
@@ -235,7 +235,7 @@ class TestComputeClient:
         (
             transformation_,
             extends_protocoldagresult,
-        ) = compute_client.get_task_transformation(task_sks[0])
+        ) = compute_client.retrieve_task_transformation(task_sks[0])
 
         assert transformation_ == transformation
         assert extends_protocoldagresult is None
@@ -251,7 +251,7 @@ class TestComputeClient:
         (
             transformation2,
             extends_protocoldagresult2,
-        ) = compute_client.get_task_transformation(task_sk2)
+        ) = compute_client.retrieve_task_transformation(task_sk2)
 
         assert transformation2 == transformation_
         assert extends_protocoldagresult2 == protocoldagresults[0]
