@@ -72,13 +72,16 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         return taskhubs
 
     def claim_taskhub_tasks(
-            self, taskhub: ScopedKey, 
-            compute_service_id: ComputeServiceID,
-            count: int = 1,
-            protocols: Optional[List[str]] = None
+        self,
+        taskhub: ScopedKey,
+        compute_service_id: ComputeServiceID,
+        count: int = 1,
+        protocols: Optional[List[str]] = None,
     ) -> Task:
         """Claim a `Task` from the specified `TaskHub`"""
-        data = dict(compute_service_id=str(compute_service_id), count=count, protocols=protocols)
+        data = dict(
+            compute_service_id=str(compute_service_id), count=count, protocols=protocols
+        )
         tasks = self._post_resource(f"taskhubs/{taskhub}/claim", data)
 
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]
@@ -87,7 +90,6 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         """Get the Transformation associated with the given Task."""
         transformation = self._get_resource(f"/tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
-
 
     def retrieve_task_transformation(
         self, task: ScopedKey

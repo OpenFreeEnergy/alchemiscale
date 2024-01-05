@@ -74,10 +74,7 @@ class SynchronousComputeService:
 
     """
 
-    def __init__(
-        self,
-        settings: ComputeServiceSettings
-    ):
+    def __init__(self, settings: ComputeServiceSettings):
         """Create a `SynchronousComputeService` instance."""
         self.settings = settings
 
@@ -160,7 +157,9 @@ class SynchronousComputeService:
             self.beat()
             time.sleep(self.heartbeat_interval)
 
-    def claim_tasks(self, count=1, protocols: Optional[List[str]] = None) -> List[Optional[ScopedKey]]:
+    def claim_tasks(
+        self, count=1, protocols: Optional[List[str]] = None
+    ) -> List[Optional[ScopedKey]]:
         """Get a Task to execute from compute API.
 
         Returns `None` if no Task was available matching service configuration.
@@ -197,7 +196,7 @@ class SynchronousComputeService:
                 taskhub,
                 compute_service_id=self.compute_service_id,
                 count=(count - len(tasks)),
-                protocols=protocols
+                protocols=protocols,
             )
 
             # gather up claimed tasks, if present
@@ -221,9 +220,10 @@ class SynchronousComputeService:
 
         """
 
-        transformation, extends_protocoldagresult = self.client.retrieve_task_transformation(
-            task
-        )
+        (
+            transformation,
+            extends_protocoldagresult,
+        ) = self.client.retrieve_task_transformation(task)
 
         protocoldag = transformation.create(
             extends=extends_protocoldagresult,

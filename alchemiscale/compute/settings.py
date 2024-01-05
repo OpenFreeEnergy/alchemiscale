@@ -54,7 +54,7 @@ class ComputeServiceSettings(BaseModel):
         description="Scopes to limit Task claiming to; defaults to all Scopes accessible by compute identity.",
     )
     protocols: Optional[List[str]] = Field(
-        None, 
+        None,
         description="Names of Protocols to run with this service; regex patterns are allowed. `None` means no restriction",
     )
     claim_limit: int = Field(

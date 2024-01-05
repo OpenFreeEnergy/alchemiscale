@@ -69,7 +69,9 @@ class TestComputeAPI:
         test_client,
         scoped_keys,
     ):
-        response = test_client.get(f"/tasks/{scoped_keys['tasks'][0]}/transformation/gufe")
+        response = test_client.get(
+            f"/tasks/{scoped_keys['tasks'][0]}/transformation/gufe"
+        )
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
