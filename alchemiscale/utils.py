@@ -87,7 +87,6 @@ def gufe_to_digraph(gufe_obj):
     shallow_dicts = {}
 
     def add_edges(o):
-
         # if we've made a shallow dict before, we've already added this one
         # and all its dependencies; return `None` to avoid going down the tree
         # again
