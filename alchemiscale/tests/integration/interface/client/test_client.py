@@ -1350,7 +1350,7 @@ class TestClient:
         #    t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
         # ][0]
 
-        while not user_client.check_exists(an):
+        while not user_client.check_exists(an_sk):
             sleep(0.25)
 
         tf_sks = user_client.get_network_transformations(an_sk)

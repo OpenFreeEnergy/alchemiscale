@@ -76,7 +76,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 "Scope for a ScopedKey must be specific; it cannot contain wildcards."
             )
 
-    def check_exists(self, scoped_key: Scope) -> bool:
+    def check_exists(self, scoped_key: ScopedKey) -> bool:
         """Returns ``True`` if the given ScopedKey represents an object in the database."""
         return self._get_resource(f"/exists/{scoped_key}")
 
