@@ -1344,16 +1344,21 @@ class TestClient:
             edges=[broken_transformation] + list(network_tyk2.edges), name="tyk2_broken"
         )
 
+        n_edges = len(an.edges)
+
         # select the transformation we want to compute
         an_sk = user_client.create_network(an, scope_test)
-        # transformation = [
-        #    t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
-        # ][0]
+        #transformation = [
+        #   t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
+        #][0]
 
         while not user_client.check_exists(an_sk):
             sleep(0.25)
 
         tf_sks = user_client.get_network_transformations(an_sk)
+        while len(an.edges) != len(tf_sks):
+            sleep(0.25)
+            tf_sks = user_client.get_network_transformations(an_sk)
 
         if len(tf_sks) == 0:
             raise ValueError("This should not happen")
@@ -1362,6 +1367,7 @@ class TestClient:
             tf = user_client.get_transformation(tf_sk)
             if tf.name == "broken":
                 transformation_sk = tf_sk
+                transformation = tf
                 break
 
         network_sk = an_sk
