@@ -1348,9 +1348,9 @@ class TestClient:
 
         # select the transformation we want to compute
         an_sk = user_client.create_network(an, scope_test)
-        #transformation = [
+        # transformation = [
         #   t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
-        #][0]
+        # ][0]
 
         while not user_client.check_exists(an_sk):
             sleep(0.25)
