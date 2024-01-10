@@ -78,7 +78,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def check_exists(self, scoped_key: Scope) -> bool:
         """Returns ``True`` if the given ScopedKey represents an object in the database."""
-        return self._get_resource("/exists/{scoped_key}")
+        return self._get_resource(f"/exists/{scoped_key}")
 
     def create_network(
         self,
