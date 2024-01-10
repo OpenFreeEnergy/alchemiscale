@@ -1355,6 +1355,9 @@ class TestClient:
 
         tf_sks = user_client.get_network_transformations(an_sk)
 
+        if len(tf_sks) == 0:
+            raise ValueError("This should not happen")
+
         for tf_sk in tf_sks:
             tf = user_client.get_transformation(tf_sk)
             if tf.name == "broken":
