@@ -1211,7 +1211,15 @@ class TestClient:
 
         # select the transformation we want to compute
         an = network_tyk2_failure
-        user_client.create_network(an, scope_test)
+        an_sk = user_client.create_network(an, scope_test)
+
+        while True:
+            try:
+                user_client.get_network(an_sk)
+                break
+            except:
+                sleep(0.1)
+
         transformation = [
             t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
         ][0]
@@ -1333,7 +1341,15 @@ class TestClient:
 
         # select the transformation we want to compute
         an = network_tyk2_failure
-        user_client.create_network(an, scope_test)
+        an_sk = user_client.create_network(an, scope_test)
+
+        while True:
+            try:
+                user_client.get_network(an_sk)
+                break
+            except:
+                sleep(0.1)
+
         transformation = [
             t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
         ][0]
