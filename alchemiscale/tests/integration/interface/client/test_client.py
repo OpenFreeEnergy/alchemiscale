@@ -1326,51 +1326,63 @@ class TestClient:
         n4js_preloaded,
         s3os_server,
         user_client: client.AlchemiscaleClient,
-        network_tyk2,
+        network_tyk2_failure,
         tmpdir,
     ):
         n4js = n4js_preloaded
 
-        transformation = list(network_tyk2.edges)[0]
+        # select the transformation we want to compute
+        an = network_tyk2_failure
+        user_client.create_network(an, scope_test)
+        transformation = [
+            t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
+        ][0]
 
-        broken_transformation = Transformation(
-            stateA=transformation.stateA,
-            stateB=transformation.stateB,
-            protocol=BrokenProtocol(settings=BrokenProtocol.default_settings()),
-            name="broken",
-        )
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
-        an = AlchemicalNetwork(
-            edges=[broken_transformation] + list(network_tyk2.edges), name="tyk2_broken"
-        )
+        # execute the actioned tasks and push results directly using statestore and object store
 
-        n_edges = len(an.edges)
+        # transformation = list(network_tyk2.edges)[0]
+        #
+        # broken_transformation = Transformation(
+        #    stateA=transformation.stateA,
+        #    stateB=transformation.stateB,
+        #    protocol=BrokenProtocol(settings=BrokenProtocol.default_settings()),
+        #    name="broken",
+        # )
+
+        # an = AlchemicalNetwork(
+        #    edges=[broken_transformation] + list(network_tyk2.edges), name="tyk2_broken"
+        # )
+
+        # n_edges = len(an.edges)
 
         # select the transformation we want to compute
-        an_sk = user_client.create_network(an, scope_test)
+        # an_sk = user_client.create_network(an, scope_test)
         # transformation = [
         #   t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
         # ][0]
 
-        while not user_client.check_exists(an_sk):
-            sleep(0.25)
+        # while not user_client.check_exists(an_sk):
+        #    sleep(0.25)
 
-        tf_sks = user_client.get_network_transformations(an_sk)
-        while len(an.edges) != len(tf_sks):
-            sleep(0.25)
-            tf_sks = user_client.get_network_transformations(an_sk)
+        # tf_sks = user_client.get_network_transformations(an_sk)
+        # while len(an.edges) != len(tf_sks):
+        #    sleep(0.25)
+        #    tf_sks = user_client.get_network_transformations(an_sk)
 
-        if len(tf_sks) == 0:
-            raise ValueError("This should not happen")
+        # if len(tf_sks) == 0:
+        #    raise ValueError("This should not happen")
 
-        for tf_sk in tf_sks:
-            tf = user_client.get_transformation(tf_sk)
-            if tf.name == "broken":
-                transformation_sk = tf_sk
-                transformation = tf
-                break
+        # for tf_sk in tf_sks:
+        #    tf = user_client.get_transformation(tf_sk)
+        #    if tf.name == "broken":
+        #        transformation_sk = tf_sk
+        #        transformation = tf
+        #        break
 
-        network_sk = an_sk
+        # network_sk = an_sk
 
         # user client : create tasks for the transformation
         tasks = user_client.create_tasks(transformation_sk, count=2)
