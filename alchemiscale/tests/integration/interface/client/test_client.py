@@ -1326,13 +1326,25 @@ class TestClient:
         n4js_preloaded,
         s3os_server,
         user_client: client.AlchemiscaleClient,
-        network_tyk2_failure,
+        network_tyk2,
         tmpdir,
     ):
         n4js = n4js_preloaded
 
+        transformation = list(network_tyk2.edges)[0]
+
+        broken_transformation = Transformation(
+            stateA=transformation.stateA,
+            stateB=transformation.stateB,
+            protocol=BrokenProtocol(settings=BrokenProtocol.default_settings()),
+            name="broken",
+        )
+
+        an = AlchemicalNetwork(
+            edges=[broken_transformation] + list(network_tyk2.edges), name="tyk2_broken"
+        )
+
         # select the transformation we want to compute
-        an = network_tyk2_failure
         an_sk = user_client.create_network(an, scope_test)
         transformation = [
             t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
