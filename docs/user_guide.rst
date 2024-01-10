@@ -248,7 +248,7 @@ As mentioned above, upon choosing an :external+gufe:py:class:`~gufe.network.Alch
 You can set the ``weight`` of an actioned :py:class:`~alchemiscale.storage.models.Task` to influence the likelihood that it will be picked up for compute relative to the other :py:class:`~alchemiscale.storage.models.Task`\s actioned on the given :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
 To set the ``weight`` of an actioned :py:class:`~alchemiscale.storage.models.Task` on an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, use :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.action_tasks` with the ``weight`` keyword argument::
 
-    >>> # get all networks that the givn Task is actioned on, with weights as dict values
+    >>> # get all networks that the given Task is actioned on, with weights as dict values
     >>> asc.get_task_actioned_networks(task, task_weights=True)
     {<ScopedKey('AlchemicalNetwork-4617c8d8d6599124af3b4561b8d910a0-my_org-my_campaign-my_project')>: 0.5,
      <ScopedKey('AlchemicalNetwork-66d7676b10a1fd9cb3f75e6e2e7f6e9c-my_org-my_campaign-my_project')>: 0.5}
@@ -267,7 +267,7 @@ Setting the priority of Tasks
 =============================
 
 The ``weight`` of an actioned :py:class:`~alchemiscale.storage.models.Task` influences how likely it is to be chosen among the other :py:class:`~alchemiscale.storage.models.Task`\s actioned on the given :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
-An orthogonal mechanism to ``weight`` is :py:class:`~alchemiscale.storage.models.Task` ``priority``, which is a property of the :py:class:`~alchemiscale.storage.models.Task` itself and introduces some determinism to when is executed relative to other :py:class:`~alchemiscale.storage.models.Task`\s actioned on the same :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
+A complementary mechanism to ``weight`` is :py:class:`~alchemiscale.storage.models.Task` ``priority``, which is a property of the :py:class:`~alchemiscale.storage.models.Task` itself and introduces some determinism to when the :py:class:`~alchemiscale.storage.models.Task` is executed relative to other :py:class:`~alchemiscale.storage.models.Task`\s actioned on the same :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
 When a compute service has selected an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` to draw :py:class:`~alchemiscale.storage.models.Task`\s from, it first partitions the :py:class:`~alchemiscale.storage.models.Task`\s by ``priority``;
 the weighted selection is then performed *only* on those :py:class:`~alchemiscale.storage.models.Task`\s of the same, highest priority.
 In this way, a :py:class:`~alchemiscale.storage.models.Task` with ``priority`` 1 will always be chosen before a :py:class:`~alchemiscale.storage.models.Task` with ``priority`` 2, and so on, if they are both actioned on the same :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s.
