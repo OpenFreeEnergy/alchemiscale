@@ -1211,21 +1211,26 @@ class TestClient:
 
         # select the transformation we want to compute
         an = network_tyk2_failure
-        an_sk = user_client.create_network(an, scope_test)
+        network_sk = user_client.create_network(an, scope_test)
 
+        # seeing what appears to be random race condition in CI; adding this
+        # ensures full AlchemicalNetwork present before we proceed
         while True:
             try:
-                user_client.get_network(an_sk)
+                user_client.get_network(network_sk)
                 break
             except:
                 sleep(0.1)
 
-        transformation = [
-            t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
-        ][0]
+        tf_sks = user_client.get_network_transformations(network_sk)
 
-        network_sk = user_client.get_scoped_key(an, scope_test)
-        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+        # select the transformation we want to compute
+        for tf_sk in tf_sks:
+            tf = user_client.get_transformation(tf_sk)
+            if tf.name == "broken":
+                transformation_sk = tf_sk
+                transformation = tf
+                break
 
         # user client : create tasks for the transformation
         tasks = user_client.create_tasks(transformation_sk, count=2)
@@ -1341,21 +1346,26 @@ class TestClient:
 
         # select the transformation we want to compute
         an = network_tyk2_failure
-        an_sk = user_client.create_network(an, scope_test)
+        network_sk = user_client.create_network(an, scope_test)
 
+        # seeing what appears to be random race condition in CI; adding this
+        # ensures full AlchemicalNetwork present before we proceed
         while True:
             try:
-                user_client.get_network(an_sk)
+                user_client.get_network(network_sk)
                 break
             except:
                 sleep(0.1)
 
-        transformation = [
-            t for t in list(an.edges) if isinstance(t.protocol, BrokenProtocol)
-        ][0]
+        tf_sks = user_client.get_network_transformations(network_sk)
 
-        network_sk = user_client.get_scoped_key(an, scope_test)
-        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+        # select the transformation we want to compute
+        for tf_sk in tf_sks:
+            tf = user_client.get_transformation(tf_sk)
+            if tf.name == "broken":
+                transformation_sk = tf_sk
+                transformation = tf
+                break
 
         # user client : create tasks for the transformation
         tasks = user_client.create_tasks(transformation_sk, count=2)
