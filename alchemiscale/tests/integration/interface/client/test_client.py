@@ -1217,7 +1217,11 @@ class TestClient:
         # ensures full AlchemicalNetwork present before we proceed
         while True:
             try:
-                user_client.get_network(network_sk)
+                an_ = user_client.get_network(network_sk)
+
+                if an_ != an:
+                    raise Exception("Network out doesn't exactly match network in yet")
+
                 break
             except:
                 sleep(0.1)
@@ -1352,7 +1356,11 @@ class TestClient:
         # ensures full AlchemicalNetwork present before we proceed
         while True:
             try:
-                user_client.get_network(network_sk)
+                an_ = user_client.get_network(network_sk)
+
+                if an_ != an:
+                    raise Exception("Network out doesn't exactly match network in yet")
+
                 break
             except:
                 sleep(0.1)
