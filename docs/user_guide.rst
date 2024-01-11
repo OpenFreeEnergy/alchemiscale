@@ -143,7 +143,7 @@ This will return a :py:class:`~alchemiscale.models.ScopedKey` uniquely identifyi
 
 You can pull the full :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` back down (even in another Python session) with::
 
-    >>> network_again = asc.get_network(network_sk)
+    >>> network_again = asc.get_network(an_sk)
     >>> network_again
     <AlchemicalNetwork-66d7676b10a1fd9cb3f75e6e2e7f6e9c>
 
@@ -153,7 +153,6 @@ You can list all your accessible ``AlchemicalNetworks`` on the ``alchemiscale`` 
 
     >>> asc.query_networks()
     [<ScopedKey('AlchemicalNetwork-4617c8d8d6599124af3b4561b8d910a0-my_org-my_campaign-my_project')>,
-     <ScopedKey('AlchemicalNetwork-d90bd97079cd965b887b373307ea7bab-my_org-my_campaign-my_project')>,
      <ScopedKey('AlchemicalNetwork-d90bd97079cd965b887b373307ea7bab-my_org-my_campaign-my_project')>,
      ...]
 
@@ -175,7 +174,7 @@ For this example, we’ll loop through every :external+gufe:py:class:`~gufe.tran
     >>> for tf_sk in asc.get_network_transformations(an_sk):
             tasks.extend(asc.create_tasks(tf_sk, count=3))
     
-    >>> asc.action_tasks(tasks, network_sk)
+    >>> asc.action_tasks(tasks, an_sk)
     [<ScopedKey('Task-06cb9804356f4af1b472cc0ab689036a-my_org-my_campaign-my_project')>,
      <ScopedKey('Task-129a9e1a893f4c24a6dd3bdcc25957d6-my_org-my_campaign-my_project')>,
      <ScopedKey('Task-157232d7ff794a0985ebce5055e0f336-my_org-my_campaign-my_project')>,
@@ -185,12 +184,12 @@ A :py:class:`~alchemiscale.storage.models.Task` is associated with a :external+g
 If we submit another :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` including some of the same :external+gufe:py:class:`~gufe.transformations.Transformation`\s later to the same :py:class:`~alchemiscale.models.Scope`, we could get the :py:class:`~alchemiscale.storage.models.Task`\s for each :external+gufe:py:class:`~gufe.transformations.Transformation` and only create new :py:class:`~alchemiscale.storage.models.Task`\s if necessary, actioning the existing ones to that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` as well::
 
     >>> tasks = []
-    >>> for tf_sk in asc.get_network_transformations(other_network_sk):
+    >>> for tf_sk in asc.get_network_transformations(other_an_sk):
     >>>     existing_tasks = asc.get_transformation_tasks(tf_sk)
     >>>     tasks.extend(asc.create_tasks(transformation_sk, count=max(3 - len(existing_tasks), 0)) 
                          + existing_tasks)
 
-    >>> asc.action_tasks(tasks, other_network_sk)
+    >>> asc.action_tasks(tasks, other_an_sk)
     [<ScopedKey('Task-06cb9804356f4af1b472cc0ab689036a-my_org-my_campaign-my_project')>,
      <ScopedKey('Task-129a9e1a893f4c24a6dd3bdcc25957d6-my_org-my_campaign-my_project')>,
      <ScopedKey('Task-157232d7ff794a0985ebce5055e0f336-my_org-my_campaign-my_project')>,
@@ -208,6 +207,100 @@ In this way, actioning is an indicator of demand for a given :py:class:`~alchemi
 
    In the case of the :py:class:`~perses.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`, a :py:class:`~alchemiscale.storage.models.Task` instead encompasses a non-equilibrium cycle and will return a single work estimate.
    The work values of multiple :py:class:`~alchemiscale.storage.models.Task`\s can then be gathered to obtain a free energy estimate, and more :py:class:`~alchemiscale.storage.models.Task`\s will improve the convergence of the estimate.
+
+
+To get all :py:class:`~alchemiscale.storage.models.Task`\s actioned on an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, you can use::
+
+    >>> asc.get_network_actioned_tasks(an_sk)
+    [<ScopedKey('Task-06cb9804356f4af1b472cc0ab689036a-my_org-my_campaign-my_project')>,
+     <ScopedKey('Task-129a9e1a893f4c24a6dd3bdcc25957d6-my_org-my_campaign-my_project')>,
+     <ScopedKey('Task-157232d7ff794a0985ebce5055e0f336-my_org-my_campaign-my_project')>,
+     ...]
+
+On the other hand, to get all :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s a given :py:class:`~alchemiscale.storage.models.Task` is actioned on, you can use::
+
+    >>> asc.get_task_actioned_networks(task)
+    [<ScopedKey('AlchemicalNetwork-4617c8d8d6599124af3b4561b8d910a0-my_org-my_campaign-my_project')>,
+     <ScopedKey('AlchemicalNetwork-66d7676b10a1fd9cb3f75e6e2e7f6e9c-my_org-my_campaign-my_project')>,
+     ...]
+
+
+Setting the weight of an AlchemicalNetwork
+==========================================
+
+When a compute service claims a :py:class:`~alchemiscale.storage.models.Task`, it first performs a weighted, random selection of :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s in the :py:class:`~alchemiscale.models.Scope`\s visible to it.
+Upon choosing an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, it performs a weighted, random selection of :py:class:`~alchemiscale.storage.models.Task`\s actioned on that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
+
+You can set the ``weight`` of an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` to influence the likelihood that the :py:class:`~alchemiscale.storage.models.Task`\s actioned on it are picked up for compute, increasing or decreasing the rate at which results become available relative to other :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s.
+To get and set the ``weight`` of an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, use::
+
+    >>> asc.get_network_weight(an_sk)
+    0.5
+    >>> asc.set_network_weight(an_sk, 0.9)
+    >>> asc.get_network_weight(an_sk)
+    0.9
+
+
+Setting the weight of actioned Tasks
+====================================
+
+As mentioned above, upon choosing an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, a compute service performs a weighted, random selection of :py:class:`~alchemiscale.storage.models.Task`\s actioned on that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
+You can set the ``weight`` of an actioned :py:class:`~alchemiscale.storage.models.Task` to influence the likelihood that it will be picked up for compute relative to the other :py:class:`~alchemiscale.storage.models.Task`\s actioned on the given :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
+To set the ``weight`` of an actioned :py:class:`~alchemiscale.storage.models.Task` on an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, use :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.action_tasks` with the ``weight`` keyword argument::
+
+    >>> # get all networks that the given Task is actioned on, with weights as dict values
+    >>> asc.get_task_actioned_networks(task, task_weights=True)
+    {<ScopedKey('AlchemicalNetwork-4617c8d8d6599124af3b4561b8d910a0-my_org-my_campaign-my_project')>: 0.5,
+     <ScopedKey('AlchemicalNetwork-66d7676b10a1fd9cb3f75e6e2e7f6e9c-my_org-my_campaign-my_project')>: 0.5}
+
+    >>> asc.action_tasks([task], an_sk, weight=0.7)
+    >>> asc.get_task_actioned_networks(task, task_weights=True)
+    {<ScopedKey('AlchemicalNetwork-4617c8d8d6599124af3b4561b8d910a0-my_org-my_campaign-my_project')>: 0.5,
+     <ScopedKey('AlchemicalNetwork-66d7676b10a1fd9cb3f75e6e2e7f6e9c-my_org-my_campaign-my_project')>: 0.7}
+
+Because this ``weight`` is a property of the actions relationship between the :py:class:`~alchemiscale.storage.models.Task` and the :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, there is a distinct ``weight`` associated with each actions relationship between a :py:class:`~alchemiscale.storage.models.Task` and the :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s it is actioned on.
+These ``weight``\s can be set independently.
+Also, the :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.action_tasks` method is idempotent, so repeated calls will serve to set the ``weight`` to the value specified, even for already-actioned :py:class:`~alchemiscale.storage.models.Task`\s.
+
+
+Setting the priority of Tasks
+=============================
+
+The ``weight`` of an actioned :py:class:`~alchemiscale.storage.models.Task` influences how likely it is to be chosen among the other :py:class:`~alchemiscale.storage.models.Task`\s actioned on the given :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
+A complementary mechanism to ``weight`` is :py:class:`~alchemiscale.storage.models.Task` ``priority``, which is a property of the :py:class:`~alchemiscale.storage.models.Task` itself and introduces some determinism to when the :py:class:`~alchemiscale.storage.models.Task` is executed relative to other :py:class:`~alchemiscale.storage.models.Task`\s actioned on the same :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
+When a compute service has selected an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` to draw :py:class:`~alchemiscale.storage.models.Task`\s from, it first partitions the :py:class:`~alchemiscale.storage.models.Task`\s by ``priority``;
+the weighted selection is then performed *only* on those :py:class:`~alchemiscale.storage.models.Task`\s of the same, highest priority.
+In this way, a :py:class:`~alchemiscale.storage.models.Task` with ``priority`` 1 will always be chosen before a :py:class:`~alchemiscale.storage.models.Task` with ``priority`` 2, and so on, if they are both actioned on the same :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s.
+
+You can get and set the ``priority`` for a number of :py:class:`~alchemiscale.storage.models.Task`\s at a time with::
+
+    >>> asc.get_tasks_priority(tasks)
+    [5,
+     1,
+     3,
+     ...]
+    >>> asc.set_tasks_priority(tasks, [2, 3, 599, ...])
+    [<ScopedKey('Task-06cb9804356f4af1b472cc0ab689036a-my_org-my_campaign-my_project')>,
+     <ScopedKey('Task-129a9e1a893f4c24a6dd3bdcc25957d6-my_org-my_campaign-my_project')>,
+     <ScopedKey('Task-157232d7ff794a0985ebce5055e0f336-my_org-my_campaign-my_project')>,
+     ...]
+
+
+.. note::
+   Unlike the ``weight`` of an actioned :py:class:`~alchemiscale.storage.models.Task`, the ``priority`` of a :py:class:`~alchemiscale.storage.models.Task` is a property of a :py:class:`~alchemiscale.storage.models.Task` itself: it influences selection order of the :py:class:`~alchemiscale.storage.models.Task` for *every* :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` it is actioned on.
+
+*************************
+Cancelling actioned Tasks
+*************************
+
+Only *actioned* :py:class:`~alchemiscale.storage.models.Task`\s are available for execution to compute services, and if you decide later that you would prefer a given :py:class:`~alchemiscale.storage.models.Task` not be actioned for a given :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` you can *cancel* it.
+To *cancel* a :py:class:`~alchemiscale.storage.models.Task` is the opposite of *actioning* it::
+
+    >>> asc.cancel_tasks(tasks, an_sk)
+    [<ScopedKey('Task-06cb9804356f4af1b472cc0ab689036a-my_org-my_campaign-my_project')>,
+     <ScopedKey('Task-129a9e1a893f4c24a6dd3bdcc25957d6-my_org-my_campaign-my_project')>,
+     <ScopedKey('Task-157232d7ff794a0985ebce5055e0f336-my_org-my_campaign-my_project')>,
+     ...]
 
 
 ********************************
@@ -308,6 +401,7 @@ To get the specific statuses of all :py:class:`~alchemiscale.storage.models.Task
      'running',
      'running',
      'running']
+
 
 
 ******************************
@@ -415,3 +509,34 @@ If you’re feeling confident, you could set all errored :py:class:`~alchemiscal
     >>> 
     >>> # set all these tasks to status 'waiting'
     >>> asc.set_tasks_status(tasks, 'waiting')
+    [<ScopedKey('Task-06cb9804356f4af1b472cc0ab689036a-my_org-my_campaign-my_project')>,
+     <ScopedKey('Task-129a9e1a893f4c24a6dd3bdcc25957d6-my_org-my_campaign-my_project')>,
+     <ScopedKey('Task-157232d7ff794a0985ebce5055e0f336-my_org-my_campaign-my_project')>,
+     ...]
+
+
+***********************************
+Marking Tasks as deleted or invalid
+***********************************
+
+If you created many :py:class:`~alchemiscale.storage.models.Task`\s that are problematic, perhaps because they will always fail, would give scientifically dubious results, or are otherwise unwanted, you can choose to set their status to either ``invalid`` or ``deleted``.
+Although technically equivalent, ``invalid`` :py:class:`~alchemiscale.storage.models.Task`\s are ones that have a known problem that you wish to mark as such, while ``deleted`` :py:class:`~alchemiscale.storage.models.Task`\s are marked as fair game for removal by the administrator at a future time.
+Setting a :py:class:`~alchemiscale.storage.models.Task` to either of these statuses will automatically cancel them from any and all :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s they are actioned on, so choosing one of these statuses is the easiest way to ensure no compute is wasted on a :py:class:`~alchemiscale.storage.models.Task` you no longer want results for.
+
+You can set any :py:class:`~alchemiscale.storage.models.Task` you create to either ``invalid`` or ``deleted``, although once a :py:class:`~alchemiscale.storage.models.Task` is set to either of these statuses, it cannot be changed to another.
+To set a number of :py:class:`~alchemiscale.storage.models.Task`\s to ``invalid``::
+
+    >>> asc.set_tasks_status(tasks, 'invalid')
+    [<ScopedKey('Task-06cb9804356f4af1b472cc0ab689036a-my_org-my_campaign-my_project')>,
+     <ScopedKey('Task-129a9e1a893f4c24a6dd3bdcc25957d6-my_org-my_campaign-my_project')>,
+     <ScopedKey('Task-157232d7ff794a0985ebce5055e0f336-my_org-my_campaign-my_project')>,
+     ...]
+
+
+Or instead to ``deleted``::
+
+    >>> asc.set_tasks_status(tasks, 'deleted')
+    [<ScopedKey('Task-06cb9804356f4af1b472cc0ab689036a-my_org-my_campaign-my_project')>,
+     <ScopedKey('Task-129a9e1a893f4c24a6dd3bdcc25957d6-my_org-my_campaign-my_project')>,
+     <ScopedKey('Task-157232d7ff794a0985ebce5055e0f336-my_org-my_campaign-my_project')>,
+     ...]
