@@ -1221,8 +1221,8 @@ class TestClient:
 
                 if an_ != an:
                     raise Exception("Network out doesn't exactly match network in yet")
-
-                break
+                else:
+                    break
             except:
                 sleep(0.1)
 
@@ -1360,8 +1360,8 @@ class TestClient:
 
                 if an_ != an:
                     raise Exception("Network out doesn't exactly match network in yet")
-
-                break
+                else:
+                    break
             except:
                 sleep(0.1)
 
