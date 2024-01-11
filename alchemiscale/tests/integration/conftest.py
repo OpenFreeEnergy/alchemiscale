@@ -300,7 +300,7 @@ def protocoldagresults(tmpdir_factory, transformation):
     return pdrs
 
 
-@fixture(scope="module")
+@fixture
 def network_tyk2_failure(network_tyk2):
     transformation = list(network_tyk2.edges)[0]
 
@@ -316,12 +316,12 @@ def network_tyk2_failure(network_tyk2):
     )
 
 
-@fixture(scope="module")
+@fixture
 def transformation_failure(network_tyk2_failure):
     return [t for t in network_tyk2_failure.edges if t.name == "broken"][0]
 
 
-@fixture(scope="module")
+@fixture
 def protocoldagresults_failure(tmpdir_factory, transformation_failure):
     pdrs = []
     for i in range(3):
