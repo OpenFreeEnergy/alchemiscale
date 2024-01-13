@@ -38,7 +38,7 @@ from ..storage.models import ProtocolDAGResultRef, TaskStatusEnum
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedUserIdentity
-from ..utils import keyed_dicts_to_gufe
+from ..keyedchain import KeyedChain
 
 
 app = FastAPI(title="AlchemiscaleAPI")
@@ -116,7 +116,7 @@ def create_network(
 ):
     validate_scopes(scope, token)
 
-    an = keyed_dicts_to_gufe(network)
+    an = KeyedChain(network).to_gufe()
 
     try:
         an_sk = n4js.create_network(network=an, scope=scope)
