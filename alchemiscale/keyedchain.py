@@ -75,16 +75,7 @@ class KeyedChain(object):
         return len(self._keyed_chain)
 
     def __iter__(self):
-        self._index = 0
-        return self
-
-    def __next__(self) -> Generator[Tuple[str, Dict], None, None]:
-        try:
-            result = self._keyed_chain[self._index]
-            self._index += 1
-        except IndexError:
-            raise StopIteration
-        return result
+        return (i for i in self._keyed_chain)
 
     def __getitem__(self, index):
         return self._keyed_chain[index]
