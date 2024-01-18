@@ -27,8 +27,7 @@ def test_keyedchain_get_keys(network):
     keyedchain = KeyedChain.from_gufe(network)
     keys = list(map(lambda x: x.key, get_all_gufe_objs(network)))
 
-    for key in keyedchain.gufe_keys():
-        assert key in keys
+    assert set(keyedchain.gufe_keys()) == set(keys)
 
 
 def test_keyedchain_get_keyed_dicts(network):
