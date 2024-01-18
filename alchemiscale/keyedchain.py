@@ -1,4 +1,4 @@
-from gufe.tokenization import GufeTokenizable
+from gufe.tokenization import GufeTokenizable, key_decode_dependencies
 import networkx as nx
 from alchemiscale.utils import gufe_to_digraph
 
@@ -28,10 +28,11 @@ class KeyedChain(object):
 
     def to_gufe(self) -> GufeTokenizable:
         """Initialize a GufeTokenizable."""
-        gts = []
-        for gt in self.keyed_dicts():
-            gts.append(GufeTokenizable.from_keyed_dict(gt))
-        return gts[-1]
+        gts = {}
+        for gufe_key, keyed_dict in self:
+            gt = key_decode_dependencies(keyed_dict, registry=gts)
+            gts[gufe_key] = gt
+        return gt
 
     @staticmethod
     def gufe_to_keyed_chain_rep(
@@ -75,7 +76,7 @@ class KeyedChain(object):
         return len(self._keyed_chain)
 
     def __iter__(self):
-        return (i for i in self._keyed_chain)
+        return self._keyed_chain.__iter__()
 
     def __getitem__(self, index):
         return self._keyed_chain[index]
