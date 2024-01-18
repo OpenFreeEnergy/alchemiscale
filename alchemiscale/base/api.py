@@ -5,8 +5,7 @@
 """
 
 from functools import lru_cache
-from typing import Any, Union, Dict, List, Callable
-import os
+from typing import Any, Union, List, Callable
 import json
 import gzip
 
@@ -14,8 +13,6 @@ from starlette.responses import JSONResponse
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.routing import APIRoute
 from fastapi.security import OAuth2PasswordRequestForm
-from py2neo import Graph
-from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
 from ..settings import (
@@ -26,7 +23,7 @@ from ..settings import (
 )
 from ..storage.statestore import Neo4jStore, get_n4js
 from ..storage.objectstore import S3ObjectStore, get_s3os
-from ..models import Scope, ScopedKey
+from ..models import Scope
 from ..security.auth import (
     authenticate,
     create_access_token,
@@ -34,7 +31,7 @@ from ..security.auth import (
     oauth2_scheme,
 )
 from ..security.models import Token, TokenData, CredentialedEntity
-from ..utils import gufe_to_keyed_dicts
+from ..keyedchain import KeyedChain
 
 
 def validate_scopes(scope: Scope, token: TokenData) -> None:
@@ -145,8 +142,8 @@ class GufeJSONResponse(JSONResponse):
     media_type = "application/json"
 
     def render(self, content: Any) -> bytes:
-        keyed_dicts = gufe_to_keyed_dicts(content)
-        return json.dumps(keyed_dicts, cls=JSON_HANDLER.encoder).encode("utf-8")
+        keyed_chain = KeyedChain.gufe_to_keyed_chain_rep(content)
+        return json.dumps(keyed_chain, cls=JSON_HANDLER.encoder).encode("utf-8")
 
 
 class GzipRequest(Request):

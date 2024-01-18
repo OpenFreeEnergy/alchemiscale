@@ -30,7 +30,7 @@ from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
 from ..strategies import Strategy
 from ..security.models import CredentialedUserIdentity
 from ..validators import validate_network_nonself
-from ..utils import gufe_to_keyed_dicts, keyed_dicts_to_gufe
+from ..keyedchain import KeyedChain
 
 
 class AlchemiscaleClientError(AlchemiscaleBaseClientError):
@@ -126,8 +126,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         sk = self.get_scoped_key(network, scope)
 
         def post():
-            keyed_dicts = gufe_to_keyed_dicts(network)
-            data = dict(network=keyed_dicts, scope=scope.dict())
+            keyed_chain = KeyedChain.gufe_to_keyed_chain_rep(network)
+            data = dict(network=keyed_chain, scope=scope.dict())
             return self._post_resource("/networks", data, compress=compress)
 
         if visualize:
@@ -303,7 +303,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         def _get_network():
             content = self._get_resource(f"/networks/{network}", compress=compress)
-            return keyed_dicts_to_gufe(content)
+            return KeyedChain(content).to_gufe()
 
         if visualize:
             from rich.progress import (
@@ -359,7 +359,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             content = self._get_resource(
                 f"/transformations/{transformation}", compress=compress
             )
-            return keyed_dicts_to_gufe(content)
+            return KeyedChain(content).to_gufe()
 
         if visualize:
             from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
@@ -410,7 +410,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             content = self._get_resource(
                 f"/chemicalsystems/{chemicalsystem}", compress=compress
             )
-            return keyed_dicts_to_gufe(content)
+            return KeyedChain(content).to_gufe()
 
         if visualize:
             from rich.progress import Progress
