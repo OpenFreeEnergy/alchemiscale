@@ -5,8 +5,7 @@ from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
 from alchemiscale.models import ScopedKey
-from alchemiscale.base.client import json_to_gufe
-from alchemiscale.utils import keyed_dicts_to_gufe, gufe_to_keyed_dicts
+from alchemiscale.keyedchain import KeyedChain
 
 
 def pre_load_payload(network, scope, name="incomplete 2"):
@@ -15,7 +14,10 @@ def pre_load_payload(network, scope, name="incomplete 2"):
         edges=list(network.edges)[:-3], nodes=network.nodes, name=name
     )
     headers = {"Content-type": "application/json"}
-    data = dict(network=gufe_to_keyed_dicts(new_network), scope=scope.dict())
+    data = dict(
+        network=KeyedChain.gufe_to_keyed_chain_rep(new_network),
+        scope=scope.dict(),
+    )
     jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
 
     return new_network, headers, jsondata
@@ -107,9 +109,9 @@ class TestAPI:
 
         assert response.status_code == 200
 
-        network_ = keyed_dicts_to_gufe(
+        network_ = KeyedChain(
             json.loads(response.text, cls=JSON_HANDLER.decoder)
-        )
+        ).to_gufe()
 
         assert network_.key == network.key
         assert network_ is network
