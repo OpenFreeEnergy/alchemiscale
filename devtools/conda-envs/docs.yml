@@ -2,7 +2,7 @@ name: alchemiscale-docs
 channels:
   - conda-forge
 dependencies:
-  - sphinx <7.0.0 # https://github.com/readthedocs/sphinx_rtd_theme/pull/1464
+  - sphinx 
   - sphinx_rtd_theme
   - async-lru
   - myst-nb
