@@ -16,8 +16,7 @@ dependencies:
   - pydantic<2.0
 
   ## state store
-  - py2neo
-  - monotonic    # needed by py2neo, but not pulled in
+  - neo4j-python-driver
 
   ## object store
   - boto3        # aws s3
