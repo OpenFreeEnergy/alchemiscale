@@ -9,25 +9,22 @@ from datetime import datetime
 from contextlib import contextmanager
 import json
 from functools import lru_cache
-from time import sleep
-from typing import Dict, List, Optional, Union, Tuple, Set
+from typing import Dict, List, Optional, Union, Tuple
 import weakref
 import numpy as np
 
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, Settings
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
-from py2neo import Graph, Node, Relationship, Subgraph
-from py2neo.database import Transaction
-from py2neo.matching import NodeMatcher
-from py2neo.errors import ClientError
+
+from neo4j import Transaction, GraphDatabase
+from neo4j.graph import Graph, Node, Relationship
 
 from .models import (
     ComputeServiceID,
     ComputeServiceRegistration,
     Task,
     TaskHub,
-    TaskArchive,
     TaskStatusEnum,
     ProtocolDAGResultRef,
 )
@@ -35,17 +32,16 @@ from ..strategies import Strategy
 from ..models import Scope, ScopedKey
 
 from ..security.models import CredentialedEntity
-from ..settings import Neo4jStoreSettings, get_neo4jstore_settings
+from ..settings import Neo4jStoreSettings
 from ..validators import validate_network_nonself
 
 
 @lru_cache()
 def get_n4js(settings: Neo4jStoreSettings):
     """Convenience function for getting a Neo4jStore directly from settings."""
-    graph = Graph(
-        settings.NEO4J_URL,
-        auth=(settings.NEO4J_USER, settings.NEO4J_PASS),
-        name=settings.NEO4J_DBNAME,
+
+    graph = GraphDatabase.driver(
+        settings.NEO4J_URL, auth=(settings.NEO4J_USER, settings.NEO4J_PASS)
     )
     return Neo4jStore(graph)
 
@@ -58,6 +54,7 @@ class AlchemiscaleStateStore(abc.ABC):
     ...
 
 
+# TODO: subgraph replacement
 def _select_task_from_taskpool(taskpool: Subgraph) -> Union[ScopedKey, None]:
     """
     Select a Task from a pool of tasks in a neo4j subgraph according to the following scheme:
@@ -147,7 +144,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         },
     }
 
-    def __init__(self, graph: "py2neo.Graph"):
+    def __init__(self, graph: GraphDatabase):
         self.graph: Graph = graph
         self.gufe_nodes = weakref.WeakValueDictionary()
 
@@ -219,7 +216,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         try:
             # just list available functions to see if database is working
             self.graph.run("SHOW FUNCTIONS YIELD *")
-        except:
+        except Exception:
             return False
         return True
 
@@ -240,6 +237,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## gufe object handling
 
+    # TODO: subgraph replacement
     def _gufe_to_subgraph(
         self, sdct: Dict, labels: List[str], gufe_key: GufeKey, scope: Scope
     ) -> Tuple[Subgraph, Node, str]:
@@ -374,6 +372,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return subgraph, node, scoped_key
 
+    # TODO: subgraph replacement
     def _subgraph_to_gufe(
         self, nodes: List[Node], subgraph: Subgraph
     ) -> Dict[Node, GufeTokenizable]:
@@ -391,6 +390,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return gufe_objs
 
+    # TODO: subgraph replacement
     def _subgraph_to_networkx(self, subgraph: Subgraph):
         g = nx.DiGraph()
 
@@ -404,6 +404,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return g
 
+    # TODO: node replacement
     def _node_to_gufe(
         self, node: Node, g: nx.DiGraph, mapping: Dict[Node, GufeTokenizable]
     ):
@@ -456,6 +457,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         mapping[node] = res = GufeTokenizable.from_shallow_dict(dct)
         return res
 
+    # TODO: replace subgraph
     def _get_node(
         self,
         scoped_key: ScopedKey,
@@ -511,6 +513,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         else:
             return list(nodes)[0]
 
+    # TODO: repalce subgraph
     def _query(
         self,
         *,
@@ -602,10 +605,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return res[0]
 
+    # TODO: replace subgraph
     def get_gufe(self, scoped_key: ScopedKey):
         node, subgraph = self._get_node(scoped_key=scoped_key, return_subgraph=True)
         return self._subgraph_to_gufe([node], subgraph)[node]
 
+    # TODO: replace subgraph, merge
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Add an `AlchemicalNetwork` to the target neo4j database, even if
         some of its components already exist in the database.
@@ -933,6 +938,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## task hubs
 
+    # TODO: replace subgraph
     def create_taskhub(
         self,
         network: ScopedKey,
@@ -1324,6 +1330,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return weights
 
+    # TODO: replace subgraph
     def cancel_tasks(
         self,
         tasks: List[ScopedKey],
@@ -1355,6 +1362,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return canceled_sks
 
+    # TODO: replace subgraph
     def get_taskhub_tasks(
         self, taskhub: ScopedKey, return_gufe=False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
@@ -1382,6 +1390,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         else:
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
+    # TODO: replace subgraph
     def get_taskhub_unclaimed_tasks(
         self, taskhub: ScopedKey, return_gufe=False
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
@@ -1410,6 +1419,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         else:
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
+    # TODO: replace subgraph
     def claim_taskhub_tasks(
         self, taskhub: ScopedKey, compute_service_id: ComputeServiceID, count: int = 1
     ) -> List[Union[ScopedKey, None]]:
@@ -1498,6 +1508,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## tasks
 
+    # TODO: replace subgraph
     def create_task(
         self,
         transformation: ScopedKey,
@@ -1676,9 +1687,11 @@ class Neo4jStore(AlchemiscaleStateStore):
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
         elif return_as == "graph":
             return {
-                ScopedKey.from_str(t["_scoped_key"]): ScopedKey.from_str(t["extends"])
-                if t["extends"] is not None
-                else None
+                ScopedKey.from_str(t["_scoped_key"]): (
+                    ScopedKey.from_str(t["extends"])
+                    if t["extends"] is not None
+                    else None
+                )
                 for t in tasks
             }
 
@@ -1731,9 +1744,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         if return_gufe:
             return (
                 self.get_gufe(transformation),
-                self.get_gufe(protocoldagresultref)
-                if protocoldagresultref is not None
-                else None,
+                (
+                    self.get_gufe(protocoldagresultref)
+                    if protocoldagresultref is not None
+                    else None
+                ),
             )
 
         return transformation, protocoldagresultref
@@ -1906,6 +1921,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return counts
 
+    # TODO: replace subgraph
     def set_task_result(
         self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
     ) -> ScopedKey:
