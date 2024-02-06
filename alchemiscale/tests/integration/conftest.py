@@ -15,8 +15,9 @@ from pytest import fixture
 from moto import mock_aws
 from moto.server import ThreadedMotoServer
 
-from py2neo import ServiceProfile, Graph
-from py2neo.client import Connector
+# from py2neo import ServiceProfile, Graph
+# from py2neo.client import Connector
+from neo4j import GraphDatabase
 
 from gufe import ChemicalSystem, Transformation, AlchemicalNetwork
 from gufe.protocols.protocoldag import execute_DAG
@@ -148,9 +149,13 @@ def uri(neo4j_service_and_uri):
     return uri
 
 
+# TODO: this should be pulling from the defined profile
 @fixture(scope="session")
 def graph(uri):
-    return Graph(uri)
+    return GraphDatabase.driver(
+        uri,
+        auth=("neo4j", "password"),
+    )
 
 
 ## data

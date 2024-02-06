@@ -27,8 +27,7 @@ from alchemiscale.security.models import (
 from alchemiscale.security.auth import hash_key
 
 
-class TestStateStore:
-    ...
+class TestStateStore: ...
 
 
 class TestNeo4jStore(TestStateStore):
@@ -39,7 +38,7 @@ class TestNeo4jStore(TestStateStore):
         return n4js_fresh
 
     def test_server(self, graph):
-        graph.service.system_graph.call("dbms.security.listUsers")
+        graph.get_server_info()
 
     ### gufe object handling
 
@@ -108,8 +107,7 @@ class TestNeo4jStore(TestStateStore):
 
         assert len(n3.nodes) == 2
 
-    def test_delete_network(self):
-        ...
+    def test_delete_network(self): ...
 
     def test_get_network(self, n4js, network_tyk2, scope_test):
         an = network_tyk2

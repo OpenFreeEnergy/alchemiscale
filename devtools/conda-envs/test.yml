@@ -13,6 +13,7 @@ dependencies:
 
   ## state store
   - neo4j-python-driver
+  - py2neo
   - docker-py    # for grolt
 
   # user client printing 

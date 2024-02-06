@@ -17,8 +17,8 @@ import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, Settings
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 
-from neo4j import Transaction, GraphDatabase
-from neo4j.graph import Graph, Node, Relationship
+from py2neo import Subgraph, Node, Relationship
+from neo4j import Transaction, GraphDatabase, Driver
 
 from .models import (
     ComputeServiceID,
@@ -46,15 +46,12 @@ def get_n4js(settings: Neo4jStoreSettings):
     return Neo4jStore(graph)
 
 
-class Neo4JStoreError(Exception):
-    ...
+class Neo4JStoreError(Exception): ...
 
 
-class AlchemiscaleStateStore(abc.ABC):
-    ...
+class AlchemiscaleStateStore(abc.ABC): ...
 
 
-# TODO: subgraph replacement
 def _select_task_from_taskpool(taskpool: Subgraph) -> Union[ScopedKey, None]:
     """
     Select a Task from a pool of tasks in a neo4j subgraph according to the following scheme:
@@ -144,14 +141,15 @@ class Neo4jStore(AlchemiscaleStateStore):
         },
     }
 
-    def __init__(self, graph: GraphDatabase):
-        self.graph: Graph = graph
+    def __init__(self, graph: Driver):
+        self.graph: Driver = graph
         self.gufe_nodes = weakref.WeakValueDictionary()
 
     @contextmanager
     def transaction(self, readonly=False, ignore_exceptions=False) -> Transaction:
         """Context manager for a py2neo Transaction."""
         tx = self.graph.begin(readonly=readonly)
+        self.graph.session
         try:
             yield tx
         except:
@@ -170,7 +168,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         for label, values in self.constraints.items():
-            self.graph.run(
+            self.graph.execute_query(
                 f"""
                 CREATE CONSTRAINT {values['name']} IF NOT EXISTS
                 FOR (n:{label}) REQUIRE n.{values['property']} is unique
@@ -181,7 +179,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # this is a compensating control for a bug in py2neo, where nodes with id 0 are not properly
         # deduplicated by Subgraph set operations, which we currently rely on
         # see this PR: https://github.com/py2neo-org/py2neo/pull/951
-        self.graph.run("MERGE (:NOPE)")
+        self.graph.execute_query("MERGE (:NOPE)")
 
     def check(self):
         """Check consistency of database.
@@ -226,10 +224,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         # after a series of wipes; appears to happen often enough in tests
         # can remove this once py2neo#951 merged
         # self.graph.run("MATCH (n) DETACH DELETE n")
-        self.graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
+        self.graph.execute_query("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
 
         for label, values in self.constraints.items():
-            self.graph.run(
+            self.graph.execute_query(
                 f"""
                 DROP CONSTRAINT {values['name']} IF EXISTS
             """
@@ -237,7 +235,6 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## gufe object handling
 
-    # TODO: subgraph replacement
     def _gufe_to_subgraph(
         self, sdct: Dict, labels: List[str], gufe_key: GufeKey, scope: Scope
     ) -> Tuple[Subgraph, Node, str]:
@@ -372,7 +369,6 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return subgraph, node, scoped_key
 
-    # TODO: subgraph replacement
     def _subgraph_to_gufe(
         self, nodes: List[Node], subgraph: Subgraph
     ) -> Dict[Node, GufeTokenizable]:
@@ -390,7 +386,6 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return gufe_objs
 
-    # TODO: subgraph replacement
     def _subgraph_to_networkx(self, subgraph: Subgraph):
         g = nx.DiGraph()
 
@@ -404,7 +399,6 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return g
 
-    # TODO: node replacement
     def _node_to_gufe(
         self, node: Node, g: nx.DiGraph, mapping: Dict[Node, GufeTokenizable]
     ):
@@ -457,7 +451,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         mapping[node] = res = GufeTokenizable.from_shallow_dict(dct)
         return res
 
-    # TODO: replace subgraph
     def _get_node(
         self,
         scoped_key: ScopedKey,
@@ -513,7 +506,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         else:
             return list(nodes)[0]
 
-    # TODO: repalce subgraph
     def _query(
         self,
         *,
@@ -563,6 +555,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             RETURN DISTINCT n
             ORDER BY n._org, n._campaign, n._project, n._gufe_key
             """
+
+        # TODO: replace py2neo style transaction with a neo4j version
+        # Note that the results no longer match the py2neo iterator
         with self.transaction() as tx:
             res = tx.run(q)
 
@@ -605,12 +600,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return res[0]
 
-    # TODO: replace subgraph
     def get_gufe(self, scoped_key: ScopedKey):
         node, subgraph = self._get_node(scoped_key=scoped_key, return_subgraph=True)
         return self._subgraph_to_gufe([node], subgraph)[node]
 
-    # TODO: replace subgraph, merge
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Add an `AlchemicalNetwork` to the target neo4j database, even if
         some of its components already exist in the database.
@@ -626,6 +619,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             gufe_key=network.key,
             scope=scope,
         )
+        # TODO: remove the transaction merge
         with self.transaction() as tx:
             tx.merge(g, "GufeTokenizable", "_scoped_key")
 
@@ -658,6 +652,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # first, delete the network's hub if present
         self.delete_taskhub(network)
 
+        # TODO: why is this not used?
         # then delete the network
         q = f"""
         MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})
@@ -705,6 +700,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN sk
         """
         sks = []
+        # TODO: replace py2neo style Transaction
         with self.transaction() as tx:
             res = tx.run(q)
             for rec in res:
@@ -735,6 +731,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN sk
         """
         sks = []
+        # TODO: replace py2neo style Transaction
         with self.transaction() as tx:
             res = tx.run(q)
             for rec in res:
@@ -750,6 +747,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN sk
         """
         sks = []
+        # TODO: replace py2neo style Transaction
         with self.transaction() as tx:
             res = tx.run(q)
             for rec in res:
@@ -767,6 +765,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN sk
         """
         sks = []
+        # TODO: replace py2neo style Transaction
         with self.transaction() as tx:
             res = tx.run(q)
             for rec in res:
@@ -784,6 +783,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN sk
         """
         sks = []
+        # TODO: replace py2neo style Transaction
         with self.transaction() as tx:
             res = tx.run(q)
             for rec in res:
@@ -793,6 +793,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def _get_protocoldagresultrefs(self, q: str, scoped_key: ScopedKey):
         sks = []
+        # TODO: replace py2neo style Transaction
         with self.transaction() as tx:
             res = tx.run(q, scoped_key=str(scoped_key))
             for rec in res:
@@ -843,6 +844,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             )
         raise NotImplementedError
 
+    # TODO: replace OGM usage
     def register_computeservice(
         self, compute_service_registration: ComputeServiceRegistration
     ):
@@ -858,6 +860,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             "ComputeServiceRegistration", **compute_service_registration.to_dict()
         )
 
+        # TODO: replace py2neo style Transaction
         with self.transaction() as tx:
             tx.create(node)
 
@@ -888,6 +891,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN identifier
         """
 
+        # TODO: replace py2neo Transaction
         with self.transaction() as tx:
             res = tx.run(q)
             identifier = next(res)["identifier"]
@@ -904,7 +908,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         SET n.heartbeat = localdatetime('{heartbeat.isoformat()}')
 
         """
-
+        # TODO: replace py2neo Transaction
         with self.transaction() as tx:
             tx.run(q)
 
@@ -927,6 +931,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         RETURN ident
         """
+        # TODO: replace py2neo transaction
         with self.transaction() as tx:
             res = tx.run(q)
 
@@ -981,6 +986,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         # if the TaskHub already exists, this will rollback transaction
         # automatically
+        # TODO: replace py2neo Transaction
+        # TODO: replace OGM create
         with self.transaction(ignore_exceptions=True) as tx:
             tx.create(subgraph)
 
@@ -1046,6 +1053,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}}),
         DETACH DELETE th
         """
+        # TODO: replace py2neo run
         self.graph.run(q)
 
         return taskhub
@@ -1069,6 +1077,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         SET th.weight = {weight}
         RETURN th
         """
+        # TODO: replace py2neo run
         with self.transaction() as tx:
             tx.run(q)
 
@@ -1095,6 +1104,7 @@ class Neo4jStore(AlchemiscaleStateStore):
            RETURN t._scoped_key, a.weight
         """
 
+        # TODO: replace py2neo Transaction
         with self.transaction() as tx:
             results = tx.run(q, th_sk=str(taskhub))
 
@@ -1124,6 +1134,7 @@ class Neo4jStore(AlchemiscaleStateStore):
            RETURN an._scoped_key, a.weight
         """
 
+        # TODO: replace py2neo Transaction
         with self.transaction() as tx:
             results = tx.run(q, scoped_key=str(task))
 
@@ -1147,6 +1158,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (th:TaskHub {{network: "{network}"}})
         RETURN th.weight
         """
+        # TODO: replace py2neo Transaction
         with self.transaction() as tx:
             weight = tx.evaluate(q)
 
@@ -1194,6 +1206,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
                 RETURN task
                 """
+                # TODO: replace OGM
                 task = tx.run(q).to_subgraph()
                 actioned_sks.append(
                     ScopedKey.from_str(task["_scoped_key"])
