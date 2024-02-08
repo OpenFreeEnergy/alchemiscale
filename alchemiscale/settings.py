@@ -56,8 +56,7 @@ class JWTSettings(FrozenSettings):
     JWT_ALGORITHM: str = "HS256"
 
 
-class BaseAPISettings(Neo4jStoreSettings, S3ObjectStoreSettings, JWTSettings):
-    ...
+class BaseAPISettings(Neo4jStoreSettings, S3ObjectStoreSettings, JWTSettings): ...
 
 
 class APISettings(BaseAPISettings):

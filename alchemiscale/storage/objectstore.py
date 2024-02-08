@@ -40,8 +40,7 @@ def get_s3os(settings: S3ObjectStoreSettings, endpoint_url=None) -> "S3ObjectSto
     )
 
 
-class S3ObjectStoreError(Exception):
-    ...
+class S3ObjectStoreError(Exception): ...
 
 
 class S3ObjectStore:

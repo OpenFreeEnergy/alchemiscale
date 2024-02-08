@@ -50,12 +50,10 @@ def get_n4js(settings: Neo4jStoreSettings):
     return Neo4jStore(graph)
 
 
-class Neo4JStoreError(Exception):
-    ...
+class Neo4JStoreError(Exception): ...
 
 
-class AlchemiscaleStateStore(abc.ABC):
-    ...
+class AlchemiscaleStateStore(abc.ABC): ...
 
 
 def _select_task_from_taskpool(taskpool: Subgraph) -> Union[ScopedKey, None]:
@@ -1676,9 +1674,11 @@ class Neo4jStore(AlchemiscaleStateStore):
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
         elif return_as == "graph":
             return {
-                ScopedKey.from_str(t["_scoped_key"]): ScopedKey.from_str(t["extends"])
-                if t["extends"] is not None
-                else None
+                ScopedKey.from_str(t["_scoped_key"]): (
+                    ScopedKey.from_str(t["extends"])
+                    if t["extends"] is not None
+                    else None
+                )
                 for t in tasks
             }
 
@@ -1731,9 +1731,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         if return_gufe:
             return (
                 self.get_gufe(transformation),
-                self.get_gufe(protocoldagresultref)
-                if protocoldagresultref is not None
-                else None,
+                (
+                    self.get_gufe(protocoldagresultref)
+                    if protocoldagresultref is not None
+                    else None
+                ),
             )
 
         return transformation, protocoldagresultref
