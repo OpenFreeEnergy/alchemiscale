@@ -12,7 +12,7 @@ from pathlib import Path
 from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
 from pytest import fixture
-from moto import mock_s3
+from moto import mock_aws
 from moto.server import ThreadedMotoServer
 
 from py2neo import ServiceProfile, Graph
@@ -207,7 +207,7 @@ def s3os_server_fresh(s3os_server):
 
 @fixture(scope="module")
 def s3os(s3objectstore_settings):
-    with mock_s3():
+    with mock_aws():
         s3os = get_s3os(s3objectstore_settings)
         s3os.initialize()
 
