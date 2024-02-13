@@ -17,7 +17,13 @@ import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, Settings
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 
-from py2neo import Subgraph, Node, Relationship
+from py2neo import Subgraph, Node, Relationship, UniquenessError
+from py2neo.cypher import cypher_join
+from py2neo.cypher.queries import (
+    unwind_merge_nodes_query,
+    unwind_merge_relationships_query,
+)
+
 from neo4j import Transaction, GraphDatabase, Driver
 
 from .models import (
@@ -147,18 +153,17 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     @contextmanager
     def transaction(self, readonly=False, ignore_exceptions=False) -> Transaction:
-        """Context manager for a py2neo Transaction."""
-        tx = self.graph.begin(readonly=readonly)
-        self.graph.session
+        """Context manager for a Neo4j Transaction."""
+        tx = self.graph.session().begin_transaction()
         try:
             yield tx
         except:
-            self.graph.rollback(tx)
+            tx.rollback()
             if not ignore_exceptions:
                 raise
 
         else:
-            self.graph.commit(tx)
+            tx.commit()
 
     def initialize(self):
         """Initialize database.
@@ -604,6 +609,62 @@ class Neo4jStore(AlchemiscaleStateStore):
         node, subgraph = self._get_node(scoped_key=scoped_key, return_subgraph=True)
         return self._subgraph_to_gufe([node], subgraph)[node]
 
+    def merge_subgraph(
+        self,
+        transaction: Transaction,
+        subgraph: Subgraph,
+        primary_label: str,
+        primary_key: str,
+    ):
+        """Code adapted from the py2neo Subgraph.__db_merge__ method."""
+        node_dict = {}
+        for node in subgraph.nodes:
+            if node.__primarylabel__ is not None:
+                p_label = node.__primarylabel__
+            elif node.__model__ is not None:
+                p_label = node.__model__.__primarylabel__ or primary_label
+            else:
+                p_label = primary_label
+
+            if node.__primarykey__ is not None:
+                p_key = node.__primarykey__
+            elif node.__model__ is not None:
+                p_key = node.__model__.__primarykey__ or primary_key
+            else:
+                p_key = primary_key
+            key = (p_label, p_key, frozenset(node.labels))
+            node_dict.setdefault(key, []).append(node)
+
+        rel_dict = {}
+        for relationship in subgraph.relationships:
+            key = type(relationship).__name__
+            rel_dict.setdefault(key, []).append(relationship)
+
+        for (pl, pk, labels), nodes in node_dict.items():
+            if pl is None or pk is None:
+                raise ValueError(
+                    "Primary label and primary key are required for MERGE operation"
+                )
+            pq = unwind_merge_nodes_query(map(dict, nodes), (pl, pk), labels)
+            pq = cypher_join(pq, "RETURN id(_)")
+            identities = [record[0] for record in transaction.run(*pq)]
+            if len(identities) > len(nodes):
+                raise UniquenessError(
+                    "Found %d matching nodes for primary label %r and primary "
+                    "key %r with labels %r but merging requires no more than "
+                    "one" % (len(identities), pl, pk, set(labels))
+                )
+
+        for r_type, relationships in rel_dict.items():
+            data = map(
+                lambda r: [r.start_node.identity, dict(r), r.end_node.identity],
+                relationships,
+            )
+            pq = unwind_merge_relationships_query(data, r_type)
+            pq = cypher_join(pq, "RETURN id(_)")
+
+            transaction.run(*pq)
+
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Add an `AlchemicalNetwork` to the target neo4j database, even if
         some of its components already exist in the database.
@@ -619,9 +680,8 @@ class Neo4jStore(AlchemiscaleStateStore):
             gufe_key=network.key,
             scope=scope,
         )
-        # TODO: remove the transaction merge
         with self.transaction() as tx:
-            tx.merge(g, "GufeTokenizable", "_scoped_key")
+            self.merge_subgraph(tx, g, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 
@@ -1934,7 +1994,6 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return counts
 
-    # TODO: replace subgraph
     def set_task_result(
         self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
     ) -> ScopedKey:
@@ -1962,7 +2021,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         with self.transaction() as tx:
-            tx.merge(subgraph, "GufeTokenizable", "_scoped_key")
+            self.merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 

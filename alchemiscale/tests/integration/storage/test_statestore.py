@@ -47,7 +47,7 @@ class TestNeo4jStore(TestStateStore):
 
         sk: ScopedKey = n4js.create_network(an, scope_test)
 
-        out = n4js.graph.run(
+        out = n4js.graph.execute_query(
             f"""
                 match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
                                              _org: '{sk.org}', _campaign: '{sk.campaign}', 
@@ -55,7 +55,7 @@ class TestNeo4jStore(TestStateStore):
                 return n
                 """
         )
-        n = out.to_subgraph()
+        n = out.records[0].data()["n"]
 
         assert n["name"] == "tyk2_relative_benchmark"
 
