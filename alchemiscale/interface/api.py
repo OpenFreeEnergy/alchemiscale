@@ -337,8 +337,7 @@ def get_chemicalsystem(
 
 
 @router.post("/networks/{scoped_key}/strategy")
-def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope):
-    ...
+def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope): ...
 
 
 @router.post("/transformations/{transformation_scoped_key}/tasks")

@@ -18,8 +18,7 @@ from gufe.tokenization import GufeTokenizable, GufeKey
 from ..models import ScopedKey, Scope
 
 
-class ComputeServiceID(str):
-    ...
+class ComputeServiceID(str): ...
 
 
 class ComputeServiceRegistration(BaseModel):
@@ -260,9 +259,11 @@ class ProtocolDAGResultRef(ObjectStoreRef):
             "obj_key": str(self.obj_key),
             "scope": str(self.scope),
             "ok": self.ok,
-            "datetime_created": self.datetime_created.isoformat()
-            if self.datetime_created is not None
-            else None,
+            "datetime_created": (
+                self.datetime_created.isoformat()
+                if self.datetime_created is not None
+                else None
+            ),
             "creator": self.creator,
         }
 
@@ -278,5 +279,4 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         return super()._from_dict(d_)
 
 
-class TaskArchive(GufeTokenizable):
-    ...
+class TaskArchive(GufeTokenizable): ...

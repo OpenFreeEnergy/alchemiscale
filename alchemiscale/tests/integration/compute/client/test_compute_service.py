@@ -145,11 +145,9 @@ class TestSynchronousComputeService:
 
         assert task is not None
 
-    def test_cycle_max_tasks(self):
-        ...
+    def test_cycle_max_tasks(self): ...
 
-    def test_cycle_max_time(self):
-        ...
+    def test_cycle_max_time(self): ...
 
     def test_start(self, n4js_preloaded, s3os_server_fresh, service):
         n4js: Neo4jStore = n4js_preloaded
@@ -197,11 +195,9 @@ class TestSynchronousComputeService:
 
     # init kwarg tests
 
-    def test_kwarg_keep_shared(self):
-        ...
+    def test_kwarg_keep_shared(self): ...
 
-    def test_kwarg_keep_scratch(self):
-        ...
+    def test_kwarg_keep_scratch(self): ...
 
     def test_kwarg_scopes(self):
         # TODO: add test here with alternative settings to `service` fixture
