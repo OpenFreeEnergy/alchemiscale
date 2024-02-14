@@ -383,6 +383,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         the subgraph will not be returned.
 
         """
+        breakpoint()
         nxg = self._subgraph_to_networkx(subgraph)
         nodes_to_gufe = {}
         gufe_objs = {}
@@ -392,6 +393,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         return gufe_objs
 
     def _subgraph_to_networkx(self, subgraph: Subgraph):
+        breakpoint()
         g = nx.DiGraph()
 
         for node in subgraph.nodes:
@@ -407,6 +409,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def _node_to_gufe(
         self, node: Node, g: nx.DiGraph, mapping: Dict[Node, GufeTokenizable]
     ):
+        breakpoint()
         # shortcut if we already have this object deserialized
         if gufe_obj := mapping.get(node):
             return gufe_obj
@@ -492,12 +495,39 @@ class Neo4jStore(AlchemiscaleStateStore):
         nodes = set()
         subgraph = Subgraph()
 
-        for record in self.graph.run(q):
-            nodes.add(record["n"])
+        def rec2node(node):
+            new_node = Node(
+                *node.labels, identity=node.element_id, graph=0, **node._properties
+            )
+            return new_node
+
+        def custom_eq(self, other):
+            return self["_scoped_key"] == other["_scoped_key"]
+
+        def custom_hash(self):
+            return hash(self["_scoped_key"])
+
+        Node.__eq__ = custom_eq
+        Node.__hash__ = custom_hash
+
+        for record in self.graph.execute_query(q).records:
+
+            node = rec2node(record["n"])
+            nodes.add(node)
             if return_subgraph and record["p"] is not None:
-                subgraph = subgraph | record["p"]
+                p = record["p"]
+                path_nodes = set((rec2node(n) for n in p.nodes))
+                path_rels = set(
+                    (
+                        Relationship(
+                            rec2node(rel.start_node), rel.type, rec2node(rel.end_node)
+                        )
+                        for rel in p.relationships
+                    )
+                )
+                subgraph = subgraph | Subgraph(path_nodes, path_rels)
             else:
-                subgraph = record["n"]
+                subgraph = node
 
         if len(nodes) == 0:
             raise KeyError("No such object in database")
@@ -655,6 +685,11 @@ class Neo4jStore(AlchemiscaleStateStore):
                     "one" % (len(identities), pl, pk, set(labels))
                 )
 
+            for i, identity in enumerate(identities):
+                node = nodes[i]
+                node.identity = identity
+                node._remote_labels = labels
+
         for r_type, relationships in rel_dict.items():
             data = map(
                 lambda r: [r.start_node.identity, dict(r), r.end_node.identity],
@@ -663,7 +698,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             pq = unwind_merge_relationships_query(data, r_type)
             pq = cypher_join(pq, "RETURN id(_)")
 
-            transaction.run(*pq)
+            for i, record in enumerate(transaction.run(*pq)):
+                relationship = relationships[i]
+                relationship.identity = record[0]
 
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Add an `AlchemicalNetwork` to the target neo4j database, even if

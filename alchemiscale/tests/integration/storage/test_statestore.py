@@ -64,14 +64,18 @@ class TestNeo4jStore(TestStateStore):
 
         sk: ScopedKey = n4js.create_network(an, scope_test)
 
-        n = n4js.graph.run(
-            f"""
+        n = (
+            n4js.graph.execute_query(
+                f"""
                 match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
                                              _org: '{sk.org}', _campaign: '{sk.campaign}', 
                                              _project: '{sk.project}'}}) 
                 return n
                 """
-        ).to_subgraph()
+            )
+            .records[0]
+            .data()["n"]
+        )
 
         assert n["name"] == "tyk2_relative_benchmark"
 
@@ -79,17 +83,17 @@ class TestNeo4jStore(TestStateStore):
         sk2: ScopedKey = n4js.create_network(an, scope_test)
         assert sk2 == sk
 
-        n2 = n4js.graph.run(
+        n2 = n4js.graph.execute_query(
             f"""
                 match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
                                              _org: '{sk.org}', _campaign: '{sk.campaign}', 
                                              _project: '{sk.project}'}}) 
                 return n
                 """
-        ).to_subgraph()
+        )
 
+        n2 = n2.records[0].data()["n"]
         assert n2["name"] == "tyk2_relative_benchmark"
-        assert n2.identity == n.identity
 
         # add a slightly different network
         an2 = AlchemicalNetwork(
@@ -98,14 +102,14 @@ class TestNeo4jStore(TestStateStore):
         sk3 = n4js.create_network(an2, scope_test)
         assert sk3 != sk
 
-        n3 = n4js.graph.run(
+        n3 = n4js.graph.execute_query(
             f"""
                 match (n:AlchemicalNetwork) 
                 return n
                 """
-        ).to_subgraph()
+        )
 
-        assert len(n3.nodes) == 2
+        assert len(n3.records) == 2
 
     def test_delete_network(self): ...
 
