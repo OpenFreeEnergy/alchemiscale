@@ -9,7 +9,8 @@ import os
 import json
 from collections import Counter
 
-from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, status
+from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException
+from fastapi import status as http_status
 from fastapi.middleware.gzip import GZipMiddleware
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.protocols import ProtocolDAGResult
@@ -122,7 +123,7 @@ def create_network(
         an_sk = n4js.create_network(network=an, scope=scope)
     except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=e.args[0],
         )
 
@@ -442,7 +443,7 @@ def get_transformation_tasks(
         }
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=f"`return_as` takes 'list' or 'graph', not '{return_as}'",
         )
 
@@ -555,7 +556,7 @@ def action_tasks(
             if len(weight) != len(tasks):
                 detail = "weight (when in a list) must have the same length as tasks"
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status_code=http_status.HTTP_400_BAD_REQUEST,
                     detail=detail,
                 )
 
@@ -563,7 +564,7 @@ def action_tasks(
                 {task: weight for task, weight in zip(tasks, weight)}, taskhub_sk, None
             )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return [str(sk) if sk is not None else None for sk in actioned_sks]
 
@@ -582,7 +583,7 @@ def set_network_weight(
     try:
         n4js.set_taskhub_weight(sk, weight)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/networks/{network_scoped_key}/tasks/cancel")
@@ -641,7 +642,7 @@ def tasks_priority_set(
     try:
         tasks_updated = n4js.set_task_priority(valid_tasks, priority)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return [str(t) if t is not None else None for t in tasks_updated]
 
@@ -681,7 +682,7 @@ def tasks_status_set(
         TaskStatusEnum.deleted,
     ):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot set status to '{status}', must be one of 'waiting', 'invalid', 'deleted'",
         )
 
@@ -712,7 +713,7 @@ def set_task_status(
         TaskStatusEnum.deleted,
     ):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot set status to '{status}', must be one of 'waiting', 'invalid', 'deleted'",
         )
     task_sk = ScopedKey.from_str(task_scoped_key)
@@ -803,7 +804,7 @@ def get_protocoldagresult(
         ok = False
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=f"`route` takes 'results' or 'failures', not '{route}'",
         )
 

@@ -10,7 +10,8 @@ import json
 import gzip
 
 from starlette.responses import JSONResponse
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import status as http_status
 from fastapi.routing import APIRoute
 from fastapi.security import OAuth2PasswordRequestForm
 from gufe.tokenization import JSON_HANDLER, GufeTokenizable
@@ -45,7 +46,7 @@ def validate_scopes(scope: Scope, token: TokenData) -> None:
 
     if not scope_in_token:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=http_status.HTTP_401_UNAUTHORIZED,
             detail=(
                 f"Targeted scope '{scope}' not accessible via scopes for this identity: {token.scopes}."
             ),
@@ -172,7 +173,7 @@ def scope_params(org: str = None, campaign: str = None, project: str = None):
         return Scope(org=org, campaign=campaign, project=project)
     except (AttributeError, ValueError):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"Requested Scope cannot be processed as a 3-object tuple of form"
                 f'"X-Y-Z" and cast to string. Alpha numerical values (a-z A-Z 0-9) and "*" are accepted for '
@@ -192,7 +193,7 @@ def _check_store_connectivity(n4js: Neo4jStore, s3os: S3ObjectStore) -> dict:
     if not neo4jreachable or not s3reachable:
         detail = f"Attempt to reach services failed, Neo4j reachable: {neo4jreachable}, S3 reachable: {s3reachable}"
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail
         )
     else:
         return True
@@ -241,7 +242,7 @@ def get_access_token(
 
     if entity is None:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=http_status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect identity or key",
             headers={"WWW-Authenticate": "Bearer"},
         )
