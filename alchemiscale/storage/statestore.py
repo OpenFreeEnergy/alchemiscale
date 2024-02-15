@@ -20,6 +20,7 @@ from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 from py2neo import Subgraph, Node, Relationship, UniquenessError
 from py2neo.cypher import cypher_join
 from py2neo.cypher.queries import (
+    unwind_create_nodes_query,
     unwind_merge_nodes_query,
     unwind_merge_relationships_query,
 )
@@ -40,6 +41,24 @@ from ..models import Scope, ScopedKey
 from ..security.models import CredentialedEntity
 from ..settings import Neo4jStoreSettings
 from ..validators import validate_network_nonself
+
+
+# overrides for py2neo comparison and set opeartions
+def custom_eq(self, other):
+    return self["_scoped_key"] == other["_scoped_key"]
+
+
+def custom_hash(self):
+    return hash(self["_scoped_key"])
+
+
+Node.__eq__ = custom_eq
+Node.__hash__ = custom_hash
+
+
+def rec2node(node):
+    new_node = Node(*node.labels, **node._properties)
+    return new_node
 
 
 @lru_cache()
@@ -492,33 +511,19 @@ class Neo4jStore(AlchemiscaleStateStore):
         nodes = set()
         subgraph = Subgraph()
 
-        def rec2node(node):
-            new_node = Node(
-                *node.labels, identity=node.element_id, graph=0, **node._properties
-            )
-            return new_node
-
-        def custom_eq(self, other):
-            return self["_scoped_key"] == other["_scoped_key"]
-
-        def custom_hash(self):
-            return hash(self["_scoped_key"])
-
-        Node.__eq__ = custom_eq
-        Node.__hash__ = custom_hash
-
         for record in self.graph.execute_query(q).records:
-
             node = rec2node(record["n"])
             nodes.add(node)
             if return_subgraph and record["p"] is not None:
                 p = record["p"]
                 path_nodes = set((rec2node(n) for n in p.nodes))
-                breakpoint()
                 path_rels = set(
                     (
                         Relationship(
-                            rec2node(rel.start_node), rel.type, rec2node(rel.end_node)
+                            rec2node(rel.start_node),
+                            rel.type,
+                            rec2node(rel.end_node),
+                            **rel._properties,
                         )
                         for rel in p.relationships
                     )
@@ -589,20 +594,32 @@ class Neo4jStore(AlchemiscaleStateStore):
             ORDER BY n._org, n._campaign, n._project, n._gufe_key
             """
 
-        # TODO: replace py2neo style transaction with a neo4j version
-        # Note that the results no longer match the py2neo iterator
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         nodes = list()
         subgraph = Subgraph()
 
-        for record in res:
-            nodes.append(record["n"])
+        for record in res.records:
+            node = rec2node(record["n"])
+            nodes.append(node)
             if return_gufe and record["p"] is not None:
-                subgraph = subgraph | record["p"]
+                p = record["p"]
+                path_nodes = set((rec2node(n) for n in p.nodes))
+                path_rels = set(
+                    (
+                        Relationship(
+                            rec2node(rel.start_node),
+                            rel.type,
+                            rec2node(rel.end_node),
+                        )
+                        for rel in p.relationships
+                    )
+                )
+
+                subgraph = subgraph | Subgraph(path_nodes, path_rels)
             else:
-                subgraph = record["n"]
+                subgraph = node
 
         if return_gufe:
             return {
@@ -634,7 +651,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         return res[0]
 
     def get_gufe(self, scoped_key: ScopedKey):
-        breakpoint()
         node, subgraph = self._get_node(scoped_key=scoped_key, return_subgraph=True)
         return self._subgraph_to_gufe([node], subgraph)[node]
 
@@ -697,6 +713,37 @@ class Neo4jStore(AlchemiscaleStateStore):
             pq = unwind_merge_relationships_query(data, r_type)
             pq = cypher_join(pq, "RETURN id(_)")
 
+            for i, record in enumerate(transaction.run(*pq)):
+                relationship = relationships[i]
+                relationship.identity = record[0]
+
+    def create_subgraph(self, transaction, subgraph):
+        """Code adapted from the py2neo Subgraph.__db_create__ method."""
+        node_dict = {}
+        for node in subgraph.nodes:
+            key = frozenset(node.labels)
+            node_dict.setdefault(key, []).append(node)
+
+        rel_dict = {}
+        for relationship in subgraph.relationships:
+            key = type(relationship).__name__
+            rel_dict.setdefault(key, []).append(relationship)
+
+        for labels, nodes in node_dict.items():
+            pq = unwind_create_nodes_query(list(map(dict, nodes)), labels=labels)
+            pq = cypher_join(pq, "RETURN id(_)")
+            records = transaction.run(*pq)
+            for i, record in enumerate(records):
+                node = nodes[i]
+                node.identity = record[0]
+                node._remote_labels = labels
+        for r_type, relationships in rel_dict.items():
+            data = map(
+                lambda r: [r.start_node.identity, dict(r), r.end_node.identity],
+                relationships,
+            )
+            pq = unwind_merge_relationships_query(data, r_type)
+            pq = cypher_join(pq, "RETURN id(_)")
             for i, record in enumerate(transaction.run(*pq)):
                 relationship = relationships[i]
                 relationship.identity = record[0]
@@ -956,9 +1003,8 @@ class Neo4jStore(AlchemiscaleStateStore):
             "ComputeServiceRegistration", **compute_service_registration.to_dict()
         )
 
-        # TODO: replace py2neo style Transaction
         with self.transaction() as tx:
-            tx.create(node)
+            self.create_subgraph(tx, Subgraph() | node)
 
         return compute_service_registration.identifier
 
@@ -1082,10 +1128,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         # if the TaskHub already exists, this will rollback transaction
         # automatically
-        # TODO: replace py2neo Transaction
-        # TODO: replace OGM create
+        # TODO: this originally used create, but is merge not what we want?
         with self.transaction(ignore_exceptions=True) as tx:
-            tx.create(subgraph)
+            self.merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 
@@ -1671,6 +1716,12 @@ class Neo4jStore(AlchemiscaleStateStore):
             stat = previous_task_node.get("status")
             # do not allow creation of a task that extends an invalid or deleted task.
             if (stat == "invalid") or (stat == "deleted"):
+                # py2neo Node doesn't like the neo4j datetime object
+                # manually cast since we're raising anyways
+                # and the results are ephemeral
+                previous_task_node["datetime_created"] = str(
+                    previous_task_node["datetime_created"]
+                )
                 raise ValueError(
                     f"Cannot extend a `deleted` or `invalid` Task: {previous_task_node}"
                 )
@@ -1691,7 +1742,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         with self.transaction() as tx:
-            tx.create(subgraph)
+            self.merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 
@@ -1786,10 +1837,10 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
 
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         tasks = []
-        for record in res:
+        for record in res.records:
             tasks.append(record["task"])
 
         if return_as == "list":
@@ -1827,11 +1878,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         transformations = []
         results = []
-        for record in res:
+        for record in res.records:
             transformations.append(record["trans"])
             results.append(record["result"])
 
@@ -1925,10 +1976,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             RETURN scoped_key, t
             """
-            res = tx.run(q, scoped_keys=[str(t) for t in tasks], priority=priority)
+            res = tx.run(
+                q, scoped_keys=[str(t) for t in tasks], priority=priority
+            ).to_eager_result()
 
         task_results = []
-        for record in res:
+        for record in res.records:
             task_i = record["t"]
             scoped_key = record["scoped_key"]
 
