@@ -984,7 +984,7 @@ class TestNeo4jStore(TestStateStore):
         return taskhub.weight
         """
 
-        weight = n4js.graph.evaluate(q)
+        weight = n4js.graph.execute_query(q).records[0].data()["taskhub.weight"]
         weight_ = n4js.get_taskhub_weight(network_sk)
 
         assert weight == 0.5
@@ -1153,13 +1153,13 @@ class TestNeo4jStore(TestStateStore):
         canceled = n4js.cancel_tasks(task_sks[1:3], taskhub_sk)
 
         # check that the hub has the contents we expect
-        tasks = n4js.graph.run(
+        tasks = n4js.graph.execute_query(
             f"""
                 MATCH (tq:TaskHub {{_scoped_key: '{taskhub_sk}'}})-[:ACTIONS]->(task:Task)
                 return task
                 """
         )
-        tasks = [record["task"] for record in tasks]
+        tasks = [record["task"] for record in tasks.records]
 
         assert len(tasks) == 8
         assert set([ScopedKey.from_str(t["_scoped_key"]) for t in tasks]) == set(

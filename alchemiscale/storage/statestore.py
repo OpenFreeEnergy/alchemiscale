@@ -1247,11 +1247,11 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         # TODO: replace py2neo Transaction
         with self.transaction() as tx:
-            results = tx.run(q, th_sk=str(taskhub))
+            results = tx.run(q, th_sk=str(taskhub)).to_eager_result()
 
         return {
             ScopedKey.from_str(record.get("t._scoped_key")): record.get("a.weight")
-            for record in results
+            for record in results.records
         }
 
     def get_task_actioned_networks(self, task: ScopedKey) -> Dict[ScopedKey, float]:
@@ -1275,13 +1275,12 @@ class Neo4jStore(AlchemiscaleStateStore):
            RETURN an._scoped_key, a.weight
         """
 
-        # TODO: replace py2neo Transaction
         with self.transaction() as tx:
-            results = tx.run(q, scoped_key=str(task))
+            results = tx.run(q, scoped_key=str(task)).to_eager_result()
 
         return {
             ScopedKey.from_str(record.get("an._scoped_key")): record.get("a.weight")
-            for record in results
+            for record in results.records
         }
 
     def get_taskhub_weight(self, network: ScopedKey) -> float:
@@ -1299,9 +1298,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (th:TaskHub {{network: "{network}"}})
         RETURN th.weight
         """
-        # TODO: replace py2neo Transaction
         with self.transaction() as tx:
-            weight = tx.evaluate(q)
+            weight = tx.run(q).data()[0]["th.weight"]
 
         return weight
 
@@ -1347,13 +1345,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
                 RETURN task
                 """
-                # TODO: replace OGM
-                task = tx.run(q).to_subgraph()
-                actioned_sks.append(
-                    ScopedKey.from_str(task["_scoped_key"])
-                    if task is not None
-                    else None
-                )
+                task = self.graph.execute_query(q)
+
+                if task.records:
+                    sk = task.records[0].data()["task"]["_scoped_key"]
+                    actioned_sks.append(ScopedKey.from_str(sk))
+                else:
+                    actioned_sks.append(None)
+
         return actioned_sks
 
     def set_task_weights(
@@ -1507,12 +1506,13 @@ class Neo4jStore(AlchemiscaleStateStore):
                 DELETE ar
                 RETURN task
                 """
-                task = tx.run(q).to_subgraph()
-                canceled_sks.append(
-                    ScopedKey.from_str(task["_scoped_key"])
-                    if task is not None
-                    else None
-                )
+                _task = tx.run(q).to_eager_result()
+
+                if _task.records:
+                    sk = _task.records[0].data()["task"]["_scoped_key"]
+                    canceled_sks.append(ScopedKey.from_str(sk))
+                else:
+                    canceled_sks.append(None)
 
         return canceled_sks
 
@@ -1528,13 +1528,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN task
         """
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         tasks = []
         subgraph = Subgraph()
-        for record in res:
-            tasks.append(record["task"])
-            subgraph = subgraph | record["task"]
+        for record in res.records:
+            tasks.append(rec2node(record["task"]))
+            subgraph = subgraph | rec2node(record["task"])
 
         if return_gufe:
             return {
@@ -1557,13 +1557,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN task
         """
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         tasks = []
         subgraph = Subgraph()
-        for record in res:
-            tasks.append(record["task"])
-            subgraph = subgraph | record["task"]
+        for record in res.records:
+            node = rec2node(record["task"])
+            tasks.append(node)
+            subgraph = subgraph | node
 
         if return_gufe:
             return {
@@ -1638,13 +1639,33 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
             )
             for i in range(count):
-                taskpool = tx.run(taskpool_q).to_subgraph()
-                if taskpool is None:
+                _taskpool = tx.run(taskpool_q).to_eager_result()
+
+                if not _taskpool.records:
+                    tasks.append(None)
+
+                taskpool = Subgraph()
+
+                for record in _taskpool.records:
+                    task = rec2node(record["task"])
+                    rel = record["actions"]
+                    actions_rel = Relationship(
+                        rec2node(rel.start_node),
+                        rel.type,
+                        rec2node(rel.end_node),
+                        **rel._properties,
+                    )
+                    taskpool = taskpool | task | actions_rel
+
+                chosen_one = _select_task_from_taskpool(taskpool)
+                claim_query = _generate_claim_query(chosen_one, compute_service_id)
+
+                cq = tx.run(claim_query).to_eager_result()
+
+                if not cq.records:
                     tasks.append(None)
                 else:
-                    chosen_one = _select_task_from_taskpool(taskpool)
-                    claim_query = _generate_claim_query(chosen_one, compute_service_id)
-                    tasks.append(tx.run(claim_query).to_subgraph())
+                    tasks.append(rec2node(cq.records[0]["t"]))
 
             tx.run(
                 f"""
