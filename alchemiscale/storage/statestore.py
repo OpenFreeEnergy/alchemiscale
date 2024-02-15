@@ -383,7 +383,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         the subgraph will not be returned.
 
         """
-        breakpoint()
         nxg = self._subgraph_to_networkx(subgraph)
         nodes_to_gufe = {}
         gufe_objs = {}
@@ -393,7 +392,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         return gufe_objs
 
     def _subgraph_to_networkx(self, subgraph: Subgraph):
-        breakpoint()
         g = nx.DiGraph()
 
         for node in subgraph.nodes:
@@ -409,7 +407,6 @@ class Neo4jStore(AlchemiscaleStateStore):
     def _node_to_gufe(
         self, node: Node, g: nx.DiGraph, mapping: Dict[Node, GufeTokenizable]
     ):
-        breakpoint()
         # shortcut if we already have this object deserialized
         if gufe_obj := mapping.get(node):
             return gufe_obj
@@ -517,6 +514,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             if return_subgraph and record["p"] is not None:
                 p = record["p"]
                 path_nodes = set((rec2node(n) for n in p.nodes))
+                breakpoint()
                 path_rels = set(
                     (
                         Relationship(
@@ -636,6 +634,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         return res[0]
 
     def get_gufe(self, scoped_key: ScopedKey):
+        breakpoint()
         node, subgraph = self._get_node(scoped_key=scoped_key, return_subgraph=True)
         return self._subgraph_to_gufe([node], subgraph)[node]
 
