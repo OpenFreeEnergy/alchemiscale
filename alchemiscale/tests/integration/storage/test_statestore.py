@@ -1572,12 +1572,12 @@ class TestNeo4jStore(TestStateStore):
         # try to push the result
         n4js.set_task_result(task_sk, pdr_ref)
 
-        n = n4js.graph.run(
+        n = n4js.graph.execute_query(
             f"""
                 match (n:ProtocolDAGResultRef)<-[:RESULTS_IN]-(t:Task)
                 return n
                 """
-        ).to_subgraph()
+        ).records[0]["n"]
 
         assert n["location"] == pdr_ref.location
         assert n["obj_key"] == str(protocoldagresult.key)
@@ -1715,12 +1715,12 @@ class TestNeo4jStore(TestStateStore):
 
         n4js.create_credentialed_entity(user)
 
-        n = n4js.graph.run(
+        n = n4js.graph.execute_query(
             f"""
             match (n:{cls_name} {{identifier: '{user.identifier}'}})
             return n
             """
-        ).to_subgraph()
+        ).records[0]["n"]
 
         assert n["identifier"] == user.identifier
         assert n["hashed_key"] == user.hashed_key
@@ -1835,7 +1835,7 @@ class TestNeo4jStore(TestStateStore):
         MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
         RETURN n
         """
-        scopes_qr = n4js.graph.run(q).to_subgraph()
+        scopes_qr = n4js.graph.execute_query(q).records[0]["n"]
         scopes = scopes_qr.get("scopes")
         assert len(scopes) == 1
 
@@ -1865,7 +1865,7 @@ class TestNeo4jStore(TestStateStore):
         MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
         RETURN n
         """
-        scopes_qr = n4js.graph.run(q).to_subgraph()
+        scopes_qr = n4js.graph.execute_query(q).records[0]["n"]
         scopes = scopes_qr.get("scopes")
         assert len(scopes) == 1
 
@@ -2251,8 +2251,11 @@ class TestNeo4jStore(TestStateStore):
         return task
         """
 
-        result = n4js.graph.run(q).to_subgraph()
-        sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
+        result = n4js.graph.execute_query(q)
+        sks = [
+            ScopedKey.from_str(record["task"].get("_scoped_key"))
+            for record in result.records
+        ]
         assert set(sks) == set(task_sks)
 
         # set one to invalid
@@ -2262,8 +2265,8 @@ class TestNeo4jStore(TestStateStore):
         # set one to complete
         n4js.set_task_complete(task_sks[2:3])
 
-        result = n4js.graph.run(q).to_subgraph()
-        assert result == None
+        result = n4js.graph.execute_query(q)
+        assert not result.records
 
     def test_set_task_status_removes_actions_relationship_extends(
         self,
@@ -2310,24 +2313,30 @@ class TestNeo4jStore(TestStateStore):
         return task
         """
 
-        result = n4js.graph.run(q).to_subgraph()
-        sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
+        result = n4js.graph.execute_query(q)
+        sks = [
+            ScopedKey.from_str(record["task"].get("_scoped_key"))
+            for record in result.records
+        ]
         assert set(sks) == set(collected_sks)
         assert len(sks) == 7
 
         # set layer one to invalid, this should invalidate the entire chain
         n4js.set_task_invalid([first_task])
 
-        result = n4js.graph.run(q).to_subgraph()
-        assert result == None
+        result = n4js.graph.execute_query(q)
+        assert not result.records
 
         q = f"""
         MATCH (task:Task)
         WHERE task.status = 'invalid'
         return task
         """
-        result = n4js.graph.run(q).to_subgraph()
-        sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
+        result = n4js.graph.execute_query(q)
+        sks = [
+            ScopedKey.from_str(record["task"].get("_scoped_key"))
+            for record in result.records
+        ]
         assert set(sks) == set(collected_sks)
         assert len(sks) == 7
 

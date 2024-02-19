@@ -217,8 +217,8 @@ def test_compute_synchronous(
             return csreg
             """
             while True:
-                csreg = n4js.graph.run(q).to_subgraph()
-                if csreg is None:
+                csreg = n4js.graph.execute_query(q)
+                if not csreg.records:
                     time.sleep(1)
                 else:
                     break
