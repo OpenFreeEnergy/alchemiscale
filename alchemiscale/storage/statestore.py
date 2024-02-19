@@ -242,7 +242,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 )
 
         nope = self.graph.execute_query("MATCH (n:NOPE) RETURN n").records[0]["n"]
-        if nope["id"] != 0:
+        if nope.element_id != "0":
             raise Neo4JStoreError("Identity of NOPE node is not exactly 0")
 
     def _store_check(self):

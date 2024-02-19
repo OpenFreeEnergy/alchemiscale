@@ -17,6 +17,8 @@ dependencies:
 
   ## state store
   - neo4j-python-driver
+  - py2neo
+  - monotonic
 
   ## object store
   - boto3        # aws s3
