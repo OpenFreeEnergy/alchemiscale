@@ -1,4 +1,4 @@
-from py2neo import Node, Subgraph, UniquenessError
+from py2neo import Node, Subgraph, Relationship, UniquenessError
 
 from py2neo.cypher import cypher_join
 from py2neo.cypher.queries import (

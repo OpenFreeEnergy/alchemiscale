@@ -34,7 +34,7 @@ from ..security.models import CredentialedEntity
 from ..settings import Neo4jStoreSettings
 from ..validators import validate_network_nonself
 
-from .data import (
+from .subgraph import (
     merge_subgraph,
     create_subgraph,
     record_data_to_node,
