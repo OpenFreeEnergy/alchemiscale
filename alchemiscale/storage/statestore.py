@@ -182,16 +182,17 @@ class Neo4jStore(AlchemiscaleStateStore):
     @contextmanager
     def transaction(self, readonly=False, ignore_exceptions=False) -> Transaction:
         """Context manager for a Neo4j Transaction."""
-        tx = self.graph.session().begin_transaction()
-        try:
-            yield tx
-        except:
-            tx.rollback()
-            if not ignore_exceptions:
-                raise
+        with self.graph.session() as session:
+            tx = session.begin_transaction()
+            try:
+                yield tx
+            except:
+                tx.rollback()
+                if not ignore_exceptions:
+                    raise
 
-        else:
-            tx.commit()
+            else:
+                tx.commit()
 
     def initialize(self):
         """Initialize database.
