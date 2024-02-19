@@ -17,14 +17,6 @@ import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, Settings
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 
-from py2neo import Subgraph, Node, Relationship, UniquenessError
-from py2neo.cypher import cypher_join
-from py2neo.cypher.queries import (
-    unwind_create_nodes_query,
-    unwind_merge_nodes_query,
-    unwind_merge_relationships_query,
-)
-
 from neo4j import Transaction, GraphDatabase, Driver
 
 from .models import (
@@ -42,32 +34,14 @@ from ..security.models import CredentialedEntity
 from ..settings import Neo4jStoreSettings
 from ..validators import validate_network_nonself
 
-
-# overrides for py2neo comparison and set opeartions
-def custom_eq(self, other):
-    return self["_scoped_key"] == other["_scoped_key"]
-
-
-def custom_hash(self):
-    # if a scoped key exists, we should always use this
-    if self["_scoped_key"]:
-        return hash(self["_scoped_key"])
-    # added to handle CredentialedUserEntity
-    if self["identifier"]:
-        return hash(self["identifier"])
-    # if all else fails, at least try and sort out the
-    # objects themselves
-    else:
-        return hash(id(self))
-
-
-Node.__eq__ = custom_eq
-Node.__hash__ = custom_hash
-
-
-def record_data_to_node(node):
-    new_node = Node(*node.labels, **node._properties)
-    return new_node
+from .data import (
+    merge_subgraph,
+    create_subgraph,
+    record_data_to_node,
+    Node,
+    Relationship,
+    Subgraph,
+)
 
 
 @lru_cache()
@@ -667,100 +641,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         node, subgraph = self._get_node(scoped_key=scoped_key, return_subgraph=True)
         return self._subgraph_to_gufe([node], subgraph)[node]
 
-    def merge_subgraph(
-        self,
-        transaction: Transaction,
-        subgraph: Subgraph,
-        primary_label: str,
-        primary_key: str,
-    ):
-        """Code adapted from the py2neo Subgraph.__db_merge__ method."""
-        node_dict = {}
-        for node in subgraph.nodes:
-            if node.__primarylabel__ is not None:
-                p_label = node.__primarylabel__
-            elif node.__model__ is not None:
-                p_label = node.__model__.__primarylabel__ or primary_label
-            else:
-                p_label = primary_label
-
-            if node.__primarykey__ is not None:
-                p_key = node.__primarykey__
-            elif node.__model__ is not None:
-                p_key = node.__model__.__primarykey__ or primary_key
-            else:
-                p_key = primary_key
-            key = (p_label, p_key, frozenset(node.labels))
-            node_dict.setdefault(key, []).append(node)
-
-        rel_dict = {}
-        for relationship in subgraph.relationships:
-            key = type(relationship).__name__
-            rel_dict.setdefault(key, []).append(relationship)
-
-        for (pl, pk, labels), nodes in node_dict.items():
-            if pl is None or pk is None:
-                raise ValueError(
-                    "Primary label and primary key are required for MERGE operation"
-                )
-            pq = unwind_merge_nodes_query(map(dict, nodes), (pl, pk), labels)
-            pq = cypher_join(pq, "RETURN id(_)")
-            identities = [record[0] for record in transaction.run(*pq)]
-            if len(identities) > len(nodes):
-                raise UniquenessError(
-                    "Found %d matching nodes for primary label %r and primary "
-                    "key %r with labels %r but merging requires no more than "
-                    "one" % (len(identities), pl, pk, set(labels))
-                )
-
-            for i, identity in enumerate(identities):
-                node = nodes[i]
-                node.identity = identity
-                node._remote_labels = labels
-
-        for r_type, relationships in rel_dict.items():
-            data = map(
-                lambda r: [r.start_node.identity, dict(r), r.end_node.identity],
-                relationships,
-            )
-            pq = unwind_merge_relationships_query(data, r_type)
-            pq = cypher_join(pq, "RETURN id(_)")
-
-            for i, record in enumerate(transaction.run(*pq)):
-                relationship = relationships[i]
-                relationship.identity = record[0]
-
-    def create_subgraph(self, transaction, subgraph):
-        """Code adapted from the py2neo Subgraph.__db_create__ method."""
-        node_dict = {}
-        for node in subgraph.nodes:
-            key = frozenset(node.labels)
-            node_dict.setdefault(key, []).append(node)
-
-        rel_dict = {}
-        for relationship in subgraph.relationships:
-            key = type(relationship).__name__
-            rel_dict.setdefault(key, []).append(relationship)
-
-        for labels, nodes in node_dict.items():
-            pq = unwind_create_nodes_query(list(map(dict, nodes)), labels=labels)
-            pq = cypher_join(pq, "RETURN id(_)")
-            records = transaction.run(*pq)
-            for i, record in enumerate(records):
-                node = nodes[i]
-                node.identity = record[0]
-                node._remote_labels = labels
-        for r_type, relationships in rel_dict.items():
-            data = map(
-                lambda r: [r.start_node.identity, dict(r), r.end_node.identity],
-                relationships,
-            )
-            pq = unwind_merge_relationships_query(data, r_type)
-            pq = cypher_join(pq, "RETURN id(_)")
-            for i, record in enumerate(transaction.run(*pq)):
-                relationship = relationships[i]
-                relationship.identity = record[0]
-
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Add an `AlchemicalNetwork` to the target neo4j database, even if
         some of its components already exist in the database.
@@ -777,7 +657,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             scope=scope,
         )
         with self.transaction() as tx:
-            self.merge_subgraph(tx, g, "GufeTokenizable", "_scoped_key")
+            merge_subgraph(tx, g, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 
@@ -1010,7 +890,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         with self.transaction() as tx:
-            self.create_subgraph(tx, Subgraph() | node)
+            create_subgraph(tx, Subgraph() | node)
 
         return compute_service_registration.identifier
 
@@ -1132,7 +1012,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # automatically
         # TODO: this originally used create, but is merge not what we want?
         with self.transaction(ignore_exceptions=True) as tx:
-            self.merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 
@@ -1760,7 +1640,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         with self.transaction() as tx:
-            self.merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 
@@ -2128,7 +2008,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         with self.transaction() as tx:
-            self.merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 
@@ -2487,7 +2367,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         node = Node("CredentialedEntity", entity.__class__.__name__, **entity.dict())
 
         with self.transaction() as tx:
-            self.merge_subgraph(
+            merge_subgraph(
                 tx, Subgraph() | node, entity.__class__.__name__, "identifier"
             )
 
