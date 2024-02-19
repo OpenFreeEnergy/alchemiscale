@@ -65,7 +65,7 @@ Node.__eq__ = custom_eq
 Node.__hash__ = custom_hash
 
 
-def rec2node(node):
+def record_data_to_node(node):
     new_node = Node(*node.labels, **node._properties)
     return new_node
 
@@ -525,17 +525,17 @@ class Neo4jStore(AlchemiscaleStateStore):
         subgraph = Subgraph()
 
         for record in self.graph.execute_query(q).records:
-            node = rec2node(record["n"])
+            node = record_data_to_node(record["n"])
             nodes.add(node)
             if return_subgraph and record["p"] is not None:
                 p = record["p"]
-                path_nodes = set((rec2node(n) for n in p.nodes))
+                path_nodes = set((record_data_to_node(n) for n in p.nodes))
                 path_rels = set(
                     (
                         Relationship(
-                            rec2node(rel.start_node),
+                            record_data_to_node(rel.start_node),
                             rel.type,
-                            rec2node(rel.end_node),
+                            record_data_to_node(rel.end_node),
                             **rel._properties,
                         )
                         for rel in p.relationships
@@ -614,17 +614,17 @@ class Neo4jStore(AlchemiscaleStateStore):
         subgraph = Subgraph()
 
         for record in res.records:
-            node = rec2node(record["n"])
+            node = record_data_to_node(record["n"])
             nodes.append(node)
             if return_gufe and record["p"] is not None:
                 p = record["p"]
-                path_nodes = set((rec2node(n) for n in p.nodes))
+                path_nodes = set((record_data_to_node(n) for n in p.nodes))
                 path_rels = set(
                     (
                         Relationship(
-                            rec2node(rel.start_node),
+                            record_data_to_node(rel.start_node),
                             rel.type,
-                            rec2node(rel.end_node),
+                            record_data_to_node(rel.end_node),
                         )
                         for rel in p.relationships
                     )
@@ -1171,7 +1171,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 match (th:TaskHub {{network: "{network}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
                 return th
                 """
-        node = rec2node(self.graph.execute_query(q).records[0]["th"])
+        node = record_data_to_node(self.graph.execute_query(q).records[0]["th"])
 
         if return_gufe:
             return self._subgraph_to_gufe([node], node)[node]
@@ -1530,8 +1530,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         tasks = []
         subgraph = Subgraph()
         for record in res.records:
-            tasks.append(rec2node(record["task"]))
-            subgraph = subgraph | rec2node(record["task"])
+            tasks.append(record_data_to_node(record["task"]))
+            subgraph = subgraph | record_data_to_node(record["task"])
 
         if return_gufe:
             return {
@@ -1558,7 +1558,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         tasks = []
         subgraph = Subgraph()
         for record in res.records:
-            node = rec2node(record["task"])
+            node = record_data_to_node(record["task"])
             tasks.append(node)
             subgraph = subgraph | node
 
@@ -1645,12 +1645,12 @@ class Neo4jStore(AlchemiscaleStateStore):
                     taskpool = Subgraph()
 
                     for record in _taskpool.records:
-                        task = rec2node(record["task"])
+                        task = record_data_to_node(record["task"])
                         rel = record["actions"]
                         actions_rel = Relationship(
-                            rec2node(rel.start_node),
+                            record_data_to_node(rel.start_node),
                             rel.type,
-                            rec2node(rel.end_node),
+                            record_data_to_node(rel.end_node),
                             **rel._properties,
                         )
                         taskpool = taskpool | task | actions_rel
@@ -1663,7 +1663,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     if not cq.records:
                         tasks.append(None)
                     else:
-                        tasks.append(rec2node(cq.records[0]["t"]))
+                        tasks.append(record_data_to_node(cq.records[0]["t"]))
 
             tx.run(
                 f"""
@@ -2503,7 +2503,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         nodes = set()
         for record in res.records:
-            nodes.add(rec2node(record["n"]))
+            nodes.add(record_data_to_node(record["n"]))
 
         if len(nodes) == 0:
             raise KeyError("No such object in database")
@@ -2525,7 +2525,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         nodes = set()
         for record in res.records:
-            nodes.add(rec2node(record["n"]))
+            nodes.add(record_data_to_node(record["n"]))
 
         return [node["identifier"] for node in nodes]
 
