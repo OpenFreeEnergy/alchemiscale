@@ -67,11 +67,10 @@ class TestSynchronousComputeService:
         # should have 2 tasks
         assert len(task_sks) == 2
 
-        # TODO: do we have a reason to return csreg? Just adds confusion
         q = f"""
         match (csreg:ComputeServiceRegistration {{identifier: '{service.compute_service_id}'}}),
               (csreg)-[:CLAIMS]->(t:Task)
-        return csreg, t
+        return t
         """
 
         results = n4js_preloaded.graph.execute_query(q)

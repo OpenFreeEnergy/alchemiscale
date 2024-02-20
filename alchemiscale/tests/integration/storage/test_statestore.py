@@ -47,15 +47,13 @@ class TestNeo4jStore(TestStateStore):
 
         sk: ScopedKey = n4js.create_network(an, scope_test)
 
-        out = n4js.graph.execute_query(
-            f"""
-                match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
+        q = f"""match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
                                              _org: '{sk.org}', _campaign: '{sk.campaign}', 
                                              _project: '{sk.project}'}}) 
                 return n
                 """
-        )
-        n = out.records[0].data()["n"]
+
+        n = n4js.graph.execute_query(q).records[0]["n"]
 
         assert n["name"] == "tyk2_relative_benchmark"
 
@@ -64,18 +62,12 @@ class TestNeo4jStore(TestStateStore):
 
         sk: ScopedKey = n4js.create_network(an, scope_test)
 
-        n = (
-            n4js.graph.execute_query(
-                f"""
-                match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
+        q = f"""match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
                                              _org: '{sk.org}', _campaign: '{sk.campaign}', 
                                              _project: '{sk.project}'}}) 
                 return n
                 """
-            )
-            .records[0]
-            .data()["n"]
-        )
+        n = n4js.graph.execute_query(q).records[0]["n"]
 
         assert n["name"] == "tyk2_relative_benchmark"
 
@@ -83,16 +75,13 @@ class TestNeo4jStore(TestStateStore):
         sk2: ScopedKey = n4js.create_network(an, scope_test)
         assert sk2 == sk
 
-        n2 = n4js.graph.execute_query(
-            f"""
-                match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
+        q = f"""match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
                                              _org: '{sk.org}', _campaign: '{sk.campaign}', 
                                              _project: '{sk.project}'}}) 
                 return n
                 """
-        )
+        n2 = n4js.graph.execute_query(q).records[0]["n"]
 
-        n2 = n2.records[0].data()["n"]
         assert n2["name"] == "tyk2_relative_benchmark"
 
         # add a slightly different network
@@ -102,12 +91,11 @@ class TestNeo4jStore(TestStateStore):
         sk3 = n4js.create_network(an2, scope_test)
         assert sk3 != sk
 
-        n3 = n4js.graph.execute_query(
-            f"""
-                match (n:AlchemicalNetwork) 
+        q = f"""match (n:AlchemicalNetwork) 
                 return n
                 """
-        )
+
+        n3 = n4js.graph.execute_query(q)
 
         assert len(n3.records) == 2
 
@@ -407,16 +395,10 @@ class TestNeo4jStore(TestStateStore):
 
         assert compute_service_id == compute_service_id_
 
-        csreg = (
-            n4js.graph.execute_query(
-                f"""
-            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+        q = f"""match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
             """
-            )
-            .records[0]
-            .data()["csreg"]
-        )
+        csreg = n4js.graph.execute_query(q).records[0]["csreg"]
 
         assert csreg["identifier"] == compute_service_id
 
@@ -439,14 +421,12 @@ class TestNeo4jStore(TestStateStore):
 
         assert compute_service_id == compute_service_id_
 
-        csreg = n4js.graph.execute_query(
-            f"""
-            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+        q = f"""match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
             """
-        )
+        csreg = n4js.graph.execute_query(q)
 
-        assert len(csreg.records) == 0
+        assert not csreg.records
 
     def test_heartbeat_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
@@ -460,14 +440,11 @@ class TestNeo4jStore(TestStateStore):
         tomorrow = now + timedelta(days=1)
         n4js.heartbeat_computeservice(compute_service_id, tomorrow)
 
-        csreg = n4js.graph.execute_query(
-            f"""
-            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+        q = f"""match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
             """
-        )
 
-        csreg = csreg.records[0].data()["csreg"]
+        csreg = n4js.graph.execute_query(q).records[0]["csreg"]
 
         # we round to integer seconds from epoch to avoid somewhat different
         # floats on either side of comparison even if practically the same
@@ -492,14 +469,13 @@ class TestNeo4jStore(TestStateStore):
 
         identities = n4js.expire_registrations(expire_time=thirty_mins_ago)
 
-        csreg = n4js.graph.execute_query(
-            f"""
-            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+        q = f"""match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
             """
-        )
 
-        assert len(csreg.records) == 0
+        results = n4js.graph.execute_query(q)
+
+        assert not results.records
         assert compute_service_id in identities
 
     def test_create_task(self, n4js, network_tyk2, scope_test):
@@ -512,18 +488,12 @@ class TestNeo4jStore(TestStateStore):
 
         task_sk: ScopedKey = n4js.create_task(transformation_sk)
 
-        m = (
-            n4js.graph.execute_query(
-                f"""
-                match (n:Task {{_gufe_key: '{task_sk.gufe_key}', 
+        q = f"""match (n:Task {{_gufe_key: '{task_sk.gufe_key}', 
                                              _org: '{task_sk.org}', _campaign: '{task_sk.campaign}', 
                                              _project: '{task_sk.project}'}})-[:PERFORMS]->(m:Transformation)
                 return m
                 """
-            )
-            .records[0]
-            .data()["m"]
-        )
+        m = n4js.graph.execute_query(q).records[0]["m"]
 
         assert m["_gufe_key"] == transformation.key
 
@@ -830,19 +800,13 @@ class TestNeo4jStore(TestStateStore):
         # create taskhub
         taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
-        # verify creation looks as we expect
-        m = (
-            n4js.graph.execute_query(
-                f"""
-                match (n:TaskHub {{_gufe_key: '{taskhub_sk.gufe_key}', 
-                                             _org: '{taskhub_sk.org}', _campaign: '{taskhub_sk.campaign}', 
-                                             _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+        q = f"""match (n:TaskHub {{_gufe_key: '{taskhub_sk.gufe_key}', 
+                                   _org: '{taskhub_sk.org}', _campaign: '{taskhub_sk.campaign}', 
+                                   _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
                 return m
                 """
-            )
-            .records[0]
-            .data()["m"]
-        )
+        # verify creation looks as we expect
+        m = n4js.graph.execute_query(q).records[0]["m"]
 
         assert m["_gufe_key"] == an.key
 
@@ -851,16 +815,14 @@ class TestNeo4jStore(TestStateStore):
 
         assert taskhub_sk2 == taskhub_sk
 
-        records = n4js.graph.execute_query(
-            f"""
-                match (n:TaskHub {{network: '{network_sk}', 
-                                             _org: '{taskhub_sk.org}', _campaign: '{taskhub_sk.campaign}', 
-                                             _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+        q = f"""match (n:TaskHub {{network: '{network_sk}', 
+                                   _org: '{taskhub_sk.org}', _campaign: '{taskhub_sk.campaign}', 
+                                   _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
                 return n
                 """
-        ).records
+        results = n4js.graph.execute_query(q)
 
-        assert len(list(records)) == 1
+        assert len(results.records) == 1
 
     def test_create_taskhub_weight(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -869,32 +831,22 @@ class TestNeo4jStore(TestStateStore):
         # create taskhub
         taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
-        n = (
-            n4js.graph.execute_query(
-                f"""
-                match (n:TaskHub)
-                return n
+        q = f"""match (n:TaskHub)
+                 return n
                 """
-            )
-            .records[0]
-            .data()["n"]
-        )
+
+        n = n4js.graph.execute_query(q).records[0]["n"]
 
         assert n["weight"] == 0.5
 
         # change the weight
         n4js.set_taskhub_weight(network_sk, 0.7)
 
-        n = (
-            n4js.graph.execute_query(
-                f"""
-                match (n:TaskHub)
+        q = f"""match (n:TaskHub)
                 return n
                 """
-            )
-            .records[0]
-            .data()["n"]
-        )
+
+        n = n4js.graph.execute_query(q).records[0]["n"]
 
         assert n["weight"] == 0.7
 
@@ -1153,12 +1105,11 @@ class TestNeo4jStore(TestStateStore):
         canceled = n4js.cancel_tasks(task_sks[1:3], taskhub_sk)
 
         # check that the hub has the contents we expect
-        tasks = n4js.graph.execute_query(
-            f"""
-                MATCH (tq:TaskHub {{_scoped_key: '{taskhub_sk}'}})-[:ACTIONS]->(task:Task)
+        q = f"""MATCH (tq:TaskHub {{_scoped_key: '{taskhub_sk}'}})-[:ACTIONS]->(task:Task)
                 return task
                 """
-        )
+
+        tasks = n4js.graph.execute_query(q)
         tasks = [record["task"] for record in tasks.records]
 
         assert len(tasks) == 8
@@ -1835,8 +1786,8 @@ class TestNeo4jStore(TestStateStore):
         MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
         RETURN n
         """
-        scopes_qr = n4js.graph.execute_query(q).records[0]["n"]
-        scopes = scopes_qr.get("scopes")
+        n = n4js.graph.execute_query(q).records[0]["n"]
+        scopes = n["scopes"]
         assert len(scopes) == 1
 
         new_scope = Scope.from_str(scopes[0])
@@ -1865,8 +1816,8 @@ class TestNeo4jStore(TestStateStore):
         MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
         RETURN n
         """
-        scopes_qr = n4js.graph.execute_query(q).records[0]["n"]
-        scopes = scopes_qr.get("scopes")
+        n = n4js.graph.execute_query(q).records[0]["n"]
+        scopes = n["scopes"]
         assert len(scopes) == 1
 
         new_scope = Scope.from_str(scopes[0])
@@ -2253,7 +2204,7 @@ class TestNeo4jStore(TestStateStore):
 
         result = n4js.graph.execute_query(q)
         sks = [
-            ScopedKey.from_str(record["task"].get("_scoped_key"))
+            ScopedKey.from_str(record["task"]["_scoped_key"])
             for record in result.records
         ]
         assert set(sks) == set(task_sks)
@@ -2315,7 +2266,7 @@ class TestNeo4jStore(TestStateStore):
 
         result = n4js.graph.execute_query(q)
         sks = [
-            ScopedKey.from_str(record["task"].get("_scoped_key"))
+            ScopedKey.from_str(record["task"]["_scoped_key"])
             for record in result.records
         ]
         assert set(sks) == set(collected_sks)
@@ -2334,7 +2285,7 @@ class TestNeo4jStore(TestStateStore):
         """
         result = n4js.graph.execute_query(q)
         sks = [
-            ScopedKey.from_str(record["task"].get("_scoped_key"))
+            ScopedKey.from_str(record["task"]["_scoped_key"])
             for record in result.records
         ]
         assert set(sks) == set(collected_sks)

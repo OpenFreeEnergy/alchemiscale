@@ -15,8 +15,6 @@ from pytest import fixture
 from moto import mock_aws
 from moto.server import ThreadedMotoServer
 
-# from py2neo import ServiceProfile, Graph
-# from py2neo.client import Connector
 from neo4j import GraphDatabase
 
 from gufe import ChemicalSystem, Transformation, AlchemicalNetwork

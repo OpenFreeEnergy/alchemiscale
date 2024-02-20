@@ -68,7 +68,7 @@ class TestComputeClient:
             """
         )
 
-        assert csreg.records != []
+        assert csreg.records
         assert (
             csreg.records[0]["csreg"]["registered"]
             == csreg.records[0]["csreg"]["heartbeat"]

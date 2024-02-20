@@ -336,7 +336,8 @@ def test_database_reset(n4js_fresh, network_tyk2, scope_test):
         result = runner.invoke(cli, ["database", "reset"])
         assert click_success(result)
 
-    assert not n4js.graph.execute_query("MATCH (n) WHERE NOT n:NOPE RETURN n").records
+    q = "MATCH (n) WHERE NOT n:NOPE RETURN n"
+    assert not n4js.graph.execute_query(q).records
 
     with pytest.raises(Neo4JStoreError):
         n4js.check()
