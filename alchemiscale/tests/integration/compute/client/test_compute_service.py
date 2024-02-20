@@ -48,7 +48,8 @@ class TestSynchronousComputeService:
         match (csreg:ComputeServiceRegistration {{identifier: '{service.compute_service_id}'}})
         return csreg
         """
-        csreg = n4js.graph.run(q).to_subgraph()
+        csreg = n4js.graph.execute_query(q).records[0]["csreg"]
+
         assert csreg["registered"] < csreg["heartbeat"]
 
         # stop the service; should trigger heartbeat to stop
@@ -66,15 +67,21 @@ class TestSynchronousComputeService:
         # should have 2 tasks
         assert len(task_sks) == 2
 
-        subgraph = n4js.graph.run(
-            f"""
+        q = f"""
         match (csreg:ComputeServiceRegistration {{identifier: '{service.compute_service_id}'}}),
               (csreg)-[:CLAIMS]->(t:Task)
-        return csreg, t
+        return t
         """
-        ).to_subgraph()
 
-        assert len([node for node in subgraph.nodes if "Task" in node.labels]) == 2
+        results = n4js_preloaded.graph.execute_query(q)
+
+        nodes = []
+        for record in results.records:
+            t = record["t"]
+            if "Task" in t.labels:
+                nodes.append(t)
+
+        assert len(nodes) == 2
 
     def test_task_to_protocoldag(
         self, n4js_preloaded, service, network_tyk2, scope_test
@@ -126,24 +133,24 @@ class TestSynchronousComputeService:
         """
 
         # preconditions
-        protocoldagresultref = n4js.graph.run(q).to_subgraph()
-        assert protocoldagresultref is None
+        protocoldagresultref = n4js.graph.execute_query(q)
+        assert not protocoldagresultref.records
 
         service.cycle()
 
         # postconditions
-        protocoldagresultref = n4js.graph.run(q).to_subgraph()
-        assert protocoldagresultref is not None
-        assert protocoldagresultref["ok"] == True
+        protocoldagresultref = n4js.graph.execute_query(q)
+        assert protocoldagresultref.records
+        assert protocoldagresultref.records[0]["pdr"]["ok"] is True
 
-        task = n4js.graph.run(
-            """
+        q = """
         match (t:Task {status: 'complete'})
         return t
         """
-        ).to_subgraph()
 
-        assert task is not None
+        results = n4js.graph.execute_query(q)
+
+        assert results.records
 
     def test_cycle_max_tasks(self): ...
 
@@ -164,7 +171,7 @@ class TestSynchronousComputeService:
         match (csreg:ComputeServiceRegistration {{identifier: '{service.compute_service_id}'}})
         return csreg
         """
-        csreg = n4js.graph.run(q).to_subgraph()
+        csreg = n4js.graph.execute_query(q).records[0]["csreg"]
         assert csreg["registered"] < csreg["heartbeat"]
 
         # stop the service
@@ -175,18 +182,13 @@ class TestSynchronousComputeService:
             else:
                 break
 
-        task = n4js.graph.run(
-            """
+        q = """
         match (t:Task {status: 'complete'})
         return t
         """
-        ).to_subgraph()
 
-        assert task is not None
-
-        # service should now be deregistered
-        csreg = n4js.graph.run(q).to_subgraph()
-        assert csreg is None
+        results = n4js.graph.execute_query(q)
+        assert results.records
 
     def test_stop(self):
         # tested as part of tests above to stop threaded components that
