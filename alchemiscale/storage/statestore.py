@@ -183,12 +183,6 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
             )
 
-        # make sure we don't get objects with id 0 by creating at least one
-        # this is a compensating control for a bug in py2neo, where nodes with id 0 are not properly
-        # deduplicated by Subgraph set operations, which we currently rely on
-        # see this PR: https://github.com/py2neo-org/py2neo/pull/951
-        self.graph.execute_query("MERGE (:NOPE)")
-
     def check(self):
         """Check consistency of database.
 
@@ -216,10 +210,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                     f"Constraint {constraint['name']} does not have expected form"
                 )
 
-        nope = self.graph.execute_query("MATCH (n:NOPE) RETURN n").records[0]["n"]
-        if nope.element_id != "0":
-            raise Neo4JStoreError("Identity of NOPE node is not exactly 0")
-
     def _store_check(self):
         """Check that the database is in a state that can be used by the API."""
         try:
@@ -231,11 +221,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def reset(self):
         """Remove all data from database; undo all components in `initialize`."""
-        # we'll keep NOPE around to avoid a case where Neo4j doesn't give it id 0
-        # after a series of wipes; appears to happen often enough in tests
-        # can remove this once py2neo#951 merged
-        # self.graph.run("MATCH (n) DETACH DELETE n")
-        self.graph.execute_query("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
+        self.graph.execute_query("MATCH (n) DETACH DELETE n")
 
         for label, values in self.constraints.items():
             self.graph.execute_query(
