@@ -33,8 +33,7 @@ class AlchemiscaleBaseClientError(Exception):
         super().__init__(*args, **kwargs)
 
 
-class AlchemiscaleConnectionError(Exception):
-    ...
+class AlchemiscaleConnectionError(Exception): ...
 
 
 def use_session(f):

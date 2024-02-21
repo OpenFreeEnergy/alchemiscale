@@ -26,8 +26,7 @@ from ..models import Scope, ScopedKey
 from ..storage.models import TaskHub, Task, ComputeServiceID, TaskStatusEnum
 
 
-class AlchemiscaleComputeClientError(AlchemiscaleBaseClientError):
-    ...
+class AlchemiscaleComputeClientError(AlchemiscaleBaseClientError): ...
 
 
 class AlchemiscaleComputeClient(AlchemiscaleBaseClient):

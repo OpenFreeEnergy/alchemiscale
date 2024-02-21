@@ -33,8 +33,7 @@ from ..validators import validate_network_nonself
 from ..keyedchain import KeyedChain
 
 
-class AlchemiscaleClientError(AlchemiscaleBaseClientError):
-    ...
+class AlchemiscaleClientError(AlchemiscaleBaseClientError): ...
 
 
 def _get_transformation_results(client_settings, tf_sk, ok: bool, kwargs):
