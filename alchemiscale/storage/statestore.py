@@ -95,15 +95,29 @@ def _select_task_from_taskpool(taskpool: Subgraph) -> Union[ScopedKey, None]:
     return chosen_one[0]
 
 
+def _select_tasks_from_taskpool(taskpool: List[Tuple[str, float]], count) -> List[str]:
+
+    weights = []
+    tasks = []
+    for t, w in taskpool:
+        tasks.append(t)
+        weights.append(w)
+
+    weights = np.array(weights)
+    prob = weights / weights.sum()
+
+    return list(np.random.choice(tasks, count, replace=False, p=prob))
+
+
 def _generate_claim_query(
-    task_sk: ScopedKey, compute_service_id: ComputeServiceID
+    task_sks: List[ScopedKey], compute_service_id: ComputeServiceID
 ) -> str:
     """
-    Generate a query to claim a single Task.
+    Generate a query to claim a list of Tasks.
     Parameters
     ----------
-    task_sk
-        The ScopedKey of the Task to claim.
+    task_sks
+        A list of ScopedKeys of Tasks to claim.
     compute_service_id
         ComputeServiceID of the claiming service.
 
@@ -112,9 +126,13 @@ def _generate_claim_query(
     query: str
         The Cypher query to claim the Task.
     """
+
+    task_data = str([str(task_sk) for task_sk in task_sks])
+
     query = f"""
     // only match the task if it doesn't have an existing CLAIMS relationship
-    MATCH (t:Task {{_scoped_key: '{task_sk}'}})
+    UNWIND {task_data} AS task_sk
+    MATCH (t:Task {{_scoped_key: task_sk}})
     WHERE NOT (t)<-[:CLAIMS]-(:ComputeServiceRegistration)
     SET t.status = 'running'
 
@@ -1436,8 +1454,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         else:
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
-    # TODO: this needs to be cleaning up, but that's
-    # high priority anyways
     def claim_taskhub_tasks(
         self, taskhub: ScopedKey, compute_service_id: ComputeServiceID, count: int = 1
     ) -> List[Union[ScopedKey, None]]:
@@ -1462,36 +1478,20 @@ class Neo4jStore(AlchemiscaleStateStore):
             Claim the given number of Tasks in a single transaction.
 
         """
-        taskpool_q = f"""
-        // get list of all eligible 'waiting' tasks in the hub
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
-        WHERE task.status = 'waiting'
-        AND actions.weight > 0
-        OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
-        // drop tasks from consideration if they EXTENDS an incomplete task
-        WITH task, other_task, actions
-        WHERE other_task.status = 'complete' OR other_task IS NULL
+        q = f"""
+            MATCH (th:TaskHub {{`_scoped_key`: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
+            WHERE task.status = 'waiting'
+            AND actions.weight > 0
+            OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
-        // get the highest priority present among these tasks (value nearest to 1)
-        WITH MIN(task.priority) as top_priority
+            WITH task, other_task, actions
+            WHERE other_task.status = 'completed' OR other_task IS NULL
 
-        // match again, this time filtering on highest priority
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
-        WHERE task.status = 'waiting'
-        AND actions.weight > 0
-        AND task.priority = top_priority
-        OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
-
-        // drop tasks from consideration if they EXTENDS an incomplete task
-        WITH task, other_task, actions
-        WHERE other_task.status = 'complete' OR other_task IS NULL
-
-        // return the tasks and actions relationships
-        RETURN task, actions
+            RETURN task.`_scoped_key`, task.priority, actions.weight
+            ORDER BY task.priority ASC
         """
-
-        tasks = []
+        _tasks = {}
         with self.transaction() as tx:
             tx.run(
                 f"""
@@ -1501,35 +1501,42 @@ class Neo4jStore(AlchemiscaleStateStore):
             SET th._lock = True
             """
             )
-            for i in range(count):
-                _taskpool = tx.run(taskpool_q).to_eager_result()
 
-                if not _taskpool.records:
-                    tasks.append(None)
+            _taskpool = tx.run(q)
 
+            def task_count(task_dict: dict):
+                return sum(map(len, task_dict.values()))
+
+            _task_iter = _taskpool.__iter__()
+            while task_count(_tasks) < count:
+                try:
+                    candidate = next(_task_iter)
+                    pr = candidate["task.priority"]
+
+                    if pr not in _tasks.keys():
+                        _tasks[pr] = []
+
+                    sk = candidate["task.`_scoped_key`"]
+                    wt = candidate["actions.weight"]
+                    _tasks[pr].append((sk, wt))
+                except StopIteration:
+                    break
+
+            remaining = count
+            tasks = []
+            for _, taskgroup in sorted(_tasks.items()):
+                if len(taskgroup) <= remaining:
+                    tasks.extend(map(lambda x: ScopedKey.from_str(x[0]), taskgroup))
+                    if not (remaining := count - len(tasks)):
+                        break
                 else:
-                    taskpool = Subgraph()
+                    tasks.extend(
+                        map(ScopedKey.from_str, _select_tasks_from_taskpool(taskgroup))
+                    )
 
-                    for record in _taskpool.records:
-                        task = record_data_to_node(record["task"])
-                        rel = record["actions"]
-                        actions_rel = Relationship(
-                            record_data_to_node(rel.start_node),
-                            rel.type,
-                            record_data_to_node(rel.end_node),
-                            **rel._properties,
-                        )
-                        taskpool = taskpool | task | actions_rel
-
-                    chosen_one = _select_task_from_taskpool(taskpool)
-                    claim_query = _generate_claim_query(chosen_one, compute_service_id)
-
-                    cq = tx.run(claim_query).to_eager_result()
-
-                    if not cq.records:
-                        tasks.append(None)
-                    else:
-                        tasks.append(record_data_to_node(cq.records[0]["t"]))
+            if tasks:
+                q = _generate_claim_query(tasks, compute_service_id)
+                tx.run(q)
 
             tx.run(
                 f"""
@@ -1540,10 +1547,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
             )
 
-        return [
-            ScopedKey.from_str(t["_scoped_key"]) if t is not None else None
-            for t in tasks
-        ]
+        return tasks + [None] * (count - len(tasks))
 
     ## tasks
 
