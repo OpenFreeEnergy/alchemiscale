@@ -15,4 +15,4 @@ assignees: ''
 **Briefly detail what you have already tried**
 
 
-**Describe the new feature(s) that would help you to achive this**
+**Describe the new feature(s) that would help you to achieve this**
