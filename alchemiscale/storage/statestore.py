@@ -51,7 +51,7 @@ def get_n4js(settings: Neo4jStoreSettings):
     graph = GraphDatabase.driver(
         settings.NEO4J_URL, auth=(settings.NEO4J_USER, settings.NEO4J_PASS)
     )
-    return Neo4jStore(graph)
+    return Neo4jStore(graph, db_name=settings.NEO4J_DBNAME)
 
 
 class Neo4JStoreError(Exception): ...
@@ -149,14 +149,15 @@ class Neo4jStore(AlchemiscaleStateStore):
         },
     }
 
-    def __init__(self, graph: Driver):
+    def __init__(self, graph: Driver, db_name: str = "neo4j"):
         self.graph: Driver = graph
+        self.db_name = db_name
         self.gufe_nodes = weakref.WeakValueDictionary()
 
     @contextmanager
-    def transaction(self, readonly=False, ignore_exceptions=False) -> Transaction:
+    def transaction(self, ignore_exceptions=False) -> Transaction:
         """Context manager for a Neo4j Transaction."""
-        with self.graph.session() as session:
+        with self.graph.session(database=self.db_name) as session:
             tx = session.begin_transaction()
             try:
                 yield tx
@@ -168,6 +169,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             else:
                 tx.commit()
 
+    def execute_query(self, query):
+        return self.execute_query(query, database_=self.db_name)
+
     def initialize(self):
         """Initialize database.
 
@@ -176,7 +180,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         for label, values in self.constraints.items():
-            self.graph.execute_query(
+            self.execute_query(
                 f"""
                 CREATE CONSTRAINT {values['name']} IF NOT EXISTS
                 FOR (n:{label}) REQUIRE n.{values['property']} is unique
@@ -187,7 +191,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # this is a compensating control for a bug in py2neo, where nodes with id 0 are not properly
         # deduplicated by Subgraph set operations, which we currently rely on
         # see this PR: https://github.com/py2neo-org/py2neo/pull/951
-        self.graph.execute_query("MERGE (:NOPE)")
+        self.execute_query("MERGE (:NOPE)")
 
     def check(self):
         """Check consistency of database.
@@ -197,8 +201,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         constraints = {
-            rec["name"]: rec
-            for rec in self.graph.execute_query("show constraints").records
+            rec["name"]: rec for rec in self.execute_query("show constraints").records
         }
 
         if len(constraints) != len(self.constraints):
@@ -216,7 +219,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     f"Constraint {constraint['name']} does not have expected form"
                 )
 
-        nope = self.graph.execute_query("MATCH (n:NOPE) RETURN n").records[0]["n"]
+        nope = self.execute_query("MATCH (n:NOPE) RETURN n").records[0]["n"]
         if nope.element_id != "0":
             raise Neo4JStoreError("Identity of NOPE node is not exactly 0")
 
@@ -224,7 +227,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Check that the database is in a state that can be used by the API."""
         try:
             # just list available functions to see if database is working
-            self.graph.execute_query("SHOW FUNCTIONS YIELD *")
+            self.execute_query("SHOW FUNCTIONS YIELD *")
         except Exception:
             return False
         return True
@@ -235,10 +238,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         # after a series of wipes; appears to happen often enough in tests
         # can remove this once py2neo#951 merged
         # self.graph.run("MATCH (n) DETACH DELETE n")
-        self.graph.execute_query("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
+        self.execute_query("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
 
         for label, values in self.constraints.items():
-            self.graph.execute_query(
+            self.execute_query(
                 f"""
                 DROP CONSTRAINT {values['name']} IF EXISTS
             """
@@ -498,7 +501,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         nodes = set()
         subgraph = Subgraph()
 
-        for record in self.graph.execute_query(q).records:
+        for record in self.execute_query(q).records:
             node = record_data_to_node(record["n"])
             nodes.add(node)
             if return_subgraph and record["p"] is not None:
@@ -1051,7 +1054,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 match (th:TaskHub {{network: "{network}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
                 return th
                 """
-        node = record_data_to_node(self.graph.execute_query(q).records[0]["th"])
+        node = record_data_to_node(self.execute_query(q).records[0]["th"])
 
         if return_gufe:
             return self._subgraph_to_gufe([node], node)[node]
@@ -1075,7 +1078,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}}),
         DETACH DELETE th
         """
-        self.graph.execute_query(q)
+        self.execute_query(q)
 
         return taskhub
 
@@ -1223,7 +1226,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
                 RETURN task
                 """
-                task = self.graph.execute_query(q)
+                task = self.execute_query(q)
 
                 if task.records:
                     sk = task.records[0].data()["task"]["_scoped_key"]
