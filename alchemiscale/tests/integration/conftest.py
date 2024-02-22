@@ -94,6 +94,7 @@ class TestProfile:
             image=self.release_str,
             auth=("neo4j", "password"),
             dir_spec=dir_spec,
+            config={},
         ) as service:
             uris = [router.uri(self.scheme) for router in service.routers()]
             yield service, uris[0]
@@ -101,7 +102,7 @@ class TestProfile:
 
 # TODO: test with full certificates
 neo4j_deployment_profiles = [
-    DeploymentProfile(release=(4, 4), topology="CE", schemes=["bolt"]),
+    DeploymentProfile(release=(5, 16), topology="CE", schemes=["bolt"]),
 ]
 
 if NEO4J_VERSION == "LATEST":
