@@ -398,7 +398,6 @@ class TestNeo4jStore(TestStateStore):
         q = f"""match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
             """
-
         csreg = n4js.execute_query(q).records[0]["csreg"]
 
         assert csreg["identifier"] == compute_service_id
@@ -494,7 +493,6 @@ class TestNeo4jStore(TestStateStore):
                                              _project: '{task_sk.project}'}})-[:PERFORMS]->(m:Transformation)
                 return m
                 """
-
         m = n4js.execute_query(q).records[0]["m"]
 
         assert m["_gufe_key"] == transformation.key
@@ -822,7 +820,6 @@ class TestNeo4jStore(TestStateStore):
                                    _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
                 return n
                 """
-
         results = n4js.execute_query(q)
 
         assert len(results.records) == 1
@@ -1789,7 +1786,6 @@ class TestNeo4jStore(TestStateStore):
         MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
         RETURN n
         """
-
         n = n4js.execute_query(q).records[0]["n"]
         scopes = n["scopes"]
         assert len(scopes) == 1
@@ -1820,7 +1816,6 @@ class TestNeo4jStore(TestStateStore):
         MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
         RETURN n
         """
-
         n = n4js.execute_query(q).records[0]["n"]
         scopes = n["scopes"]
         assert len(scopes) == 1

@@ -159,7 +159,6 @@ class Neo4jStore(AlchemiscaleStateStore):
     def transaction(self, ignore_exceptions=False) -> Transaction:
         """Context manager for a Neo4j Transaction."""
         with self.graph.session(database=self.db_name) as session:
-
             tx = session.begin_transaction()
             try:
                 yield tx
@@ -225,7 +224,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Check that the database is in a state that can be used by the API."""
         try:
             # just list available functions to see if database is working
-
             self.execute_query("SHOW FUNCTIONS YIELD *")
         except Exception:
             return False
@@ -501,7 +499,6 @@ class Neo4jStore(AlchemiscaleStateStore):
             nodes.add(node)
             if return_subgraph and record["p"] is not None:
                 subgraph = subgraph | subgraph_from_path_record(record["p"])
-
             else:
                 subgraph = node
 
@@ -1024,7 +1021,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                 match (th:TaskHub {{network: "{network}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
                 return th
                 """
-
         node = record_data_to_node(self.execute_query(q).records[0]["th"])
 
         if return_gufe:
@@ -1049,7 +1045,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}}),
         DETACH DELETE th
         """
-
         self.execute_query(q)
 
         return taskhub
@@ -1198,7 +1193,6 @@ class Neo4jStore(AlchemiscaleStateStore):
 
                 RETURN task
                 """
-
                 task = self.execute_query(q)
 
                 if task.records:

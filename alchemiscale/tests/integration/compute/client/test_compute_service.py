@@ -48,7 +48,6 @@ class TestSynchronousComputeService:
         match (csreg:ComputeServiceRegistration {{identifier: '{service.compute_service_id}'}})
         return csreg
         """
-
         csreg = n4js.execute_query(q).records[0]["csreg"]
 
         assert csreg["registered"] < csreg["heartbeat"]
