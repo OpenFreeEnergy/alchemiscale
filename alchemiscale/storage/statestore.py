@@ -170,7 +170,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 tx.commit()
 
     def execute_query(self, query):
-        return self.execute_query(query, database_=self.db_name)
+        return self.graph.execute_query(query, database_=self.db_name)
 
     def initialize(self):
         """Initialize database.
