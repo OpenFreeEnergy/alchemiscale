@@ -217,7 +217,7 @@ def test_compute_synchronous(
             return csreg
             """
             while True:
-                csreg = n4js.graph.execute_query(q)
+                csreg = n4js.execute_query(q)
                 if not csreg.records:
                     time.sleep(1)
                 else:
@@ -337,7 +337,7 @@ def test_database_reset(n4js_fresh, network_tyk2, scope_test):
         assert click_success(result)
 
     q = "MATCH (n) RETURN n"
-    assert not n4js.graph.execute_query(q).records
+    assert not n4js.execute_query(q).records
 
     with pytest.raises(Neo4JStoreError):
         n4js.check()
