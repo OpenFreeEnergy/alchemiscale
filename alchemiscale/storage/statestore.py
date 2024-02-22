@@ -35,12 +35,13 @@ from ..settings import Neo4jStoreSettings
 from ..validators import validate_network_nonself
 
 from .subgraph import (
-    merge_subgraph,
-    create_subgraph,
-    record_data_to_node,
     Node,
     Relationship,
     Subgraph,
+    create_subgraph,
+    merge_subgraph,
+    record_data_to_node,
+    subgraph_from_path_record,
 )
 
 
@@ -505,20 +506,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             node = record_data_to_node(record["n"])
             nodes.add(node)
             if return_subgraph and record["p"] is not None:
-                p = record["p"]
-                path_nodes = set((record_data_to_node(n) for n in p.nodes))
-                path_rels = set(
-                    (
-                        Relationship(
-                            record_data_to_node(rel.start_node),
-                            rel.type,
-                            record_data_to_node(rel.end_node),
-                            **rel._properties,
-                        )
-                        for rel in p.relationships
-                    )
-                )
-                subgraph = subgraph | Subgraph(path_nodes, path_rels)
+                subgraph = subgraph | subgraph_from_path_record(record["p"])
             else:
                 subgraph = node
 
@@ -594,20 +582,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             node = record_data_to_node(record["n"])
             nodes.append(node)
             if return_gufe and record["p"] is not None:
-                p = record["p"]
-                path_nodes = set((record_data_to_node(n) for n in p.nodes))
-                path_rels = set(
-                    (
-                        Relationship(
-                            record_data_to_node(rel.start_node),
-                            rel.type,
-                            record_data_to_node(rel.end_node),
-                        )
-                        for rel in p.relationships
-                    )
-                )
-
-                subgraph = subgraph | Subgraph(path_nodes, path_rels)
+                subgraph = subgraph | subgraph_from_path_record(record["p"])
             else:
                 subgraph = node
 
@@ -1414,7 +1389,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         subgraph = Subgraph()
         for record in res.records:
             tasks.append(record_data_to_node(record["task"]))
-            subgraph = subgraph | record_data_to_node(record["task"])
+            subgraph = subgraph | tasks[-1]
 
         if return_gufe:
             return {
