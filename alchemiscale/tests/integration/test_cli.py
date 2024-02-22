@@ -217,13 +217,15 @@ def test_compute_synchronous(
             return csreg
             """
             while True:
-                csreg = n4js.graph.run(q).to_subgraph()
-                if csreg is None:
+                csreg = n4js.execute_query(q)
+                if not csreg.records:
                     time.sleep(1)
                 else:
                     break
 
-            assert csreg["registered"] > datetime.utcnow() - timedelta(seconds=30)
+            assert csreg.records[0]["csreg"][
+                "registered"
+            ] > datetime.utcnow() - timedelta(seconds=30)
 
             proc.terminate()
             proc.join()
@@ -273,7 +275,7 @@ def test_database_init(n4js_fresh):
         n4js.check()
 
     env_vars = {
-        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_URL": "bolt://" + str(n4js.graph.address),
         "NEO4J_USER": "neo4j",
         "NEO4J_PASS": "password",
     }
@@ -294,7 +296,7 @@ def test_database_check(n4js_fresh, network_tyk2, scope_test):
     n4js.create_network(network_tyk2, scope_test)
 
     env_vars = {
-        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_URL": "bolt://" + str(n4js.graph.address),
         "NEO4J_USER": "neo4j",
         "NEO4J_PASS": "password",
     }
@@ -323,7 +325,7 @@ def test_database_reset(n4js_fresh, network_tyk2, scope_test):
     n4js.create_network(network_tyk2, scope_test)
 
     env_vars = {
-        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_URL": "bolt://" + str(n4js.graph.address),
         "NEO4J_USER": "neo4j",
         "NEO4J_PASS": "password",
     }
@@ -334,7 +336,8 @@ def test_database_reset(n4js_fresh, network_tyk2, scope_test):
         result = runner.invoke(cli, ["database", "reset"])
         assert click_success(result)
 
-    assert n4js.graph.run("MATCH (n) WHERE NOT n:NOPE RETURN n").to_subgraph() is None
+    q = "MATCH (n) WHERE NOT n:NOPE RETURN n"
+    assert not n4js.execute_query(q).records
 
     with pytest.raises(Neo4JStoreError):
         n4js.check()
@@ -348,7 +351,7 @@ def test_identity_add(n4js_fresh, identity_type):
     n4js = n4js_fresh
     identity_type_str, identity_type_cls = identity_type
     env_vars = {
-        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_URL": "bolt://" + str(n4js.graph.address),
         "NEO4J_USER": "neo4j",
         "NEO4J_PASS": "password",
     }
@@ -383,7 +386,7 @@ def test_identity_remove(n4js_fresh, identity_type):
     n4js = n4js_fresh
     identity_type_str, identity_type_cls = identity_type
     env_vars = {
-        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_URL": "bolt://" + str(n4js.graph.address),
         "NEO4J_USER": "neo4j",
         "NEO4J_PASS": "password",
     }
@@ -419,7 +422,7 @@ def test_identity_remove(n4js_fresh, identity_type):
 def test_identity_list(n4js_fresh):
     n4js = n4js_fresh
     env_vars = {
-        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_URL": "bolt://" + str(n4js.graph.address),
         "NEO4J_USER": "neo4j",
         "NEO4J_PASS": "password",
     }
@@ -453,7 +456,7 @@ def test_identity_list(n4js_fresh):
 def test_scope_list(n4js_fresh):
     n4js = n4js_fresh
     env_vars = {
-        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_URL": "bolt://" + str(n4js.graph.address),
         "NEO4J_USER": "neo4j",
         "NEO4J_PASS": "password",
     }
@@ -505,7 +508,7 @@ def test_scope_list(n4js_fresh):
 def test_scope_add(n4js_fresh, scopes):
     n4js = n4js_fresh
     env_vars = {
-        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_URL": "bolt://" + str(n4js.graph.address),
         "NEO4J_USER": "neo4j",
         "NEO4J_PASS": "password",
     }
@@ -557,7 +560,7 @@ def test_scope_add(n4js_fresh, scopes):
 def test_scope_remove(n4js_fresh, scopes_remove):
     n4js = n4js_fresh
     env_vars = {
-        "NEO4J_URL": n4js.graph.service.uri,
+        "NEO4J_URL": "bolt://" + str(n4js.graph.address),
         "NEO4J_USER": "neo4j",
         "NEO4J_PASS": "password",
     }
