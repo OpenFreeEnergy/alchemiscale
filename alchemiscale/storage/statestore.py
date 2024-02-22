@@ -42,7 +42,6 @@ from .subgraph import (
     merge_subgraph,
     record_data_to_node,
     subgraph_from_path_record,
-
 )
 
 
@@ -172,10 +171,8 @@ class Neo4jStore(AlchemiscaleStateStore):
             else:
                 tx.commit()
 
-
     def execute_query(self, query):
         return self.graph.execute_query(query, database_=self.db_name)
-
 
     def initialize(self):
         """Initialize database.
@@ -206,7 +203,6 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         constraints = {
-
             rec["name"]: rec for rec in self.execute_query("show constraints").records
         }
 
@@ -225,7 +221,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                     f"Constraint {constraint['name']} does not have expected form"
                 )
 
-
     def _store_check(self):
         """Check that the database is in a state that can be used by the API."""
         try:
@@ -242,7 +237,6 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         for label, values in self.constraints.items():
             self.execute_query(
-
                 f"""
                 DROP CONSTRAINT {values['name']} IF EXISTS
             """

@@ -401,7 +401,6 @@ class TestNeo4jStore(TestStateStore):
 
         csreg = n4js.execute_query(q).records[0]["csreg"]
 
-
         assert csreg["identifier"] == compute_service_id
 
         # we round to integer seconds from epoch to avoid somewhat different
@@ -447,7 +446,6 @@ class TestNeo4jStore(TestStateStore):
             """
 
         csreg = n4js.execute_query(q).records[0]["csreg"]
-
 
         # we round to integer seconds from epoch to avoid somewhat different
         # floats on either side of comparison even if practically the same
