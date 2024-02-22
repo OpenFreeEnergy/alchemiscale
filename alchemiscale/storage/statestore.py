@@ -231,7 +231,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def reset(self):
         """Remove all data from database; undo all components in `initialize`."""
-        self.graph.execute_query("MATCH (n) DETACH DELETE n")
+        self.execute_query("MATCH (n) DETACH DELETE n")
 
         for label, values in self.constraints.items():
             self.execute_query(
