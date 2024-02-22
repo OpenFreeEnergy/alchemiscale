@@ -9,8 +9,7 @@ import os
 import json
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException
-from fastapi import status as http_status
+from fastapi import FastAPI, APIRouter, Body, Depends
 from fastapi.middleware.gzip import GZipMiddleware
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
