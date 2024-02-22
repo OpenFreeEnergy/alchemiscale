@@ -1513,12 +1513,26 @@ class Neo4jStore(AlchemiscaleStateStore):
                     candidate = next(_task_iter)
                     pr = candidate["task.priority"]
 
-                    if pr not in _tasks.keys():
-                        _tasks[pr] = []
+                    _tasks[pr] = []
+                    _tasks[pr].append(
+                        (candidate["task.`_scoped_key`"], candidate["actions.weight"])
+                    )
+                    while True:
 
-                    sk = candidate["task.`_scoped_key`"]
-                    wt = candidate["actions.weight"]
-                    _tasks[pr].append((sk, wt))
+                        if not (next_task := _taskpool.peek()):
+                            raise StopIteration
+
+                        if next_task["task.priority"] != pr:
+                            break
+
+                        candidate = next(_task_iter)
+                        _tasks[candidate["task.priority"]].append(
+                            (
+                                candidate["task.`_scoped_key`"],
+                                candidate["actions.weight"],
+                            )
+                        )
+
                 except StopIteration:
                     break
 
@@ -1531,7 +1545,10 @@ class Neo4jStore(AlchemiscaleStateStore):
                         break
                 else:
                     tasks.extend(
-                        map(ScopedKey.from_str, _select_tasks_from_taskpool(taskgroup))
+                        map(
+                            ScopedKey.from_str,
+                            _select_tasks_from_taskpool(taskgroup, remaining),
+                        )
                     )
 
             if tasks:
