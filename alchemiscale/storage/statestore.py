@@ -1432,8 +1432,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         else:
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
-    # TODO: this needs to be cleaning up, but that's
-    # high priority anyways
     def claim_taskhub_tasks(
         self, taskhub: ScopedKey, compute_service_id: ComputeServiceID, count: int = 1
     ) -> List[Union[ScopedKey, None]]:
@@ -1461,12 +1459,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         q = f"""
             MATCH (th:TaskHub {{`_scoped_key`: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
-            WHERE task.status = 'waiting'
+            WHERE task.status = '{TaskStatusEnum.waiting.value}'
             AND actions.weight > 0
             OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
             WITH task, other_task, actions
-            WHERE other_task.status = 'completed' OR other_task IS NULL
+            WHERE other_task.status = '{TaskStatusEnum.complete.value}' OR other_task IS NULL
 
             RETURN task.`_scoped_key`, task.priority, actions.weight
             ORDER BY task.priority ASC
