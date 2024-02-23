@@ -48,7 +48,7 @@ class TestSynchronousComputeService:
         match (csreg:ComputeServiceRegistration {{identifier: '{service.compute_service_id}'}})
         return csreg
         """
-        csreg = n4js.graph.execute_query(q).records[0]["csreg"]
+        csreg = n4js.execute_query(q).records[0]["csreg"]
 
         assert csreg["registered"] < csreg["heartbeat"]
 
@@ -73,7 +73,7 @@ class TestSynchronousComputeService:
         return t
         """
 
-        results = n4js_preloaded.graph.execute_query(q)
+        results = n4js_preloaded.execute_query(q)
 
         nodes = []
         for record in results.records:
@@ -133,13 +133,13 @@ class TestSynchronousComputeService:
         """
 
         # preconditions
-        protocoldagresultref = n4js.graph.execute_query(q)
+        protocoldagresultref = n4js.execute_query(q)
         assert not protocoldagresultref.records
 
         service.cycle()
 
         # postconditions
-        protocoldagresultref = n4js.graph.execute_query(q)
+        protocoldagresultref = n4js.execute_query(q)
         assert protocoldagresultref.records
         assert protocoldagresultref.records[0]["pdr"]["ok"] is True
 
@@ -148,7 +148,7 @@ class TestSynchronousComputeService:
         return t
         """
 
-        results = n4js.graph.execute_query(q)
+        results = n4js.execute_query(q)
 
         assert results.records
 
@@ -171,7 +171,7 @@ class TestSynchronousComputeService:
         match (csreg:ComputeServiceRegistration {{identifier: '{service.compute_service_id}'}})
         return csreg
         """
-        csreg = n4js.graph.execute_query(q).records[0]["csreg"]
+        csreg = n4js.execute_query(q).records[0]["csreg"]
         assert csreg["registered"] < csreg["heartbeat"]
 
         # stop the service
@@ -187,7 +187,7 @@ class TestSynchronousComputeService:
         return t
         """
 
-        results = n4js.graph.execute_query(q)
+        results = n4js.execute_query(q)
         assert results.records
 
     def test_stop(self):
