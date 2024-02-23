@@ -29,6 +29,7 @@ from .models import (
 )
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
+from .cypher import scoped_keys_to_cypher_list
 
 from ..security.models import CredentialedEntity
 from ..settings import Neo4jStoreSettings
@@ -128,7 +129,7 @@ def _generate_claim_query(
         The Cypher query to claim the Task.
     """
 
-    task_data = str([str(task_sk) for task_sk in task_sks])
+    task_data = scoped_keys_to_cypher_list(task_sks)
 
     query = f"""
     // only match the task if it doesn't have an existing CLAIMS relationship

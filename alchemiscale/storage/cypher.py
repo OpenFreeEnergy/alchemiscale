@@ -1,0 +1,23 @@
+from alchemiscale import ScopedKey
+from typing import List, Optional
+
+
+def scoped_keys_to_cypher_list(scoped_keys: List[Optional[ScopedKey]]) -> str:
+    """Generate a Cypher list structure from a list of ScopedKeys, ignoring NoneType entries.
+
+    Parameters
+    ----------
+    scoped_keys
+        List of ScopedKeys to generate the Cypher list
+
+    Returns
+    -------
+    str
+        Cypher list
+    """
+
+    data = []
+    for scoped_key in scoped_keys:
+        if scoped_key:
+            data.append('"' + str(scoped_key) + '"')
+    return "[" + ", ".join(data) + "]"
