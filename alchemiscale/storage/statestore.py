@@ -1187,7 +1187,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             // and where the task is either in 'waiting', 'running', or 'error' status
             WITH th, an, task
             WHERE NOT (th)-[:ACTIONS]->(task)
-              AND task.status IN ['waiting', 'running', 'error']
+              AND task.status IN ['{TaskStatusEnum.waiting.value}', '{TaskStatusEnum.running.value}', '{TaskStatusEnum.error.value}']
 
             // create the connection
             CREATE (th)-[ar:ACTIONS {{weight: 0.5}}]->(task)
@@ -1200,6 +1200,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
             results = tx.run(q).to_eager_result()
 
+        # update our map with the results, leaving None for tasks that aren't found
         for task_record in results.records:
             sk = task_record["task"]["_scoped_key"]
             task_map[str(sk)] = ScopedKey.from_str(sk)
