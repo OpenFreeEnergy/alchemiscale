@@ -487,7 +487,6 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         task_sk: ScopedKey = n4js.create_task(transformation_sk)
-
         q = f"""match (n:Task {{_gufe_key: '{task_sk.gufe_key}', 
                                              _org: '{task_sk.org}', _campaign: '{task_sk.campaign}', 
                                              _project: '{task_sk.project}'}})-[:PERFORMS]->(m:Transformation)
@@ -496,6 +495,17 @@ class TestNeo4jStore(TestStateStore):
         m = n4js.execute_query(q).records[0]["m"]
 
         assert m["_gufe_key"] == transformation.key
+
+        N = 100
+        task_sks = n4js.create_tasks([transformation_sk] * N)
+
+        assert len(task_sks) == N
+
+        # extend all of these tasks
+        task_sks = n4js.create_tasks([transformation_sk] * N, task_sks)
+
+        # TODO: expand these tests
+        assert len(task_sks) == N
 
     def test_create_task_extends_invalid_deleted(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try generating task
@@ -528,8 +538,7 @@ class TestNeo4jStore(TestStateStore):
 
         tf_sks = n4js.query_transformations(scope=scope_test)
 
-        for tf_sk in tf_sks[:10]:
-            [n4js.create_task(tf_sk) for i in range(3)]
+        n4js.create_tasks([tf_sk for tf_sk in tf_sks[:10]] * 3)
 
         task_sks = n4js.query_tasks()
         assert len(task_sks) == 10 * 3
@@ -562,7 +571,7 @@ class TestNeo4jStore(TestStateStore):
 
         task_sks = []
         for tf_sk in tf_sks[:10]:
-            task_sks.extend([n4js.create_task(tf_sk) for i in range(3)])
+            task_sks.extend(n4js.create_tasks([tf_sk] * 3))
 
         task_sks_network = n4js.get_network_tasks(an_sk)
         assert set(task_sks_network) == set(task_sks)
@@ -587,9 +596,7 @@ class TestNeo4jStore(TestStateStore):
         an_sk = n4js.query_networks(scope=scope_test)[0]
         tf_sks = n4js.get_network_transformations(an_sk)
 
-        task_sks = []
-        for tf_sk in tf_sks[:10]:
-            task_sks.extend([n4js.create_task(tf_sk) for i in range(3)])
+        task_sks = n4js.create_tasks([tf_sk for tf_sk in tf_sks[:10]] * 3)
 
         for task_sk in task_sks:
             an_sks = n4js.get_task_networks(task_sk)
@@ -695,7 +702,7 @@ class TestNeo4jStore(TestStateStore):
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
-        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+        task_sks = n4js.create_tasks([transformation_sk] * 3)
 
         base_case = n4js.get_task_priority(task_sks)
         assert [10, 10, 10] == base_case
@@ -716,7 +723,7 @@ class TestNeo4jStore(TestStateStore):
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
-        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+        task_sks = n4js.create_tasks([transformation_sk] * 3)
 
         updated = n4js.set_task_priority(task_sks, 1)
         assert updated == task_sks
@@ -735,7 +742,7 @@ class TestNeo4jStore(TestStateStore):
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
-        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+        task_sks = n4js.create_tasks([transformation_sk] * 3)
         task_sks_with_fake = task_sks + [
             ScopedKey.from_str("Task-FAKE-test_org-test_campaign-test_project")
         ]
@@ -751,7 +758,7 @@ class TestNeo4jStore(TestStateStore):
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
-        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+        task_sks = n4js.create_tasks([transformation_sk] * 3)
 
         msg = "priority must be between"
 
@@ -771,7 +778,7 @@ class TestNeo4jStore(TestStateStore):
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
-        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+        task_sks = n4js.create_tasks([transformation_sk] * 3)
 
         result = n4js.get_task_priority(task_sks)
         assert result == [10, 10, 10]
@@ -784,7 +791,7 @@ class TestNeo4jStore(TestStateStore):
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
-        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+        task_sks = n4js.create_tasks([transformation_sk] * 3)
         task_sks_with_fake = task_sks + [
             ScopedKey.from_str("Task-FAKE-test_org-test_campaign-test_project")
         ]
@@ -879,7 +886,7 @@ class TestNeo4jStore(TestStateStore):
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
-        task_sks = [n4js.create_task(transformation_sk) for i in range(5)]
+        task_sks = n4js.create_tasks([transformation_sk] * 5)
 
         # do not action the tasks yet; should get back nothing
         actioned_tasks = n4js.get_taskhub_actioned_tasks(taskhub_sk)
@@ -960,7 +967,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
 
         # action the tasks
         n4js.action_tasks(task_sks, taskhub_sk)
@@ -994,8 +1001,8 @@ class TestNeo4jStore(TestStateStore):
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
-        # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(6)]
+        # create 6 tasks
+        task_sks = n4js.create_tasks([transformation_sk] * 6)
 
         # set all but first task to running
         n4js.set_task_running(task_sks[1:])
@@ -1049,7 +1056,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
 
         # action the tasks
         n4js.action_tasks(task_sks, taskhub_sk)
@@ -1075,7 +1082,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
         n4js.action_tasks(task_sks, taskhub_sk)
 
         # weights should all be the default 0.5
@@ -1096,7 +1103,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
 
         # action the tasks
         actioned = n4js.action_tasks(task_sks, taskhub_sk)
@@ -1126,7 +1133,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
 
         # action the tasks
         actioned = n4js.action_tasks(task_sks, taskhub_sk)
@@ -1152,7 +1159,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
 
         # shuffle the tasks; want to check that order of claiming is unrelated
         # to order created
@@ -1381,7 +1388,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
 
         # action the tasks
         n4js.action_tasks(task_sks, taskhub_sk)
@@ -1414,9 +1421,7 @@ class TestNeo4jStore(TestStateStore):
 
         tf_sks = n4js.get_network_transformations(an_sk)
 
-        task_sks = []
-        for tf_sk in tf_sks:
-            task_sks.append(n4js.create_task(tf_sk))
+        task_sks = n4js.create_tasks(tf_sks)
 
         # try all scopes first
         status = n4js.get_scope_status(Scope())
@@ -1447,9 +1452,7 @@ class TestNeo4jStore(TestStateStore):
 
         tf_sks = n4js.get_network_transformations(an_sk)
 
-        task_sks = []
-        for tf_sk in tf_sks:
-            task_sks.append(n4js.create_task(tf_sk))
+        task_sks = n4js.create_tasks(tf_sks)
 
         status = n4js.get_network_status(an_sk)
         assert len(status) == 1
@@ -1473,7 +1476,7 @@ class TestNeo4jStore(TestStateStore):
 
         task_sks = []
         for tf_sk in tf_sks:
-            task_sks.append([n4js.create_task(tf_sk) for i in range(3)])
+            task_sks.append(n4js.create_tasks([tf_sk] * 3))
 
             status = n4js.get_transformation_status(tf_sk)
             assert status == {"waiting": 3}
@@ -1937,7 +1940,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
 
         if not allowed:
             with pytest.raises(ValueError, match="Cannot set task"):
@@ -1984,7 +1987,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
 
         # set all the tasks to running
         n4js.set_task_running(task_sks)
@@ -2035,7 +2038,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
 
         # set all the tasks to running
         n4js.set_task_running(task_sks)
@@ -2089,7 +2092,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
 
         # set all the tasks to running
         n4js.set_task_running(task_sks)
@@ -2151,7 +2154,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
 
         # move it to one of the terminal statuses
         neo4j_terminal_op(task_sks)
@@ -2186,7 +2189,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 3 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(3)]
+        task_sks = n4js.create_tasks([transformation_sk] * 3)
 
         n4js.action_tasks(task_sks, taskhub_sk)
 
@@ -2349,7 +2352,7 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 6 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(6)]
+        task_sks = n4js.create_tasks([transformation_sk] * 6)
 
         # task 0 will remain waiting
 

@@ -14,7 +14,7 @@ import weakref
 import numpy as np
 
 import networkx as nx
-from gufe import AlchemicalNetwork, Transformation, Settings
+from gufe import AlchemicalNetwork, Transformation, NonTransformation, Settings
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 
 from neo4j import Transaction, GraphDatabase, Driver
@@ -29,6 +29,7 @@ from .models import (
 )
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
+from .cypher import cypher_list_from_scoped_keys
 
 from ..security.models import CredentialedEntity
 from ..settings import Neo4jStoreSettings
@@ -1531,12 +1532,43 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## tasks
 
-    def create_task(
+    def validate_extends_tasks(self, task_list):
+
+        if not task_list:
+            return []
+
+        q = f"""
+            UNWIND {cypher_list_from_scoped_keys(task_list)} as task
+            MATCH (t:Task {{`_scoped_key`: task}})
+            return t
+        """
+
+        results = self.execute_query(q)
+
+        nodes = {}
+
+        for record in results.records:
+            node = record_data_to_node(record["t"])
+
+            status = node.get("status")
+
+            if status in ("invalid", "deleted"):
+                # py2neo Node doesn't like the neo4j datetime object
+                # manually cast since we're raising anyways
+                # and the results are ephemeral
+                node["datetime_created"] = str(node["datetime_created"])
+                raise ValueError(f"Cannot extend a `deleted` or `invalid` Task: {node}")
+
+            nodes[node["_scoped_key"]] = node
+
+        return nodes
+
+    def create_tasks(
         self,
-        transformation: ScopedKey,
-        extends: Optional[ScopedKey] = None,
+        transformations: List[ScopedKey],
+        extends: Optional[List[Optional[ScopedKey]]] = None,
         creator: Optional[str] = None,
-    ) -> ScopedKey:
+    ) -> List[ScopedKey]:
         """Add a compute Task to a Transformation.
 
         Note: this creates a compute Task, but does not add it to any TaskHubs.
@@ -1553,66 +1585,130 @@ class Neo4jStore(AlchemiscaleStateStore):
             `extends` input for the Task's eventual call to `Protocol.create`.
 
         """
-        if transformation.qualname not in ["Transformation", "NonTransformation"]:
+
+        allowed_types = [Transformation.__qualname__, NonTransformation.__qualname__]
+
+        # reshape data to a standard form
+        if extends is None:
+            extends = [None] * len(transformations)
+        elif len(extends) != len(transformations):
             raise ValueError(
-                "`transformation` ScopedKey does not correspond to a `Transformation`"
+                "`extends` must either be `None` or have the same length as `transformations`"
             )
 
-        if extends is not None and extends.qualname != "Task":
-            raise ValueError("`extends` ScopedKey does not correspond to a `Task`")
+        for i, _extends in enumerate(extends):
+            if _extends is not None:
+                if not (
+                    extended_task_qualname := _extends.__getattribute__("qualname")
+                ):
+                    raise ValueError(
+                        f"`extends` entry for `Task` {transformations[i]} is not valid"
+                    )
+                if extended_task_qualname != "Task":
+                    raise ValueError(
+                        f"`extends` ScopedKey ({_extends}) does not correspond to a `Task`"
+                    )
 
-        scope = transformation.scope
-        transformation_node = self._get_node(transformation)
+        transformation_map = {
+            transformation_type: [[], []] for transformation_type in allowed_types
+        }
+        for i, transformation in enumerate(transformations):
+            if transformation.qualname not in allowed_types:
+                raise ValueError(
+                    f"Got an unsupported `Task` type: {transformation.qualname}"
+                )
+            transformation_map[transformation.qualname][0].append(transformation)
+            transformation_map[transformation.qualname][1].append(extends[i])
 
-        # create a new task for the supplied transformation
-        # use a PERFORMS relationship
-        task = Task(
-            creator=creator, extends=str(extends) if extends is not None else None
-        )
-
-        _, task_node, scoped_key = self._gufe_to_subgraph(
-            task.to_shallow_dict(),
-            labels=["GufeTokenizable", task.__class__.__name__],
-            gufe_key=task.key,
-            scope=scope,
+        extends_nodes = self.validate_extends_tasks(
+            [_extends for _extends in extends if _extends is not None]
         )
 
         subgraph = Subgraph()
 
-        if extends is not None:
-            previous_task_node = self._get_node(extends)
-            stat = previous_task_node.get("status")
-            # do not allow creation of a task that extends an invalid or deleted task.
-            if (stat == "invalid") or (stat == "deleted"):
-                # py2neo Node doesn't like the neo4j datetime object
-                # manually cast since we're raising anyways
-                # and the results are ephemeral
-                previous_task_node["datetime_created"] = str(
-                    previous_task_node["datetime_created"]
-                )
-                raise ValueError(
-                    f"Cannot extend a `deleted` or `invalid` Task: {previous_task_node}"
-                )
-            subgraph = subgraph | Relationship.type("EXTENDS")(
-                task_node,
-                previous_task_node,
-                _org=scope.org,
-                _campaign=scope.campaign,
-                _project=scope.project,
-            )
+        for node_type, (
+            transformation_subset,
+            extends_subset,
+        ) in transformation_map.items():
 
-        subgraph = subgraph | Relationship.type("PERFORMS")(
-            task_node,
-            transformation_node,
-            _org=scope.org,
-            _campaign=scope.campaign,
-            _project=scope.project,
-        )
+            if not transformation_subset:
+                continue
+
+            q = f"""
+            UNWIND {cypher_list_from_scoped_keys(transformation_subset)} as sk
+            MATCH (n:{node_type} {{`_scoped_key`: sk}})
+            RETURN n
+            """
+
+            results = self.execute_query(q)
+
+            transformation_nodes = {}
+            for record in results.records:
+                node = record_data_to_node(record["n"])
+                transformation_nodes[node["_scoped_key"]] = node
+
+            tasks = [
+                Task(
+                    creator=creator,
+                    extends=str(_extends) if _extends is not None else None,
+                )
+                for _extends in extends_subset
+            ]
+
+            sks = []
+
+            for _transformation, _extends in zip(transformation_subset, extends_subset):
+
+                scope = transformation.scope
+
+                _task = Task(
+                    creator=creator,
+                    extends=str(_extends) if _extends is not None else None,
+                )
+                _, task_node, scoped_key = self._gufe_to_subgraph(
+                    _task.to_shallow_dict(),
+                    labels=["GufeTokenizable", _task.__class__.__name__],
+                    gufe_key=_task.key,
+                    scope=scope,
+                )
+
+                sks.append(scoped_key)
+
+                if _extends is not None:
+                    subgraph |= Relationship.type("EXTENDS")(
+                        task_node,
+                        extends_nodes[str(_extends)],
+                        _org=scope.org,
+                        _campaign=scope.campaign,
+                        _project=scope.project,
+                    )
+
+                subgraph |= Relationship.type("PERFORMS")(
+                    task_node,
+                    transformation_nodes[str(_transformation)],
+                    _org=scope.org,
+                    _campaign=scope.campaign,
+                    _project=scope.project,
+                )
 
         with self.transaction() as tx:
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
-        return scoped_key
+        return sks
+
+    def create_task(
+        self,
+        transformation: ScopedKey,
+        extends: Optional[ScopedKey] = None,
+        creator: Optional[str] = None,
+    ) -> ScopedKey:
+        """Create a single `Task` from a `Transformation`.
+
+        This method wrap around the more general `create_tasks` method.
+        """
+        return self.create_tasks(
+            [transformation], extends=[extends] if extends is not None else [None]
+        )[0]
 
     def query_tasks(self, *, status=None, key=None, scope: Scope = Scope()):
         """Query for `Task`\s matching given attributes."""
