@@ -1626,6 +1626,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         subgraph = Subgraph()
 
+        sks = []
+        # iterate over all allowed types, unpacking the transformations and extends subsets
         for node_type, (
             transformation_subset,
             extends_subset,
@@ -1646,16 +1648,6 @@ class Neo4jStore(AlchemiscaleStateStore):
             for record in results.records:
                 node = record_data_to_node(record["n"])
                 transformation_nodes[node["_scoped_key"]] = node
-
-            tasks = [
-                Task(
-                    creator=creator,
-                    extends=str(_extends) if _extends is not None else None,
-                )
-                for _extends in extends_subset
-            ]
-
-            sks = []
 
             for _transformation, _extends in zip(transformation_subset, extends_subset):
 
