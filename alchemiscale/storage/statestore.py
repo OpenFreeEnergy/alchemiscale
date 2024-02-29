@@ -170,8 +170,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             else:
                 tx.commit()
 
-    def execute_query(self, query):
-        return self.graph.execute_query(query, database_=self.db_name)
+    def execute_query(self, *args, **kwargs):
+        kwargs.update({"database_": self.db_name})
+        return self.graph.execute_query(*args, **kwargs)
 
     def initialize(self):
         """Initialize database.
@@ -1162,40 +1163,41 @@ class Neo4jStore(AlchemiscaleStateStore):
         actioned.
 
         """
-        with self.transaction() as tx:
-            actioned_sks = []
-            for t in tasks:
-                q = f"""
-                // get our TaskHub
-                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:PERFORMS]->(an:AlchemicalNetwork)
+        # since UNWIND doesn't guarantee order, we need to keep track manually
+        # so we can properly return `None` if needed
+        task_map = {str(task): None for task in tasks}
 
-                // get the task we want to add to the hub; check that it connects to same network
-                MATCH (task:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
+        q = f"""
+        // get our TaskHub
+        UNWIND {cypher_list_from_scoped_keys(tasks)} AS task_sk
+        MATCH (th:TaskHub {{_scoped_key: "{taskhub}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
 
-                // only proceed for cases where task is not already actioned on hub
-                // and where the task is either in 'waiting', 'running', or 'error' status
-                WITH th, an, task
-                WHERE NOT (th)-[:ACTIONS]->(task)
-                  AND task.status IN ['waiting', 'running', 'error']
+        // get the task we want to add to the hub; check that it connects to same network
+        MATCH (task:Task {{_scoped_key: task_sk}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
 
-                // create the connection
-                CREATE (th)-[ar:ACTIONS {{weight: 0.5}}]->(task)
+        // only proceed for cases where task is not already actioned on hub
+        // and where the task is either in 'waiting', 'running', or 'error' status
+        WITH th, an, task
+        WHERE NOT (th)-[:ACTIONS]->(task)
+          AND task.status IN ['{TaskStatusEnum.waiting.value}', '{TaskStatusEnum.running.value}', '{TaskStatusEnum.error.value}']
 
-                // set the task property to the scoped key of the Task
-                // this is a convenience for when we have to loop over relationships in Python
-                SET ar.task = task._scoped_key
+        // create the connection
+        CREATE (th)-[ar:ACTIONS {{weight: 0.5}}]->(task)
 
-                RETURN task
-                """
-                task = self.execute_query(q)
+        // set the task property to the scoped key of the Task
+        // this is a convenience for when we have to loop over relationships in Python
+        SET ar.task = task._scoped_key
 
-                if task.records:
-                    sk = task.records[0].data()["task"]["_scoped_key"]
-                    actioned_sks.append(ScopedKey.from_str(sk))
-                else:
-                    actioned_sks.append(None)
+        RETURN task
+        """
+        results = self.execute_query(q)
 
-        return actioned_sks
+        # update our map with the results, leaving None for tasks that aren't found
+        for task_record in results.records:
+            sk = task_record["task"]["_scoped_key"]
+            task_map[str(sk)] = ScopedKey.from_str(sk)
+
+        return [task_map[str(t)] for t in tasks]
 
     def set_task_weights(
         self,
