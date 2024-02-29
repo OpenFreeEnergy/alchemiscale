@@ -1581,21 +1581,20 @@ class Neo4jStore(AlchemiscaleStateStore):
         extends: Optional[List[Optional[ScopedKey]]] = None,
         creator: Optional[str] = None,
     ) -> List[ScopedKey]:
-        """Add a compute Task to a Transformation.
+        """Add compute Tasks to a provided Transformations.
 
-        Note: this creates a compute Task, but does not add it to any TaskHubs.
+        Note: this creates compute Tasks, but does not add them to any TaskHubs.
 
         Parameters
         ----------
-        transformation
-            The Transformation to compute.
-        scope
-            The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
+        transformations
+            The Transformations to compute.
         extends
-            The ScopedKey of the Task to use as a starting point for this Task.
+            The ScopedKeys of the Tasks to use as a starting point for the Tasks.
             Will use the `ProtocolDAGResult` from the given Task as the
             `extends` input for the Task's eventual call to `Protocol.create`.
-
+        creator (optional)
+            The creator of the Tasks
         """
 
         allowed_types = [Transformation.__qualname__, NonTransformation.__qualname__]
