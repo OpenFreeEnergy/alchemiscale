@@ -1159,7 +1159,8 @@ class TestNeo4jStore(TestStateStore):
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
         # create 10 tasks
-        task_sks = n4js.create_tasks([transformation_sk] * 10)
+        N = 10
+        task_sks = n4js.create_tasks([transformation_sk] * N)
 
         # shuffle the tasks; want to check that order of claiming is unrelated
         # to order created
