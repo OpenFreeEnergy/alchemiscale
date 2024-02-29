@@ -4,10 +4,12 @@ from typing import List, Optional
 
 def cypher_list_from_scoped_keys(scoped_keys: List[Optional[ScopedKey]]) -> str:
     """Generate a Cypher list structure from a list of ScopedKeys, ignoring NoneType entries.
+
     Parameters
     ----------
     scoped_keys
         List of ScopedKeys to generate the Cypher list
+
     Returns
     -------
     str

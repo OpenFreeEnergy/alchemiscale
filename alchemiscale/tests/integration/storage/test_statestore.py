@@ -1151,8 +1151,9 @@ class TestNeo4jStore(TestStateStore):
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
-        # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        # create N tasks
+        N = 10
+        task_sks = [n4js.create_task(transformation_sk) for i in range(N)]
 
         # shuffle the tasks; want to check that order of claiming is unrelated
         # to order created
@@ -1175,6 +1176,7 @@ class TestNeo4jStore(TestStateStore):
         claimed = n4js.claim_taskhub_tasks(taskhub_sk, csid)
 
         assert claimed[0] in task_sks
+        N -= 1
 
         # filter out the claimed task so that we have clean list of remaining
         # tasks
@@ -1189,6 +1191,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed2 = n4js.claim_taskhub_tasks(taskhub_sk, csid)
         assert claimed2[0] == remaining_tasks[0]
+        N -= 1
 
         remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
@@ -1197,6 +1200,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed3 = n4js.claim_taskhub_tasks(taskhub_sk, csid)
         assert claimed3[0] in remaining_tasks
+        N -= 1
 
         remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
@@ -1207,9 +1211,10 @@ class TestNeo4jStore(TestStateStore):
         assert len(claimed4) == 4
         for sk in claimed4:
             assert sk in remaining_tasks
+        N -= 4
 
         # exhaust the hub
-        claimed5 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=3)
+        _ = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=N)
 
         # try to claim from a hub with no tasks available
         claimed6 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=2)
