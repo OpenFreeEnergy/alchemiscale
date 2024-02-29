@@ -1182,6 +1182,7 @@ class TestNeo4jStore(TestStateStore):
         claimed = n4js.claim_taskhub_tasks(taskhub_sk, csid)
 
         assert claimed[0] in task_sks
+        N -= 1
 
         # filter out the claimed task so that we have clean list of remaining
         # tasks
@@ -1196,6 +1197,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed2 = n4js.claim_taskhub_tasks(taskhub_sk, csid)
         assert claimed2[0] == remaining_tasks[0]
+        N -= 1
 
         remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
@@ -1204,6 +1206,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed3 = n4js.claim_taskhub_tasks(taskhub_sk, csid)
         assert claimed3[0] in remaining_tasks
+        N -= 1
 
         remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
@@ -1214,9 +1217,10 @@ class TestNeo4jStore(TestStateStore):
         assert len(claimed4) == 4
         for sk in claimed4:
             assert sk in remaining_tasks
+        N -= 4
 
         # exhaust the hub
-        claimed5 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=3)
+        _ = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=N)
 
         # try to claim from a hub with no tasks available
         claimed6 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=2)
