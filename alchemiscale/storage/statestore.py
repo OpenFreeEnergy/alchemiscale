@@ -62,43 +62,23 @@ class Neo4JStoreError(Exception): ...
 class AlchemiscaleStateStore(abc.ABC): ...
 
 
-def _select_task_from_taskpool(taskpool: Subgraph) -> Union[ScopedKey, None]:
-    """
-    Select a Task from a pool of tasks in a neo4j subgraph according to the following scheme:
+def _select_tasks_from_taskpool(taskpool: List[Tuple[str, float]], count) -> List[str]:
+    """Select Tasks from a pool of tasks according to the following scheme:
 
-    PRE: taskpool is a subgraph of Tasks of equal priority with a weight on their ACTIONS relationship.
-    The records in the subgraph are :ACTIONS relationships with two properties: 'task' and 'weight'.
-    1. Randomly select 1 Task from the TaskPool based on weighting
-    2. Return the ScopedKey of the Task.
+    1. Randomly select N=`count` tasks from the TaskPool based on weighting
+    2. Return the string representation of the Task ScopedKeys.
 
     Parameters
     ----------
-    taskpool: 'subgraph'
-        A subgraph of Tasks of equal priority with a weight on their ACTIONS relationship.
+    taskpool: List[Tuple[str, float]]
+        A list of tuples containing Tasks (string represtnation of their ScopedKeys) of
+        equal priority with the weights of their ACTIONS relationships.
 
     Returns
     -------
-    sk: ScopedKey
-        The ScopedKey of the Task selected from the taskpool.
+    sk: List[str]
+        The string representations of the ScopedKeys of the Tasks selected from the taskpool.
     """
-    tasks = []
-    weights = []
-    for actions in taskpool.relationships:
-        tasks.append(actions.get("task"))
-        weights.append(actions.get("weight"))
-
-    # normalize weights
-    weights = np.array(weights)
-    weights = weights / weights.sum()
-
-    # randomly select a task from the taskpool based on weights without replacement
-    # NOTE: if useful could expand this to select multiple tasks
-    chosen_one = np.random.choice(tasks, 1, p=weights, replace=False)
-    return chosen_one[0]
-
-
-def _select_tasks_from_taskpool(taskpool: List[Tuple[str, float]], count) -> List[str]:
-
     weights = []
     tasks = []
     for t, w in taskpool:
@@ -143,7 +123,7 @@ def _generate_claim_query(
     MATCH (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
     CREATE (t)<-[cl:CLAIMS {{claimed: localdatetime('{datetime.utcnow().isoformat()}')}}]-(csreg)
 
-    SET t.status = 'running'
+    SET t.status = '{TaskStatusEnum.running.value}'
 
     RETURN t
     """
