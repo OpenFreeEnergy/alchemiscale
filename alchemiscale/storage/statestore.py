@@ -1167,31 +1167,30 @@ class Neo4jStore(AlchemiscaleStateStore):
         # so we can properly return `None` if needed
         task_map = {str(task): None for task in tasks}
 
-        with self.transaction() as tx:
-            q = f"""
-            // get our TaskHub
-            UNWIND {cypher_list_from_scoped_keys(tasks)} AS task_sk
-            MATCH (th:TaskHub {{_scoped_key: "{taskhub}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
+        q = f"""
+        // get our TaskHub
+        UNWIND {cypher_list_from_scoped_keys(tasks)} AS task_sk
+        MATCH (th:TaskHub {{_scoped_key: "{taskhub}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
 
-            // get the task we want to add to the hub; check that it connects to same network
-            MATCH (task:Task {{_scoped_key: task_sk}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
+        // get the task we want to add to the hub; check that it connects to same network
+        MATCH (task:Task {{_scoped_key: task_sk}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
 
-            // only proceed for cases where task is not already actioned on hub
-            // and where the task is either in 'waiting', 'running', or 'error' status
-            WITH th, an, task
-            WHERE NOT (th)-[:ACTIONS]->(task)
-              AND task.status IN ['{TaskStatusEnum.waiting.value}', '{TaskStatusEnum.running.value}', '{TaskStatusEnum.error.value}']
+        // only proceed for cases where task is not already actioned on hub
+        // and where the task is either in 'waiting', 'running', or 'error' status
+        WITH th, an, task
+        WHERE NOT (th)-[:ACTIONS]->(task)
+          AND task.status IN ['{TaskStatusEnum.waiting.value}', '{TaskStatusEnum.running.value}', '{TaskStatusEnum.error.value}']
 
-            // create the connection
-            CREATE (th)-[ar:ACTIONS {{weight: 0.5}}]->(task)
+        // create the connection
+        CREATE (th)-[ar:ACTIONS {{weight: 0.5}}]->(task)
 
-            // set the task property to the scoped key of the Task
-            // this is a convenience for when we have to loop over relationships in Python
-            SET ar.task = task._scoped_key
+        // set the task property to the scoped key of the Task
+        // this is a convenience for when we have to loop over relationships in Python
+        SET ar.task = task._scoped_key
 
-            RETURN task
-            """
-            results = tx.run(q).to_eager_result()
+        RETURN task
+        """
+        results = self.execute_query(q)
 
         # update our map with the results, leaving None for tasks that aren't found
         for task_record in results.records:
