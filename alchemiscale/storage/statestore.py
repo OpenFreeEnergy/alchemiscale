@@ -114,8 +114,8 @@ def _select_tasks_from_taskpool(taskpool: List[Tuple[str, float]], count) -> Lis
 def _generate_claim_query(
     task_sks: List[ScopedKey], compute_service_id: ComputeServiceID
 ) -> str:
-    """
-    Generate a query to claim a list of Tasks.
+    """Generate a query to claim a list of Tasks.
+
     Parameters
     ----------
     task_sks
@@ -136,13 +136,14 @@ def _generate_claim_query(
     UNWIND {task_data} AS task_sk
     MATCH (t:Task {{_scoped_key: task_sk}})
     WHERE NOT (t)<-[:CLAIMS]-(:ComputeServiceRegistration)
-    SET t.status = 'running'
 
     WITH t
 
     // create CLAIMS relationship with given compute service
     MATCH (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
     CREATE (t)<-[cl:CLAIMS {{claimed: localdatetime('{datetime.utcnow().isoformat()}')}}]-(csreg)
+
+    SET t.status = 'running'
 
     RETURN t
     """
@@ -1485,21 +1486,27 @@ class Neo4jStore(AlchemiscaleStateStore):
             def task_count(task_dict: dict):
                 return sum(map(len, task_dict.values()))
 
+            # directly use iterator to avoid pulling more tasks than we need
+            # since we will likely stop early
             _task_iter = _taskpool.__iter__()
             while task_count(_tasks) < count:
                 try:
                     candidate = next(_task_iter)
                     pr = candidate["task.priority"]
 
+                    # get all tasks and their actions weights at each priority level
+                    # until we've reached or surpassed `count`
                     _tasks[pr] = []
                     _tasks[pr].append(
                         (candidate["task.`_scoped_key`"], candidate["actions.weight"])
                     )
                     while True:
 
+                        # if we've run out of tasks, stop immediately
                         if not (next_task := _taskpool.peek()):
                             raise StopIteration
 
+                        # if next task has a different (lower) priority, stop consuming
                         if next_task["task.priority"] != pr:
                             break
 
@@ -1516,11 +1523,19 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             remaining = count
             tasks = []
+            # for each group of tasks at each priority level
             for _, taskgroup in sorted(_tasks.items()):
+                # if we want more tasks (or exactly as many tasks) as there are
+                # in the group, just add them all
                 if len(taskgroup) <= remaining:
                     tasks.extend(map(lambda x: ScopedKey.from_str(x[0]), taskgroup))
+
+                    # immediately stop if we've reached our target count
                     if not (remaining := count - len(tasks)):
                         break
+
+                # otherwise, perform a weighted random selection from the tasks
+                # to fill out remaining
                 else:
                     tasks.extend(
                         map(
@@ -1529,6 +1544,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                         )
                     )
 
+            # if tasks is not empty, proceed with claiming
             if tasks:
                 q = _generate_claim_query(tasks, compute_service_id)
                 tx.run(q)
