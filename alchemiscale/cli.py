@@ -213,8 +213,7 @@ def start_api(api_app, workers, host, port, options):
 
 
 @click.group()
-def cli():
-    ...
+def cli(): ...
 
 
 # reusable parameters to ensure consistent naming and help strings
@@ -283,8 +282,7 @@ def api(
 
 
 @cli.group(help="Subcommands for compute services")
-def compute():
-    ...
+def compute(): ...
 
 
 @compute.command(help="Start the compute API service.")
@@ -393,8 +391,7 @@ def synchronous(config_file):
 
 
 @cli.group(help="Subcommands for the database")
-def database():
-    ...
+def database(): ...
 
 
 @database.command()
@@ -495,8 +492,7 @@ def scope(func):
 
 
 @cli.group(help="Subcommands for managing identities")
-def identity():
-    ...
+def identity(): ...
 
 
 @identity.command()

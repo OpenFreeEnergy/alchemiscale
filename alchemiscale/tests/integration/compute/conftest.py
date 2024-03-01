@@ -158,9 +158,9 @@ def compute_api_no_auth(
 
     api.app.dependency_overrides[get_base_api_settings] = get_compute_settings_override
     api.app.dependency_overrides[get_s3os_depends] = get_s3os_override
-    api.app.dependency_overrides[
-        get_token_data_depends
-    ] = get_token_data_depends_override
+    api.app.dependency_overrides[get_token_data_depends] = (
+        get_token_data_depends_override
+    )
     yield api.app
     api.app.dependency_overrides = overrides
 

@@ -5,8 +5,7 @@ from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
 from alchemiscale.models import ScopedKey
-from alchemiscale.base.client import json_to_gufe
-from alchemiscale.utils import keyed_dicts_to_gufe, gufe_to_keyed_dicts
+from alchemiscale.keyedchain import KeyedChain
 
 
 def pre_load_payload(network, scope, name="incomplete 2"):
@@ -15,7 +14,10 @@ def pre_load_payload(network, scope, name="incomplete 2"):
         edges=list(network.edges)[:-3], nodes=network.nodes, name=name
     )
     headers = {"Content-type": "application/json"}
-    data = dict(network=gufe_to_keyed_dicts(new_network), scope=scope.dict())
+    data = dict(
+        network=KeyedChain.gufe_to_keyed_chain_rep(new_network),
+        scope=scope.dict(),
+    )
     jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
 
     return new_network, headers, jsondata
@@ -107,9 +109,9 @@ class TestAPI:
 
         assert response.status_code == 200
 
-        network_ = keyed_dicts_to_gufe(
+        network_ = KeyedChain(
             json.loads(response.text, cls=JSON_HANDLER.decoder)
-        )
+        ).to_gufe()
 
         assert network_.key == network.key
         assert network_ is network
@@ -138,39 +140,28 @@ class TestAPI:
 
     def test_query_transformations(
         self, n4js_preloaded, network_tyk2, test_client, scope_test
-    ):
-        ...
+    ): ...
 
-    def test_get_transformation(self):
-        ...
+    def test_get_transformation(self): ...
 
-    def test_query_chemicalsystems(self):
-        ...
+    def test_query_chemicalsystems(self): ...
 
-    def test_get_chemicalsystem(self):
-        ...
+    def test_get_chemicalsystem(self): ...
 
     ### compute
 
-    def test_set_strategy(self):
-        ...
+    def test_set_strategy(self): ...
 
-    def test_create_tasks(self):
-        ...
+    def test_create_tasks(self): ...
 
-    def test_get_tasks(self):
-        ...
+    def test_get_tasks(self): ...
 
-    def test_action_tasks(self):
-        ...
+    def test_action_tasks(self): ...
 
-    def test_cancel_tasks(self):
-        ...
+    def test_cancel_tasks(self): ...
 
     ### results
 
-    def test_get_transformation_results(self):
-        ...
+    def test_get_transformation_results(self): ...
 
-    def test_get_protocoldagresult(self):
-        ...
+    def test_get_protocoldagresult(self): ...

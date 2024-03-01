@@ -442,8 +442,7 @@ class AsynchronousComputeService(SynchronousComputeService):
 
         self._stop = False
 
-    def get_new_tasks(self):
-        ...
+    def get_new_tasks(self): ...
 
     def start(self):
         """Start the service; will keep going until told to stop."""

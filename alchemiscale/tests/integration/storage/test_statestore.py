@@ -27,8 +27,7 @@ from alchemiscale.security.models import (
 from alchemiscale.security.auth import hash_key
 
 
-class TestStateStore:
-    ...
+class TestStateStore: ...
 
 
 class TestNeo4jStore(TestStateStore):
@@ -39,7 +38,7 @@ class TestNeo4jStore(TestStateStore):
         return n4js_fresh
 
     def test_server(self, graph):
-        graph.service.system_graph.call("dbms.security.listUsers")
+        graph.get_server_info()
 
     ### gufe object handling
 
@@ -48,15 +47,13 @@ class TestNeo4jStore(TestStateStore):
 
         sk: ScopedKey = n4js.create_network(an, scope_test)
 
-        out = n4js.graph.run(
-            f"""
-                match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
+        q = f"""match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
                                              _org: '{sk.org}', _campaign: '{sk.campaign}', 
                                              _project: '{sk.project}'}}) 
                 return n
                 """
-        )
-        n = out.to_subgraph()
+
+        n = n4js.execute_query(q).records[0]["n"]
 
         assert n["name"] == "tyk2_relative_benchmark"
 
@@ -65,14 +62,12 @@ class TestNeo4jStore(TestStateStore):
 
         sk: ScopedKey = n4js.create_network(an, scope_test)
 
-        n = n4js.graph.run(
-            f"""
-                match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
+        q = f"""match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
                                              _org: '{sk.org}', _campaign: '{sk.campaign}', 
                                              _project: '{sk.project}'}}) 
                 return n
                 """
-        ).to_subgraph()
+        n = n4js.execute_query(q).records[0]["n"]
 
         assert n["name"] == "tyk2_relative_benchmark"
 
@@ -80,17 +75,14 @@ class TestNeo4jStore(TestStateStore):
         sk2: ScopedKey = n4js.create_network(an, scope_test)
         assert sk2 == sk
 
-        n2 = n4js.graph.run(
-            f"""
-                match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
+        q = f"""match (n:AlchemicalNetwork {{_gufe_key: '{an.key}', 
                                              _org: '{sk.org}', _campaign: '{sk.campaign}', 
                                              _project: '{sk.project}'}}) 
                 return n
                 """
-        ).to_subgraph()
+        n2 = n4js.execute_query(q).records[0]["n"]
 
         assert n2["name"] == "tyk2_relative_benchmark"
-        assert n2.identity == n.identity
 
         # add a slightly different network
         an2 = AlchemicalNetwork(
@@ -99,17 +91,15 @@ class TestNeo4jStore(TestStateStore):
         sk3 = n4js.create_network(an2, scope_test)
         assert sk3 != sk
 
-        n3 = n4js.graph.run(
-            f"""
-                match (n:AlchemicalNetwork) 
+        q = f"""match (n:AlchemicalNetwork) 
                 return n
                 """
-        ).to_subgraph()
 
-        assert len(n3.nodes) == 2
+        n3 = n4js.execute_query(q)
 
-    def test_delete_network(self):
-        ...
+        assert len(n3.records) == 2
+
+    def test_delete_network(self): ...
 
     def test_get_network(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -405,12 +395,10 @@ class TestNeo4jStore(TestStateStore):
 
         assert compute_service_id == compute_service_id_
 
-        csreg = n4js.graph.run(
-            f"""
-            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+        q = f"""match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
             """
-        ).to_subgraph()
+        csreg = n4js.execute_query(q).records[0]["csreg"]
 
         assert csreg["identifier"] == compute_service_id
 
@@ -433,14 +421,12 @@ class TestNeo4jStore(TestStateStore):
 
         assert compute_service_id == compute_service_id_
 
-        csreg = n4js.graph.run(
-            f"""
-            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+        q = f"""match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
             """
-        ).to_subgraph()
+        csreg = n4js.execute_query(q)
 
-        assert csreg is None
+        assert not csreg.records
 
     def test_heartbeat_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
@@ -454,12 +440,11 @@ class TestNeo4jStore(TestStateStore):
         tomorrow = now + timedelta(days=1)
         n4js.heartbeat_computeservice(compute_service_id, tomorrow)
 
-        csreg = n4js.graph.run(
-            f"""
-            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+        q = f"""match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
             """
-        ).to_subgraph()
+
+        csreg = n4js.execute_query(q).records[0]["csreg"]
 
         # we round to integer seconds from epoch to avoid somewhat different
         # floats on either side of comparison even if practically the same
@@ -484,14 +469,13 @@ class TestNeo4jStore(TestStateStore):
 
         identities = n4js.expire_registrations(expire_time=thirty_mins_ago)
 
-        csreg = n4js.graph.run(
-            f"""
-            match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+        q = f"""match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
             """
-        ).to_subgraph()
 
-        assert csreg is None
+        results = n4js.execute_query(q)
+
+        assert not results.records
         assert compute_service_id in identities
 
     def test_create_task(self, n4js, network_tyk2, scope_test):
@@ -504,14 +488,12 @@ class TestNeo4jStore(TestStateStore):
 
         task_sk: ScopedKey = n4js.create_task(transformation_sk)
 
-        m = n4js.graph.run(
-            f"""
-                match (n:Task {{_gufe_key: '{task_sk.gufe_key}', 
+        q = f"""match (n:Task {{_gufe_key: '{task_sk.gufe_key}', 
                                              _org: '{task_sk.org}', _campaign: '{task_sk.campaign}', 
                                              _project: '{task_sk.project}'}})-[:PERFORMS]->(m:Transformation)
                 return m
                 """
-        ).to_subgraph()
+        m = n4js.execute_query(q).records[0]["m"]
 
         assert m["_gufe_key"] == transformation.key
 
@@ -818,15 +800,13 @@ class TestNeo4jStore(TestStateStore):
         # create taskhub
         taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
-        # verify creation looks as we expect
-        m = n4js.graph.run(
-            f"""
-                match (n:TaskHub {{_gufe_key: '{taskhub_sk.gufe_key}', 
-                                             _org: '{taskhub_sk.org}', _campaign: '{taskhub_sk.campaign}', 
-                                             _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+        q = f"""match (n:TaskHub {{_gufe_key: '{taskhub_sk.gufe_key}', 
+                                   _org: '{taskhub_sk.org}', _campaign: '{taskhub_sk.campaign}', 
+                                   _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
                 return m
                 """
-        ).to_subgraph()
+        # verify creation looks as we expect
+        m = n4js.execute_query(q).records[0]["m"]
 
         assert m["_gufe_key"] == an.key
 
@@ -835,16 +815,14 @@ class TestNeo4jStore(TestStateStore):
 
         assert taskhub_sk2 == taskhub_sk
 
-        records = n4js.graph.run(
-            f"""
-                match (n:TaskHub {{network: '{network_sk}', 
-                                             _org: '{taskhub_sk.org}', _campaign: '{taskhub_sk.campaign}', 
-                                             _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
+        q = f"""match (n:TaskHub {{network: '{network_sk}', 
+                                   _org: '{taskhub_sk.org}', _campaign: '{taskhub_sk.campaign}', 
+                                   _project: '{taskhub_sk.project}'}})-[:PERFORMS]->(m:AlchemicalNetwork)
                 return n
                 """
-        )
+        results = n4js.execute_query(q)
 
-        assert len(list(records)) == 1
+        assert len(results.records) == 1
 
     def test_create_taskhub_weight(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -853,24 +831,22 @@ class TestNeo4jStore(TestStateStore):
         # create taskhub
         taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
 
-        n = n4js.graph.run(
-            f"""
-                match (n:TaskHub)
-                return n
+        q = f"""match (n:TaskHub)
+                 return n
                 """
-        ).to_subgraph()
+
+        n = n4js.execute_query(q).records[0]["n"]
 
         assert n["weight"] == 0.5
 
         # change the weight
         n4js.set_taskhub_weight(network_sk, 0.7)
 
-        n = n4js.graph.run(
-            f"""
-                match (n:TaskHub)
+        q = f"""match (n:TaskHub)
                 return n
                 """
-        ).to_subgraph()
+
+        n = n4js.execute_query(q).records[0]["n"]
 
         assert n["weight"] == 0.7
 
@@ -960,7 +936,7 @@ class TestNeo4jStore(TestStateStore):
         return taskhub.weight
         """
 
-        weight = n4js.graph.evaluate(q)
+        weight = n4js.execute_query(q).records[0].data()["taskhub.weight"]
         weight_ = n4js.get_taskhub_weight(network_sk)
 
         assert weight == 0.5
@@ -1129,13 +1105,12 @@ class TestNeo4jStore(TestStateStore):
         canceled = n4js.cancel_tasks(task_sks[1:3], taskhub_sk)
 
         # check that the hub has the contents we expect
-        tasks = n4js.graph.run(
-            f"""
-                MATCH (tq:TaskHub {{_scoped_key: '{taskhub_sk}'}})-[:ACTIONS]->(task:Task)
+        q = f"""MATCH (tq:TaskHub {{_scoped_key: '{taskhub_sk}'}})-[:ACTIONS]->(task:Task)
                 return task
                 """
-        )
-        tasks = [record["task"] for record in tasks]
+
+        tasks = n4js.execute_query(q)
+        tasks = [record["task"] for record in tasks.records]
 
         assert len(tasks) == 8
         assert set([ScopedKey.from_str(t["_scoped_key"]) for t in tasks]) == set(
@@ -1176,8 +1151,9 @@ class TestNeo4jStore(TestStateStore):
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
-        # create 10 tasks
-        task_sks = [n4js.create_task(transformation_sk) for i in range(10)]
+        # create N tasks
+        N = 10
+        task_sks = [n4js.create_task(transformation_sk) for i in range(N)]
 
         # shuffle the tasks; want to check that order of claiming is unrelated
         # to order created
@@ -1200,6 +1176,7 @@ class TestNeo4jStore(TestStateStore):
         claimed = n4js.claim_taskhub_tasks(taskhub_sk, csid)
 
         assert claimed[0] in task_sks
+        N -= 1
 
         # filter out the claimed task so that we have clean list of remaining
         # tasks
@@ -1214,6 +1191,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed2 = n4js.claim_taskhub_tasks(taskhub_sk, csid)
         assert claimed2[0] == remaining_tasks[0]
+        N -= 1
 
         remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
@@ -1222,6 +1200,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed3 = n4js.claim_taskhub_tasks(taskhub_sk, csid)
         assert claimed3[0] in remaining_tasks
+        N -= 1
 
         remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
@@ -1232,9 +1211,10 @@ class TestNeo4jStore(TestStateStore):
         assert len(claimed4) == 4
         for sk in claimed4:
             assert sk in remaining_tasks
+        N -= 4
 
         # exhaust the hub
-        claimed5 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=3)
+        _ = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=N)
 
         # try to claim from a hub with no tasks available
         claimed6 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=2)
@@ -1548,12 +1528,12 @@ class TestNeo4jStore(TestStateStore):
         # try to push the result
         n4js.set_task_result(task_sk, pdr_ref)
 
-        n = n4js.graph.run(
+        n = n4js.execute_query(
             f"""
                 match (n:ProtocolDAGResultRef)<-[:RESULTS_IN]-(t:Task)
                 return n
                 """
-        ).to_subgraph()
+        ).records[0]["n"]
 
         assert n["location"] == pdr_ref.location
         assert n["obj_key"] == str(protocoldagresult.key)
@@ -1691,12 +1671,12 @@ class TestNeo4jStore(TestStateStore):
 
         n4js.create_credentialed_entity(user)
 
-        n = n4js.graph.run(
+        n = n4js.execute_query(
             f"""
             match (n:{cls_name} {{identifier: '{user.identifier}'}})
             return n
             """
-        ).to_subgraph()
+        ).records[0]["n"]
 
         assert n["identifier"] == user.identifier
         assert n["hashed_key"] == user.hashed_key
@@ -1811,8 +1791,8 @@ class TestNeo4jStore(TestStateStore):
         MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
         RETURN n
         """
-        scopes_qr = n4js.graph.run(q).to_subgraph()
-        scopes = scopes_qr.get("scopes")
+        n = n4js.execute_query(q).records[0]["n"]
+        scopes = n["scopes"]
         assert len(scopes) == 1
 
         new_scope = Scope.from_str(scopes[0])
@@ -1841,8 +1821,8 @@ class TestNeo4jStore(TestStateStore):
         MATCH (n:{credential_type.__name__} {{identifier: '{user.identifier}'}})
         RETURN n
         """
-        scopes_qr = n4js.graph.run(q).to_subgraph()
-        scopes = scopes_qr.get("scopes")
+        n = n4js.execute_query(q).records[0]["n"]
+        scopes = n["scopes"]
         assert len(scopes) == 1
 
         new_scope = Scope.from_str(scopes[0])
@@ -2227,8 +2207,11 @@ class TestNeo4jStore(TestStateStore):
         return task
         """
 
-        result = n4js.graph.run(q).to_subgraph()
-        sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
+        result = n4js.execute_query(q)
+        sks = [
+            ScopedKey.from_str(record["task"]["_scoped_key"])
+            for record in result.records
+        ]
         assert set(sks) == set(task_sks)
 
         # set one to invalid
@@ -2238,8 +2221,8 @@ class TestNeo4jStore(TestStateStore):
         # set one to complete
         n4js.set_task_complete(task_sks[2:3])
 
-        result = n4js.graph.run(q).to_subgraph()
-        assert result == None
+        result = n4js.execute_query(q)
+        assert not result.records
 
     def test_set_task_status_removes_actions_relationship_extends(
         self,
@@ -2286,24 +2269,30 @@ class TestNeo4jStore(TestStateStore):
         return task
         """
 
-        result = n4js.graph.run(q).to_subgraph()
-        sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
+        result = n4js.execute_query(q)
+        sks = [
+            ScopedKey.from_str(record["task"]["_scoped_key"])
+            for record in result.records
+        ]
         assert set(sks) == set(collected_sks)
         assert len(sks) == 7
 
         # set layer one to invalid, this should invalidate the entire chain
         n4js.set_task_invalid([first_task])
 
-        result = n4js.graph.run(q).to_subgraph()
-        assert result == None
+        result = n4js.execute_query(q)
+        assert not result.records
 
         q = f"""
         MATCH (task:Task)
         WHERE task.status = 'invalid'
         return task
         """
-        result = n4js.graph.run(q).to_subgraph()
-        sks = [ScopedKey.from_str(task.get("_scoped_key")) for task in result.nodes]
+        result = n4js.execute_query(q)
+        sks = [
+            ScopedKey.from_str(record["task"]["_scoped_key"])
+            for record in result.records
+        ]
         assert set(sks) == set(collected_sks)
         assert len(sks) == 7
 

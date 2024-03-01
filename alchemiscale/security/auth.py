@@ -34,8 +34,7 @@ def authenticate(db, cls, identifier: str, key: str) -> CredentialedEntity:
     return entity
 
 
-class AuthenticationError(Exception):
-    ...
+class AuthenticationError(Exception): ...
 
 
 def hash_key(key):

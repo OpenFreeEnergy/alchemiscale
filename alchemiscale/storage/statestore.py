@@ -9,99 +9,97 @@ from datetime import datetime
 from contextlib import contextmanager
 import json
 from functools import lru_cache
-from time import sleep
-from typing import Dict, List, Optional, Union, Tuple, Set
+from typing import Dict, List, Optional, Union, Tuple
 import weakref
 import numpy as np
 
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, Settings
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
-from py2neo import Graph, Node, Relationship, Subgraph
-from py2neo.database import Transaction
-from py2neo.matching import NodeMatcher
-from py2neo.errors import ClientError
+
+from neo4j import Transaction, GraphDatabase, Driver
 
 from .models import (
     ComputeServiceID,
     ComputeServiceRegistration,
     Task,
     TaskHub,
-    TaskArchive,
     TaskStatusEnum,
     ProtocolDAGResultRef,
 )
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
+from .cypher import cypher_list_from_scoped_keys
 
 from ..security.models import CredentialedEntity
-from ..settings import Neo4jStoreSettings, get_neo4jstore_settings
+from ..settings import Neo4jStoreSettings
 from ..validators import validate_network_nonself
+
+from .subgraph import (
+    Node,
+    Relationship,
+    Subgraph,
+    create_subgraph,
+    merge_subgraph,
+    record_data_to_node,
+    subgraph_from_path_record,
+)
 
 
 @lru_cache()
 def get_n4js(settings: Neo4jStoreSettings):
     """Convenience function for getting a Neo4jStore directly from settings."""
-    graph = Graph(
-        settings.NEO4J_URL,
-        auth=(settings.NEO4J_USER, settings.NEO4J_PASS),
-        name=settings.NEO4J_DBNAME,
+
+    graph = GraphDatabase.driver(
+        settings.NEO4J_URL, auth=(settings.NEO4J_USER, settings.NEO4J_PASS)
     )
-    return Neo4jStore(graph)
+    return Neo4jStore(graph, db_name=settings.NEO4J_DBNAME)
 
 
-class Neo4JStoreError(Exception):
-    ...
+class Neo4JStoreError(Exception): ...
 
 
-class AlchemiscaleStateStore(abc.ABC):
-    ...
+class AlchemiscaleStateStore(abc.ABC): ...
 
 
-def _select_task_from_taskpool(taskpool: Subgraph) -> Union[ScopedKey, None]:
-    """
-    Select a Task from a pool of tasks in a neo4j subgraph according to the following scheme:
+def _select_tasks_from_taskpool(taskpool: List[Tuple[str, float]], count) -> List[str]:
+    """Select Tasks from a pool of tasks according to the following scheme:
 
-    PRE: taskpool is a subgraph of Tasks of equal priority with a weight on their ACTIONS relationship.
-    The records in the subgraph are :ACTIONS relationships with two properties: 'task' and 'weight'.
-    1. Randomly select 1 Task from the TaskPool based on weighting
-    2. Return the ScopedKey of the Task.
+    1. Randomly select N=`count` tasks from the TaskPool based on weighting
+    2. Return the string representation of the Task ScopedKeys.
 
     Parameters
     ----------
-    taskpool: 'subgraph'
-        A subgraph of Tasks of equal priority with a weight on their ACTIONS relationship.
+    taskpool: List[Tuple[str, float]]
+        A list of tuples containing Tasks (string represtnation of their ScopedKeys) of
+        equal priority with the weights of their ACTIONS relationships.
 
     Returns
     -------
-    sk: ScopedKey
-        The ScopedKey of the Task selected from the taskpool.
+    sk: List[str]
+        The string representations of the ScopedKeys of the Tasks selected from the taskpool.
     """
-    tasks = []
     weights = []
-    for actions in taskpool.relationships:
-        tasks.append(actions.get("task"))
-        weights.append(actions.get("weight"))
+    tasks = []
+    for t, w in taskpool:
+        tasks.append(t)
+        weights.append(w)
 
-    # normalize weights
     weights = np.array(weights)
-    weights = weights / weights.sum()
+    prob = weights / weights.sum()
 
-    # randomly select a task from the taskpool based on weights without replacement
-    # NOTE: if useful could expand this to select multiple tasks
-    chosen_one = np.random.choice(tasks, 1, p=weights, replace=False)
-    return chosen_one[0]
+    return list(np.random.choice(tasks, count, replace=False, p=prob))
 
 
 def _generate_claim_query(
-    task_sk: ScopedKey, compute_service_id: ComputeServiceID
+    task_sks: List[ScopedKey], compute_service_id: ComputeServiceID
 ) -> str:
-    """
-    Generate a query to claim a single Task.
+    """Generate a query to claim a list of Tasks.
+
     Parameters
     ----------
-    task_sk
-        The ScopedKey of the Task to claim.
+    task_sks
+        A list of ScopedKeys of Tasks to claim.
     compute_service_id
         ComputeServiceID of the claiming service.
 
@@ -110,17 +108,22 @@ def _generate_claim_query(
     query: str
         The Cypher query to claim the Task.
     """
+
+    task_data = cypher_list_from_scoped_keys(task_sks)
+
     query = f"""
     // only match the task if it doesn't have an existing CLAIMS relationship
-    MATCH (t:Task {{_scoped_key: '{task_sk}'}})
+    UNWIND {task_data} AS task_sk
+    MATCH (t:Task {{_scoped_key: task_sk}})
     WHERE NOT (t)<-[:CLAIMS]-(:ComputeServiceRegistration)
-    SET t.status = 'running'
 
     WITH t
 
     // create CLAIMS relationship with given compute service
     MATCH (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
     CREATE (t)<-[cl:CLAIMS {{claimed: localdatetime('{datetime.utcnow().isoformat()}')}}]-(csreg)
+
+    SET t.status = '{TaskStatusEnum.running.value}'
 
     RETURN t
     """
@@ -147,23 +150,29 @@ class Neo4jStore(AlchemiscaleStateStore):
         },
     }
 
-    def __init__(self, graph: "py2neo.Graph"):
-        self.graph: Graph = graph
+    def __init__(self, graph: Driver, db_name: str = "neo4j"):
+        self.graph: Driver = graph
+        self.db_name = db_name
         self.gufe_nodes = weakref.WeakValueDictionary()
 
     @contextmanager
-    def transaction(self, readonly=False, ignore_exceptions=False) -> Transaction:
-        """Context manager for a py2neo Transaction."""
-        tx = self.graph.begin(readonly=readonly)
-        try:
-            yield tx
-        except:
-            self.graph.rollback(tx)
-            if not ignore_exceptions:
-                raise
+    def transaction(self, ignore_exceptions=False) -> Transaction:
+        """Context manager for a Neo4j Transaction."""
+        with self.graph.session(database=self.db_name) as session:
+            tx = session.begin_transaction()
+            try:
+                yield tx
+            except:
+                tx.rollback()
+                if not ignore_exceptions:
+                    raise
 
-        else:
-            self.graph.commit(tx)
+            else:
+                tx.commit()
+
+    def execute_query(self, *args, **kwargs):
+        kwargs.update({"database_": self.db_name})
+        return self.graph.execute_query(*args, **kwargs)
 
     def initialize(self):
         """Initialize database.
@@ -173,18 +182,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         for label, values in self.constraints.items():
-            self.graph.run(
+            self.execute_query(
                 f"""
                 CREATE CONSTRAINT {values['name']} IF NOT EXISTS
                 FOR (n:{label}) REQUIRE n.{values['property']} is unique
             """
             )
-
-        # make sure we don't get objects with id 0 by creating at least one
-        # this is a compensating control for a bug in py2neo, where nodes with id 0 are not properly
-        # deduplicated by Subgraph set operations, which we currently rely on
-        # see this PR: https://github.com/py2neo-org/py2neo/pull/951
-        self.graph.run("MERGE (:NOPE)")
 
     def check(self):
         """Check consistency of database.
@@ -193,7 +196,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         If no check fails, will return without any exception.
 
         """
-        constraints = {rec["name"]: rec for rec in self.graph.run("show constraints")}
+        constraints = {
+            rec["name"]: rec for rec in self.execute_query("show constraints").records
+        }
 
         if len(constraints) != len(self.constraints):
             raise Neo4JStoreError(
@@ -210,29 +215,21 @@ class Neo4jStore(AlchemiscaleStateStore):
                     f"Constraint {constraint['name']} does not have expected form"
                 )
 
-        nope = self.graph.run("MATCH (n:NOPE) RETURN n").to_subgraph()
-        if nope.identity != 0:
-            raise Neo4JStoreError("Identity of NOPE node is not exactly 0")
-
     def _store_check(self):
         """Check that the database is in a state that can be used by the API."""
         try:
             # just list available functions to see if database is working
-            self.graph.run("SHOW FUNCTIONS YIELD *")
-        except:
+            self.execute_query("SHOW FUNCTIONS YIELD *")
+        except Exception:
             return False
         return True
 
     def reset(self):
         """Remove all data from database; undo all components in `initialize`."""
-        # we'll keep NOPE around to avoid a case where Neo4j doesn't give it id 0
-        # after a series of wipes; appears to happen often enough in tests
-        # can remove this once py2neo#951 merged
-        # self.graph.run("MATCH (n) DETACH DELETE n")
-        self.graph.run("MATCH (n) WHERE NOT n:NOPE DETACH DELETE n")
+        self.execute_query("MATCH (n) DETACH DELETE n")
 
         for label, values in self.constraints.items():
-            self.graph.run(
+            self.execute_query(
                 f"""
                 DROP CONSTRAINT {values['name']} IF EXISTS
             """
@@ -492,12 +489,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         nodes = set()
         subgraph = Subgraph()
 
-        for record in self.graph.run(q):
-            nodes.add(record["n"])
+        for record in self.execute_query(q).records:
+            node = record_data_to_node(record["n"])
+            nodes.add(node)
             if return_subgraph and record["p"] is not None:
-                subgraph = subgraph | record["p"]
+                subgraph = subgraph | subgraph_from_path_record(record["p"])
             else:
-                subgraph = record["n"]
+                subgraph = node
 
         if len(nodes) == 0:
             raise KeyError("No such object in database")
@@ -560,18 +558,20 @@ class Neo4jStore(AlchemiscaleStateStore):
             RETURN DISTINCT n
             ORDER BY n._org, n._campaign, n._project, n._gufe_key
             """
+
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         nodes = list()
         subgraph = Subgraph()
 
-        for record in res:
-            nodes.append(record["n"])
+        for record in res.records:
+            node = record_data_to_node(record["n"])
+            nodes.append(node)
             if return_gufe and record["p"] is not None:
-                subgraph = subgraph | record["p"]
+                subgraph = subgraph | subgraph_from_path_record(record["p"])
             else:
-                subgraph = record["n"]
+                subgraph = node
 
         if return_gufe:
             return {
@@ -622,7 +622,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             scope=scope,
         )
         with self.transaction() as tx:
-            tx.merge(g, "GufeTokenizable", "_scoped_key")
+            merge_subgraph(tx, g, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 
@@ -653,6 +653,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # first, delete the network's hub if present
         self.delete_taskhub(network)
 
+        # TODO: why is this not used?
         # then delete the network
         q = f"""
         MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})
@@ -854,7 +855,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         with self.transaction() as tx:
-            tx.create(node)
+            create_subgraph(tx, Subgraph() | node)
 
         return compute_service_registration.identifier
 
@@ -899,7 +900,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         SET n.heartbeat = localdatetime('{heartbeat.isoformat()}')
 
         """
-
         with self.transaction() as tx:
             tx.run(q)
 
@@ -975,8 +975,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         # if the TaskHub already exists, this will rollback transaction
         # automatically
+        # TODO: this originally used create, but is merge not what we want?
         with self.transaction(ignore_exceptions=True) as tx:
-            tx.create(subgraph)
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 
@@ -1011,12 +1012,11 @@ class Neo4jStore(AlchemiscaleStateStore):
                 "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
             )
 
-        node = self.graph.run(
-            f"""
+        q = f"""
                 match (th:TaskHub {{network: "{network}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
                 return th
                 """
-        ).to_subgraph()
+        node = record_data_to_node(self.execute_query(q).records[0]["th"])
 
         if return_gufe:
             return self._subgraph_to_gufe([node], node)[node]
@@ -1040,7 +1040,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}}),
         DETACH DELETE th
         """
-        self.graph.run(q)
+        self.execute_query(q)
 
         return taskhub
 
@@ -1090,11 +1090,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         with self.transaction() as tx:
-            results = tx.run(q, th_sk=str(taskhub))
+            results = tx.run(q, th_sk=str(taskhub)).to_eager_result()
 
         return {
             ScopedKey.from_str(record.get("t._scoped_key")): record.get("a.weight")
-            for record in results
+            for record in results.records
         }
 
     def get_task_actioned_networks(self, task: ScopedKey) -> Dict[ScopedKey, float]:
@@ -1119,11 +1119,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         with self.transaction() as tx:
-            results = tx.run(q, scoped_key=str(task))
+            results = tx.run(q, scoped_key=str(task)).to_eager_result()
 
         return {
             ScopedKey.from_str(record.get("an._scoped_key")): record.get("a.weight")
-            for record in results
+            for record in results.records
         }
 
     def get_taskhub_weight(self, network: ScopedKey) -> float:
@@ -1142,7 +1142,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN th.weight
         """
         with self.transaction() as tx:
-            weight = tx.evaluate(q)
+            weight = tx.run(q).data()[0]["th.weight"]
 
         return weight
 
@@ -1163,38 +1163,41 @@ class Neo4jStore(AlchemiscaleStateStore):
         actioned.
 
         """
-        with self.transaction() as tx:
-            actioned_sks = []
-            for t in tasks:
-                q = f"""
-                // get our TaskHub
-                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:PERFORMS]->(an:AlchemicalNetwork)
+        # since UNWIND doesn't guarantee order, we need to keep track manually
+        # so we can properly return `None` if needed
+        task_map = {str(task): None for task in tasks}
 
-                // get the task we want to add to the hub; check that it connects to same network
-                MATCH (task:Task {{_scoped_key: '{t}'}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
+        q = f"""
+        // get our TaskHub
+        UNWIND {cypher_list_from_scoped_keys(tasks)} AS task_sk
+        MATCH (th:TaskHub {{_scoped_key: "{taskhub}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
 
-                // only proceed for cases where task is not already actioned on hub
-                // and where the task is either in 'waiting', 'running', or 'error' status
-                WITH th, an, task
-                WHERE NOT (th)-[:ACTIONS]->(task)
-                  AND task.status IN ['waiting', 'running', 'error']
+        // get the task we want to add to the hub; check that it connects to same network
+        MATCH (task:Task {{_scoped_key: task_sk}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
 
-                // create the connection
-                CREATE (th)-[ar:ACTIONS {{weight: 0.5}}]->(task)
+        // only proceed for cases where task is not already actioned on hub
+        // and where the task is either in 'waiting', 'running', or 'error' status
+        WITH th, an, task
+        WHERE NOT (th)-[:ACTIONS]->(task)
+          AND task.status IN ['{TaskStatusEnum.waiting.value}', '{TaskStatusEnum.running.value}', '{TaskStatusEnum.error.value}']
 
-                // set the task property to the scoped key of the Task
-                // this is a convenience for when we have to loop over relationships in Python
-                SET ar.task = task._scoped_key
+        // create the connection
+        CREATE (th)-[ar:ACTIONS {{weight: 0.5}}]->(task)
 
-                RETURN task
-                """
-                task = tx.run(q).to_subgraph()
-                actioned_sks.append(
-                    ScopedKey.from_str(task["_scoped_key"])
-                    if task is not None
-                    else None
-                )
-        return actioned_sks
+        // set the task property to the scoped key of the Task
+        // this is a convenience for when we have to loop over relationships in Python
+        SET ar.task = task._scoped_key
+
+        RETURN task
+        """
+        results = self.execute_query(q)
+
+        # update our map with the results, leaving None for tasks that aren't found
+        for task_record in results.records:
+            sk = task_record["task"]["_scoped_key"]
+            task_map[str(sk)] = ScopedKey.from_str(sk)
+
+        return [task_map[str(t)] for t in tasks]
 
     def set_task_weights(
         self,
@@ -1255,7 +1258,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     SET ar.weight = {w}
                     RETURN task, ar
                     """
-                    results.append(tx.run(q))
+                    results.append(tx.run(q).to_eager_result())
 
             elif isinstance(tasks, list):
                 if weight is None:
@@ -1266,17 +1269,18 @@ class Neo4jStore(AlchemiscaleStateStore):
                 if not 0 <= weight <= 1:
                     raise ValueError("weight must be between 0 and 1 (inclusive)")
 
+                # TODO: remove for loop with an unwind clause
                 for t in tasks:
                     q = f"""
                     MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
                     SET ar.weight = {weight}
                     RETURN task, ar
                     """
-                    tx.run(q)
+                    results.append(tx.run(q).to_eager_result())
 
         # return ScopedKeys for Tasks we changed; `None` for tasks we didn't
         for res in results:
-            for record in res:
+            for record in res.records:
                 task = record["task"]
                 tasks_changed.append(
                     ScopedKey.from_str(task["_scoped_key"])
@@ -1346,12 +1350,13 @@ class Neo4jStore(AlchemiscaleStateStore):
                 DELETE ar
                 RETURN task
                 """
-                task = tx.run(q).to_subgraph()
-                canceled_sks.append(
-                    ScopedKey.from_str(task["_scoped_key"])
-                    if task is not None
-                    else None
-                )
+                _task = tx.run(q).to_eager_result()
+
+                if _task.records:
+                    sk = _task.records[0].data()["task"]["_scoped_key"]
+                    canceled_sks.append(ScopedKey.from_str(sk))
+                else:
+                    canceled_sks.append(None)
 
         return canceled_sks
 
@@ -1366,13 +1371,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN task
         """
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         tasks = []
         subgraph = Subgraph()
-        for record in res:
-            tasks.append(record["task"])
-            subgraph = subgraph | record["task"]
+        for record in res.records:
+            tasks.append(record_data_to_node(record["task"]))
+            subgraph = subgraph | tasks[-1]
 
         if return_gufe:
             return {
@@ -1394,13 +1399,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN task
         """
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         tasks = []
         subgraph = Subgraph()
-        for record in res:
-            tasks.append(record["task"])
-            subgraph = subgraph | record["task"]
+        for record in res.records:
+            node = record_data_to_node(record["task"])
+            tasks.append(node)
+            subgraph = subgraph | node
 
         if return_gufe:
             return {
@@ -1434,36 +1440,20 @@ class Neo4jStore(AlchemiscaleStateStore):
             Claim the given number of Tasks in a single transaction.
 
         """
-        taskpool_q = f"""
-        // get list of all eligible 'waiting' tasks in the hub
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
-        WHERE task.status = 'waiting'
-        AND actions.weight > 0
-        OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
-        // drop tasks from consideration if they EXTENDS an incomplete task
-        WITH task, other_task, actions
-        WHERE other_task.status = 'complete' OR other_task IS NULL
+        q = f"""
+            MATCH (th:TaskHub {{`_scoped_key`: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
+            WHERE task.status = '{TaskStatusEnum.waiting.value}'
+            AND actions.weight > 0
+            OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
-        // get the highest priority present among these tasks (value nearest to 1)
-        WITH MIN(task.priority) as top_priority
+            WITH task, other_task, actions
+            WHERE other_task.status = '{TaskStatusEnum.complete.value}' OR other_task IS NULL
 
-        // match again, this time filtering on highest priority
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
-        WHERE task.status = 'waiting'
-        AND actions.weight > 0
-        AND task.priority = top_priority
-        OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
-
-        // drop tasks from consideration if they EXTENDS an incomplete task
-        WITH task, other_task, actions
-        WHERE other_task.status = 'complete' OR other_task IS NULL
-
-        // return the tasks and actions relationships
-        RETURN task, actions
+            RETURN task.`_scoped_key`, task.priority, actions.weight
+            ORDER BY task.priority ASC
         """
-
-        tasks = []
+        _tasks = {}
         with self.transaction() as tx:
             tx.run(
                 f"""
@@ -1473,14 +1463,73 @@ class Neo4jStore(AlchemiscaleStateStore):
             SET th._lock = True
             """
             )
-            for i in range(count):
-                taskpool = tx.run(taskpool_q).to_subgraph()
-                if taskpool is None:
-                    tasks.append(None)
+            _taskpool = tx.run(q)
+
+            def task_count(task_dict: dict):
+                return sum(map(len, task_dict.values()))
+
+            # directly use iterator to avoid pulling more tasks than we need
+            # since we will likely stop early
+            _task_iter = _taskpool.__iter__()
+            while task_count(_tasks) < count:
+                try:
+                    candidate = next(_task_iter)
+                    pr = candidate["task.priority"]
+
+                    # get all tasks and their actions weights at each priority level
+                    # until we've reached or surpassed `count`
+                    _tasks[pr] = []
+                    _tasks[pr].append(
+                        (candidate["task.`_scoped_key`"], candidate["actions.weight"])
+                    )
+                    while True:
+
+                        # if we've run out of tasks, stop immediately
+                        if not (next_task := _taskpool.peek()):
+                            raise StopIteration
+
+                        # if next task has a different (lower) priority, stop consuming
+                        if next_task["task.priority"] != pr:
+                            break
+
+                        candidate = next(_task_iter)
+                        _tasks[candidate["task.priority"]].append(
+                            (
+                                candidate["task.`_scoped_key`"],
+                                candidate["actions.weight"],
+                            )
+                        )
+
+                except StopIteration:
+                    break
+
+            remaining = count
+            tasks = []
+            # for each group of tasks at each priority level
+            for _, taskgroup in sorted(_tasks.items()):
+                # if we want more tasks (or exactly as many tasks) as there are
+                # in the group, just add them all
+                if len(taskgroup) <= remaining:
+                    tasks.extend(map(lambda x: ScopedKey.from_str(x[0]), taskgroup))
+
+                    # immediately stop if we've reached our target count
+                    if not (remaining := count - len(tasks)):
+                        break
+
+                # otherwise, perform a weighted random selection from the tasks
+                # to fill out remaining
                 else:
-                    chosen_one = _select_task_from_taskpool(taskpool)
-                    claim_query = _generate_claim_query(chosen_one, compute_service_id)
-                    tasks.append(tx.run(claim_query).to_subgraph())
+                    tasks.extend(
+                        map(
+                            ScopedKey.from_str,
+                            _select_tasks_from_taskpool(taskgroup, remaining),
+                        )
+                    )
+
+            # if tasks is not empty, proceed with claiming
+            if tasks:
+                q = _generate_claim_query(tasks, compute_service_id)
+                tx.run(q)
 
             tx.run(
                 f"""
@@ -1491,10 +1540,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
             )
 
-        return [
-            ScopedKey.from_str(t["_scoped_key"]) if t is not None else None
-            for t in tasks
-        ]
+        return tasks + [None] * (count - len(tasks))
 
     ## tasks
 
@@ -1551,6 +1597,12 @@ class Neo4jStore(AlchemiscaleStateStore):
             stat = previous_task_node.get("status")
             # do not allow creation of a task that extends an invalid or deleted task.
             if (stat == "invalid") or (stat == "deleted"):
+                # py2neo Node doesn't like the neo4j datetime object
+                # manually cast since we're raising anyways
+                # and the results are ephemeral
+                previous_task_node["datetime_created"] = str(
+                    previous_task_node["datetime_created"]
+                )
                 raise ValueError(
                     f"Cannot extend a `deleted` or `invalid` Task: {previous_task_node}"
                 )
@@ -1571,7 +1623,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         with self.transaction() as tx:
-            tx.create(subgraph)
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 
@@ -1666,19 +1718,21 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
 
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         tasks = []
-        for record in res:
+        for record in res.records:
             tasks.append(record["task"])
 
         if return_as == "list":
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
         elif return_as == "graph":
             return {
-                ScopedKey.from_str(t["_scoped_key"]): ScopedKey.from_str(t["extends"])
-                if t["extends"] is not None
-                else None
+                ScopedKey.from_str(t["_scoped_key"]): (
+                    ScopedKey.from_str(t["extends"])
+                    if t["extends"] is not None
+                    else None
+                )
                 for t in tasks
             }
 
@@ -1705,11 +1759,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         transformations = []
         results = []
-        for record in res:
+        for record in res.records:
             transformations.append(record["trans"])
             results.append(record["result"])
 
@@ -1731,9 +1785,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         if return_gufe:
             return (
                 self.get_gufe(transformation),
-                self.get_gufe(protocoldagresultref)
-                if protocoldagresultref is not None
-                else None,
+                (
+                    self.get_gufe(protocoldagresultref)
+                    if protocoldagresultref is not None
+                    else None
+                ),
             )
 
         return transformation, protocoldagresultref
@@ -1801,10 +1857,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             RETURN scoped_key, t
             """
-            res = tx.run(q, scoped_keys=[str(t) for t in tasks], priority=priority)
+            res = tx.run(
+                q, scoped_keys=[str(t) for t in tasks], priority=priority
+            ).to_eager_result()
 
         task_results = []
-        for record in res:
+        for record in res.records:
             task_i = record["t"]
             scoped_key = record["scoped_key"]
 
@@ -1933,7 +1991,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         with self.transaction() as tx:
-            tx.merge(subgraph, "GufeTokenizable", "_scoped_key")
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return scoped_key
 
@@ -2292,8 +2350,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         node = Node("CredentialedEntity", entity.__class__.__name__, **entity.dict())
 
         with self.transaction() as tx:
-            tx.merge(
-                node, primary_label=entity.__class__.__name__, primary_key="identifier"
+            merge_subgraph(
+                tx, Subgraph() | node, entity.__class__.__name__, "identifier"
             )
 
     def get_credentialed_entity(self, identifier: str, cls: type[CredentialedEntity]):
@@ -2304,11 +2362,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         nodes = set()
-        for record in res:
-            nodes.add(record["n"])
+        for record in res.records:
+            nodes.add(record_data_to_node(record["n"]))
 
         if len(nodes) == 0:
             raise KeyError("No such object in database")
@@ -2325,13 +2383,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (n:{cls.__name__})
         RETURN n
         """
-
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         nodes = set()
-        for record in res:
-            nodes.add(record["n"])
+        for record in res.records:
+            nodes.add(record_data_to_node(record["n"]))
 
         return [node["identifier"] for node in nodes]
 
@@ -2374,10 +2431,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q).to_eager_result()
 
         scopes = []
-        for record in res:
+        for record in res.records:
             scope_rec = record["s"]
             for scope_str in scope_rec:
                 scope = Scope.from_str(scope_str)

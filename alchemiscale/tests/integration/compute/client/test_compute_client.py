@@ -61,15 +61,18 @@ class TestComputeClient:
         out = compute_client.register(compute_service_id)
         assert out == compute_service_id
 
-        csreg = n4js_preloaded.graph.run(
+        csreg = n4js_preloaded.graph.execute_query(
             f"""
             match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
             """
-        ).to_subgraph()
+        )
 
-        assert csreg is not None
-        assert csreg["registered"] == csreg["heartbeat"]
+        assert csreg.records
+        assert (
+            csreg.records[0]["csreg"]["registered"]
+            == csreg.records[0]["csreg"]["heartbeat"]
+        )
 
     def test_deregister(
         self,
@@ -84,14 +87,14 @@ class TestComputeClient:
         out = compute_client.deregister(compute_service_id)
         assert out == compute_service_id
 
-        csreg = n4js_preloaded.graph.run(
-            f"""
+        q = f"""
             match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
             """
-        ).to_subgraph()
 
-        assert csreg is None
+        csreg = n4js_preloaded.graph.execute_query(q)
+
+        assert not csreg.records
 
     def test_heartbeat(
         self,
@@ -105,14 +108,18 @@ class TestComputeClient:
         out = compute_client.heartbeat(compute_service_id)
         assert out == compute_service_id
 
-        csreg = n4js_preloaded.graph.run(
-            f"""
+        q = f"""
             match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
             """
-        ).to_subgraph()
 
-        assert csreg is not None
+        csreg = n4js_preloaded.graph.execute_query(q)
+
+        assert csreg.records
+        assert len(csreg.records) == 1
+
+        csreg = csreg.records[0]["csreg"]
+
         assert csreg["registered"] < csreg["heartbeat"]
 
     def test_list_scope(

@@ -3,6 +3,7 @@
 =================================================
 
 """
+
 from typing import Optional, Union
 from pydantic import BaseModel, Field, validator, root_validator
 from gufe.tokenization import GufeKey
@@ -171,8 +172,7 @@ class ScopedKey(BaseModel):
         return cls(**d)
 
 
-class InvalidScopeError(ValueError):
-    ...
+class InvalidScopeError(ValueError): ...
 
 
 def _is_wildcard(char: Union[str, None]) -> bool:

@@ -16,8 +16,9 @@ dependencies:
   - pydantic<2.0
 
   ## state store
+  - neo4j-python-driver
   - py2neo
-  - monotonic    # needed by py2neo, but not pulled in
+  - monotonic
 
   ## object store
   - boto3        # aws s3
@@ -45,5 +46,5 @@ dependencies:
 
   - pip:
     - async_lru
-    - git+https://github.com/openforcefield/alchemiscale.git@v0.2.1
+    - git+https://github.com/openforcefield/alchemiscale.git@v0.3.0
     - git+https://github.com/choderalab/perses.git@protocol-neqcyc
