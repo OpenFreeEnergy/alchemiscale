@@ -10,6 +10,7 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from alchemiscale.storage.statestore import Neo4jStore
+from alchemiscale.storage.cypher import cypher_list_from_scoped_keys
 from alchemiscale.storage.models import (
     Task,
     TaskHub,
@@ -502,10 +503,24 @@ class TestNeo4jStore(TestStateStore):
         assert len(task_sks) == N
 
         # extend all of these tasks
-        task_sks = n4js.create_tasks([transformation_sk] * N, task_sks)
+        child_task_sks = n4js.create_tasks([transformation_sk] * N, task_sks)
 
-        # TODO: expand these tests
-        assert len(task_sks) == N
+        assert len(child_task_sks) == N
+
+        q = f"""
+            UNWIND {cypher_list_from_scoped_keys(child_task_sks)} AS task_sk
+            MATCH (n:Task)<-[:EXTENDS]-(m:Task {{`_scoped_key`: task_sk}})
+            RETURN n, m
+            """
+        results = n4js.execute_query(q)
+
+        assert len(results.records) == N
+
+        for record in results.records:
+            # n is a parent Task, m is a child Task
+            n, m = record["n"], record["m"]
+            assert ScopedKey.from_str(n["_scoped_key"]) in task_sks
+            assert ScopedKey.from_str(m["_scoped_key"]) in child_task_sks
 
     def test_create_task_extends_invalid_deleted(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try generating task
