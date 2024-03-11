@@ -1068,34 +1068,39 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_taskhub_actioned_tasks(
         self,
-        taskhub: ScopedKey,
-    ) -> Dict[ScopedKey, float]:
-        """Get the Tasks that a given TaskHub ACTIONS.
+        taskhubs: List[ScopedKey],
+    ) -> List[Dict[ScopedKey, float]]:
+        """Get the Tasks that the given TaskHubs ACTIONS.
 
         Parameters
         ----------
-        taskhub
-            The ScopedKey of the TaskHub to query.
+        taskhubs
+            The ScopedKeys of the TaskHubs to query.
 
         Returns
         -------
         tasks
-            A dict with Task ScopedKeys that are actioned on the given TaskHub
-            as keys, Task weights as values.
+            A list of dicts, one per TaskHub, which contains the Task ScopedKeys that are
+            actioned on the given TaskHub as keys, with their weights as values.
         """
 
-        q = """
-           MATCH (th: TaskHub {_scoped_key: $th_sk})-[a:ACTIONS]->(t:Task)
-           RETURN t._scoped_key, a.weight
+        q = f"""
+           UNWIND {cypher_list_from_scoped_keys(taskhubs)} as th_sk
+           MATCH (th: TaskHub {{_scoped_key: th_sk}})-[a:ACTIONS]->(t:Task)
+           RETURN t._scoped_key, a.weight, th._scoped_key
         """
 
-        with self.transaction() as tx:
-            results = tx.run(q, th_sk=str(taskhub)).to_eager_result()
+        results = self.execute_query(q)
 
-        return {
-            ScopedKey.from_str(record.get("t._scoped_key")): record.get("a.weight")
-            for record in results.records
-        }
+        data = {taskhub: {} for taskhub in taskhubs}
+        for record in results.records:
+            th_sk = ScopedKey.from_str(record["th._scoped_key"])
+            t_sk = ScopedKey.from_str(record["t._scoped_key"])
+            weight = record["a.weight"]
+
+            data[th_sk][t_sk] = weight
+
+        return [data[taskhub] for taskhub in taskhubs]
 
     def get_task_actioned_networks(self, task: ScopedKey) -> Dict[ScopedKey, float]:
         """Get all AlchemicalNetwork ScopedKeys whose TaskHub ACTIONS a given Task.
@@ -1939,18 +1944,23 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return counts
 
-    def get_network_status(self, network: ScopedKey) -> Dict[str, int]:
+    def get_network_status(self, networks: List[ScopedKey]) -> List[Dict[str, int]]:
         """Return status counts for all Tasks associated with the given AlchemicalNetwork."""
         q = f"""
-        MATCH (:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
+        UNWIND {cypher_list_from_scoped_keys(networks)} as network
+        MATCH (an:AlchemicalNetwork {{_scoped_key: network}})-[:DEPENDS_ON]->(tf:Transformation),
               (tf)<-[:PERFORMS]-(t:Task)
-        RETURN t.status AS status, count(t) as counts
+        RETURN an._scoped_key AS sk, t.status AS status, count(t) as counts
         """
-        with self.transaction() as tx:
-            res = tx.run(q)
-            counts = {rec["status"]: rec["counts"] for rec in res}
 
-        return counts
+        network_data = {str(network_sk): {} for network_sk in networks}
+        for rec in self.execute_query(q).records:
+            sk = rec["sk"]
+            status = rec["status"]
+            counts = rec["counts"]
+            network_data[sk][status] = counts
+
+        return [network_data[str(an)] for an in networks]
 
     def get_transformation_status(self, transformation: ScopedKey) -> Dict[str, int]:
         """Return status counts for all Tasks associated with the given Transformation."""

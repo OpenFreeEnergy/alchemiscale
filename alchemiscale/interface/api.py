@@ -474,8 +474,25 @@ def get_network_status(
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
-    status_counts = n4js.get_network_status(network_scoped_key)
+    status_counts = n4js.get_network_status([network_scoped_key])[0]
 
+    return status_counts
+
+
+@router.post("/bulk/networks/status")
+def get_networks_status(
+    *,
+    networks: List[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Dict[str, int]]:
+
+    network_sks = [ScopedKey.from_str(sk) for sk in networks]
+
+    for sk in network_sks:
+        validate_scopes(sk.scope, token)
+
+    status_counts = n4js.get_network_status(network_sks)
     return status_counts
 
 
@@ -506,12 +523,40 @@ def get_network_actioned_tasks(
     validate_scopes(network_sk.scope, token)
 
     taskhub_sk = n4js.get_taskhub(network_sk)
-    task_sks = n4js.get_taskhub_actioned_tasks(taskhub_sk)
+    task_sks = n4js.get_taskhub_actioned_tasks([taskhub_sk])[0]
 
     if task_weights:
         return {str(task_sk): weight for task_sk, weight in task_sks.items()}
 
     return [str(task_sk) for task_sk in task_sks]
+
+
+@router.post("/bulk/networks/tasks/actioned")
+def get_networks_actioned_tasks(
+    *,
+    networks: List[str] = Body(embed=True),
+    task_weights: bool = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Union[Dict[str, float], List[str]]]:
+
+    network_sks = [ScopedKey.from_str(network) for network in networks]
+    taskhub_sks = [n4js.get_taskhub(network_sk) for network_sk in network_sks]
+
+    grouped_task_sks = n4js.get_taskhub_actioned_tasks(taskhub_sks)
+
+    return_data = []
+
+    for group in grouped_task_sks:
+        if task_weights:
+            return_data.append(
+                {str(task_sk): weight for task_sk, weight in group.items()}
+            )
+        else:
+            print(group)
+            return_data.append([str(task_sk) for task_sk in group])
+
+    return return_data
 
 
 @router.post("/tasks/{task_scoped_key}/networks/actioned")

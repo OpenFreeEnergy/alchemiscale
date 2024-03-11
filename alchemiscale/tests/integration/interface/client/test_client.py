@@ -590,6 +590,31 @@ class TestClient:
                 else:
                     assert status_counts[status] == 0
 
+    def test_get_networks_status(
+        self,
+        n4js_preloaded,
+        multiple_scopes,
+        user_client: client.AlchemiscaleClient,
+    ):
+        # for each of the following scopes, get one of the networks present,
+        # create tasks for a single random transformation
+        an_sks = []
+        for scope in multiple_scopes:
+            an_sk = user_client.query_networks(scope=scope)[0]
+            tf_sks = user_client.get_network_transformations(an_sk)
+            user_client.create_tasks(tf_sks[0], count=3)
+
+            an_sks.append(an_sk)
+
+        status_counts = user_client.get_networks_status(an_sks)
+
+        for i, statuses in enumerate(status_counts):
+            for status in statuses:
+                if status == "waiting":
+                    assert status_counts[i][status] == 3
+                else:
+                    assert status_counts[i][status] == 0
+
     def test_get_transformation_status(
         self,
         scope_test,
@@ -663,6 +688,77 @@ class TestClient:
             assert list(results.values()) == [0.5, 0.5]
 
         assert set(results) == set(task_sks[:2])
+
+    @pytest.mark.parametrize(
+        "get_weights",
+        [
+            (True),
+            (False),
+        ],
+    )
+    def test_get_networks_actioned_tasks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client,
+        network_tyk2,
+        get_weights,
+    ):
+        base_an = network_tyk2
+
+        # 2 test networks
+        n_networks = 2
+        # 3 tasks per network
+        n_tasks = 3
+
+        networks = [
+            network_tyk2.copy_with_replacements(name=base_an.name + f"_copy_{i}")
+            for i in range(n_networks)
+        ]
+
+        network_sks = [
+            user_client.create_network(network, scope_test) for network in networks
+        ]
+
+        transformation_sks = [
+            user_client.get_scoped_key(list(network.edges)[0], scope_test)
+            for network in networks
+        ]
+
+        for network_sk in network_sks:
+            # if no tasks actioned, should get nothing back
+            assert (
+                len(
+                    user_client.get_networks_actioned_tasks(
+                        [network_sk], task_weights=get_weights
+                    )[0]
+                )
+                == 0
+            )
+
+        all_task_sks = []
+        for network_sk, transformation_sk in zip(network_sks, transformation_sks):
+            task_sks = user_client.create_tasks(transformation_sk, count=n_tasks)
+            # action all but one task for each network
+            user_client.action_tasks(task_sks[: n_tasks - 1], network_sk)
+            all_task_sks.append(task_sks[: n_tasks - 1])
+
+        results = user_client.get_networks_actioned_tasks(
+            network_sks, task_weights=get_weights
+        )
+
+        assert len(results) == n_networks and isinstance(results, list)
+
+        if get_weights:
+            assert isinstance(results[0], dict)
+        else:
+            assert isinstance(results[0], list)
+
+        for network_result, task_sks in zip(results, all_task_sks):
+            if get_weights:
+                assert list(network_result.values()) == [0.5, 0.5]
+
+            assert set(network_result) == set(task_sks[: n_tasks - 1])
 
     @pytest.mark.parametrize(
         ("actioned_tasks"),

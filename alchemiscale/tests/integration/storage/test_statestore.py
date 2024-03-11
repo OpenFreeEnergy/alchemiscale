@@ -882,13 +882,13 @@ class TestNeo4jStore(TestStateStore):
         task_sks = [n4js.create_task(transformation_sk) for i in range(5)]
 
         # do not action the tasks yet; should get back nothing
-        actioned_tasks = n4js.get_taskhub_actioned_tasks(taskhub_sk)
+        actioned_tasks = n4js.get_taskhub_actioned_tasks([taskhub_sk])[0]
         assert actioned_tasks == {}
 
         # action 3 of 5 tasks
         n4js.action_tasks(task_sks[:3], taskhub_sk)
 
-        actioned_tasks = n4js.get_taskhub_actioned_tasks(taskhub_sk)
+        actioned_tasks = n4js.get_taskhub_actioned_tasks([taskhub_sk])[0]
 
         assert len(actioned_tasks) == 3
         assert all([task_i in task_sks for task_i in actioned_tasks])
@@ -1456,14 +1456,14 @@ class TestNeo4jStore(TestStateStore):
         for tf_sk in tf_sks:
             task_sks.append(n4js.create_task(tf_sk))
 
-        status = n4js.get_network_status(an_sk)
+        status = n4js.get_network_status([an_sk])[0]
         assert len(status) == 1
         assert status["waiting"] == len(task_sks)
 
         # change some task statuses
         n4js.set_task_invalid(task_sks[:10])
 
-        status = n4js.get_network_status(an_sk)
+        status = n4js.get_network_status([an_sk])[0]
         assert len(status) == 2
         assert status["waiting"] == len(task_sks) - 10
         assert status["invalid"] == 10

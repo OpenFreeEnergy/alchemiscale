@@ -623,6 +623,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return status_counts
 
+    def get_networks_status(
+        self,
+        networks: List[ScopedKey],
+    ) -> List[Dict[str, int]]:
+        data = {"networks": [str(network) for network in networks]}
+        status_counts = self._post_resource("/bulk/networks/status", data=data)
+        return status_counts
+
     def get_transformation_status(
         self,
         transformation: ScopedKey,
@@ -679,6 +687,25 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             return {ScopedKey.from_str(t): w for t, w in tasks.items()}
 
         return [ScopedKey.from_str(t) for t in tasks]
+
+    def get_networks_actioned_tasks(
+        self,
+        networks: List[ScopedKey],
+        task_weights: bool = False,
+    ) -> List[Union[Dict[ScopedKey, float], List[ScopedKey]]]:
+        data = dict(
+            networks=[str(network) for network in networks], task_weights=task_weights
+        )
+        grouped_tasks = self._post_resource("/bulk/networks/tasks/actioned", data=data)
+
+        return_data = []
+        for tasks in grouped_tasks:
+            if task_weights:
+                return_data.append({ScopedKey.from_str(t): w for t, w in tasks.items()})
+            else:
+                return_data.append([ScopedKey.from_str(t) for t in tasks])
+
+        return return_data
 
     def get_task_actioned_networks(
         self, task: ScopedKey, task_weights: bool = False
