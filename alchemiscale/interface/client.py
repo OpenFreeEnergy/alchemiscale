@@ -32,6 +32,8 @@ from ..security.models import CredentialedUserIdentity
 from ..validators import validate_network_nonself
 from ..keyedchain import KeyedChain
 
+from warnings import warn
+
 
 class AlchemiscaleClientError(AlchemiscaleBaseClientError): ...
 
@@ -68,6 +70,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         gufe object and a Scope.
 
         """
+
+        msg = """`get_scoped_key` will be removed in v0.5.0
+
+        For accurate server-side ScopedKeys, use the relevant methods for the GufeTokenizable of interest.
+        For instance, `get_network_transformations` should be used to get Transformation ScopedKeys.
+        """
+        warn(
+            msg,
+            DeprecationWarning,
+        )
+
         if scope.specific():
             return ScopedKey(gufe_key=obj.key, **scope.dict())
         else:
