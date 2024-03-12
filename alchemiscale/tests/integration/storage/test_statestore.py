@@ -840,7 +840,7 @@ class TestNeo4jStore(TestStateStore):
         assert n["weight"] == 0.5
 
         # change the weight
-        n4js.set_taskhub_weight(network_sk, 0.7)
+        n4js.set_taskhub_weight([network_sk], 0.7)
 
         q = f"""match (n:TaskHub)
                 return n
@@ -937,7 +937,7 @@ class TestNeo4jStore(TestStateStore):
         """
 
         weight = n4js.execute_query(q).records[0].data()["taskhub.weight"]
-        weight_ = n4js.get_taskhub_weight(network_sk)
+        weight_ = n4js.get_taskhub_weight([network_sk])[0]
 
         assert weight == 0.5
         assert weight_ == 0.5
@@ -946,8 +946,8 @@ class TestNeo4jStore(TestStateStore):
         network_sk = n4js.create_network(network_tyk2, scope_test)
         n4js.create_taskhub(network_sk)
 
-        n4js.set_taskhub_weight(network_sk, 1.0)
-        weight = n4js.get_taskhub_weight(network_sk)
+        n4js.set_taskhub_weight([network_sk], 1.0)
+        weight = n4js.get_taskhub_weight([network_sk])[0]
 
         assert weight == 1.0
 

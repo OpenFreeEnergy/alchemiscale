@@ -1044,27 +1044,28 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return taskhub
 
-    def set_taskhub_weight(self, network: ScopedKey, weight: float):
-        """Set the weight for the TaskHub associated with the given
-        AlchemicalNetwork.
+    def set_taskhub_weight(self, networks: List[ScopedKey], weight: float):
+        """Set the weights for the TaskHubs associated with the given
+        AlchemicalNetworks.
 
         """
 
         if not 0 <= weight <= 1:
             raise ValueError("weight must be between 0 and 1 (inclusive)")
 
-        if network.qualname != "AlchemicalNetwork":
-            raise ValueError(
-                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
-            )
+        for network in networks:
+            if network.qualname != "AlchemicalNetwork":
+                raise ValueError(
+                    "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+                )
 
         q = f"""
-        MATCH (th:TaskHub {{network: "{network}"}})
+        UNWIND {cypher_list_from_scoped_keys(networks)} as network
+        MATCH (th:TaskHub {{network: network}})
         SET th.weight = {weight}
         RETURN th
         """
-        with self.transaction() as tx:
-            tx.run(q)
+        self.execute_query(q)
 
     def get_taskhub_actioned_tasks(
         self,
@@ -1131,25 +1132,34 @@ class Neo4jStore(AlchemiscaleStateStore):
             for record in results.records
         }
 
-    def get_taskhub_weight(self, network: ScopedKey) -> float:
+    def get_taskhub_weight(self, networks: List[ScopedKey]) -> List[float]:
         """Get the weight for the TaskHub associated with the given
         AlchemicalNetwork.
 
         """
 
-        if network.qualname != "AlchemicalNetwork":
-            raise ValueError(
-                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
-            )
+        for network in networks:
+            if network.qualname != "AlchemicalNetwork":
+                raise ValueError(
+                    "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+                )
 
         q = f"""
-        MATCH (th:TaskHub {{network: "{network}"}})
-        RETURN th.weight
+        UNWIND {cypher_list_from_scoped_keys(networks)} as network
+        MATCH (th:TaskHub {{network: network}})
+        RETURN network, th.weight
         """
-        with self.transaction() as tx:
-            weight = tx.run(q).data()[0]["th.weight"]
 
-        return weight
+        results = self.execute_query(q)
+
+        network_weights = {}
+
+        for record in results.records:
+            weight = record["th.weight"]
+            network_sk = ScopedKey.from_str(record["network"])
+            network_weights[network_sk] = weight
+
+        return [network_weights[network] for network in networks]
 
     def action_tasks(
         self,

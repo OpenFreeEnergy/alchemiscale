@@ -219,6 +219,20 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         return self._get_resource(f"/networks/{network}/weight")
 
+    async def _get_network_weight(self, networks: List[ScopedKey]) -> List[float]:
+        data = dict(networks=[str(network) for network in networks])
+        weights = await self._post_resource_async(
+            "/bulk/networks/weight/get", data=data
+        )
+        return weights
+
+    def get_networks_weight(
+        self, networks: List[ScopedKey], batch_size: int = 1000
+    ) -> [float]:
+        return self._tokenizable_attribute_getter(
+            networks, self._get_network_weight, batch_size
+        )
+
     def set_network_weight(self, network: ScopedKey, weight: float) -> None:
         """Set the weight of the TaskHub associated with the given AlchemicalNetwork.
 
@@ -242,6 +256,25 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         """
         self._post_resource(f"/networks/{network}/weight", weight)
+
+    async def _set_network_weight(self, networks: List[ScopedKey], weight) -> None:
+        data = dict(networks=[str(network) for network in networks], weight=weight)
+        await self._post_resource_async("/bulk/networks/weight/set", data=data)
+
+    def set_networks_weight(
+        self,
+        networks: List[ScopedKey],
+        weight: float,
+        batch_size: int = 1000,
+    ) -> None:
+
+        self._tokenizable_attribute_setter(
+            networks,
+            self._set_network_weight,
+            (weight,),
+            batch_size,
+            should_return=False,
+        )
 
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
@@ -810,22 +843,33 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return [ScopedKey.from_str(i) if i is not None else None for i in canceled_sks]
 
-    def _task_attribute_getter(
-        self, tasks: List[ScopedKey], getter_function, batch_size
+    def _tokenizable_attribute_getter(
+        self,
+        tokenizables: List[ScopedKey],
+        getter_function,
+        batch_size,
+        should_return=True,
     ) -> List[Any]:
-        tasks = [
-            ScopedKey.from_str(task) if isinstance(task, str) else task
-            for task in tasks
+        tokenizables = [
+            (
+                ScopedKey.from_str(tokenizable)
+                if isinstance(tokenizable, str)
+                else tokenizable
+            )
+            for tokenizable in tokenizables
         ]
 
         @use_session
         async def async_request(self):
             values = await asyncio.gather(
                 *[
-                    getter_function(task_batch)
-                    for task_batch in self._batched(tasks, batch_size)
+                    getter_function(tokenizable_batch)
+                    for tokenizable_batch in self._batched(tokenizables, batch_size)
                 ]
             )
+
+            if not should_return:
+                return None
 
             return list(chain.from_iterable(values))
 
@@ -841,22 +885,34 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             nest_asyncio.apply()
             return asyncio.run(coro)
 
-    def _task_attribute_setter(
-        self, tasks: List[ScopedKey], setter_function, setter_args, batch_size
+    def _tokenizable_attribute_setter(
+        self,
+        tokenizables: List[ScopedKey],
+        setter_function,
+        setter_args,
+        batch_size,
+        should_return=True,
     ) -> List[Optional[ScopedKey]]:
-        tasks = [
-            ScopedKey.from_str(task) if isinstance(task, str) else task
-            for task in tasks
+        tokenizables = [
+            (
+                ScopedKey.from_str(tokenizable)
+                if isinstance(tokenizable, str)
+                else tokenizable
+            )
+            for tokenizable in tokenizables
         ]
 
         @use_session
         async def async_request(self):
             scoped_keys = await asyncio.gather(
                 *[
-                    setter_function(task_batch, *setter_args)
-                    for task_batch in self._batched(tasks, batch_size)
+                    setter_function(tokenizable_batch, *setter_args)
+                    for tokenizable_batch in self._batched(tokenizables, batch_size)
                 ]
             )
+
+            if not should_return:
+                return None
 
             return list(chain.from_iterable(scoped_keys))
 
@@ -914,14 +970,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         status = TaskStatusEnum(status)
 
-        return self._task_attribute_setter(
+        return self._tokenizable_attribute_setter(
             tasks, self._set_task_status, (status,), batch_size
         )
 
     async def _get_task_status(self, tasks: List[ScopedKey]) -> List[TaskStatusEnum]:
         """Get the statuses for many Tasks"""
         data = dict(tasks=[t.dict() for t in tasks])
-        statuses = await self._post_resource_async(f"/bulk/tasks/status/get", data=data)
+        statuses = await self._post_resource_async("/bulk/tasks/status/get", data=data)
         return statuses
 
     def get_tasks_status(
@@ -944,7 +1000,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             given Task doesn't exist, ``None`` will be returned in its place.
 
         """
-        return self._task_attribute_getter(tasks, self._get_task_status, batch_size)
+        return self._tokenizable_attribute_getter(
+            tasks, self._get_task_status, batch_size
+        )
 
     async def _set_task_priority(
         self, tasks: List[ScopedKey], priority: int
@@ -984,7 +1042,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             as given in `tasks`. If a given Task doesn't exist, ``None`` will
             be returned in its place.
         """
-        return self._task_attribute_setter(
+        return self._tokenizable_attribute_setter(
             tasks, self._set_task_priority, (priority,), batch_size
         )
 
@@ -1018,7 +1076,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             given Task doesn't exist, ``None`` will be returned in its place.
 
         """
-        return self._task_attribute_getter(tasks, self._get_task_priority, batch_size)
+        return self._tokenizable_attribute_getter(
+            tasks, self._get_task_priority, batch_size
+        )
 
     ### results
 
