@@ -35,7 +35,7 @@ from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ProtocolDAGResultRef, TaskStatusEnum
+from ..storage.models import ProtocolDAGResultRef, TaskStatusEnum, NetworkStateEnum
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedUserIdentity
@@ -129,6 +129,7 @@ def create_network(
 
     # create taskhub for this network
     n4js.create_taskhub(an_sk)
+    n4js.set_network_state(an_sk, state=NetworkStateEnum.active.value)
 
     return an_sk
 

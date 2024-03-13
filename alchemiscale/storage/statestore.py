@@ -22,6 +22,8 @@ from neo4j import Transaction, GraphDatabase, Driver
 from .models import (
     ComputeServiceID,
     ComputeServiceRegistration,
+    NetworkState,
+    NetworkStateEnum,
     Task,
     TaskHub,
     TaskStatusEnum,
@@ -661,12 +663,43 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return network
 
+    def set_network_state(self, network: ScopedKey, state: str = "active") -> ScopedKey:
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+            )
+
+        scope = network.scope
+        network_node = self._get_node(network)
+
+        network_state = NetworkState(network=str(network), state=state)
+        _, network_state_node, scoped_key = self._gufe_to_subgraph(
+            network_state.to_shallow_dict(),
+            labels=["GufeTokenizable", network_state.__class__.__name__],
+            gufe_key=network_state.key,
+            scope=scope,
+        )
+
+        subgraph = Relationship.type("MARKS")(
+            network_state_node,
+            network_node,
+            _org=scope.org,
+            _campaign=scope.campaign,
+            _project=scope.project,
+        )
+
+        with self.transaction(ignore_exceptions=True) as tx:
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+
+        return scoped_key
+
     def query_networks(
         self,
         *,
         name=None,
         key=None,
         scope: Optional[Scope] = Scope(),
+        network_state: Optional[str] = NetworkStateEnum.active.value,
         return_gufe: bool = False,
     ):
         """Query for `AlchemicalNetwork`\s matching given attributes."""
