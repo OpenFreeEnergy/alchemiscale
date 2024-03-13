@@ -117,12 +117,12 @@ async def create_network(
     # we handle the request directly so we can decode with custom JSON decoder
     # this is important for properly handling GUFE objects
     body = await request.body()
-    body_ = json.loads(body.decode('utf-8'), cls=JSON_HANDLER.decoder)
+    body_ = json.loads(body.decode("utf-8"), cls=JSON_HANDLER.decoder)
 
-    scope = Scope.parse_obj(body_['scope'])
+    scope = Scope.parse_obj(body_["scope"])
     validate_scopes(scope, token)
 
-    network = body_['network']
+    network = body_["network"]
     an = KeyedChain(network).to_gufe()
 
     try:
