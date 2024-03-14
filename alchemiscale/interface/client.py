@@ -469,6 +469,25 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
         return [ScopedKey.from_str(i) for i in task_sks]
 
+    def create_bulk_tasks(
+        self,
+        transformations: List[ScopedKey],
+        extends: Optional[List[Optional[ScopedKey]]] = None,
+    ) -> List[ScopedKey]:
+
+        data = dict(
+            transformations=[str(transformation) for transformation in transformations],
+            extends=(
+                None
+                if not extends
+                else [
+                    str(task_sk) if task_sk is not None else None for task_sk in extends
+                ]
+            ),
+        )
+        task_sks = self._post_resource("/bulk/transformations/tasks/create", data)
+        return [ScopedKey.from_str(i) for i in task_sks]
+
     def query_tasks(
         self,
         scope: Optional[Scope] = None,
