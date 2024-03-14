@@ -1544,15 +1544,15 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## tasks
 
-    def validate_extends_tasks(self, task_list):
+    def validate_extends_tasks(self, task_list) -> Dict[str, Tuple[Node, str]]:
 
         if not task_list:
-            return []
+            return {}
 
         q = f"""
             UNWIND {cypher_list_from_scoped_keys(task_list)} as task
-            MATCH (t:Task {{`_scoped_key`: task}})
-            return t
+            MATCH (t:Task {{`_scoped_key`: task}})-[PERFORMS]->(tf:Transformation)
+            return t, tf._scoped_key as tf_sk
         """
 
         results = self.execute_query(q)
@@ -1561,6 +1561,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         for record in results.records:
             node = record_data_to_node(record["t"])
+            transformation_sk = record["tf_sk"]
 
             status = node.get("status")
 
@@ -1571,7 +1572,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 node["datetime_created"] = str(node["datetime_created"])
                 raise ValueError(f"Cannot extend a `deleted` or `invalid` Task: {node}")
 
-            nodes[node["_scoped_key"]] = node
+            nodes[node["_scoped_key"]] = (node, transformation_sk)
 
         return nodes
 
@@ -1680,9 +1681,19 @@ class Neo4jStore(AlchemiscaleStateStore):
                 sks.append(scoped_key)
 
                 if _extends is not None:
+
+                    extends_task_node, extends_transformation_sk = extends_nodes[
+                        str(_extends)
+                    ]
+
+                    if extends_transformation_sk != str(_transformation):
+                        raise ValueError(
+                            f"{_extends} extends a transformation other than {_transformation}"
+                        )
+
                     subgraph |= Relationship.type("EXTENDS")(
                         task_node,
-                        extends_nodes[str(_extends)],
+                        extends_task_node,
                         _org=scope.org,
                         _campaign=scope.campaign,
                         _project=scope.project,

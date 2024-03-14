@@ -487,9 +487,11 @@ class TestNeo4jStore(TestStateStore):
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
 
+        # test the `n4js.create_task` method, which calls `n4js.create_tasks`
+        # for convenience
         task_sk: ScopedKey = n4js.create_task(transformation_sk)
-        q = f"""match (n:Task {{_gufe_key: '{task_sk.gufe_key}', 
-                                             _org: '{task_sk.org}', _campaign: '{task_sk.campaign}', 
+        q = f"""match (n:Task {{_gufe_key: '{task_sk.gufe_key}',
+                                             _org: '{task_sk.org}', _campaign: '{task_sk.campaign}',
                                              _project: '{task_sk.project}'}})-[:PERFORMS]->(m:Transformation)
                 return m
                 """
@@ -526,6 +528,17 @@ class TestNeo4jStore(TestStateStore):
             child_task_sk = child_task_sks[task_sks.index(task_sk)]
 
             assert ScopedKey.from_str(m["_scoped_key"]) == child_task_sk
+
+        incompatible_transformation_sk = n4js.get_scoped_key(
+            list(an.edges)[1], scope_test
+        )
+
+        with pytest.raises(ValueError):
+            incompatible_transformations = [transformation_sk] * len(child_task_sks)
+            incompatible_transformations[0] = incompatible_transformation_sk
+            # since the child tasks all PERFORM transformation_sk, the addition
+            # of incompatible_transformation_sk raises a ValueError
+            n4js.create_tasks(incompatible_transformations, child_task_sks)
 
     def test_create_task_extends_invalid_deleted(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try generating task
