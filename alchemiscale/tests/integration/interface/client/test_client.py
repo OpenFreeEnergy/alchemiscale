@@ -364,7 +364,7 @@ class TestClient:
         )
         assert set() == set(n4js.get_transformation_tasks(sk, extends=task_sks[1]))
 
-    def test_create_bulk_tasks(
+    def test_create_transformations_tasks(
         self,
         scope_test,
         n4js_preloaded,
@@ -382,7 +382,7 @@ class TestClient:
         ]
 
         # create three copies tasks per transformation
-        task_sks = user_client.create_bulk_tasks(transformation_sks * 3)
+        task_sks = user_client.create_transformations_tasks(transformation_sks * 3)
 
         all_tasks = set()
         extends_list = []
@@ -398,7 +398,7 @@ class TestClient:
         assert set(task_sks) == all_tasks
 
         # create a new set of tasks
-        extends_tasks = user_client.create_bulk_tasks(
+        extends_tasks = user_client.create_transformations_tasks(
             transformation_sks, extends=extends_list
         )
 
@@ -415,9 +415,10 @@ class TestClient:
         assert len(results.records) == 5
 
         # check that we extended the correct tasks
-        for record in results.records:
-            original = ScopedKey.from_str(record["original_task"])
-            assert original in extends_list
+        originals = [
+            ScopedKey.from_str(record["original_task"]) for record in results.records
+        ]
+        assert set(originals) == set(extends_list)
 
         # make sure the first transformation_sk isn't extending an already existing task
         extends_list[0] = None
@@ -425,7 +426,7 @@ class TestClient:
         # confirm we still have 5 entries
         assert len(extends_list) == 5
 
-        extends_tasks = user_client.create_bulk_tasks(
+        extends_tasks = user_client.create_transformations_tasks(
             transformation_sks, extends=extends_list
         )
 

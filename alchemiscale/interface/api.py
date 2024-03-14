@@ -358,7 +358,7 @@ def create_tasks(
 
 
 @router.post("/bulk/transformations/tasks/create")
-def create_bulk_tasks(
+def create_transformations_tasks(
     *,
     transformations: List[str] = Body(embed=True),
     extends: Optional[List[Optional[str]]] = None,
@@ -379,8 +379,10 @@ def create_bulk_tasks(
             for extends_str in extends
         ]
 
-    # TODO: raise Bad Request for ValueErrors raised
-    task_sks = n4js.create_tasks(transformation_sks, extends)
+    try:
+        task_sks = n4js.create_tasks(transformation_sks, extends)
+    except ValueError as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return [str(sk) for sk in task_sks]
 

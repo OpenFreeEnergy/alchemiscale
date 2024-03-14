@@ -1581,22 +1581,26 @@ class Neo4jStore(AlchemiscaleStateStore):
         extends: Optional[List[Optional[ScopedKey]]] = None,
         creator: Optional[str] = None,
     ) -> List[ScopedKey]:
-        """Add compute Tasks to a provided Transformations.
+        """Create Tasks for the given Transformations.
 
-        Note: this creates compute Tasks, but does not add them to any TaskHubs.
+        Note: this creates Tasks; it does not action them.
 
         Parameters
         ----------
         transformations
-            The Transformations to compute.
+            The Transformations to create Tasks for.
+            One Task is created for each Transformation ScopedKey given; to
+            create multiple Tasks for a given Transformation, provide its
+            ScopedKey multiple times.
         extends
-            The ScopedKeys of the Tasks to use as a starting point for the Tasks.
+            The ScopedKeys of the Tasks to use as a starting point for the
+            created Tasks, in the same order as `transformations`. If ``None``
+            given for a given Task, it will not extend any other Task.
             Will use the `ProtocolDAGResult` from the given Task as the
             `extends` input for the Task's eventual call to `Protocol.create`.
         creator (optional)
-            The creator of the Tasks
+            The creator of the Tasks.
         """
-
         allowed_types = [Transformation.__qualname__, NonTransformation.__qualname__]
 
         # reshape data to a standard form
@@ -1609,9 +1613,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         for i, _extends in enumerate(extends):
             if _extends is not None:
-                if not (
-                    extended_task_qualname := _extends.__getattribute__("qualname")
-                ):
+                if not (extended_task_qualname := getattr(_extends, "qualname", None)):
                     raise ValueError(
                         f"`extends` entry for `Task` {transformations[i]} is not valid"
                     )
@@ -1626,7 +1628,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         for i, transformation in enumerate(transformations):
             if transformation.qualname not in allowed_types:
                 raise ValueError(
-                    f"Got an unsupported `Task` type: {transformation.qualname}"
+                    f"Got an unsupported `Transformation` type: {transformation.qualname}"
                 )
             transformation_map[transformation.qualname][0].append(transformation)
             transformation_map[transformation.qualname][1].append(extends[i])
@@ -1705,12 +1707,16 @@ class Neo4jStore(AlchemiscaleStateStore):
         extends: Optional[ScopedKey] = None,
         creator: Optional[str] = None,
     ) -> ScopedKey:
-        """Create a single `Task` from a `Transformation`.
+        """Create a single Task for a Transformation.
 
-        This method wrap around the more general `create_tasks` method.
+        This is a convenience method that wraps around the more general
+        `create_tasks` method.
+
         """
         return self.create_tasks(
-            [transformation], extends=[extends] if extends is not None else [None]
+            [transformation],
+            extends=[extends] if extends is not None else [None],
+            creator=creator,
         )[0]
 
     def query_tasks(self, *, status=None, key=None, scope: Scope = Scope()):

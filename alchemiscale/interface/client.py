@@ -469,7 +469,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
         return [ScopedKey.from_str(i) for i in task_sks]
 
-    def create_bulk_tasks(
+    def create_transformations_tasks(
         self,
         transformations: List[ScopedKey],
         extends: Optional[List[Optional[ScopedKey]]] = None,

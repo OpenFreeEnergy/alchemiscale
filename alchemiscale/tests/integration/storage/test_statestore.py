@@ -519,8 +519,13 @@ class TestNeo4jStore(TestStateStore):
         for record in results.records:
             # n is a parent Task, m is a child Task
             n, m = record["n"], record["m"]
-            assert ScopedKey.from_str(n["_scoped_key"]) in task_sks
-            assert ScopedKey.from_str(m["_scoped_key"]) in child_task_sks
+
+            task_sk = ScopedKey.from_str(n["_scoped_key"])
+            assert task_sk in task_sks
+
+            child_task_sk = child_task_sks[task_sks.index(task_sk)]
+
+            assert ScopedKey.from_str(m["_scoped_key"]) == child_task_sk
 
     def test_create_task_extends_invalid_deleted(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try generating task
