@@ -1566,11 +1566,10 @@ class Neo4jStore(AlchemiscaleStateStore):
             status = node.get("status")
 
             if status in ("invalid", "deleted"):
-                # py2neo Node doesn't like the neo4j datetime object
-                # manually cast since we're raising anyways
-                # and the results are ephemeral
-                node["datetime_created"] = str(node["datetime_created"])
-                raise ValueError(f"Cannot extend a `deleted` or `invalid` Task: {node}")
+                invalid_task_scoped_key = node["_scoped_key"]
+                raise ValueError(
+                    f"Cannot extend a `deleted` or `invalid` Task: {invalid_task_scoped_key}"
+                )
 
             nodes[node["_scoped_key"]] = (node, transformation_sk)
 
