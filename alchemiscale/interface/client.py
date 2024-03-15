@@ -74,7 +74,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         msg = """`get_scoped_key` will be removed in v0.5.0
 
         For accurate server-side ScopedKeys, use the relevant methods for the GufeTokenizable of interest.
-        For instance, `get_network_transformations` should be used to get Transformation ScopedKeys.
+        For instance, `get_network_transformations` should be used to get Transformation ScopedKeys for a given AlchemicalNetwork.
+
         """
         warn(
             msg,
