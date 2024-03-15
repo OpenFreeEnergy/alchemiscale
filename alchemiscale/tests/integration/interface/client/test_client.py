@@ -682,6 +682,8 @@ class TestClient:
 
         status_counts = user_client.get_networks_status(an_sks)
 
+        assert len(status_counts) == len(an_sks)
+
         for i, statuses in enumerate(status_counts):
             for status in statuses:
                 if status == "waiting":
@@ -813,9 +815,10 @@ class TestClient:
         all_task_sks = []
         for network_sk, transformation_sk in zip(network_sks, transformation_sks):
             task_sks = user_client.create_tasks(transformation_sk, count=n_tasks)
+
             # action all but one task for each network
-            user_client.action_tasks(task_sks[: n_tasks - 1], network_sk)
-            all_task_sks.append(task_sks[: n_tasks - 1])
+            actioned = user_client.action_tasks(task_sks[: n_tasks - 1], network_sk)
+            all_task_sks.append(actioned)
 
         results = user_client.get_networks_actioned_tasks(
             network_sks, task_weights=get_weights
@@ -830,9 +833,9 @@ class TestClient:
 
         for network_result, task_sks in zip(results, all_task_sks):
             if get_weights:
-                assert list(network_result.values()) == [0.5, 0.5]
+                assert list(network_result.values()) == [0.5] * (n_tasks - 1)
 
-            assert set(network_result) == set(task_sks[: n_tasks - 1])
+            assert set(network_result) == set(task_sks)
 
     @pytest.mark.parametrize(
         ("actioned_tasks"),
