@@ -1544,7 +1544,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## tasks
 
-    def validate_extends_tasks(self, task_list) -> Dict[str, Tuple[Node, str]]:
+    def _validate_extends_tasks(self, task_list) -> Dict[str, Tuple[Node, str]]:
 
         if not task_list:
             return {}
@@ -1633,7 +1633,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             transformation_map[transformation.qualname][0].append(transformation)
             transformation_map[transformation.qualname][1].append(extends[i])
 
-        extends_nodes = self.validate_extends_tasks(
+        extends_nodes = self._validate_extends_tasks(
             [_extends for _extends in extends if _extends is not None]
         )
 
@@ -1687,7 +1687,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
                     if extends_transformation_sk != str(_transformation):
                         raise ValueError(
-                            f"{_extends} extends a transformation other than {_transformation}"
+                            f"{_extends} extends a Transformation other than {_transformation}"
                         )
 
                     subgraph |= Relationship.type("EXTENDS")(

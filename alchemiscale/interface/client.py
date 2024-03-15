@@ -481,7 +481,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         whenever creating Tasks for more than one unique Transformation since it
         minimizes the number of API requests to the alchemiscale server.
 
-
         Parameters
         ----------
         transformations
