@@ -228,7 +228,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def get_networks_weight(
         self, networks: List[ScopedKey], batch_size: int = 1000
-    ) -> [float]:
+    ) -> List[float]:
         return self._tokenizable_attribute_getter(
             networks, self._get_network_weight, batch_size
         )
@@ -848,7 +848,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         tokenizables: List[ScopedKey],
         getter_function,
         batch_size,
-        should_return=True,
     ) -> List[Any]:
         tokenizables = [
             (
@@ -867,9 +866,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     for tokenizable_batch in self._batched(tokenizables, batch_size)
                 ]
             )
-
-            if not should_return:
-                return None
 
             return list(chain.from_iterable(values))
 
