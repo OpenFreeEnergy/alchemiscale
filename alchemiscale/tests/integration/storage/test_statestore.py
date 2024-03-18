@@ -946,10 +946,45 @@ class TestNeo4jStore(TestStateStore):
         network_sk = n4js.create_network(network_tyk2, scope_test)
         n4js.create_taskhub(network_sk)
 
-        n4js.set_taskhub_weight([network_sk], 1.0)
+        results = n4js.set_taskhub_weight([network_sk], 1.0)
         weight = n4js.get_taskhub_weight([network_sk])[0]
 
+        assert results == [network_sk]
         assert weight == 1.0
+
+        # create three new networks
+        network_sks = []
+        for i in range(3):
+            an = network_tyk2.copy_with_replacements(
+                name=network_tyk2.name + f"_test_set_taskhub_weight_{i}"
+            )
+            network_sk = n4js.create_network(an, scope_test)
+            network_sks.append(network_sk)
+            n4js.create_taskhub(network_sk)
+
+        results = n4js.set_taskhub_weight(network_sks, 1.0)
+        weight = n4js.get_taskhub_weight(network_sks)
+
+        assert results == network_sks
+        assert weight == [1.0, 1.0, 1.0]
+
+        results = n4js.set_taskhub_weight([network_sks[0]], 0.5)
+        weight = n4js.get_taskhub_weight(network_sks)
+
+        assert results == [network_sks[0]]
+        assert weight == [0.5, 1.0, 1.0]
+
+        wrong_scoped_key = ScopedKey.from_str(str(network_sks[1]) + "noexist")
+
+        results = n4js.set_taskhub_weight(
+            [network_sks[0], wrong_scoped_key, network_sks[2]], 0.25
+        )
+        weight = n4js.get_taskhub_weight(
+            [network_sks[0], wrong_scoped_key, network_sks[2]]
+        )
+
+        assert results == [network_sks[0], None, network_sks[2]]
+        assert weight == [0.25, None, 0.25]
 
     def test_action_task(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2

@@ -640,7 +640,8 @@ def set_network_weight(
     validate_scopes(sk.scope, token)
 
     try:
-        n4js.set_taskhub_weight([sk], weight)
+        network_sk = n4js.set_taskhub_weight([sk], weight)[0]
+        return str(network_sk) if network_sk else None
     except ValueError as e:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -660,9 +661,10 @@ def set_networks_weight(
         validate_scopes(network.scope, token)
 
     try:
-        n4js.set_taskhub_weight(
+        network_sks = n4js.set_taskhub_weight(
             [ScopedKey.from_str(network) for network in networks], weight
         )
+        return [str(network_sk) if network_sk else None for network_sk in network_sks]
     except Exception as e:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 

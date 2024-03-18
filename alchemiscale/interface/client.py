@@ -229,11 +229,36 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_networks_weight(
         self, networks: List[ScopedKey], batch_size: int = 1000
     ) -> List[float]:
+        """Get the weight of the TaskHubs associated with the given AlchemicalNetworks.
+
+        Compute services perform a weighted selection of the AlchemicalNetworks
+        visible to them before claiming Tasks actioned on those networks.
+        Networks with higher weight are more likely to be selected than those
+        with lower weight, and so will generally get more compute attention
+        over time.
+
+        A weight of ``0`` means the AlchemicalNetwork will not receive any
+        compute for its actioned Tasks.
+
+        Parameters
+        ----------
+        networks
+            A list of AlchemicalNetwork ScopedKeys.
+
+        Returns
+        -------
+        List[float]
+            The weights of the TaskHubs associated with the specified AlchemicalNetworks.
+            If the network was not found in the database, then None is returned in the
+            corresponding index.
+        """
         return self._tokenizable_attribute_getter(
             networks, self._get_network_weight, batch_size
         )
 
-    def set_network_weight(self, network: ScopedKey, weight: float) -> None:
+    def set_network_weight(
+        self, network: ScopedKey, weight: float
+    ) -> Optional[ScopedKey]:
         """Set the weight of the TaskHub associated with the given AlchemicalNetwork.
 
         Compute services perform a weighted selection of the AlchemicalNetworks
@@ -253,28 +278,57 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The weight to set for the network. This must be between 0 and 1
             (inclusive). Setting the value to 0 will effectively disable
             compute on this network without cancelling its actioned Tasks.
-
         """
-        self._post_resource(f"/networks/{network}/weight", weight)
+        network_sk = self._post_resource(f"/networks/{network}/weight", weight)
+        return ScopedKey.from_str(network_sk) if network_sk else None
 
-    async def _set_network_weight(self, networks: List[ScopedKey], weight) -> None:
+    async def _set_network_weight(
+        self, networks: List[ScopedKey], weight
+    ) -> List[Optional[ScopedKey]]:
         data = dict(networks=[str(network) for network in networks], weight=weight)
-        await self._post_resource_async("/bulk/networks/weight/set", data=data)
+        return await self._post_resource_async("/bulk/networks/weight/set", data=data)
 
     def set_networks_weight(
         self,
         networks: List[ScopedKey],
         weight: float,
         batch_size: int = 1000,
-    ) -> None:
+    ) -> List[Optional[ScopedKey]]:
+        """Set the weights of the TaskHubs associated with the given AlchemicalNetworks.
 
-        self._tokenizable_attribute_setter(
+        Compute services perform a weighted selection of the AlchemicalNetworks
+        visible to them before claiming Tasks actioned on those networks.
+        Networks with higher weight are more likely to be selected than those
+        with lower weight, and so will generally get more compute attention
+        over time.
+
+        A weight of ``0`` means the AlchemicalNetwork will not receive any
+        compute for its actioned Tasks.
+
+        Parameters
+        ----------
+        networks
+            The ScopedKeys of the AlchemicalNetworks to set the weights for.
+        weight
+            The weight to set for the networks. This must be between 0 and 1
+            (inclusive). Setting the value to 0 will effectively disable
+            compute on this network without cancelling its actioned Tasks.
+
+        Returns
+        -------
+        List[Optional[ScopedKey]]
+            The ScopedKeys of the TaskHubs whose weight changed, in the order
+            that the AlchemicalNetworks ScopedKeys were provided. If one of
+            the specified networks could not be found, a None is returned
+            at its corresponding index.
+        """
+        values = self._tokenizable_attribute_setter(
             networks,
             self._set_network_weight,
             (weight,),
             batch_size,
-            should_return=False,
         )
+        return [ScopedKey.from_str(value) if value else None for value in values]
 
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
@@ -660,6 +714,23 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         networks: List[ScopedKey],
     ) -> List[Dict[str, int]]:
+        """Get the status counts of tasks for a group of AlchemicalNetworks.
+
+        Parameters
+        ----------
+        networks
+            List of AlchemsicalNetwork ScopedKeys
+
+        Returns
+        -------
+        List[Dict[str, int]]
+            A list of dictionaries, in the same order as the provided networks,
+            containing the Task status counts for all Tasks in each network.
+            The dictionary keys are the statuses and the values are the number
+            of Tasks with that status. If either no tasks exist for the
+            transformations in a network, or the network does not exist in the
+            database, a empty dictionary is returned at the corresponding index.
+        """
         data = {"networks": [str(network) for network in networks]}
         status_counts = self._post_resource("/bulk/networks/status", data=data)
         return status_counts
@@ -726,6 +797,25 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         networks: List[ScopedKey],
         task_weights: bool = False,
     ) -> List[Union[Dict[ScopedKey, float], List[ScopedKey]]]:
+        """Get all actioned Tasks for a group of AlchemicalNetwork ScopedKeys.
+
+        Parameters
+        ----------
+        networks
+            A list of AlchemicalNetwork ScopedKeys to retrieve actioned
+            Tasks for.
+
+        Returns
+        -------
+        List[Union[Dict[ScopedKey, float], List[ScopedKey]]]
+            If task_weights is True, a list of dictionaries is returned with
+            the same length as the specified network list. The keys and values
+            of the contained dictionaries are the ScopedKeys and weights of
+            the actioned Tasks.
+
+            If task_weights is False, only a list of actioned Task ScopedKeys
+            is returned for each network in the specified list.
+        """
         data = dict(
             networks=[str(network) for network in networks], task_weights=task_weights
         )

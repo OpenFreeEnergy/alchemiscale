@@ -1044,7 +1044,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return taskhub
 
-    def set_taskhub_weight(self, networks: List[ScopedKey], weight: float):
+    def set_taskhub_weight(
+        self, networks: List[ScopedKey], weight: float
+    ) -> List[Optional[ScopedKey]]:
         """Set the weights for the TaskHubs associated with the given
         AlchemicalNetworks.
 
@@ -1058,14 +1060,21 @@ class Neo4jStore(AlchemiscaleStateStore):
                 raise ValueError(
                     "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
                 )
-
         q = f"""
         UNWIND {cypher_list_from_scoped_keys(networks)} as network
+
         MATCH (th:TaskHub {{network: network}})
         SET th.weight = {weight}
-        RETURN th
+        RETURN network
         """
-        self.execute_query(q)
+        results = self.execute_query(q)
+
+        network_results = {str(network): None for network in networks}
+        for record in results.records:
+            network_sk_str = record["network"]
+            network_results[network_sk_str] = ScopedKey.from_str(network_sk_str)
+
+        return [network_results[str(network)] for network in networks]
 
     def get_taskhub_actioned_tasks(
         self,
@@ -1152,14 +1161,13 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         results = self.execute_query(q)
 
-        network_weights = {}
-
+        network_weights = {str(network): None for network in networks}
         for record in results.records:
             weight = record["th.weight"]
-            network_sk = ScopedKey.from_str(record["network"])
-            network_weights[network_sk] = weight
+            network_sk_str = record["network"]
+            network_weights[network_sk_str] = weight
 
-        return [network_weights[network] for network in networks]
+        return [network_weights[str(network)] for network in networks]
 
     def action_tasks(
         self,

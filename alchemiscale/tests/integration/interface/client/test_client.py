@@ -336,6 +336,12 @@ class TestClient:
             user_client.set_network_weight(an_sk, weight)
             assert user_client.get_network_weight(an_sk) == weight
 
+            weight = abs(weight - 0.5)
+            result = user_client.set_network_weight(an_sk, weight)
+
+            assert result == an_sk
+            assert user_client.get_network_weight(an_sk) == weight
+
     @pytest.mark.parametrize(
         "weight, shouldfail",
         [
@@ -355,20 +361,20 @@ class TestClient:
         weight,
         shouldfail,
     ):
-        networks = [
-            network_tyk2.copy_with_replacements(
-                name=network_tyk2.name + "_test_set_networks_weight_{i}"
+
+        # create new networks and taskhubs
+        network_sks = []
+        for i in range(2):
+            network = network_tyk2.copy_with_replacements(
+                name=network_tyk2.name + f"_test_set_networks_weight_{i}"
             )
-            for i in range(2)
-        ]
 
-        network_sks = [
-            n4js_preloaded.create_network(network, scope_test) for network in networks
-        ]
-
-        for network_sk in network_sks:
+            network_sk = n4js_preloaded.create_network(network, scope_test)
             n4js_preloaded.create_taskhub(network_sk)
 
+            network_sks.append(network_sk)
+
+        # test for invalid input
         if shouldfail:
             with pytest.raises(
                 AlchemiscaleClientError,
@@ -377,7 +383,13 @@ class TestClient:
                 user_client.set_networks_weight(network_sks, weight)
         else:
             user_client.set_networks_weight(network_sks, weight)
-            assert n4js_preloaded.get_taskhub_weight(network_sks) == [weight] * 2
+            assert n4js_preloaded.get_taskhub_weight(network_sks) == [weight, weight]
+
+            weight = abs(weight - 0.5)
+            results = user_client.set_networks_weight(network_sks, weight)
+
+            assert results == network_sks
+            assert n4js_preloaded.get_taskhub_weight(network_sks) == [weight, weight]
 
     def test_get_transformation(
         self,
