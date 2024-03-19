@@ -176,7 +176,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The ScopedKey of the updated network. If the network was not found, a None
             is returned.
         """
-        raise NotImplementedError
+        return self.set_networks_state([network], [state])
 
     def set_networks_state(
         self, networks: List[ScopedKey], state: List[str]

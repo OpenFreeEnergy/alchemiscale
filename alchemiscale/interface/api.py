@@ -129,9 +129,31 @@ def create_network(
 
     # create taskhub for this network
     n4js.create_taskhub(an_sk)
-    n4js.set_network_state(an_sk, state=NetworkStateEnum.active.value)
+    n4js.set_network_state([an_sk], [NetworkStateEnum.active.value])
 
     return an_sk
+
+
+@router.post("/bulk/networks/state/set")
+def set_networks_state(
+    *,
+    networks: List[str] = Body(embed=True),
+    states: List[str] = Body(embed=True),
+    scope: Scope,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Optional[str]]:
+    if len(states) != len(networks):
+        msg = "networks and states must be the same length"
+        raise ValueError(msg)
+
+    network_sks = []
+    for network, state in zip(networks, states):
+        network_sks.append(ScopedKey.from_str(network))
+
+    results = n4js.set_network_state(network_sks, states)
+
+    return [None if network_sk is None else str(network_sk) for network_sk in results]
 
 
 @router.get("/networks")
