@@ -353,11 +353,36 @@ def create_tasks(
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    task_sks = []
-    for i in range(count):
-        task_sks.append(
-            n4js.create_task(transformation=sk, extends=extends, creator=token.entity)
-        )
+    task_sks = n4js.create_tasks([sk] * count, [extends] * count)
+    return [str(sk) for sk in task_sks]
+
+
+@router.post("/bulk/transformations/tasks/create")
+def create_transformations_tasks(
+    *,
+    transformations: List[str] = Body(embed=True),
+    extends: Optional[List[Optional[str]]] = None,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    transformation_sks = [
+        ScopedKey.from_str(transformation_string)
+        for transformation_string in transformations
+    ]
+
+    for transformation_sk in transformation_sks:
+        validate_scopes(transformation_sk.scope, token)
+
+    if extends is not None:
+        extends = [
+            None if not extends_str else ScopedKey.from_str(extends_str)
+            for extends_str in extends
+        ]
+
+    try:
+        task_sks = n4js.create_tasks(transformation_sks, extends)
+    except ValueError as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return [str(sk) for sk in task_sks]
 

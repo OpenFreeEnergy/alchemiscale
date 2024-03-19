@@ -469,6 +469,64 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
         return [ScopedKey.from_str(i) for i in task_sks]
 
+    def create_transformations_tasks(
+        self,
+        transformations: List[ScopedKey],
+        extends: Optional[List[Optional[ScopedKey]]] = None,
+    ) -> List[ScopedKey]:
+        """Create Tasks for multiple Transformations.
+
+        Unlike `create_tasks`, this method can create Tasks for many
+        Transformations. This method should be used instead of `create_tasks`
+        whenever creating Tasks for more than one unique Transformation since it
+        minimizes the number of API requests to the alchemiscale server.
+
+        Parameters
+        ----------
+        transformations
+            A list of ScopedKeys of Transformations to create Tasks for. The
+            same ScopedKey can be repeated to create multiple Tasks for the
+            same Transformation.
+        extends
+            A list of ScopedKeys for the Tasks to be extended. When not `None`,
+            `extends` must be a list of the same length as `transformations`. If
+            a transformation in `transformations` should not extend a Task, use
+            a `None` as a placeholder in the `extends` list.
+
+        Returns
+        -------
+        List[ScopedKey]
+            A list giving the ScopedKeys of the new Tasks created.
+
+        Examples
+        --------
+
+        Instead of looping over Transformations and calling `create_tasks`, make
+        one call to `create_transformations_tasks`.
+
+        >>> client.create_transformations_tasks([transformation_1_sk, transformation_2_sk])
+
+        The behavior of the `count` keyword argument from `create_tasks` can be
+        recreated by repeating the same transformation in the list while also
+        allowing the addition of other transformtions.
+
+        >>> client.create_transformations_tasks([transformation_1_sk] * 3 + [transformation_2_sk] * 2)
+
+        """
+
+        data = dict(
+            transformations=[str(transformation) for transformation in transformations],
+            extends=(
+                None
+                if not extends
+                else [
+                    str(task_sk) if task_sk is not None else None for task_sk in extends
+                ]
+            ),
+        )
+        task_sks = self._post_resource("/bulk/transformations/tasks/create", data)
+        return [ScopedKey.from_str(i) for i in task_sks]
+
     def query_tasks(
         self,
         scope: Optional[Scope] = None,
