@@ -16,6 +16,8 @@ from alchemiscale.storage.models import (
     TaskHub,
     ProtocolDAGResultRef,
     TaskStatusEnum,
+    NetworkState,
+    NetworkStateEnum,
     ComputeServiceID,
     ComputeServiceRegistration,
 )
@@ -101,6 +103,54 @@ class TestNeo4jStore(TestStateStore):
         assert len(n3.records) == 2
 
     def test_delete_network(self): ...
+
+    def test_set_network_state(self, n4js, network_tyk2, scope_test):
+        valid_states = [state.value for state in NetworkStateEnum]
+        network_sks = []
+        for i, state in enumerate(valid_states):
+            an = network_tyk2.copy_with_replacements(
+                name=network_tyk2.name + f"_test_set_network_state_{i}"
+            )
+            sk = n4js.create_network(an, scope_test)
+            n4js.create_taskhub(sk)
+            network_sks.append(sk)
+
+        results = n4js.set_network_state(network_sks, valid_states)
+        assert results == network_sks
+
+        q = f"""
+            UNWIND {cypher_list_from_scoped_keys(network_sks)} as network
+            MATCH (th:TaskHub)-[:PERFORMS]->(an:AlchemicalNetwork)<-[:MARKS]-(ns:NetworkState {{network: network}})
+            RETURN ns
+        """
+        results = n4js.execute_query(q)
+
+        network_results = {}
+        for record in results.records:
+            ns = record["ns"]
+            network = ns["network"]
+            state = ns["state"]
+            network_results[ScopedKey.from_str(network)] = state
+
+            try:
+                NetworkStateEnum(state)
+            except ValueError:
+                raise ValueError(f"database contains an invalid state: {state}")
+
+        for network_sk, state in zip(network_sks, valid_states):
+            assert network_results[network_sk] == state
+
+        network_sk_no_exists = ScopedKey.from_str(str(network_sks[0]) + "_no_exists")
+        results = n4js.set_network_state(
+            network_sks + [network_sk_no_exists],
+            [NetworkStateEnum.active.value] * (len(NetworkStateEnum) + 1),
+        )
+
+        assert results == network_sks + [None]
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_get_network_state(self, n4js, network_tyk2, scope_test):
+        raise NotImplementedError
 
     def test_get_network(self, n4js, network_tyk2, scope_test):
         an = network_tyk2

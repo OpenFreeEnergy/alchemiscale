@@ -663,35 +663,78 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return network
 
-    def set_network_state(self, network: ScopedKey, state: str = "active") -> ScopedKey:
-        if network.qualname != "AlchemicalNetwork":
-            raise ValueError(
-                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+    def set_network_state(
+        self, networks: List[ScopedKey], states: List[str]
+    ) -> List[Optional[ScopedKey]]:
+        """Set the state of a group of AlchemicalNetworks.
+
+        Parameters
+        ----------
+        networks
+            A list networks to set the states for.
+        states
+            A list of states to set the networks to.
+
+        Returns
+        -------
+        List[Optional[ScopedKey]]
+            The list of ScopedKeys for networks that were updated. If the
+            network could not be found in the database, a None is returned at
+            the corresponding index.
+        """
+
+        if len(networks) != len(states):
+            msg = "networks and states must have the same length"
+            raise ValueError(msg)
+
+        for network, state in zip(networks, states):
+            if network.qualname != "AlchemicalNetwork":
+                raise ValueError(
+                    "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+                )
+            try:
+                NetworkStateEnum(state)
+            except ValueError:
+                valid_states = [state.value for state in NetworkStateEnum]
+                msg = f"{state} is not a valid state. Valid values include: {valid_states}"
+                raise ValueError(msg)
+
+        subgraph = Subgraph()
+        network_sks = []
+
+        for network, state in zip(networks, states):
+            scope = network.scope
+            # TODO: replace this with a direct query, in it's current state it could
+            # introduce a bottleneck
+            try:
+                network_node = self._get_node(network)
+            except KeyError:
+                network_sks.append(None)
+                continue
+
+            network_state = NetworkState(network=str(network), state=state)
+            _, network_state_node, scoped_key = self._gufe_to_subgraph(
+                network_state.to_shallow_dict(),
+                labels=["GufeTokenizable", network_state.__class__.__name__],
+                gufe_key=network_state.key,
+                scope=scope,
             )
 
-        scope = network.scope
-        network_node = self._get_node(network)
+            network_sks.append(network)
 
-        network_state = NetworkState(network=str(network), state=state)
-        _, network_state_node, scoped_key = self._gufe_to_subgraph(
-            network_state.to_shallow_dict(),
-            labels=["GufeTokenizable", network_state.__class__.__name__],
-            gufe_key=network_state.key,
-            scope=scope,
-        )
-
-        subgraph = Relationship.type("MARKS")(
-            network_state_node,
-            network_node,
-            _org=scope.org,
-            _campaign=scope.campaign,
-            _project=scope.project,
-        )
+            subgraph |= Relationship.type("MARKS")(
+                network_state_node,
+                network_node,
+                _org=scope.org,
+                _campaign=scope.campaign,
+                _project=scope.project,
+            )
 
         with self.transaction(ignore_exceptions=True) as tx:
-            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+            if subgraph:
+                merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
-        return scoped_key
+        return network_sks
 
     def query_networks(
         self,
