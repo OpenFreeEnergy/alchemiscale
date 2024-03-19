@@ -159,6 +159,47 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return ScopedKey.from_dict(scoped_key)
 
+    def set_network_state(self, network: ScopedKey, state: str) -> Optional[ScopedKey]:
+        """Set the state of an AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network
+            The network whose state will be updated.
+        state
+            The state to set the network to. Valid options include "active",
+            "inactive", "invalid", and "deleted".
+
+        Returns
+        -------
+        Optional[ScopedKey]
+            The ScopedKey of the updated network. If the network was not found, a None
+            is returned.
+        """
+        raise NotImplementedError
+
+    def set_networks_state(
+        self, networks: List[ScopedKey], state: List[str]
+    ) -> List[Optional[ScopedKey]]:
+        """Set the state of a group of AlchemicalNetworks.
+
+        Parameters
+        ----------
+        networks
+            The networks whose states will be updated.
+        states
+            The states to set the networks to. Values must be in a list of
+            the same length as the networks parameter. Valid options include
+            "active", "inactive", "invalid", and "deleted".
+
+        Returns
+        -------
+        Optional[ScopedKey]
+            The ScopedKeys of the updated networks. If a network was not found, a None
+            is returned at the corresponding index.
+        """
+        raise NotImplementedError
+
     def query_networks(
         self,
         name: Optional[str] = None,
