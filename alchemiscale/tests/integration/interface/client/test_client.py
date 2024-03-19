@@ -9,7 +9,7 @@ from gufe.tests.test_protocol import BrokenProtocol
 import networkx as nx
 
 from alchemiscale.models import ScopedKey, Scope
-from alchemiscale.storage.models import TaskStatusEnum
+from alchemiscale.storage.models import TaskStatusEnum, NetworkStateEnum
 from alchemiscale.storage.cypher import cypher_list_from_scoped_keys
 from alchemiscale.interface import client
 from alchemiscale.utils import RegistryBackup
@@ -90,6 +90,30 @@ class TestClient:
         # TODO: make a network in a scope that doesn't have any components in
         # common with an existing network
         # user_client.create_network(
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    @pytest.mark.parametrize(("state",), [[state.value] for state in NetworkStateEnum])
+    def test_set_network_state(
+        self,
+        state,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleBaseClient,
+    ):
+        raise NotImplementedError
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    @pytest.mark.parametrize(("state",), [[state.value] for state in NetworkStateEnum])
+    def test_set_networks_state(
+        self,
+        state,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleBaseClient,
+    ):
+        raise NotImplementedError
 
     def test_query_networks(
         self,
