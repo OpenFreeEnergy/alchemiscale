@@ -663,6 +663,48 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return network
 
+    def get_network_state(self, networks: List[ScopedKey]) -> List[Optional[str]]:
+        """Get the states of a group of networks.
+
+        Parameters
+        ----------
+        networks
+            The list networks to get the states of.
+
+        Returns
+        -------
+        List[Optional[str]]
+            A list containing the states of the provided networks, in the same
+            order as they were provided. If a network was not found, a None
+            is returned.
+        """
+
+        q = f"""
+            UNWIND {cypher_list_from_scoped_keys(networks)} AS network
+            MATCH (an:AlchemicalNetwork {{`_scoped_key`: network}})
+            WITH network, an
+            OPTIONAL MATCH (AlchemicalNetwork {{`_scoped_key`: network}})<-[:MARKS]-(ns:NetworkState {{network: network}})
+            RETURN an._scoped_key as sk, ns.state AS state
+        """
+
+        results = self.execute_query(q)
+
+        state_results = {str(network): None for network in networks}
+        for record in results.records:
+            # network = record["network"]
+            # an = record["an"]
+            sk = record["sk"]
+            state = record["state"]
+
+            if sk is None:
+                continue
+
+            state_results[sk] = (
+                NetworkStateEnum.active.value if state is None else state
+            )
+
+        return [state_results[str(network)] for network in networks]
+
     def set_network_state(
         self, networks: List[ScopedKey], states: List[str]
     ) -> List[Optional[ScopedKey]]:

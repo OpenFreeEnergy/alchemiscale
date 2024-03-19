@@ -148,9 +148,29 @@ class TestNeo4jStore(TestStateStore):
 
         assert results == network_sks + [None]
 
-    @pytest.mark.xfail(raises=NotImplementedError)
     def test_get_network_state(self, n4js, network_tyk2, scope_test):
-        raise NotImplementedError
+        valid_states = [state.value for state in NetworkStateEnum]
+        network_sks = []
+        for i, state in enumerate(valid_states):
+            an = network_tyk2.copy_with_replacements(
+                name=network_tyk2.name + f"_test_get_network_state_{i}"
+            )
+            sk = n4js.create_network(an, scope_test)
+            n4js.create_taskhub(sk)
+            network_sks.append(sk)
+
+        results = n4js.get_network_state(network_sks)
+        assert results == [NetworkStateEnum.active.value] * len(network_sks)
+
+        n4js.set_network_state(network_sks, valid_states)
+
+        results = n4js.get_network_state(network_sks)
+        assert results == valid_states
+
+        network_sk_no_exists = ScopedKey.from_str(str(network_sks[0]) + "_no_exists")
+
+        results = n4js.get_network_state([network_sk_no_exists] + network_sks)
+        assert results == [None] + valid_states
 
     def test_get_network(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
