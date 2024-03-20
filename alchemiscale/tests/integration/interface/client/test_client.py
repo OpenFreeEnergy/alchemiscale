@@ -10,6 +10,7 @@ import networkx as nx
 
 from alchemiscale.models import ScopedKey, Scope
 from alchemiscale.storage.models import TaskStatusEnum
+from alchemiscale.storage.cypher import cypher_list_from_scoped_keys
 from alchemiscale.interface import client
 from alchemiscale.utils import RegistryBackup
 from alchemiscale.tests.integration.interface.utils import (
@@ -448,6 +449,82 @@ class TestClient:
             n4js.get_transformation_tasks(sk, extends=task_sks[0])
         )
         assert set() == set(n4js.get_transformation_tasks(sk, extends=task_sks[1]))
+
+    def test_create_transformations_tasks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        n4js = n4js_preloaded
+
+        an = network_tyk2
+        transformations = list(an.edges)[:5]
+
+        transformation_sks = [
+            user_client.get_scoped_key(transformation, scope_test)
+            for transformation in transformations
+        ]
+
+        # create three copies tasks per transformation
+        task_sks = user_client.create_transformations_tasks(transformation_sks * 3)
+
+        all_tasks = set()
+        extends_list = []
+        for transformation_sk in transformation_sks:
+            transformation_tasks = n4js.get_transformation_tasks(transformation_sk)
+            # there should be three tasks for each transformation
+            assert len(transformation_tasks) == 3
+            all_tasks |= set(transformation_tasks)
+
+            # we will want to test extensions, hold on to some tasks
+            extends_list.append(transformation_tasks[0])
+
+        assert set(task_sks) == all_tasks
+
+        # create a new set of tasks
+        extends_tasks = user_client.create_transformations_tasks(
+            transformation_sks, extends=extends_list
+        )
+
+        # should still have 5
+        assert len(extends_tasks) == 5
+
+        # get all of the original tasks, given our extension tasks
+        q = f"""UNWIND {cypher_list_from_scoped_keys(extends_tasks)} AS e_task
+        MATCH (Task {{`_scoped_key`: e_task}})-[:EXTENDS]->(original_task:Task)
+        RETURN original_task._scoped_key AS original_task
+        """
+        results = n4js.execute_query(q)
+
+        assert len(results.records) == 5
+
+        # check that we extended the correct tasks
+        originals = [
+            ScopedKey.from_str(record["original_task"]) for record in results.records
+        ]
+        assert set(originals) == set(extends_list)
+
+        # make sure the first transformation_sk isn't extending an already existing task
+        extends_list[0] = None
+
+        # confirm we still have 5 entries
+        assert len(extends_list) == 5
+
+        extends_tasks = user_client.create_transformations_tasks(
+            transformation_sks, extends=extends_list
+        )
+
+        q = f"""UNWIND {cypher_list_from_scoped_keys(extends_tasks)} AS e_task
+        MATCH (Task {{`_scoped_key`: e_task}})-[:EXTENDS]->(original_task:Task)
+        RETURN original_task._scoped_key AS original_task
+        """
+        results = n4js.execute_query(q)
+
+        # we should only have 4 original tasks even though we
+        # created 5 new tasks
+        assert len(results.records) == 4 and len(extends_tasks) == 5
 
     def test_query_tasks(
         self,
