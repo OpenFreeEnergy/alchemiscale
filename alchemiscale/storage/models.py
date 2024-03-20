@@ -209,7 +209,7 @@ class NetworkState(GufeTokenizable):
     network: str
     state: str
 
-    def __init__(self, network: ScopedKey, state: str = "active"):
+    def __init__(self, network: str, state: str = "active"):
         self.network = network
         self.state = state
 

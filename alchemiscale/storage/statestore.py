@@ -683,7 +683,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             UNWIND {cypher_list_from_scoped_keys(networks)} AS network
             MATCH (an:AlchemicalNetwork {{`_scoped_key`: network}})
             WITH network, an
-            OPTIONAL MATCH (AlchemicalNetwork {{`_scoped_key`: network}})<-[:MARKS]-(ns:NetworkState {{network: network}})
+            OPTIONAL MATCH (:AlchemicalNetwork {{`_scoped_key`: network}})<-[:MARKS]-(ns:NetworkState {{network: network}})
             RETURN an._scoped_key as sk, ns.state AS state
         """
 
@@ -691,8 +691,6 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         state_results = {str(network): None for network in networks}
         for record in results.records:
-            # network = record["network"]
-            # an = record["an"]
             sk = record["sk"]
             state = record["state"]
 
@@ -741,28 +739,45 @@ class Neo4jStore(AlchemiscaleStateStore):
                 msg = f"{state} is not a valid state. Valid values include: {valid_states}"
                 raise ValueError(msg)
 
+        q = f"""
+            UNWIND {cypher_list_from_scoped_keys(networks)} as network
+            OPTIONAL MATCH (an:AlchemicalNetwork {{`_scoped_key`: network}})
+            RETURN network, an
+        """
+
+        results = self.execute_query(q)
+        network_nodes_dict = {}
+        for record in results.records:
+            network, an = record["network"], record["an"]
+            if an is None:
+                continue
+            network_nodes_dict[network] = record_data_to_node(an)
+
+        network_nodes = [
+            network_nodes_dict.get(str(network), None) for network in networks
+        ]
+
         subgraph = Subgraph()
         network_sks = []
 
-        for network, state in zip(networks, states):
-            scope = network.scope
-            # TODO: replace this with a direct query, in it's current state it could
-            # introduce a bottleneck
-            try:
-                network_node = self._get_node(network)
-            except KeyError:
+        for network_node, state in zip(network_nodes, states):
+
+            if network_node is None:
                 network_sks.append(None)
                 continue
 
-            network_state = NetworkState(network=str(network), state=state)
+            network_sk = ScopedKey.from_str(network_node["_scoped_key"])
+            network_sks.append(network_sk)
+
+            network_state = NetworkState(network=str(network_sk), state=state)
+
+            scope = network_sk.scope
             _, network_state_node, scoped_key = self._gufe_to_subgraph(
                 network_state.to_shallow_dict(),
                 labels=["GufeTokenizable", network_state.__class__.__name__],
                 gufe_key=network_state.key,
                 scope=scope,
             )
-
-            network_sks.append(network)
 
             subgraph |= Relationship.type("MARKS")(
                 network_state_node,
