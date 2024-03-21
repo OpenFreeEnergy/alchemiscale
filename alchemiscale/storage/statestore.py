@@ -736,7 +736,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 NetworkStateEnum(state)
             except ValueError:
                 valid_states = [state.value for state in NetworkStateEnum]
-                msg = f"{state} is not a valid state. Valid values include: {valid_states}"
+                msg = f"'{state}' is not a valid state. Valid values include: {valid_states}"
                 raise ValueError(msg)
 
         q = f"""

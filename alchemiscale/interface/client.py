@@ -176,10 +176,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The ScopedKey of the updated network. If the network was not found, a None
             is returned.
         """
-        return self.set_networks_state([network], [state])
+        return self.set_networks_state([network], [state])[0]
 
     def set_networks_state(
-        self, networks: List[ScopedKey], state: List[str]
+        self, networks: List[ScopedKey], states: List[str]
     ) -> List[Optional[ScopedKey]]:
         """Set the state of a group of AlchemicalNetworks.
 
@@ -198,7 +198,47 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The ScopedKeys of the updated networks. If a network was not found, a None
             is returned at the corresponding index.
         """
-        raise NotImplementedError
+        data = dict(networks=list(map(str, networks)), states=states)
+        networks_updated = self._post_resource("/bulk/networks/state/set", data=data)
+        return [
+            ScopedKey.from_str(network_sk) if network_sk is not None else None
+            for network_sk in networks_updated
+        ]
+
+    def get_network_state(self, network: ScopedKey) -> Optional[str]:
+        """Get the state of a network.
+
+        Parameters
+        ----------
+        network
+            The network's ScopedKey.
+
+        Returns
+        -------
+        Optional[str]
+            The state of the network. If the network was not found in the
+            database, a None is returned instead.
+        """
+        return self.get_networks_state([network])[0]
+
+    def get_networks_state(self, networks: List[ScopedKey]) -> List[Optional[str]]:
+        """Get the states for a group of networks.
+
+        Parameters
+        ----------
+        networks
+            A list of ScopedKeys for the networks.
+
+        Returns
+        -------
+        List[Optional[str]]
+            A list of network states, in the same order as the specified
+            networks. If a network was not found in the database, the
+            corresponding entry in this list is None.
+        """
+        data = dict(networks=list(map(str, networks)))
+        states = self._post_resource("/bulk/networks/state/get", data=data)
+        return [None if state is None else state for state in states]
 
     def query_networks(
         self,

@@ -129,6 +129,7 @@ def create_network(
 
     # create taskhub for this network
     n4js.create_taskhub(an_sk)
+    # attach a network state of active
     n4js.set_network_state([an_sk], [NetworkStateEnum.active.value])
 
     return an_sk
@@ -139,19 +140,37 @@ def set_networks_state(
     *,
     networks: List[str] = Body(embed=True),
     states: List[str] = Body(embed=True),
-    scope: Scope,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> List[Optional[str]]:
-    if len(states) != len(networks):
-        msg = "networks and states must be the same length"
-        raise ValueError(msg)
-
     network_sks = []
-    for network, state in zip(networks, states):
-        network_sks.append(ScopedKey.from_str(network))
+    for network in networks:
+        network_sk = ScopedKey.from_str(network)
+        validate_scopes(network_sk.scope, token)
+        network_sks.append(network_sk)
 
-    results = n4js.set_network_state(network_sks, states)
+    try:
+        results = n4js.set_network_state(network_sks, states)
+    except ValueError as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    return [None if network_sk is None else str(network_sk) for network_sk in results]
+
+
+@router.post("/bulk/networks/state/get")
+def get_networks_state(
+    *,
+    networks: List[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Optional[str]]:
+    network_sks = []
+    for network in networks:
+        network_sk = ScopedKey.from_str(network)
+        validate_scopes(network_sk.scope, token)
+        network_sks.append(network_sk)
+
+    results = n4js.get_network_state(network_sks)
 
     return [None if network_sk is None else str(network_sk) for network_sk in results]
 
