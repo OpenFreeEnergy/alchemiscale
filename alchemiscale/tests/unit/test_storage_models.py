@@ -1,6 +1,6 @@
 import pytest
 
-from alchemiscale.storage.models import NetworkStateEnum, NetworkState
+from alchemiscale.storage.models import NetworkStateEnum, NetworkMark
 from alchemiscale import ScopedKey
 
 
@@ -24,7 +24,7 @@ class TestNetworkState(object):
     def test_enum_values(self, state: str, should_fail: bool):
 
         def create_network_state():
-            return NetworkState(self.network_sk, state)
+            return NetworkMark(self.network_sk, state)
 
         if should_fail:
             with pytest.raises(ValueError, match="`state` = "):
@@ -34,7 +34,7 @@ class TestNetworkState(object):
 
     def test_suggested_states_message(self):
         try:
-            NetworkState(self.network_sk, "NotAState")
+            NetworkMark(self.network_sk, "NotAState")
         except ValueError as e:
             emessage = str(e)
             suggested_states = emessage.split(":")[1].strip().split(", ")

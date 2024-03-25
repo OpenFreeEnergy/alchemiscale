@@ -22,7 +22,7 @@ from neo4j import Transaction, GraphDatabase, Driver
 from .models import (
     ComputeServiceID,
     ComputeServiceRegistration,
-    NetworkState,
+    NetworkMark,
     NetworkStateEnum,
     Task,
     TaskHub,
@@ -683,7 +683,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             UNWIND {cypher_list_from_scoped_keys(networks)} AS network
             MATCH (an:AlchemicalNetwork {{`_scoped_key`: network}})
             WITH network, an
-            OPTIONAL MATCH (:AlchemicalNetwork {{`_scoped_key`: network}})<-[:MARKS]-(ns:NetworkState {{network: network}})
+            OPTIONAL MATCH (:AlchemicalNetwork {{`_scoped_key`: network}})<-[:MARKS]-(ns:NetworkMark {{network: network}})
             RETURN an._scoped_key as sk, ns.state AS state
         """
 
@@ -769,7 +769,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             network_sk = ScopedKey.from_str(network_node["_scoped_key"])
             network_sks.append(network_sk)
 
-            network_state = NetworkState(network=str(network_sk), state=state)
+            network_state = NetworkMark(network=str(network_sk), state=state)
 
             scope = network_sk.scope
             _, network_state_node, scoped_key = self._gufe_to_subgraph(
@@ -817,7 +817,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 query_params[k] = ".*"
 
         q = """
-            MATCH (an:AlchemicalNetwork)<-[:MARKS]-(ns:NetworkState)
+            MATCH (an:AlchemicalNetwork)<-[:MARKS]-(ns:NetworkMark)
             WHERE
                     an.name =~ $name_pattern
                 AND an.`_gufe_key` =~ $gufe_key_pattern

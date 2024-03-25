@@ -110,7 +110,7 @@ class TestClient:
         )
 
         q = """
-            MATCH (:AlchemicalNetwork {`_scoped_key`: $network})<-[:MARKS]-(ns:NetworkState)
+            MATCH (:AlchemicalNetwork {`_scoped_key`: $network})<-[:MARKS]-(ns:NetworkMark)
             RETURN ns.state as state
         """
 
@@ -179,7 +179,7 @@ class TestClient:
 
         q = """
             UNWIND $networks as network
-            MATCH (:AlchemicalNetwork {`_scoped_key`: network})<-[:MARKS]-(ns:NetworkState)
+            MATCH (:AlchemicalNetwork {`_scoped_key`: network})<-[:MARKS]-(ns:NetworkMark)
             RETURN ns.state as state
         """
 

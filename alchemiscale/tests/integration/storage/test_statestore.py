@@ -16,7 +16,7 @@ from alchemiscale.storage.models import (
     TaskHub,
     ProtocolDAGResultRef,
     TaskStatusEnum,
-    NetworkState,
+    NetworkMark,
     NetworkStateEnum,
     ComputeServiceID,
     ComputeServiceRegistration,
@@ -120,7 +120,7 @@ class TestNeo4jStore(TestStateStore):
 
         q = f"""
             UNWIND {cypher_list_from_scoped_keys(network_sks)} as network
-            MATCH (th:TaskHub)-[:PERFORMS]->(an:AlchemicalNetwork)<-[:MARKS]-(ns:NetworkState {{network: network}})
+            MATCH (th:TaskHub)-[:PERFORMS]->(an:AlchemicalNetwork)<-[:MARKS]-(ns:NetworkMark {{network: network}})
             RETURN ns
         """
         results = n4js.execute_query(q)
