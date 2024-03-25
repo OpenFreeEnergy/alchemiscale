@@ -279,13 +279,28 @@ class TestClient:
         network_tyk2,
         user_client: client.AlchemiscaleClient,
     ):
-        network_sks = user_client.query_networks()
+        network_sks = user_client.query_networks(state="active")
 
-        assert len(network_sks) == 6
+        assert len(network_sks) == 3
         assert scope_test in [n_sk.scope for n_sk in network_sks]
 
-        assert len(user_client.query_networks(scope=scope_test)) == 2
-        assert len(user_client.query_networks(name=network_tyk2.name)) == 3
+        network_sks = user_client.query_networks(state="inactive")
+
+        assert len(network_sks) == 3
+        assert scope_test in [n_sk.scope for n_sk in network_sks]
+
+        assert (
+            len(user_client.query_networks(scope=scope_test, state="active|inactive"))
+            == 2
+        )
+        assert (
+            len(
+                user_client.query_networks(
+                    name=network_tyk2.name, state="active|inactive"
+                )
+            )
+            == 3
+        )
 
     def test_query_transformations(
         self,

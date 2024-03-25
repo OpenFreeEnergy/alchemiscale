@@ -194,6 +194,8 @@ class TestNeo4jStore(TestStateStore):
         sk: ScopedKey = n4js.create_network(an, scope_test)
         sk2: ScopedKey = n4js.create_network(an2, scope_test)
 
+        n4js.set_network_state([sk, sk2], ["active", "inactive"])
+
         an_sks: List[ScopedKey] = n4js.query_networks()
 
         assert sk in an_sks
@@ -210,6 +212,19 @@ class TestNeo4jStore(TestStateStore):
         # test name query
         an_sks = n4js.query_networks(name="tyk2_relative_benchmark")
         assert len(an_sks) == 1
+
+        # test state query
+        an_sks = n4js.query_networks(network_state=NetworkStateEnum.active.value)
+        assert len(an_sks) == 1
+
+        an_sks = n4js.query_networks(network_state=NetworkStateEnum.inactive.value)
+        assert len(an_sks) == 1
+
+        network_state = (
+            f"{NetworkStateEnum.active.value}|{NetworkStateEnum.inactive.value}"
+        )
+        an_sks = n4js.query_networks(network_state=network_state)
+        assert len(an_sks) == 2
 
     def test_query_transformations(self, n4js, network_tyk2, multiple_scopes):
         an = network_tyk2

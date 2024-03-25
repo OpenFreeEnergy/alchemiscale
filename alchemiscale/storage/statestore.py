@@ -799,18 +799,46 @@ class Neo4jStore(AlchemiscaleStateStore):
         name=None,
         key=None,
         scope: Optional[Scope] = Scope(),
-        network_state: Optional[str] = NetworkStateEnum.active.value,
-        return_gufe: bool = False,
+        network_state: Optional[str] = None,
     ):
         """Query for `AlchemicalNetwork`\s matching given attributes."""
-        additional = {"name": name}
-        return self._query(
-            qualname="AlchemicalNetwork",
-            additional=additional,
-            key=key,
-            scope=scope,
-            return_gufe=return_gufe,
+
+        query_params = dict(
+            name_pattern=name,
+            org_pattern=scope.org,
+            campaign_pattern=scope.campaign,
+            project_pattern=scope.project,
+            state_pattern=network_state,
+            gufe_key_pattern=None if key is None else str(key),
         )
+
+        for k, v in query_params.items():
+            if v is None:
+                query_params[k] = ".*"
+
+        q = """
+            MATCH (an:AlchemicalNetwork)<-[:MARKS]-(ns:NetworkState)
+            WHERE
+                    an.name =~ $name_pattern
+                AND an.`_gufe_key` =~ $gufe_key_pattern
+                AND an.`_org` =~ $org_pattern
+                AND an.`_campaign` =~ $campaign_pattern
+                AND an.`_project` =~ $project_pattern
+                AND ns.state =~ $state_pattern
+            RETURN an._scoped_key as sk
+        """
+
+        results = self.execute_query(
+            q,
+            query_params,
+        )
+
+        network_sks = []
+        for record in results.records:
+            sk = record["sk"]
+            network_sks.append(ScopedKey.from_str(sk))
+
+        return network_sks
 
     def query_transformations(self, *, name=None, key=None, scope: Scope = Scope()):
         """Query for `Transformation`\s matching given attributes."""

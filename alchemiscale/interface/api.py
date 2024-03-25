@@ -179,6 +179,7 @@ def get_networks_state(
 def query_networks(
     *,
     name: str = None,
+    network_state: str = "active",
     scope: Scope = Depends(scope_params),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
@@ -194,6 +195,7 @@ def query_networks(
             n4js.query_networks(
                 name=name,
                 scope=single_query_scope,
+                network_state=network_state,
             )
         )
 

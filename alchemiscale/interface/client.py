@@ -26,7 +26,12 @@ from ..base.client import (
     use_session,
 )
 from ..models import Scope, ScopedKey
-from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
+from ..storage.models import (
+    Task,
+    ProtocolDAGResultRef,
+    TaskStatusEnum,
+    NetworkStateEnum,
+)
 from ..strategies import Strategy
 from ..security.models import CredentialedUserIdentity
 from ..validators import validate_network_nonself
@@ -243,6 +248,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def query_networks(
         self,
         name: Optional[str] = None,
+        state: Optional[str] = NetworkStateEnum.active.value,
         scope: Optional[Scope] = None,
     ) -> List[ScopedKey]:
         """Query for AlchemicalNetworks, optionally by name or Scope.
@@ -255,7 +261,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        params = dict(name=name, **scope.dict())
+        if state == "all":
+            state = "|".join([state.value for state in NetworkStateEnum])
+
+        params = dict(name=name, **scope.dict(), network_state=state)
 
         return self._query_resource("/networks", params=params)
 
