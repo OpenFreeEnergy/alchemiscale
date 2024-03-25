@@ -682,7 +682,8 @@ class TestNeo4jStore(TestStateStore):
 
     def test_get_network_tasks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
-        n4js.create_network(an, scope_test)
+        sk = n4js.create_network(an, scope_test)
+        n4js.set_network_state([sk], ["active"])
 
         an_sk = n4js.query_networks(scope=scope_test)[0]
         tf_sks = n4js.get_network_transformations(an_sk)
@@ -708,8 +709,12 @@ class TestNeo4jStore(TestStateStore):
 
     def test_get_task_networks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
-        n4js.create_network(an, scope_test)
-        n4js.create_network(AlchemicalNetwork(edges=list(an.edges)[:-2]), scope_test)
+        sk_1 = n4js.create_network(an, scope_test)
+        sk_2 = n4js.create_network(
+            AlchemicalNetwork(edges=list(an.edges)[:-2]), scope_test
+        )
+
+        n4js.set_network_state([sk_1, sk_2], ["active", "active"])
 
         an_sk = n4js.query_networks(scope=scope_test)[0]
         tf_sks = n4js.get_network_transformations(an_sk)
