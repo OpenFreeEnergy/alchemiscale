@@ -279,6 +279,11 @@ class TestClient:
         network_tyk2,
         user_client: client.AlchemiscaleClient,
     ):
+        network_sks = user_client.query_networks(state="all")
+
+        assert len(network_sks) == 6
+        assert scope_test in [n_sk.scope for n_sk in network_sks]
+
         network_sks = user_client.query_networks(state="active")
 
         assert len(network_sks) == 3
