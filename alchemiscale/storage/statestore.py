@@ -812,14 +812,14 @@ class Neo4jStore(AlchemiscaleStateStore):
                 query_params[k] = ".*"
 
         q = """
-            MATCH (an:AlchemicalNetwork)<-[:MARKS]-(ns:NetworkMark)
+            MATCH (an:AlchemicalNetwork)<-[:MARKS]-(nm:NetworkMark)
             WHERE
                     an.name =~ $name_pattern
                 AND an.`_gufe_key` =~ $gufe_key_pattern
                 AND an.`_org` =~ $org_pattern
                 AND an.`_campaign` =~ $campaign_pattern
                 AND an.`_project` =~ $project_pattern
-                AND ns.state =~ $state_pattern
+                AND nm.state =~ $state_pattern
             RETURN an._scoped_key as sk
         """
 
