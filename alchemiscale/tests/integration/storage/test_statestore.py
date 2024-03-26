@@ -159,6 +159,8 @@ class TestNeo4jStore(TestStateStore):
             n4js.create_taskhub(sk)
             network_sks.append(sk)
 
+        n4js.set_network_state(network_sks, ["active"] * len(network_sks))
+
         results = n4js.get_network_state(network_sks)
         assert results == [NetworkStateEnum.active.value] * len(network_sks)
 

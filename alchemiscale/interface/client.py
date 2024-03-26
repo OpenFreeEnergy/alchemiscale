@@ -263,8 +263,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             Regex expression for the network names. Defaults to a wildcard.
         state : optional
             Regex expression for the network states. Nonexistent state values
-            entered will not raise any warnings. Defaults to the "active"
-            state.
+            entered will not raise any warnings. Use "all" to get networks
+            regardless of state. Defaults to the "active" state.
         scope : optional
             A specific scope to filter with.
 
