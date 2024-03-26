@@ -257,6 +257,22 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         all AlchemicalNetworks that are within the Scopes this user has access
         to.
 
+        Parameters
+        ----------
+        name : optional
+            Regex expression for the network names. Defaults to a wildcard.
+        state : optional
+            Regex expression for the network states. Nonexistent state values
+            entered will not raise any warnings. Defaults to the "active"
+            state.
+        scope : optional
+            A specific scope to filter with.
+
+        Returns
+        -------
+        List[ScopedKey]
+            A list of ScopedKeys for the networks matching the query
+            parameters.
         """
         if scope is None:
             scope = Scope()
