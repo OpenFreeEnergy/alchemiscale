@@ -110,8 +110,8 @@ class TestClient:
         )
 
         q = """
-            MATCH (:AlchemicalNetwork {`_scoped_key`: $network})<-[:MARKS]-(ns:NetworkMark)
-            RETURN ns.state as state
+            MATCH (:AlchemicalNetwork {`_scoped_key`: $network})<-[:MARKS]-(nm:NetworkMark)
+            RETURN nm.state as state
         """
 
         results = n4js_preloaded.execute_query(q, {"network": str(network_sk)})
@@ -179,8 +179,8 @@ class TestClient:
 
         q = """
             UNWIND $networks as network
-            MATCH (:AlchemicalNetwork {`_scoped_key`: network})<-[:MARKS]-(ns:NetworkMark)
-            RETURN ns.state as state
+            MATCH (:AlchemicalNetwork {`_scoped_key`: network})<-[:MARKS]-(nm:NetworkMark)
+            RETURN nm.state as state
         """
 
         results = n4js_preloaded.execute_query(q, {"networks": network_str_sks})

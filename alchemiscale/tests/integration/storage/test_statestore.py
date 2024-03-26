@@ -120,16 +120,16 @@ class TestNeo4jStore(TestStateStore):
 
         q = f"""
             UNWIND {cypher_list_from_scoped_keys(network_sks)} as network
-            MATCH (th:TaskHub)-[:PERFORMS]->(an:AlchemicalNetwork)<-[:MARKS]-(ns:NetworkMark {{network: network}})
-            RETURN ns
+            MATCH (an:AlchemicalNetwork {{`_scoped_key`: network}})<-[:MARKS]-(nm:NetworkMark {{network: network}})
+            RETURN nm
         """
         results = n4js.execute_query(q)
 
         network_results = {}
         for record in results.records:
-            ns = record["ns"]
-            network = ns["network"]
-            state = ns["state"]
+            nm = record["nm"]
+            network = nm["network"]
+            state = nm["state"]
             network_results[ScopedKey.from_str(network)] = state
 
             try:
