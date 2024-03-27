@@ -608,6 +608,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         node, subgraph = self._get_node(scoped_key=scoped_key, return_subgraph=True)
         return self._subgraph_to_gufe([node], subgraph)[node]
 
+    def assemble_network(self, network: AlchemicalNetwork, scope: Scope):
+        raise NotImplementedError
+
     def create_network(self, network: AlchemicalNetwork, scope: Scope):
         """Add an `AlchemicalNetwork` to the target neo4j database, even if
         some of its components already exist in the database.
@@ -697,6 +700,11 @@ class Neo4jStore(AlchemiscaleStateStore):
             )
 
         return [state_results.get(str(network), None) for network in networks]
+
+    def create_network_mark(
+        self, network: ScopedKey, state: str = NetworkStateEnum.active.value
+    ):
+        raise NotImplementedError
 
     def set_network_state(
         self, networks: List[ScopedKey], states: List[str]
