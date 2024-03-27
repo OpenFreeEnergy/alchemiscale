@@ -186,7 +186,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def set_networks_state(
         self, networks: List[ScopedKey], states: List[str]
     ) -> List[Optional[ScopedKey]]:
-        """Set the state of a group of AlchemicalNetworks.
+        """Set the state of a list of AlchemicalNetworks.
 
         Parameters
         ----------
@@ -227,7 +227,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return self.get_networks_state([network])[0]
 
     def get_networks_state(self, networks: List[ScopedKey]) -> List[Optional[str]]:
-        """Get the states for a group of networks.
+        """Get the states for a list of networks.
 
         Parameters
         ----------
