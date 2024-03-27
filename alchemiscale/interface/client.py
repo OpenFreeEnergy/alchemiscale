@@ -277,9 +277,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        if state == "all":
-            state = "|".join([state.value for state in NetworkStateEnum])
-
         params = dict(name=name, **scope.dict(), network_state=state)
 
         return self._query_resource("/networks", params=params)
