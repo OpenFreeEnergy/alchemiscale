@@ -4,6 +4,7 @@
 
 """
 
+from abc import abstractmethod
 from copy import copy
 from datetime import datetime
 from enum import Enum
@@ -192,9 +193,10 @@ class TaskHub(GufeTokenizable):
 
 class Mark(GufeTokenizable):
 
-    def __init__(self, target: str):
-        self.target = target
+    def __init__(self, target: ScopedKey):
+        self.target = str(target)
 
+    @abstractmethod
     def _to_dict(self):
         raise NotImplementedError
 
@@ -230,9 +232,9 @@ class NetworkMark(Mark):
     network: str
     state: str
 
-    def __init__(self, network: str, state: str = "active"):
+    def __init__(self, target: ScopedKey, state: str = "active"):
         self.state = state
-        super().__init__(network)
+        super().__init__(target)
 
     @property
     def state(self):
@@ -248,7 +250,7 @@ class NetworkMark(Mark):
             raise ValueError(msg)
 
     def _to_dict(self):
-        return {"network": self.target, "state": self._state}
+        return {"target": self.target, "state": self._state}
 
 
 class TaskArchive(GufeTokenizable):
