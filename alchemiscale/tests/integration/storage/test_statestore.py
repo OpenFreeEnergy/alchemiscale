@@ -1299,17 +1299,17 @@ class TestNeo4jStore(TestStateStore):
         # deregister service
         compute_service_id_ = n4js.deregister_computeservice(csid)
 
-        # check that no tasks are in a running state after deregistering
+        # check that all tasks are in a waiting state after deregistering
         res = n4js.execute_query(
             f"""
-        match (t:Task) where t.status = 'running'
+        match (t:Task) where t.status = 'waiting'
         with t._scoped_key as sk
         return sk
         """
         )
 
         task_scoped_keys = [rec["sk"] for rec in res.records]
-        assert len(task_scoped_keys) == 0
+        assert len(set(task_scoped_keys)) == 10
 
     def test_action_claim_task_extends(
         self, n4js: Neo4jStore, network_tyk2, scope_test
