@@ -11,7 +11,7 @@
    :align: left
 
 #######################################################################
-a high-throughput alchemical free energy execution system
+high-throughput alchemical free energy execution
 #######################################################################
 
 **alchemiscale** is a service-oriented execution system for ``AlchemicalNetworks``,
