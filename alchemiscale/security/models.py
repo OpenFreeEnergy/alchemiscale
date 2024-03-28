@@ -55,13 +55,11 @@ class UserIdentity(ScopedIdentity):
     full_name: Optional[str] = None
 
 
-class CredentialedUserIdentity(UserIdentity, CredentialedEntity):
-    ...
+class CredentialedUserIdentity(UserIdentity, CredentialedEntity): ...
 
 
 class ComputeIdentity(ScopedIdentity):
     email: Optional[str] = None
 
 
-class CredentialedComputeIdentity(ComputeIdentity, CredentialedEntity):
-    ...
+class CredentialedComputeIdentity(ComputeIdentity, CredentialedEntity): ...

@@ -12,11 +12,10 @@ from pathlib import Path
 from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
 from pytest import fixture
-from moto import mock_s3
+from moto import mock_aws
 from moto.server import ThreadedMotoServer
 
-from py2neo import ServiceProfile, Graph
-from py2neo.client import Connector
+from neo4j import GraphDatabase
 
 from gufe import ChemicalSystem, Transformation, AlchemicalNetwork
 from gufe.protocols.protocoldag import execute_DAG
@@ -95,6 +94,7 @@ class TestProfile:
             image=self.release_str,
             auth=("neo4j", "password"),
             dir_spec=dir_spec,
+            config={},
         ) as service:
             uris = [router.uri(self.scheme) for router in service.routers()]
             yield service, uris[0]
@@ -102,7 +102,7 @@ class TestProfile:
 
 # TODO: test with full certificates
 neo4j_deployment_profiles = [
-    DeploymentProfile(release=(4, 4), topology="CE", schemes=["bolt"]),
+    DeploymentProfile(release=(5, 16), topology="CE", schemes=["bolt"]),
 ]
 
 if NEO4J_VERSION == "LATEST":
@@ -148,9 +148,13 @@ def uri(neo4j_service_and_uri):
     return uri
 
 
+# TODO: this should be pulling from the defined profile
 @fixture(scope="session")
 def graph(uri):
-    return Graph(uri)
+    return GraphDatabase.driver(
+        uri,
+        auth=("neo4j", "password"),
+    )
 
 
 ## data
@@ -172,7 +176,7 @@ def n4js_fresh(graph):
     return n4js
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def s3objectstore_settings():
     os.environ["AWS_ACCESS_KEY_ID"] = "test-key-id"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "test-key"
@@ -207,7 +211,7 @@ def s3os_server_fresh(s3os_server):
 
 @fixture(scope="module")
 def s3os(s3objectstore_settings):
-    with mock_s3():
+    with mock_aws():
         s3os = get_s3os(s3objectstore_settings)
         s3os.initialize()
 
@@ -219,7 +223,7 @@ def s3os(s3objectstore_settings):
 # TODO: add in atom mapping once `gufe`#35 is settled
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def network_tyk2():
     tyk2s = tyk2.get_system()
 
@@ -266,17 +270,17 @@ def network_tyk2():
     )
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def transformation(network_tyk2):
     return list(network_tyk2.edges)[0]
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def chemicalsystem(network_tyk2):
     return list(network_tyk2.nodes)[0]
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def protocoldagresults(tmpdir_factory, transformation):
     pdrs = []
     for i in range(3):
@@ -300,7 +304,7 @@ def protocoldagresults(tmpdir_factory, transformation):
     return pdrs
 
 
-@fixture(scope="session")
+@fixture
 def network_tyk2_failure(network_tyk2):
     transformation = list(network_tyk2.edges)[0]
 
@@ -316,12 +320,12 @@ def network_tyk2_failure(network_tyk2):
     )
 
 
-@fixture(scope="session")
+@fixture
 def transformation_failure(network_tyk2_failure):
     return [t for t in network_tyk2_failure.edges if t.name == "broken"][0]
 
 
-@fixture(scope="session")
+@fixture
 def protocoldagresults_failure(tmpdir_factory, transformation_failure):
     pdrs = []
     for i in range(3):
@@ -346,13 +350,13 @@ def protocoldagresults_failure(tmpdir_factory, transformation_failure):
     return pdrs
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def scope_test():
     """Primary scope for individual tests"""
     return Scope(org="test_org", campaign="test_campaign", project="test_project")
 
 
-@fixture(scope="session")
+@fixture(scope="module")
 def multiple_scopes(scope_test):
     scopes = [scope_test]  # Append initial test
     # Augment

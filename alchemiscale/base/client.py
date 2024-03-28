@@ -33,8 +33,7 @@ class AlchemiscaleBaseClientError(Exception):
         super().__init__(*args, **kwargs)
 
 
-class AlchemiscaleConnectionError(Exception):
-    ...
+class AlchemiscaleConnectionError(Exception): ...
 
 
 def use_session(f):
@@ -356,8 +355,12 @@ class AlchemiscaleBaseClient:
             raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
+            try:
+                detail = resp.json()["detail"]
+            except:
+                detail = resp.text
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason} : {resp.text}",
+                f"Status Code {resp.status_code} : {resp.reason} : {detail}",
                 status_code=resp.status_code,
             )
 
@@ -387,8 +390,12 @@ class AlchemiscaleBaseClient:
             raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
+            try:
+                detail = resp.json()["detail"]
+            except:
+                detail = resp.text
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason_phrase} : {resp.text}",
+                f"Status Code {resp.status_code} : {resp.reason_phrase} : {detail}",
                 status_code=resp.status_code,
             )
         content = json.loads(resp.text, cls=JSON_HANDLER.decoder)
@@ -429,8 +436,12 @@ class AlchemiscaleBaseClient:
             raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
+            try:
+                detail = resp.json()["detail"]
+            except:
+                detail = resp.text
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason}",
+                f"Status Code {resp.status_code} : {resp.reason} : {detail}",
                 status_code=resp.status_code,
             )
 
@@ -449,8 +460,12 @@ class AlchemiscaleBaseClient:
             raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
+            try:
+                detail = resp.json()["detail"]
+            except:
+                detail = resp.text
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason_phrase}",
+                f"Status Code {resp.status_code} : {resp.reason_phrase} : {detail}",
                 status_code=resp.status_code,
             )
 

@@ -3,6 +3,7 @@
 =================================================
 
 """
+
 from typing import Optional, Union
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from gufe.tokenization import GufeKey
@@ -139,6 +140,15 @@ class ScopedKey(BaseModel):
     def __str__(self):
         return "-".join([self.gufe_key, self.org, self.campaign, self.project])
 
+    def __lt__(self, other):
+        return str(self) < str(other)
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+
+        return str(self) == str(other)
+
     @classmethod
     def from_str(cls, string):
         prefix, token, org, campaign, project = string.split("-")
@@ -162,8 +172,7 @@ class ScopedKey(BaseModel):
         return cls(**d)
 
 
-class InvalidScopeError(ValueError):
-    ...
+class InvalidScopeError(ValueError): ...
 
 
 def _is_wildcard(char: Union[str, None]) -> bool:

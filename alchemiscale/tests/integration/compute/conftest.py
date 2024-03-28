@@ -112,7 +112,7 @@ def n4js_preloaded(
 
         # set task priority higher the first transformation
         # used for claim determinism in some tests
-        n4js.set_task_priority(task_sks[transformations[0]][0], 1)
+        n4js.set_task_priority([task_sks[transformations[0]][0]], 1)
 
         # add tasks from each transformation selected to each task hubs
         n4js.action_tasks(
@@ -156,9 +156,9 @@ def compute_api_no_auth(s3os, scope_consistent_token_data_depends_override):
 
     api.app.dependency_overrides[get_base_api_settings] = get_compute_settings_override
     api.app.dependency_overrides[get_s3os_depends] = get_s3os_override
-    api.app.dependency_overrides[
-        get_token_data_depends
-    ] = get_token_data_depends_override
+    api.app.dependency_overrides[get_token_data_depends] = (
+        get_token_data_depends_override
+    )
     yield api.app
     api.app.dependency_overrides = overrides
 
