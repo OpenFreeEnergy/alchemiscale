@@ -1,4 +1,6 @@
-# alchemiscale
+![alchemiscale](assets/logo_full_horizontal_inverted.png)
+
+---
 
 [![build](https://github.com/openforcefield/alchemiscale/actions/workflows/ci-integration.yml/badge.svg)](https://github.com/openforcefield/alchemiscale/actions/workflows/ci-integration.yml)
 [![coverage](https://codecov.io/gh/openforcefield/alchemiscale/branch/main/graph/badge.svg)](https://codecov.io/gh/openforcefield/alchemiscale)
