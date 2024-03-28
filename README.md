@@ -1,4 +1,4 @@
-![alchemiscale](assets/logo/logo_full_horizontal_inverted.png)
+![alchemiscale](docs/assets/logo/logo_full_horizontal_inverted.png)
 
 ---
 

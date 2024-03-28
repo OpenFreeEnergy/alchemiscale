@@ -2,9 +2,14 @@
    sphinx-quickstart on Wed Nov 23 20:51:04 2022.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
+   
+.. image:: assets/logo/logo_full_horizontal_inverted.png
+   :scale: 50 %
+   :alt: alchemiscale logo
+   :align: left
 
 #######################################################################
-alchemiscale: a high-throughput alchemical free energy execution system
+a high-throughput alchemical free energy execution system
 #######################################################################
 
 **alchemiscale** is a service-oriented execution system for ``AlchemicalNetworks``,
