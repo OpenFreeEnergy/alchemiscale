@@ -4,7 +4,9 @@
    contain the root `toctree` directive.
    
 .. image:: assets/logo/logo_full_horizontal_inverted.png
-   :scale: 50 %
+   :width: 3174px
+   :height: 610px
+   :scale: 25 %
    :alt: alchemiscale logo
    :align: left
 
