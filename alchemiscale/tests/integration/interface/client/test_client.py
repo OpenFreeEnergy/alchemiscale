@@ -82,7 +82,7 @@ class TestClient:
     ):
         # make a smaller network that overlaps with an existing one in DB
         an = AlchemicalNetwork(edges=list(network_tyk2.edges)[4:-2], name="smaller")
-        an_sk = user_client.create_network(an, scope_test)
+        an_sk = user_client.create_network(an, scope_test, state="active")
 
         network_sks = user_client.query_networks()
         assert an_sk in network_sks
@@ -279,25 +279,37 @@ class TestClient:
         network_tyk2,
         user_client: client.AlchemiscaleClient,
     ):
-        network_sks = user_client.query_networks(state="all")
+        # explicit None for state
+        network_sks = user_client.query_networks(state=None)
 
         assert len(network_sks) == 6
         assert scope_test in [n_sk.scope for n_sk in network_sks]
 
+        # implicit None for state, should get active states
+        network_sks = user_client.query_networks()
+
+        assert set(user_client.query_networks(state="active")) == set(
+            user_client.query_networks()
+        )
+
+        # only active states
         network_sks = user_client.query_networks(state="active")
 
         assert len(network_sks) == 3
         assert scope_test in [n_sk.scope for n_sk in network_sks]
 
+        # only inactive states
         network_sks = user_client.query_networks(state="inactive")
 
         assert len(network_sks) == 3
         assert scope_test in [n_sk.scope for n_sk in network_sks]
 
+        # either active or inactive, in a single scope
         assert (
             len(user_client.query_networks(scope=scope_test, state="active|inactive"))
             == 2
         )
+        # either active or inactive given a network name
         assert (
             len(
                 user_client.query_networks(
@@ -826,7 +838,7 @@ class TestClient:
 
         # create tasks in a scope we don't have access to
         other_scope = Scope("other_org", "other_campaign", "other_project")
-        n4js_preloaded.create_network(network_tyk2, other_scope)
+        n4js_preloaded.assemble_network(network_tyk2, other_scope)
         other_tf_sk = n4js_preloaded.query_transformations(scope=other_scope)[0]
         task_sk = n4js_preloaded.create_task(other_tf_sk)
 

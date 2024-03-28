@@ -102,6 +102,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         network: AlchemicalNetwork,
         scope: Scope,
+        state: str = NetworkStateEnum.active.value,
         compress: Union[bool, int] = True,
         visualize: bool = True,
     ) -> ScopedKey:
@@ -114,6 +115,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         scope
             The Scope in which to submit the AlchemicalNetwork.
             This must be a *specific* Scope; it must not contain wildcards.
+        state
+            The starting of the AlchemicalNetwork in the database.
         compress
             If ``True``, compress the AlchemicalNetwork client-side before
             shipping to the API service. This can reduce submission time
@@ -145,7 +148,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         def post():
             keyed_chain = KeyedChain.gufe_to_keyed_chain_rep(network)
-            data = dict(network=keyed_chain, scope=scope.dict())
+            data = dict(network=keyed_chain, scope=scope.dict(), state=state)
             return self._post_resource("/networks", data, compress=compress)
 
         if visualize:
@@ -277,7 +280,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        params = dict(name=name, **scope.dict(), network_state=state)
+        params = dict(name=name, **scope.dict(), state=state)
 
         return self._query_resource("/networks", params=params)
 

@@ -75,17 +75,8 @@ def n4js_preloaded(
 
     # set starting contents for many of the tests in this module
     for single_scope in multiple_scopes:
-        # Create initial network for this scope
-        sk1 = n4js.create_network(network_tyk2, single_scope)
-        # Create another network for this scope
-        sk2 = n4js.create_network(an2, single_scope)
-
-        # add a taskhub for each network
-        n4js.create_taskhub(sk1)
-        n4js.create_taskhub(sk2)
-
-        # set network states
-        n4js.set_network_state([sk1, sk2], ["active", "inactive"])
+        sk_1, _, _ = n4js.assemble_network(network_tyk2, single_scope)
+        sk_2, _, _ = n4js.assemble_network(an2, single_scope, state="inactive")
 
     # Create user identities
     for user in [

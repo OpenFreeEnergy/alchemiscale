@@ -608,28 +608,71 @@ class Neo4jStore(AlchemiscaleStateStore):
         node, subgraph = self._get_node(scoped_key=scoped_key, return_subgraph=True)
         return self._subgraph_to_gufe([node], subgraph)[node]
 
-    def assemble_network(self, network: AlchemicalNetwork, scope: Scope):
-        raise NotImplementedError
+    def assemble_network(
+        self,
+        network: AlchemicalNetwork,
+        scope: Scope,
+        state=NetworkStateEnum.active.value,
+    ):
+        """Create all nodes needed for a production AlchemicalNetwork.
 
-    def create_network(self, network: AlchemicalNetwork, scope: Scope):
-        """Add an `AlchemicalNetwork` to the target neo4j database, even if
-        some of its components already exist in the database.
+        Parameters
+        ----------
+        network
+            The AlchemicalNetwork to submit to the database.
+        scope
+            The Scope where the AlchemicalNetwork resides.
+        state
+            The starting state of the network as marked by the NetworkMark.
 
+        Returns
+        -------
+        A tuple containing the network ScopedKey, the TaskHub ScopedKey, and
+        the NetworkMark ScopedKey.
         """
+
+        nw_subgraph, nw_node, nw_sk = self.create_network_subgraph(network, scope)
+        th_subgraph, th_node, th_sk = self.create_taskhub_subgraph(nw_node, scope)
+        nm_subgraph, nm_node, nm_sk = self.create_network_mark_subgraph(
+            nw_node, scope, state
+        )
+
+        subgraph = nw_subgraph | th_subgraph | nm_subgraph
+
+        with self.transaction() as tx:
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+
+        return nw_sk, th_sk, nm_sk
+
+    def create_network_subgraph(self, network: AlchemicalNetwork, scope: Scope):
+        """Create a Subgraph for a provided network.
+
+        Parameters
+        ----------
+        network
+            An AlchemicalNetwork to make into a Subgraph.
+        scope
+            The Scope where the AlchemicalNetwork resides.
+
+        Returns
+        -------
+        A tuple containing the AlchemicalNetwork Subgraph, the specific
+        AlchemicalNetwork Node within the Subgraph, and the ScopedKey of the
+        AlchemicalNetwork.
+        """
+
         validate_network_nonself(network)
 
         ndict = network.to_shallow_dict()
 
-        g, n, scoped_key = self._gufe_to_subgraph(
+        subgraph, node, scoped_key = self._gufe_to_subgraph(
             ndict,
             labels=["GufeTokenizable", network.__class__.__name__],
             gufe_key=network.key,
             scope=scope,
         )
-        with self.transaction() as tx:
-            merge_subgraph(tx, g, "GufeTokenizable", "_scoped_key")
 
-        return scoped_key
+        return subgraph, node, scoped_key
 
     def delete_network(
         self,
@@ -658,13 +701,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         # first, delete the network's hub if present
         self.delete_taskhub(network)
 
-        # TODO: why is this not used?
         # then delete the network
         q = f"""
         MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})
         DETACH DELETE an
         """
-        return network
+        raise NotImplementedError
 
     def get_network_state(self, networks: List[ScopedKey]) -> List[Optional[str]]:
         """Get the states of a group of networks.
@@ -701,10 +743,54 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [state_results.get(str(network), None) for network in networks]
 
-    def create_network_mark(
-        self, network: ScopedKey, state: str = NetworkStateEnum.active.value
+    def create_network_mark_subgraph(
+        self, network_node, scope, state=NetworkStateEnum.active.value
     ):
-        raise NotImplementedError
+        """Create the Subgraph for an AlchemicalNetworks NetworkMark.
+
+        Parameters
+        ----------
+        network_node
+            A Node representing the target AlchemicalNetwork. This is
+            a returned value from the create_network_subgraph method.
+        scope
+            The Scope where the NetworkMark resides.
+        state
+            The starting state for the AlchemicalNetwork.
+        Returns
+        -------
+        A tuple containing the NetworkMark Subgraph, the specific NetworkMark
+        Node within the Subgraph, and the ScopedKey of the NetworkMark.
+        """
+        try:
+            NetworkStateEnum(state)
+        except ValueError:
+            valid_states = [state.value for state in NetworkStateEnum]
+            msg = (
+                f"'{state}' is not a valid state. Valid values include: {valid_states}"
+            )
+            raise ValueError(msg)
+
+        network_sk = ScopedKey.from_str(network_node["_scoped_key"])
+        network_state = NetworkMark(target=str(network_sk), state=state)
+
+        scope = network_sk.scope
+        _, network_state_node, scoped_key = self._gufe_to_subgraph(
+            network_state.to_shallow_dict(),
+            labels=["GufeTokenizable", network_state.__class__.__name__],
+            gufe_key=network_state.key,
+            scope=scope,
+        )
+
+        subgraph = Relationship.type("MARKS")(
+            network_state_node,
+            network_node,
+            _org=scope.org,
+            _campaign=scope.campaign,
+            _project=scope.project,
+        )
+
+        return subgraph, network_state_node, scoped_key
 
     def set_network_state(
         self, networks: List[ScopedKey], states: List[str]
@@ -742,59 +828,31 @@ class Neo4jStore(AlchemiscaleStateStore):
                 msg = f"'{state}' is not a valid state. Valid values include: {valid_states}"
                 raise ValueError(msg)
 
-        q = f"""
-            UNWIND {cypher_list_from_scoped_keys(networks)} as network
-            OPTIONAL MATCH (an:AlchemicalNetwork {{`_scoped_key`: network}})
-            RETURN network, an
+        # TODO: nested lists
+        q = """
+            UNWIND $networks as network
+            MATCH (:AlchemicalNetwork {`_scoped_key`: network})<-[:MARKS]-(nm:NetworkMark)
+            SET nm.state = $state
+            RETURN network
         """
 
-        results = self.execute_query(q)
-        network_nodes_dict = {}
-        for record in results.records:
-            network, an = record["network"], record["an"]
-            if an is None:
-                continue
-            network_nodes_dict[network] = record_data_to_node(an)
+        unique_states = set([state for state in states])
 
-        network_nodes = [
-            network_nodes_dict.get(str(network), None) for network in networks
-        ]
+        state_grouped_networks = {unique_state: [] for unique_state in unique_states}
+        for network, state in zip(networks, states):
+            state_grouped_networks[state].append(str(network))
 
-        subgraph = Subgraph()
-        network_sks = []
+        network_results = {}
+        for state, network_list in state_grouped_networks.items():
+            # submit group of networks to the database
+            results = self.execute_query(q, dict(state=state, networks=network_list))
 
-        for network_node, state in zip(network_nodes, states):
+            # collect group results
+            for record in results.records:
+                returned_network = record["network"]
+                network_results[returned_network] = ScopedKey.from_str(returned_network)
 
-            if network_node is None:
-                network_sks.append(None)
-                continue
-
-            network_sk = ScopedKey.from_str(network_node["_scoped_key"])
-            network_sks.append(network_sk)
-
-            network_state = NetworkMark(network=str(network_sk), state=state)
-
-            scope = network_sk.scope
-            _, network_state_node, scoped_key = self._gufe_to_subgraph(
-                network_state.to_shallow_dict(),
-                labels=["GufeTokenizable", network_state.__class__.__name__],
-                gufe_key=network_state.key,
-                scope=scope,
-            )
-
-            subgraph |= Relationship.type("MARKS")(
-                network_state_node,
-                network_node,
-                _org=scope.org,
-                _campaign=scope.campaign,
-                _project=scope.project,
-            )
-
-        with self.transaction(ignore_exceptions=True) as tx:
-            if subgraph:
-                merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
-
-        return network_sks
+        return [network_results.get(str(network), None) for network in networks]
 
     def query_networks(
         self,
@@ -802,7 +860,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         name=None,
         key=None,
         scope: Optional[Scope] = Scope(),
-        network_state: Optional[str] = None,
+        state: Optional[str] = None,
     ):
         """Query for `AlchemicalNetwork`\s matching given attributes."""
 
@@ -811,7 +869,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             org_pattern=scope.org,
             campaign_pattern=scope.campaign,
             project_pattern=scope.project,
-            state_pattern=network_state,
+            state_pattern=state,
             gufe_key_pattern=None if key is None else str(key),
         )
 
@@ -1097,31 +1155,23 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## task hubs
 
-    def create_taskhub(
-        self,
-        network: ScopedKey,
-    ) -> ScopedKey:
-        """Create a TaskHub for the given AlchemicalNetwork.
+    def create_taskhub_subgraph(self, network_node, scope):
+        """Create a Subgraph for an AlchemicalNetworks TaskHub.
 
-        An AlchemicalNetwork can have only one associated TaskHub.
-        A TaskHub is required to action Tasks for a given AlchemicalNetwork.
-
-        This method will only create a TaskHub for an AlchemicalNetwork if it
-        doesn't already exist; it will return the scoped key for the TaskHub
-        either way.
-
+        Parameters
+        ----------
+        network_node
+            A Node representing the target AlchemicalNetwork. This is
+            a returned value from the create_network_subgraph method.
+        scope
+            The Scope where the TaskHub resides.
+        Returns
+        -------
+        A tuple containing the TaskHub Subgraph, the specific TaskHub
+        Node within the Subgraph, and the ScopedKey of the TaskHub.
         """
-        if network.qualname != "AlchemicalNetwork":
-            raise ValueError(
-                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
-            )
-
-        scope = network.scope
-        network_node = self._get_node(network)
-
-        # create a taskhub for the supplied network
-        # use a PERFORMS relationship
-        taskhub = TaskHub(network=str(network))
+        network_sk = network_node["_scoped_key"]
+        taskhub = TaskHub(network=network_sk)
         _, taskhub_node, scoped_key = self._gufe_to_subgraph(
             taskhub.to_shallow_dict(),
             labels=["GufeTokenizable", taskhub.__class__.__name__],
@@ -1137,13 +1187,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             _project=scope.project,
         )
 
-        # if the TaskHub already exists, this will rollback transaction
-        # automatically
-        # TODO: this originally used create, but is merge not what we want?
-        with self.transaction(ignore_exceptions=True) as tx:
-            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
-
-        return scoped_key
+        return subgraph, taskhub_node, scoped_key
 
     def query_taskhubs(
         self, scope: Optional[Scope] = Scope(), return_gufe: bool = False
@@ -1979,7 +2023,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             RETURN task
             """
         else:
-            q += f"""
+            q += """
             RETURN task
             """
 
@@ -2180,7 +2224,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         raise NotImplementedError
 
-    def get_scope_status(self, scope: Scope) -> Dict[str, int]:
+    def get_scope_status(
+        self, scope: Scope, network_state=NetworkStateEnum.active.value
+    ) -> Dict[str, int]:
         """Return status counts for all Tasks within the given Scope."""
 
         properties = {
@@ -2196,11 +2242,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         q = f"""
-        MATCH (n:Task {{{prop_string}}})
-        RETURN n.status AS status, count(n) as counts
+        MATCH (n:Task {{{prop_string}}})-[:PERFORMS]->(:Transformation)<-[:DEPENDS_ON]-(:AlchemicalNetwork)<-[:MARKS]-(nm:NetworkMark)
+        WHERE nm.state =~ $state_pattern
+        RETURN n.status AS status, count(DISTINCT n) as counts
         """
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, dict(state_pattern=network_state))
             counts = {rec["status"]: rec["counts"] for rec in res}
 
         return counts

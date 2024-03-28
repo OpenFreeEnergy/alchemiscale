@@ -110,8 +110,9 @@ def check_existence(
 @router.post("/networks", response_model=ScopedKey)
 def create_network(
     *,
-    network: List = Body(...),
-    scope: Scope,
+    network: List = Body(embed=True),
+    scope: Scope = Body(embed=True),
+    state: str = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -120,17 +121,12 @@ def create_network(
     an = KeyedChain(network).to_gufe()
 
     try:
-        an_sk = n4js.create_network(network=an, scope=scope)
+        an_sk, _, _ = n4js.assemble_network(network=an, scope=scope, state=state)
     except ValueError as e:
         raise HTTPException(
             status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=e.args[0],
         )
-
-    # create taskhub for this network
-    n4js.create_taskhub(an_sk)
-    # attach a network state of active
-    n4js.set_network_state([an_sk], [NetworkStateEnum.active.value])
 
     return an_sk
 
@@ -179,7 +175,7 @@ def get_networks_state(
 def query_networks(
     *,
     name: str = None,
-    network_state: str = "active",
+    state: str = None,
     scope: Scope = Depends(scope_params),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
@@ -195,7 +191,7 @@ def query_networks(
             n4js.query_networks(
                 name=name,
                 scope=single_query_scope,
-                network_state=network_state,
+                state=state,
             )
         )
 
