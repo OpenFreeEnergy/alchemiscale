@@ -102,7 +102,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         network: AlchemicalNetwork,
         scope: Scope,
-        state: str = NetworkStateEnum.active.value,
+        state: Union[NetworkStateEnum, str] = NetworkStateEnum.active,
         compress: Union[bool, int] = True,
         visualize: bool = True,
     ) -> ScopedKey:
@@ -116,7 +116,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The Scope in which to submit the AlchemicalNetwork.
             This must be a *specific* Scope; it must not contain wildcards.
         state
-            The starting of the AlchemicalNetwork in the database.
+            The starting state of the AlchemicalNetwork in the database.
+            See :meth:`AlchemiscaleClient.set_network_state` for valid states.
         compress
             If ``True``, compress the AlchemicalNetwork client-side before
             shipping to the API service. This can reduce submission time
@@ -144,11 +145,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         validate_network_nonself(network)
 
-        sk = self.get_scoped_key(network, scope)
+        state = NetworkStateEnum(state)
+
+        sk = ScopedKey(gufe_key=network.key, **scope.dict())
 
         def post():
             keyed_chain = KeyedChain.gufe_to_keyed_chain_rep(network)
-            data = dict(network=keyed_chain, scope=scope.dict(), state=state)
+            data = dict(network=keyed_chain, scope=scope.dict(), state=state.value)
             return self._post_resource("/networks", data, compress=compress)
 
         if visualize:
@@ -167,7 +170,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return ScopedKey.from_dict(scoped_key)
 
-    def set_network_state(self, network: ScopedKey, state: str) -> Optional[ScopedKey]:
+    def set_network_state(
+        self, network: ScopedKey, state: Union[NetworkStateEnum, str]
+    ) -> Optional[ScopedKey]:
         """Set the state of an AlchemicalNetwork.
 
         Parameters
@@ -181,13 +186,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         Returns
         -------
         Optional[ScopedKey]
-            The ScopedKey of the updated network. If the network was not found, a None
+            The ScopedKey of the updated network. If the network was not found, ``None``
             is returned.
         """
         return self.set_networks_state([network], [state])[0]
 
     def set_networks_state(
-        self, networks: List[ScopedKey], states: List[str]
+        self, networks: List[ScopedKey], states: List[Union[NetworkStateEnum, str]]
     ) -> List[Optional[ScopedKey]]:
         """Set the state of a list of AlchemicalNetworks.
 
@@ -196,16 +201,18 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         networks
             The networks whose states will be updated.
         states
-            The states to set the networks to. Values must be in a list of
-            the same length as the networks parameter. Valid options include
-            "active", "inactive", "invalid", and "deleted".
+            The states to set the networks to, in the same order as `networks`.
+            Values must be in a list of the same length as the networks
+            parameter. Valid options include "active", "inactive", "invalid",
+            and "deleted".
 
         Returns
         -------
-        Optional[ScopedKey]
-            The ScopedKeys of the updated networks. If a network was not found, a None
+        List[Optional[ScopedKey]]
+            The ScopedKeys of the updated networks. If a network was not found, ``None``
             is returned at the corresponding index.
         """
+        states = [NetworkStateEnum(state).value for state in states]
         data = dict(networks=list(map(str, networks)), states=states)
         networks_updated = self._post_resource("/bulk/networks/state/set", data=data)
         return [
@@ -214,44 +221,45 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         ]
 
     def get_network_state(self, network: ScopedKey) -> Optional[str]:
-        """Get the state of a network.
+        """Get the state of an AlchemicalNetwork.
 
         Parameters
         ----------
         network
-            The network's ScopedKey.
+            The ScopedKey of the AlchemicalNetwork to get the state for.
 
         Returns
         -------
         Optional[str]
-            The state of the network. If the network was not found in the
-            database, a None is returned instead.
+            The state of the AlchemicalNetwork. If the network was not found in
+            the database, ``None`` is returned instead.
         """
         return self.get_networks_state([network])[0]
 
     def get_networks_state(self, networks: List[ScopedKey]) -> List[Optional[str]]:
-        """Get the states for a list of networks.
+        """Get the states for a list of AlchemicalNetworks.
 
         Parameters
         ----------
         networks
-            A list of ScopedKeys for the networks.
+            A list of ScopedKeys for the AlchemicalNetworks to get the states
+            of.
 
         Returns
         -------
         List[Optional[str]]
             A list of network states, in the same order as the specified
             networks. If a network was not found in the database, the
-            corresponding entry in this list is None.
+            corresponding entry in this list is ``None``.
         """
         data = dict(networks=list(map(str, networks)))
         states = self._post_resource("/bulk/networks/state/get", data=data)
-        return [None if state is None else state for state in states]
+        return states
 
     def query_networks(
         self,
         name: Optional[str] = None,
-        state: Optional[str] = NetworkStateEnum.active.value,
+        state: Optional[Union[NetworkStateEnum, str]] = NetworkStateEnum.active,
         scope: Optional[Scope] = None,
     ) -> List[ScopedKey]:
         """Query for AlchemicalNetworks, optionally by name or Scope.
@@ -279,6 +287,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         if scope is None:
             scope = Scope()
+
+        if state is not None:
+            state = NetworkStateEnum(state)
 
         params = dict(name=name, **scope.dict(), state=state)
 
