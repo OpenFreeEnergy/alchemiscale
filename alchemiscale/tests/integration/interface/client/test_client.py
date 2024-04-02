@@ -936,6 +936,41 @@ class TestClient:
             else:
                 assert status_counts[status] == 0
 
+    def test_get_scope_status_network_state(
+        self,
+        multiple_scopes,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        # for each scope, get a Transformation in the inactive network
+        # that is not also a member of the active network
+        for scope in multiple_scopes:
+
+            # create Tasks for that Transformation
+
+            # by default, `get_scope_status` shouldn't show these Tasks
+
+            # show Tasks for all networks
+
+            # show Tasks only for inactive networks
+
+            # for each scope, set all active networks to inactive, inactive networks to active
+            an_sks_active = user_client.query_networks(scope=scope, state="active")
+            an_sks_inactive = user_client.query_networks(scope=scope, state="inactive")
+
+            user_client.set_networks_state(
+                an_sks_active + an_sks_inactive,
+                ["inactive"] * len(an_sks_active) + ["active"] * len(an_sks_inactive),
+            )
+
+            # show that we now by default get our expected status counts by default
+            status_counts = user_client
+
+            # create Tasks for a Transformation shared by both networks
+
+            # show that status counts are not double counted
+
     def test_get_network_status(
         self,
         n4js_preloaded,

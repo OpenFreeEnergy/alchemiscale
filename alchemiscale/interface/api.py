@@ -504,6 +504,7 @@ def get_transformation_tasks(
 def get_scope_status(
     scope,
     *,
+    network_state: str = None,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -512,7 +513,9 @@ def get_scope_status(
 
     status_counts = Counter()
     for single_scope in scope_space:
-        status_counts.update(n4js.get_scope_status(single_scope))
+        status_counts.update(
+            n4js.get_scope_status(single_scope, network_state=network_state)
+        )
 
     return dict(status_counts)
 

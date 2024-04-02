@@ -23,14 +23,11 @@ class TestNetworkState(object):
     )
     def test_enum_values(self, state: str, should_fail: bool):
 
-        def create_network_state():
-            return NetworkMark(self.network_sk, state)
-
         if should_fail:
             with pytest.raises(ValueError, match="`state` = "):
-                create_network_state()
+                NetworkMark(self.network_sk, state)
         else:
-            create_network_state()
+            NetworkMark(self.network_sk, state)
 
     def test_suggested_states_message(self):
         try:

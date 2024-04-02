@@ -259,8 +259,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def query_networks(
         self,
         name: Optional[str] = None,
-        state: Optional[Union[NetworkStateEnum, str]] = NetworkStateEnum.active,
         scope: Optional[Scope] = None,
+        state: Optional[Union[NetworkStateEnum, str]] = NetworkStateEnum.active,
     ) -> List[ScopedKey]:
         """Query for AlchemicalNetworks, optionally by name or Scope.
 
@@ -272,12 +272,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         ----------
         name : optional
             Regex expression for the network names. Defaults to a wildcard.
+        scope : optional
+            A Scope to filter AlchemicalNetworks on.
         state : optional
             Regex expression for the network states. Nonexistent state values
-            entered will not raise any warnings. Use "all" to get networks
+            entered will not raise any warnings. Use ``None`` to get networks
             regardless of state. Defaults to the "active" state.
-        scope : optional
-            A specific scope to filter with.
 
         Returns
         -------
@@ -288,8 +288,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        if state is not None:
-            state = NetworkStateEnum(state)
+        if isinstance(state, NetworkStateEnum):
+            state = state.value
 
         params = dict(name=name, **scope.dict(), state=state)
 
@@ -855,6 +855,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         scope: Optional[Scope] = None,
         visualize: Optional[bool] = True,
+        network_state: Optional[Union[NetworkStateEnum, str]] = NetworkStateEnum.active,
     ) -> Dict[str, int]:
         """Return status counts for all Tasks within the given Scope.
 
@@ -866,6 +867,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             Scope access to. Defaults to all Scopes.
         visualize
             If ``True``, print a table of status counts.
+        network_state
+            Regex expression for the network states. Nonexistent state values
+            entered will not raise any warnings. Use ``None`` to get networks
+            regardless of state. Defaults to the "active" state.
 
         Returns
         -------
@@ -875,7 +880,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        status_counts = self._get_resource(f"/scopes/{scope}/status")
+        if isinstance(network_state, NetworkStateEnum):
+            network_state = network_state.value
+
+        params = dict(network_state=network_state)
+
+        status_counts = self._get_resource(f"/scopes/{scope}/status", params=params)
 
         if visualize:
             self._visualize_status(status_counts, scope)
