@@ -1537,7 +1537,11 @@ class TestNeo4jStore(TestStateStore):
         assert status["waiting"] == len(task_sks) - 10
         assert status["invalid"] == 10
 
+    def test_get_scope_status_network_state(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
         # TODO: add test for filtering on network states
+        ...
 
     def test_get_network_status(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
