@@ -136,7 +136,7 @@ class TestNeo4jStore(TestStateStore):
 
         q = """
             UNWIND $networks as network
-            MATCH (an:AlchemicalNetwork {`_scoped_key`: network})<-[:MARKS]-(nm:NetworkMark {{target: network}})
+            MATCH (an:AlchemicalNetwork {`_scoped_key`: network})<-[:MARKS]-(nm:NetworkMark {target: network})
             RETURN nm
         """
         results = n4js.execute_query(q, networks=[str(x) for x in network_sks])
@@ -1329,8 +1329,7 @@ class TestNeo4jStore(TestStateStore):
     ):
         """Test that deregistration clears active claims on Tasks."""
         an = network_tyk2
-        network_sk = n4js.create_network(an, scope_test)
-        taskhub_sk: ScopedKey = n4js.create_taskhub(network_sk)
+        network_sk, taskhub_sk, _ = n4js.assemble_network(an, scope_test)
 
         transformation = list(an.edges)[0]
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
