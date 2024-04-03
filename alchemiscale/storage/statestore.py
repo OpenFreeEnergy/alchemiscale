@@ -821,9 +821,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         q = """
             WITH $inputs AS inputs
             UNWIND inputs AS x
-            WITH x[0] as network, x[1] as weight
+            WITH x[0] as network, x[1] as state
             MATCH (:AlchemicalNetwork {`_scoped_key`: network})<-[:MARKS]-(nm:NetworkMark)
-            SET nm.state = $state
+            SET nm.state = state
             RETURN network
         """
         inputs = [[str(network), state] for network, state in zip(networks, states)]

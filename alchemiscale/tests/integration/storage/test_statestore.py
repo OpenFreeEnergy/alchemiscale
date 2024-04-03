@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import random
 from typing import List, Dict
 from pathlib import Path
+from itertools import chain
 
 import pytest
 from gufe import AlchemicalNetwork
@@ -1540,8 +1541,54 @@ class TestNeo4jStore(TestStateStore):
     def test_get_scope_status_network_state(
         self, n4js: Neo4jStore, network_tyk2, scope_test
     ):
-        # TODO: add test for filtering on network states
-        ...
+        # create two AlchemicalNetworks with only 1 shared Transformation
+        transformations = list(network_tyk2.edges)
+
+        an1 = AlchemicalNetwork(edges=transformations[:4], name="0 - 3")
+        an2 = AlchemicalNetwork(edges=transformations[3:], name="3 - ...")
+
+        # set the first network as active, the second as inactive
+        an1_sk, _, _ = n4js.assemble_network(an1, scope_test, state="active")
+        an2_sk, _, _ = n4js.assemble_network(an2, scope_test, state="inactive")
+
+        # for each transformation, create 3 tasks
+        tf_sks = n4js.query_transformations()
+        n4js.create_tasks(list(chain(*[[tf_sk] * 3 for tf_sk in tf_sks])))
+
+        # get scope status; expect to only see task statuses for
+        # transformations in active network by default
+        statuses = n4js.get_scope_status(scope_test)
+
+        assert len(statuses) == 1
+        assert statuses["waiting"] == len(an1.edges) * 3
+
+        # get inactive task status counts
+        statuses = n4js.get_scope_status(scope_test, network_state="inactive")
+
+        assert len(statuses) == 1
+        assert statuses["waiting"] == len(an2.edges) * 3
+
+        # get all task status counts;
+        # show that status counts are not double counted
+        statuses = n4js.get_scope_status(scope_test, network_state=None)
+
+        assert len(statuses) == 1
+        assert statuses["waiting"] == len(network_tyk2.edges) * 3
+
+        # set the inactive network to active, then get status counts
+        n4js.set_network_state([an2_sk], states=["active"])
+
+        statuses = n4js.get_scope_status(scope_test)
+
+        assert len(statuses) == 1
+        assert statuses["waiting"] == len(network_tyk2.edges) * 3
+
+        # set all networks to not active, get status counts
+        n4js.set_network_state([an1_sk, an2_sk], states=["inactive", "deleted"])
+
+        statuses = n4js.get_scope_status(scope_test)
+
+        assert len(statuses) == 0
 
     def test_get_network_status(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2

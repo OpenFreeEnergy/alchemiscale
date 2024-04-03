@@ -1,6 +1,7 @@
 import pytest
 from time import sleep
 from pathlib import Path
+from itertools import chain
 
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
 from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey
@@ -938,38 +939,70 @@ class TestClient:
 
     def test_get_scope_status_network_state(
         self,
-        multiple_scopes,
+        scope_test,
         n4js_preloaded,
         network_tyk2,
         user_client: client.AlchemiscaleClient,
     ):
-        # for each scope, get a Transformation in the inactive network
-        # that is not also a member of the active network
-        for scope in multiple_scopes:
 
-            # create Tasks for that Transformation
+        # first, set all existing networks in the test scope to deleted
+        # to avoid interactions with our new networks
+        an_sks = user_client.query_networks(scope=scope_test, state=None)
+        user_client.set_networks_state(an_sks, states=["deleted"] * len(an_sks))
 
-            # by default, `get_scope_status` shouldn't show these Tasks
+        # create two AlchemicalNetworks with only 1 shared Transformation
+        transformations = list(network_tyk2.edges)
 
-            # show Tasks for all networks
+        an1 = AlchemicalNetwork(edges=transformations[:4], name="0 - 3")
+        an2 = AlchemicalNetwork(edges=transformations[3:], name="3 - ...")
 
-            # show Tasks only for inactive networks
+        # set the first network as active, the second as inactive
+        an1_sk = user_client.create_network(an1, scope_test, state="active")
+        an2_sk = user_client.create_network(an2, scope_test, state="inactive")
 
-            # for each scope, set all active networks to inactive, inactive networks to active
-            an_sks_active = user_client.query_networks(scope=scope, state="active")
-            an_sks_inactive = user_client.query_networks(scope=scope, state="inactive")
+        # for each transformation in these networks, create 3 tasks
+        tf_sks = set(
+            user_client.get_network_transformations(an1_sk)
+            + user_client.get_network_transformations(an2_sk)
+        )
+        user_client.create_transformations_tasks(
+            list(chain(*[[tf_sk] * 3 for tf_sk in tf_sks]))
+        )
 
-            user_client.set_networks_state(
-                an_sks_active + an_sks_inactive,
-                ["inactive"] * len(an_sks_active) + ["active"] * len(an_sks_inactive),
-            )
+        # get scope status; expect to only see task statuses for
+        # transformations in active network by default
+        statuses = user_client.get_scope_status(scope_test)
 
-            # show that we now by default get our expected status counts by default
-            status_counts = user_client
+        assert len(statuses) == 1
+        assert statuses["waiting"] == len(an1.edges) * 3
 
-            # create Tasks for a Transformation shared by both networks
+        # get inactive task status counts
+        statuses = user_client.get_scope_status(scope_test, network_state="inactive")
 
-            # show that status counts are not double counted
+        assert len(statuses) == 1
+        assert statuses["waiting"] == len(an2.edges) * 3
+
+        # get all task status counts;
+        # show that status counts are not double counted
+        statuses = user_client.get_scope_status(scope_test, network_state=None)
+
+        assert len(statuses) == 1
+        assert statuses["waiting"] == len(network_tyk2.edges) * 3
+
+        # set the inactive network to active, then get status counts
+        user_client.set_networks_state([an2_sk], states=["active"])
+
+        statuses = user_client.get_scope_status(scope_test)
+
+        assert len(statuses) == 1
+        assert statuses["waiting"] == len(network_tyk2.edges) * 3
+
+        # set all networks to not active, get status counts
+        user_client.set_networks_state([an1_sk, an2_sk], states=["inactive", "deleted"])
+
+        statuses = user_client.get_scope_status(scope_test)
+
+        assert len(statuses) == 0
 
     def test_get_network_status(
         self,
