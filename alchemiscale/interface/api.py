@@ -35,7 +35,7 @@ from ..settings import get_api_settings
 from ..settings import get_base_api_settings, get_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ProtocolDAGResultRef, TaskStatusEnum
+from ..storage.models import ProtocolDAGResultRef, TaskStatusEnum, NetworkStateEnum
 from ..models import Scope, ScopedKey
 from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import Token, TokenData, CredentialedUserIdentity
@@ -110,8 +110,9 @@ def check_existence(
 @router.post("/networks", response_model=ScopedKey)
 def create_network(
     *,
-    network: List = Body(...),
-    scope: Scope,
+    network: List = Body(embed=True),
+    scope: Scope = Body(embed=True),
+    state: str = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -120,23 +121,61 @@ def create_network(
     an = KeyedChain(network).to_gufe()
 
     try:
-        an_sk = n4js.create_network(network=an, scope=scope)
+        an_sk, _, _ = n4js.assemble_network(network=an, scope=scope, state=state)
     except ValueError as e:
         raise HTTPException(
             status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=e.args[0],
         )
 
-    # create taskhub for this network
-    n4js.create_taskhub(an_sk)
-
     return an_sk
+
+
+@router.post("/bulk/networks/state/set")
+def set_networks_state(
+    *,
+    networks: List[str] = Body(embed=True),
+    states: List[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Optional[str]]:
+    network_sks = []
+    for network in networks:
+        network_sk = ScopedKey.from_str(network)
+        validate_scopes(network_sk.scope, token)
+        network_sks.append(network_sk)
+
+    try:
+        results = n4js.set_network_state(network_sks, states)
+    except ValueError as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    return [None if network_sk is None else str(network_sk) for network_sk in results]
+
+
+@router.post("/bulk/networks/state/get")
+def get_networks_state(
+    *,
+    networks: List[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Optional[str]]:
+    network_sks = []
+    for network in networks:
+        network_sk = ScopedKey.from_str(network)
+        validate_scopes(network_sk.scope, token)
+        network_sks.append(network_sk)
+
+    results = n4js.get_network_state(network_sks)
+
+    return [None if network_sk is None else str(network_sk) for network_sk in results]
 
 
 @router.get("/networks")
 def query_networks(
     *,
     name: str = None,
+    state: str = None,
     scope: Scope = Depends(scope_params),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
@@ -152,6 +191,7 @@ def query_networks(
             n4js.query_networks(
                 name=name,
                 scope=single_query_scope,
+                state=state,
             )
         )
 
@@ -464,6 +504,7 @@ def get_transformation_tasks(
 def get_scope_status(
     scope,
     *,
+    network_state: str = None,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -472,7 +513,9 @@ def get_scope_status(
 
     status_counts = Counter()
     for single_scope in scope_space:
-        status_counts.update(n4js.get_scope_status(single_scope))
+        status_counts.update(
+            n4js.get_scope_status(single_scope, network_state=network_state)
+        )
 
     return dict(status_counts)
 

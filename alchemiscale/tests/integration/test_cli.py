@@ -293,7 +293,7 @@ def test_database_check(n4js_fresh, network_tyk2, scope_test):
     n4js = n4js_fresh
 
     # set starting contents
-    n4js.create_network(network_tyk2, scope_test)
+    n4js.assemble_network(network_tyk2, scope_test)
 
     env_vars = {
         "NEO4J_URL": "bolt://" + str(n4js.graph.address),
@@ -322,7 +322,7 @@ def test_database_reset(n4js_fresh, network_tyk2, scope_test):
     n4js = n4js_fresh
 
     # set starting contents
-    n4js.create_network(network_tyk2, scope_test)
+    n4js.assemble_network(network_tyk2, scope_test)
 
     env_vars = {
         "NEO4J_URL": "bolt://" + str(n4js.graph.address),

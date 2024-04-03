@@ -4,6 +4,7 @@
 
 """
 
+from abc import abstractmethod
 from copy import copy
 from datetime import datetime
 from enum import Enum
@@ -190,6 +191,77 @@ class TaskHub(GufeTokenizable):
         return super()._defaults()
 
 
+class Mark(GufeTokenizable):
+
+    def __init__(self, target: ScopedKey):
+        self.target = str(target)
+
+    @abstractmethod
+    def _to_dict(self):
+        raise NotImplementedError
+
+    def _gufe_tokenize(self):
+        hash_string = str(self.target)
+        return hashlib.md5(hash_string.encode(), usedforsecurity=False).hexdigest()
+
+    @classmethod
+    def _from_dict(cls, d):
+        return cls(**d)
+
+    @classmethod
+    def _defaults(cls):
+        return super()._defaults()
+
+
+class NetworkStateEnum(Enum):
+    active = "active"
+    inactive = "inactive"
+    invalid = "invalid"
+    deleted = "deleted"
+
+
+class NetworkMark(Mark):
+    """Mark object for AlchemicalNetworks.
+
+    Attributes
+    ----------
+    network : str
+        ScopedKey of the AlchemicalNetwork this NetworkMark corresponds to.
+        Used to ensure that there is only one NetworkMark for a given
+        AlchemicalNetwork using neo4j constraints.
+
+    state : NetworkStateEnum
+        State of the AlchemicalNetwork, stored on this NetworkMark.
+    """
+
+    network: str
+    state: NetworkStateEnum
+
+    def __init__(
+        self,
+        target: ScopedKey,
+        state: Union[str, NetworkStateEnum] = NetworkStateEnum.active,
+    ):
+        self.state = state
+        super().__init__(target)
+
+    @property
+    def state(self):
+        return self._state
+
+    @state.setter
+    def state(self, state_value):
+        try:
+            self._state = NetworkStateEnum(state_value)
+        except ValueError:
+            valid_states_string = ", ".join(sorted([i.value for i in NetworkStateEnum]))
+            msg = f"`state` = {state_value} must be one of the following: {valid_states_string}"
+            raise ValueError(msg)
+
+    def _to_dict(self):
+        return {"target": self.target, "state": self._state.value}
+
+
 class TaskArchive(GufeTokenizable):
     ...
 
@@ -277,6 +349,3 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         )
 
         return super()._from_dict(d_)
-
-
-class TaskArchive(GufeTokenizable): ...
