@@ -212,7 +212,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The ScopedKeys of the updated networks. If a network was not found, ``None``
             is returned at the corresponding index.
         """
-        states = [NetworkStateEnum(state).value for state in states]
         data = dict(networks=list(map(str, networks)), states=states)
         networks_updated = self._post_resource("/bulk/networks/state/set", data=data)
         return [
