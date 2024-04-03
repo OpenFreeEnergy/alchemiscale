@@ -552,7 +552,7 @@ By default, new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s are 
 Unlike :py:class:`~alchemiscale.storage.models.Task` statuses, all :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` states are reversible, and currently only serve as a way for users to disable default visibility in :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.query_networks` and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_scope_status`.
 Semantically, ``inactive`` is for networks that are no longer of interest, ``deleted`` is for networks that are marked as fair game for deletion by an administrator, and ``invalid`` is for networks that have a known problem and are not expected to give reasonable results.
 
-To get the current state of a :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, you can use :meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_network_state`::
+To get the current state of an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, you can use :meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_network_state`::
 
     >>> asc.get_network_state(an_sk)
     'active'
