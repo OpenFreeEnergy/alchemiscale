@@ -98,10 +98,11 @@ class TestSynchronousComputeService:
 
         assert len(protocoldag.protocol_units) == 23
 
+    @pytest.mark.xfail(raises=NotImplementedError)
     def test_push_result(self):
         # already tested with with client test for `set_task_result`
         # expand this test when we have result path handling added in
-        ...
+        raise NotImplementedError
 
     def test_execute(
         self, n4js_preloaded, s3os_server_fresh, service, network_tyk2, scope_test
@@ -152,9 +153,13 @@ class TestSynchronousComputeService:
 
         assert results.records
 
-    def test_cycle_max_tasks(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_cycle_max_tasks(self):
+        raise NotImplementedError
 
-    def test_cycle_max_time(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_cycle_max_time(self):
+        raise NotImplementedError
 
     def test_start(self, n4js_preloaded, s3os_server_fresh, service):
         n4js: Neo4jStore = n4js_preloaded
@@ -190,16 +195,21 @@ class TestSynchronousComputeService:
         results = n4js.execute_query(q)
         assert results.records
 
+    @pytest.mark.xfail(raises=NotImplementedError)
     def test_stop(self):
         # tested as part of tests above to stop threaded components that
         # otherwise run forever
-        ...
+        raise NotImplementedError
 
     # init kwarg tests
 
-    def test_kwarg_keep_shared(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_kwarg_keep_shared(self):
+        raise NotImplementedError
 
-    def test_kwarg_keep_scratch(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_kwarg_keep_scratch(self):
+        raise NotImplementedError
 
     def test_kwarg_scopes(self):
         # TODO: add test here with alternative settings to `service` fixture

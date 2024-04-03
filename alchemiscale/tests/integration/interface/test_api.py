@@ -139,30 +139,52 @@ class TestAPI:
         assert str(sk_unauthenticated.scope) in details
         assert str(auth_scope) in details
 
+    @pytest.mark.xfail(raises=NotImplementedError)
     def test_query_transformations(
         self, n4js_preloaded, network_tyk2, test_client, scope_test
-    ): ...
+    ):
+        raise NotImplementedError
 
-    def test_get_transformation(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_get_transformation(self):
+        raise NotImplementedError
 
-    def test_query_chemicalsystems(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_query_chemicalsystems(self):
+        raise NotImplementedError
 
-    def test_get_chemicalsystem(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_get_chemicalsystem(self):
+        raise NotImplementedError
 
     ### compute
 
-    def test_set_strategy(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_set_strategy(self):
+        raise NotImplementedError
 
-    def test_create_tasks(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_create_tasks(self):
+        raise NotImplementedError
 
-    def test_get_tasks(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_get_tasks(self):
+        raise NotImplementedError
 
-    def test_action_tasks(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_action_tasks(self):
+        raise NotImplementedError
 
-    def test_cancel_tasks(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_cancel_tasks(self):
+        raise NotImplementedError
 
     ### results
 
-    def test_get_transformation_results(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_get_transformation_results(self):
+        raise NotImplementedError
 
-    def test_get_protocoldagresult(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_get_protocoldagresult(self):
+        raise NotImplementedError
