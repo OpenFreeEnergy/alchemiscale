@@ -540,3 +540,45 @@ Or instead to ``deleted``::
      <ScopedKey('Task-129a9e1a893f4c24a6dd3bdcc25957d6-my_org-my_campaign-my_project')>,
      <ScopedKey('Task-157232d7ff794a0985ebce5055e0f336-my_org-my_campaign-my_project')>,
      ...]
+
+
+***********************************************************
+Marking AlchemicalNetworks as inactive, deleted, or invalid
+***********************************************************
+
+Over time, you may find that the number of :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s in the :py:class:`~alchemiscale.models.Scope`\s you have access to is becoming difficult to manage, with many no longer relevant to the work you are currently doing.
+By default, new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s are set to an ``active`` state, but you can change this to any one of ``inactive``, ``deleted``, or ``invalid``, similar to statuses for :py:class:`~alchemiscale.storage.models.Task`\s detailed previously.
+
+Unlike :py:class:`~alchemiscale.storage.models.Task` statuses, all :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` states are reversible, and currently only serve as a way for users to disable default visibility in :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.query_networks` and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_scope_status`.
+Semantically, ``inactive`` is for networks that are no longer of interest, ``deleted`` is for networks that are marked as fair game for deletion by an administrator, and ``invalid`` is for networks that have a known problem and are not expected to give reasonable results.
+
+To get the current state of an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, you can use :meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_network_state`::
+
+    >>> asc.get_network_state(an_sk)
+    'active'
+
+We can likewise set its state to e.g. ``inactive`` with::
+
+    >>> asc.set_network_state(an_sk, 'inactive')
+    <ScopedKey('AlchemicalNetwork-66d7676b10a1fd9cb3f75e6e2e7f6e9c-my_org-my_campaign-my_project')>
+
+Subsequent use of :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.query_networks` shows only ``active`` networks by default, but you can show all networks regardless of state by setting ``state=None``::
+
+    >>> asc.query_networks(state=None)
+    [<ScopedKey('AlchemicalNetwork-4617c8d8d6599124af3b4561b8d910a0-my_org-my_campaign-my_project')>,
+     <ScopedKey('AlchemicalNetwork-d90bd97079cd965b887b373307ea7bab-my_org-my_campaign-my_project')>,
+     <ScopedKey('AlchemicalNetwork-66d7676b10a1fd9cb3f75e6e2e7f6e9c-my_org-my_campaign-my_project')>
+     ...]
+
+Likewise, :py:class:`~alchemiscale.storage.models.Task` status counts over whole :py:class:`~alchemiscale.models.Scope`\s obtained from :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_scope_status` by default counts only :py:class:`~alchemiscale.storage.models.Task`\s that are associated with at least one ``active`` network, but we can disregard network state by setting ``network_state=None``::
+
+    >>> asc.get_scope_status(Scope('my_org', 'my_campaign'), network_state=None)
+    {'complete': 324,
+     'error': 37,
+     'invalid': 6,
+     'deleted': 13,
+     'waiting': 372,
+     'running': 66}
+
+Both of the above methods can take any valid network state (``active``, ``inactive``, ``deleted``, or ``invalid``) to filter down to only networks with the matching state.
+They can also take regular expressions (regexes), allowing you to filter for multiple states at once with e.g. ``inactive|active``.

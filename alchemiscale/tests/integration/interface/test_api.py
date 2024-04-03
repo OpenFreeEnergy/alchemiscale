@@ -17,6 +17,7 @@ def pre_load_payload(network, scope, name="incomplete 2"):
     data = dict(
         network=KeyedChain.gufe_to_keyed_chain_rep(new_network),
         scope=scope.dict(),
+        state="active",
     )
     jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
 
