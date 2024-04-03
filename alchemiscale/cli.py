@@ -451,13 +451,13 @@ def reset(url, user, password, dbname):
 
 
 @database.group(help="Subcommands for database migrations")
-def migrations(): ...
+def migrate(): ...
 
 
-@migrations.command()
+@migrate.command()
 @db_params
 def v03_to_v04(url, user, password, dbname):
-    """Perform migrations appropriate for transitioning from alchemiscale v0.3
+    """Perform migration appropriate for transitioning from alchemiscale v0.3
     to v0.4.
 
     Note that options here can be set by environment variables, as shown on
