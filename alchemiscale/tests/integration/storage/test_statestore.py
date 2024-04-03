@@ -100,7 +100,9 @@ class TestNeo4jStore(TestStateStore):
 
         assert len(n3.records) == 2
 
-    def test_delete_network(self): ...
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_delete_network(self):
+        raise NotImplementedError
 
     def test_get_network(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
