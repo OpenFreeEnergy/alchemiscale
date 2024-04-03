@@ -581,3 +581,4 @@ Likewise, :py:class:`~alchemiscale.storage.models.Task` status counts over whole
      'running': 66}
 
 Both of the above methods can take any valid network state (``active``, ``inactive``, ``deleted``, or ``invalid``) to filter down to only networks with the matching state.
+They can also take regular expressions (regexes), allowing you to filter for multiple states at once with e.g. ``inactive|active``.
