@@ -4,21 +4,32 @@
 
 """
 
-from ..storage.subgraph import Subgraph, merge_subgraph
+from ..storage.subgraph import Subgraph, merge_subgraph, record_data_to_node
 from ..storage.statestore import Neo4jStore
 
 
 def migrate(n4js: Neo4jStore):
+    """Migrate state store from alchemiscale v0.3 to v0.4.
 
-    # for each AlchemicalNetwork present, create a NetworkMark
-    an_sks = n4js.query_networks()
+    Changes:
+    - adds a NetworkMark node if not already present for each AlchemicalNetwork
+      node; creates a MARKS relationship from the NetworkMark to the
+      AlchemicalNetwork, with `active` state as a property
+
+    """
+
+    q = """MATCH (an:AlchemicalNetwork)
+           WHERE NOT (an)<-[:MARKS]-(:NetworkMark)
+           RETURN an
+        """
+
+    res = n4js.execute_query(q)
 
     subgraph = Subgraph()
-    for an_sk in an_sks:
-        an_node = n4js._get_node(an_sk)
-        nm_subgraph, nm_node, nm_sk = n4js.create_network_mark_subgraph(
-            network_node=an_node
-        )
+    for rec in res.records:
+        an_node = record_data_to_node(rec["an"])
+
+        nm_subgraph, _, _ = n4js.create_network_mark_subgraph(network_node=an_node)
 
         subgraph |= nm_subgraph
 
