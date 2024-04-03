@@ -47,7 +47,11 @@ class TestNeo4jStore(TestStateStore):
         network_sk, taskhub_sk, mark_sk = n4js.assemble_network(an, scope_test)
 
         q = """
-            MATCH (th:TaskHub {_scoped_key: $th_sk})-[:PERFORMS]->(an:AlchemicalNetwork {_gufe_key: $key, _org: $org, _campaign: $campaign, _project: $project, _scoped_key: $nw_sk})<-[:MARKS]-(:NetworkMark {_scoped_key: $nm_sk})
+            MATCH (th:TaskHub {_scoped_key: $th_sk})-[:PERFORMS]->(an:AlchemicalNetwork {_gufe_key: $key,
+                                                                                         _org: $org,
+                                                                                         _campaign: $campaign,
+                                                                                         _project: $project,
+                                                                                         _scoped_key: $nw_sk})<-[:MARKS]-(:NetworkMark {_scoped_key: $nm_sk})
             return an.name, th
         """
 
@@ -62,7 +66,7 @@ class TestNeo4jStore(TestStateStore):
         )
         results = n4js.execute_query(
             q,
-            query_params,
+            parameters_=query_params,
         )
 
         assert len(results.records) == 1
@@ -75,7 +79,8 @@ class TestNeo4jStore(TestStateStore):
         sk: ScopedKey = n4js.assemble_network(an, scope_test)[0]
 
         q = f"""match (n:AlchemicalNetwork {{_gufe_key: '{an.key}',
-                                             _org: '{sk.org}', _campaign: '{sk.campaign}',
+                                             _org: '{sk.org}',
+                                             _campaign: '{sk.campaign}',
                                              _project: '{sk.project}'}})
                 return n
                 """
@@ -88,7 +93,8 @@ class TestNeo4jStore(TestStateStore):
         assert sk2 == sk
 
         q = f"""match (n:AlchemicalNetwork {{_gufe_key: '{an.key}',
-                                             _org: '{sk.org}', _campaign: '{sk.campaign}',
+                                             _org: '{sk.org}',
+                                             _campaign: '{sk.campaign}',
                                              _project: '{sk.project}'}})
                 return n
                 """
@@ -128,12 +134,12 @@ class TestNeo4jStore(TestStateStore):
         results = n4js.set_network_state(network_sks, valid_states)
         assert results == network_sks
 
-        q = f"""
-            UNWIND {cypher_list_from_scoped_keys(network_sks)} as network
-            MATCH (an:AlchemicalNetwork {{`_scoped_key`: network}})<-[:MARKS]-(nm:NetworkMark {{target: network}})
+        q = """
+            UNWIND $networks as network
+            MATCH (an:AlchemicalNetwork {`_scoped_key`: network})<-[:MARKS]-(nm:NetworkMark {{target: network}})
             RETURN nm
         """
-        results = n4js.execute_query(q)
+        results = n4js.execute_query(q, networks=[str(x) for x in network_sks])
 
         network_results = {}
         for record in results.records:

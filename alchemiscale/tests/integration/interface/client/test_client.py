@@ -115,7 +115,9 @@ class TestClient:
             RETURN nm.state as state
         """
 
-        results = n4js_preloaded.execute_query(q, {"network": str(network_sk)})
+        results = n4js_preloaded.execute_query(
+            q, parameters_={"network": str(network_sk)}
+        )
 
         assert len(results.records) == 1
         assert results.records[0]["state"] == "active"
@@ -124,7 +126,9 @@ class TestClient:
 
         assert updated_sk is not None
 
-        results = n4js_preloaded.execute_query(q, {"network": str(network_sk)})
+        results = n4js_preloaded.execute_query(
+            q, parameters_={"network": str(network_sk)}
+        )
 
         assert len(results.records) == 1
         assert results.records[0]["state"] == state
@@ -184,7 +188,9 @@ class TestClient:
             RETURN nm.state as state
         """
 
-        results = n4js_preloaded.execute_query(q, {"networks": network_str_sks})
+        results = n4js_preloaded.execute_query(
+            q, parameters_={"networks": network_str_sks}
+        )
 
         assert len(results.records) == 3
         assert results.records[0]["state"] == "active"
@@ -197,7 +203,9 @@ class TestClient:
         )
         assert all([updated_sk is not None for updated_sk in updated_sks])
 
-        results = n4js_preloaded.execute_query(q, {"networks": network_str_sks})
+        results = n4js_preloaded.execute_query(
+            q, parameters_={"networks": network_str_sks}
+        )
 
         assert len(results.records) == 3
 
@@ -286,7 +294,7 @@ class TestClient:
         assert len(network_sks) == 6
         assert scope_test in [n_sk.scope for n_sk in network_sks]
 
-        # implicit None for state, should get active states
+        # default value for state, should get active states
         network_sks = user_client.query_networks()
 
         assert set(user_client.query_networks(state="active")) == set(
