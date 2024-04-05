@@ -30,12 +30,12 @@ Compute identities are needed by compute services to authenticate with and use t
 
 For a ``docker-compose``-based deployment, it is easiest to do the above using the same ``alchemiscale-server`` image the API services are deployed with::
 
-    docker run --rm -it --network docker_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> \
+    docker run --rm -it --network alchemiscale-server_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> \
                <ALCHEMISCALE_DOCKER_IMAGE> \
                identity add -t user \
                             -i <user identity> \
                             -k <user key>
-    docker run --rm -it --network docker_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> \
+    docker run --rm -it --network alchemiscale-server_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> \
                <ALCHEMISCALE_DOCKER_IMAGE> \
                identity add-scope -t user \
                                   -i <user identity> \
@@ -43,7 +43,7 @@ For a ``docker-compose``-based deployment, it is easiest to do the above using t
 
 The important bits here are:
 
-``--network docker_db``
+``--network alchemiscale-server_db``
     We need to make sure the docker container we are using can talk to the database container.
 
 ``-e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD>``
@@ -147,7 +147,7 @@ Migrate data from ``neo4j`` 4.4 to 5.18
 
 Migrate schema from ``alchemiscale`` 0.3 to 0.4
 -----------------------------------------------
-1. Set the env variable ``NEO4J_DOCKER_IMAGE=5.18`` in your ``.env`` file for your ``docker-compose`` deployment.
+1. Set the env variable ``NEO4J_DOCKER_IMAGE=neo4j:5.18`` in your ``.env`` file for your ``docker-compose`` deployment.
 
 2. Start up the ``neo4j`` service only::
 
@@ -155,7 +155,7 @@ Migrate schema from ``alchemiscale`` 0.3 to 0.4
 
 3. In another shell on the same host, perform the `alchemiscale` schema migration::
 
-    docker run --rm -it --network docker_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> \
+    docker run --rm -it --network alchemiscale-server_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> \
                ghcr.io/openforcefield/alchemiscale-server:v0.4.0 \
                database migrate v03-to-v04
 
