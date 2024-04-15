@@ -662,6 +662,19 @@ class TestClient:
         assert cs == chemicalsystem
         assert cs is chemicalsystem
 
+    def test_get_chemicalsystem_bad_chemicalsystem_key(
+        self, scope_test, n4js_preloaded, user_client
+    ):
+
+        invalid_key = "ChemicalSystem-00000000000000000000000000000000-test_org-test_campaign-test_project"
+        cs_sk = ScopedKey.from_str(invalid_key)
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'No such object in database'",
+        ):
+            user_client.get_chemicalsystem(cs_sk)
+
     ### compute
 
     def test_create_tasks(
