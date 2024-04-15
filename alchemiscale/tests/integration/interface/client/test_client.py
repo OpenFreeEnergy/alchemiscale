@@ -483,6 +483,22 @@ class TestClient:
         assert an == network_tyk2
         assert an is network_tyk2
 
+    def test_get_network_bad_network_key(
+        self,
+        scope_test: Scope,
+        n4js_preloaded,
+        network_tyk2: AlchemicalNetwork,
+        user_client: client.AlchemiscaleClient,
+    ):
+        invalid_key = "AlchemicalNetwork-00000000000000000000000000000000-test_org-test_campaign-test_project"
+        an_sk = ScopedKey.from_str(invalid_key)
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'No such object in database'",
+        ):
+            user_client.get_network(an_sk)
+
     def test_get_network_weight(
         self,
         scope_test,

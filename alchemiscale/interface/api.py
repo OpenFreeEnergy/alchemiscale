@@ -312,7 +312,6 @@ def get_chemicalsystem_transformations(
     ]
 
 
-# TODO: HTTPException
 @router.get("/networks/{network_scoped_key}")
 def get_network(
     network_scoped_key,
@@ -323,7 +322,14 @@ def get_network(
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
-    network = n4js.get_gufe(scoped_key=sk)
+    try:
+        network = n4js.get_gufe(scoped_key=sk)
+    except KeyError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
     return GufeJSONResponse(network)
 
 
