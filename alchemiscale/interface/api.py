@@ -4,21 +4,15 @@
 
 """
 
-from typing import Any, Dict, List, Optional, Union
-import os
-import json
+from typing import Dict, List, Optional, Union
 from collections import Counter
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException
 from fastapi import status as http_status
 from fastapi.middleware.gzip import GZipMiddleware
-from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
-from gufe.protocols import ProtocolDAGResult
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from ..base.api import (
     GufeJSONResponse,
-    QueryGUFEHandler,
     scope_params,
     get_token_data_depends,
     get_n4js_depends,
@@ -28,17 +22,15 @@ from ..base.api import (
     validate_scopes,
     validate_scopes_query,
     _check_store_connectivity,
-    gufe_to_json,
     GzipRoute,
 )
 from ..settings import get_api_settings
-from ..settings import get_base_api_settings, get_api_settings
+from ..settings import get_base_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ProtocolDAGResultRef, TaskStatusEnum, NetworkStateEnum
+from ..storage.models import TaskStatusEnum
 from ..models import Scope, ScopedKey
-from ..security.auth import get_token_data, oauth2_scheme
-from ..security.models import Token, TokenData, CredentialedUserIdentity
+from ..security.models import TokenData, CredentialedUserIdentity
 from ..keyedchain import KeyedChain
 
 
@@ -976,7 +968,7 @@ def get_protocoldagresult(
         pdr: str = s3os.pull_protocoldagresult(
             pdr_sk, transformation_sk, return_as="json", ok=ok
         )
-    except:
+    except Exception:
         # if we fail to get the object with the above, fall back to
         # location-based retrieval
         pdr: str = s3os.pull_protocoldagresult(
