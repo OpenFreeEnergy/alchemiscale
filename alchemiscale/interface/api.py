@@ -312,6 +312,7 @@ def get_chemicalsystem_transformations(
     ]
 
 
+# TODO: HTTPException
 @router.get("/networks/{network_scoped_key}")
 def get_network(
     network_scoped_key,
@@ -326,6 +327,7 @@ def get_network(
     return GufeJSONResponse(network)
 
 
+# TODO: HTTPException
 @router.get("/transformations/{transformation_scoped_key}")
 def get_transformation(
     transformation_scoped_key,
@@ -340,6 +342,7 @@ def get_transformation(
     return GufeJSONResponse(transformation)
 
 
+# TODO: HTTPException
 @router.get("/chemicalsystems/{chemicalsystem_scoped_key}")
 def get_chemicalsystem(
     chemicalsystem_scoped_key,
@@ -361,6 +364,7 @@ def get_chemicalsystem(
 def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope): ...
 
 
+# TODO: HTTPException
 @router.post("/transformations/{transformation_scoped_key}/tasks")
 def create_tasks(
     transformation_scoped_key,
@@ -427,6 +431,7 @@ def query_tasks(
     return [str(sk) for sk in results]
 
 
+# TODO: HTTPException
 @router.get("/networks/{network_scoped_key}/tasks")
 def get_network_tasks(
     network_scoped_key,
@@ -458,6 +463,7 @@ def get_task_networks(
     return [str(sk) for sk in n4js.get_task_networks(task=sk)]
 
 
+# TODO: HTTPException
 @router.get("/transformations/{transformation_scoped_key}/tasks")
 def get_transformation_tasks(
     transformation_scoped_key,
@@ -512,6 +518,7 @@ def get_scope_status(
     return dict(status_counts)
 
 
+# TODO: HTTPException
 @router.get("/networks/{network_scoped_key}/status")
 def get_network_status(
     network_scoped_key,
@@ -559,6 +566,7 @@ def get_transformation_status(
     return status_counts
 
 
+# TODO: HTTPException
 @router.post("/networks/{network_scoped_key}/tasks/actioned")
 def get_network_actioned_tasks(
     network_scoped_key,
@@ -627,6 +635,7 @@ def get_task_actioned_networks(
     return [str(network_sk) for network_sk in network_sks]
 
 
+# TODO: HTTPException
 @router.post("/networks/{network_scoped_key}/tasks/action")
 def action_tasks(
     network_scoped_key,
@@ -662,6 +671,7 @@ def action_tasks(
     return [str(sk) if sk is not None else None for sk in actioned_sks]
 
 
+# TODO: HTTPException
 @router.get("/networks/{network_scoped_key}/weight")
 def get_network_weight(
     network_scoped_key,
@@ -674,6 +684,7 @@ def get_network_weight(
     return n4js.get_taskhub_weight([sk])[0]
 
 
+# TODO: HTTPException
 @router.post("/bulk/networks/weight/get")
 def get_networks_weight(
     *,
@@ -731,6 +742,7 @@ def set_networks_weight(
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+# TODO: HTTPException
 @router.post("/networks/{network_scoped_key}/tasks/cancel")
 def cancel_tasks(
     network_scoped_key,
@@ -867,6 +879,7 @@ def set_task_status(
     return [str(t) if t is not None else None for t in tasks_statused][0]
 
 
+# TODO: HTTPException
 @router.get("/tasks/{task_scoped_key}/status")
 def get_task_status(
     task_scoped_key,
@@ -882,6 +895,7 @@ def get_task_status(
     return status[0].value
 
 
+# TODO: HTTPException
 @router.get("/tasks/{task_scoped_key}/transformation")
 def get_task_transformation(
     task_scoped_key,
@@ -931,6 +945,7 @@ def get_transformation_failures(
     return [str(sk) for sk in n4js.get_transformation_failures(sk)]
 
 
+# TODO: HTTPException
 @router.get(
     "/transformations/{transformation_scoped_key}/{route}/{protocoldagresultref_scoped_key}"
 )
