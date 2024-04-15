@@ -333,7 +333,6 @@ def get_network(
     return GufeJSONResponse(network)
 
 
-# TODO: HTTPException
 @router.get("/transformations/{transformation_scoped_key}")
 def get_transformation(
     transformation_scoped_key,
@@ -344,7 +343,14 @@ def get_transformation(
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    transformation = n4js.get_gufe(scoped_key=sk)
+    try:
+        transformation = n4js.get_gufe(scoped_key=sk)
+    except KeyError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
     return GufeJSONResponse(transformation)
 
 

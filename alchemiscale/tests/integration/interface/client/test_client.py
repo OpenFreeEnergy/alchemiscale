@@ -636,6 +636,19 @@ class TestClient:
         assert tf == transformation
         assert tf is transformation
 
+    def test_get_transformation_bad_transformation_key(
+        self, scope_test, n4js_preloaded, user_client
+    ):
+
+        invalid_key = "Transformation-00000000000000000000000000000000-test_org-test_campaign-test_project"
+        tf_sk = ScopedKey.from_str(invalid_key)
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'No such object in database'",
+        ):
+            user_client.get_transformation(tf_sk)
+
     def test_get_chemicalsystem(
         self,
         scope_test,
