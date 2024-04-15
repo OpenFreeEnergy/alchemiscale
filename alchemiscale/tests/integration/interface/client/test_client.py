@@ -3,17 +3,15 @@ from time import sleep
 from pathlib import Path
 from itertools import chain
 
-from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
+from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey
 from gufe.protocols.protocoldag import execute_DAG
-from gufe.tests.test_protocol import BrokenProtocol
 import networkx as nx
 
 from alchemiscale.models import ScopedKey, Scope
 from alchemiscale.storage.models import TaskStatusEnum, NetworkStateEnum
 from alchemiscale.storage.cypher import cypher_list_from_scoped_keys
 from alchemiscale.interface import client
-from alchemiscale.utils import RegistryBackup
 from alchemiscale.tests.integration.interface.utils import (
     get_user_settings_override,
 )
@@ -38,7 +36,7 @@ class TestClient:
         uvicorn_server,
     ):
         settings = get_user_settings_override()
-        assert user_client._jwtoken == None
+        assert user_client._jwtoken is None
         user_client._get_token()
 
         token = user_client._jwtoken
@@ -487,7 +485,6 @@ class TestClient:
         self,
         scope_test: Scope,
         n4js_preloaded,
-        network_tyk2: AlchemicalNetwork,
         user_client: client.AlchemiscaleClient,
     ):
         invalid_key = "AlchemicalNetwork-00000000000000000000000000000000-test_org-test_campaign-test_project"
@@ -851,8 +848,6 @@ class TestClient:
         user_client: client.AlchemiscaleClient,
         network_tyk2,
     ):
-        n4js = n4js_preloaded
-
         # select the transformation we want to compute
         an = network_tyk2
         transformation = list(an.edges)[0]
@@ -947,7 +942,7 @@ class TestClient:
         other_scope = Scope("other_org", "other_campaign", "other_project")
         n4js_preloaded.assemble_network(network_tyk2, other_scope)
         other_tf_sk = n4js_preloaded.query_transformations(scope=other_scope)[0]
-        task_sk = n4js_preloaded.create_task(other_tf_sk)
+        _ = n4js_preloaded.create_task(other_tf_sk)
 
         # ask for the scope that we don't have access to
         status_counts = user_client.get_scope_status(other_scope)
@@ -1125,8 +1120,6 @@ class TestClient:
         network_tyk2,
         get_weights,
     ):
-        n4js = n4js_preloaded
-
         an = network_tyk2
         transformation = list(an.edges)[0]
 
@@ -1242,7 +1235,6 @@ class TestClient:
         network_tyk2,
         actioned_tasks,
     ):
-        n4js = n4js_preloaded
         an = network_tyk2
 
         transformation = list(an.edges)[0]
@@ -1346,13 +1338,13 @@ class TestClient:
 
         if shouldfail:
             with pytest.raises(AlchemiscaleClientError):
-                actioned_sks = user_client.action_tasks(
+                user_client.action_tasks(
                     task_sks,
                     network_sk,
                     weight,
                 )
         else:
-            actioned_sks = user_client.action_tasks(
+            user_client.action_tasks(
                 task_sks,
                 network_sk,
                 weight,
@@ -1473,7 +1465,6 @@ class TestClient:
         an = network_tyk2
         transformation = list(an.edges)[0]
 
-        network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
         all_tasks = user_client.create_tasks(transformation_sk, count=5)
@@ -1514,7 +1505,6 @@ class TestClient:
         an = network_tyk2
         transformation = list(an.edges)[0]
 
-        network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
         all_tasks = user_client.create_tasks(transformation_sk, count=5)
@@ -1567,7 +1557,6 @@ class TestClient:
         an = network_tyk2
         transformation = list(an.edges)[0]
 
-        network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
         all_tasks = user_client.create_tasks(transformation_sk, count=5)
@@ -1598,7 +1587,6 @@ class TestClient:
         an = network_tyk2
         transformation = list(an.edges)[0]
 
-        network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
         all_tasks = user_client.create_tasks(transformation_sk, count=5)
@@ -1700,7 +1688,7 @@ class TestClient:
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
         # user client : create three independent tasks for the transformation
-        tasks = user_client.create_tasks(transformation_sk, count=3)
+        user_client.create_tasks(transformation_sk, count=3)
 
         # user client : action the tasks for execution
         all_tasks = user_client.get_transformation_tasks(transformation_sk)
@@ -1786,7 +1774,7 @@ class TestClient:
                     raise Exception("Network out doesn't exactly match network in yet")
                 else:
                     break
-            except:
+            except Exception:
                 sleep(0.1)
 
         tf_sks = user_client.get_network_transformations(network_sk)
@@ -1925,7 +1913,7 @@ class TestClient:
                     raise Exception("Network out doesn't exactly match network in yet")
                 else:
                     break
-            except:
+            except Exception:
                 sleep(0.1)
 
         tf_sks = user_client.get_network_transformations(network_sk)
