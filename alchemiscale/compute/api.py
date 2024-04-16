@@ -177,6 +177,7 @@ def claim_taskhub_tasks(
     *,
     compute_service_id: str = Body(),
     count: int = Body(),
+    protocols: Optional[List[str]] = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -187,6 +188,7 @@ def claim_taskhub_tasks(
         taskhub=taskhub_scoped_key,
         compute_service_id=ComputeServiceID(compute_service_id),
         count=count,
+        protocols=protocols
     )
 
     return [str(t) if t is not None else None for t in tasks]
