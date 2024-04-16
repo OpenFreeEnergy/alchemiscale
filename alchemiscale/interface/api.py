@@ -382,7 +382,6 @@ def get_chemicalsystem(
 def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope): ...
 
 
-# TODO: HTTPException
 @router.post("/transformations/{transformation_scoped_key}/tasks")
 def create_tasks(
     transformation_scoped_key,
@@ -395,7 +394,14 @@ def create_tasks(
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    task_sks = n4js.create_tasks([sk] * count, [extends] * count)
+    try:
+        task_sks = n4js.create_tasks([sk] * count, [extends] * count)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
     return [str(sk) for sk in task_sks]
 
 
@@ -449,7 +455,6 @@ def query_tasks(
     return [str(sk) for sk in results]
 
 
-# TODO: HTTPException
 @router.get("/networks/{network_scoped_key}/tasks")
 def get_network_tasks(
     network_scoped_key,
@@ -463,7 +468,13 @@ def get_network_tasks(
     validate_scopes(sk.scope, token)
 
     if status is not None:
-        status = TaskStatusEnum(status)
+        try:
+            status = TaskStatusEnum(status)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
 
     return [str(sk) for sk in n4js.get_network_tasks(network=sk, status=status)]
 
@@ -481,7 +492,6 @@ def get_task_networks(
     return [str(sk) for sk in n4js.get_task_networks(task=sk)]
 
 
-# TODO: HTTPException
 @router.get("/transformations/{transformation_scoped_key}/tasks")
 def get_transformation_tasks(
     transformation_scoped_key,
@@ -496,7 +506,13 @@ def get_transformation_tasks(
     validate_scopes(sk.scope, token)
 
     if status is not None:
-        status = TaskStatusEnum(status)
+        try:
+            status = TaskStatusEnum(status)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
 
     task_sks = n4js.get_transformation_tasks(
         sk, extends=extends, return_as=return_as, status=status
@@ -536,7 +552,6 @@ def get_scope_status(
     return dict(status_counts)
 
 
-# TODO: HTTPException
 @router.get("/networks/{network_scoped_key}/status")
 def get_network_status(
     network_scoped_key,
@@ -547,7 +562,10 @@ def get_network_status(
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
-    status_counts = n4js.get_network_status([network_scoped_key])[0]
+    try:
+        status_counts = n4js.get_network_status([network_scoped_key])[0]
+    except Exception as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return status_counts
 
@@ -584,7 +602,6 @@ def get_transformation_status(
     return status_counts
 
 
-# TODO: HTTPException
 @router.post("/networks/{network_scoped_key}/tasks/actioned")
 def get_network_actioned_tasks(
     network_scoped_key,
@@ -596,7 +613,12 @@ def get_network_actioned_tasks(
     network_sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(network_sk.scope, token)
 
-    taskhub_sk = n4js.get_taskhub(network_sk)
+    try:
+        # raises ValueError when a ScopedKey doesn't correspond to an AlchemicalNetwork
+        taskhub_sk = n4js.get_taskhub(network_sk)
+    except ValueError as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     task_sks = n4js.get_taskhub_actioned_tasks([taskhub_sk])[0]
 
     if task_weights:
@@ -653,7 +675,6 @@ def get_task_actioned_networks(
     return [str(network_sk) for network_sk in network_sks]
 
 
-# TODO: HTTPException
 @router.post("/networks/{network_scoped_key}/tasks/action")
 def action_tasks(
     network_scoped_key,
@@ -666,7 +687,12 @@ def action_tasks(
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
-    taskhub_sk = n4js.get_taskhub(sk)
+    try:
+        # raises ValueError when a ScopedKey doesn't correspond to an AlchemicalNetwork
+        taskhub_sk = n4js.get_taskhub(sk)
+    except ValueError as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     actioned_sks = n4js.action_tasks(tasks, taskhub_sk)
 
     try:
@@ -689,7 +715,6 @@ def action_tasks(
     return [str(sk) if sk is not None else None for sk in actioned_sks]
 
 
-# TODO: HTTPException
 @router.get("/networks/{network_scoped_key}/weight")
 def get_network_weight(
     network_scoped_key,
@@ -702,7 +727,6 @@ def get_network_weight(
     return n4js.get_taskhub_weight([sk])[0]
 
 
-# TODO: HTTPException
 @router.post("/bulk/networks/weight/get")
 def get_networks_weight(
     *,
@@ -760,7 +784,6 @@ def set_networks_weight(
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-# TODO: HTTPException
 @router.post("/networks/{network_scoped_key}/tasks/cancel")
 def cancel_tasks(
     network_scoped_key,
@@ -772,7 +795,11 @@ def cancel_tasks(
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
-    taskhub_sk = n4js.get_taskhub(sk)
+    try:
+        taskhub_sk = n4js.get_taskhub(sk)
+    except ValueError as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     canceled_sks = n4js.cancel_tasks(tasks, taskhub_sk)
 
     return [str(sk) if sk is not None else None for sk in canceled_sks]
@@ -897,7 +924,6 @@ def set_task_status(
     return [str(t) if t is not None else None for t in tasks_statused][0]
 
 
-# TODO: HTTPException
 @router.get("/tasks/{task_scoped_key}/status")
 def get_task_status(
     task_scoped_key,
@@ -913,7 +939,6 @@ def get_task_status(
     return status[0].value
 
 
-# TODO: HTTPException
 @router.get("/tasks/{task_scoped_key}/transformation")
 def get_task_transformation(
     task_scoped_key,
@@ -926,10 +951,13 @@ def get_task_transformation(
 
     transformation: ScopedKey
 
-    transformation, protocoldagresultref = n4js.get_task_transformation(
-        task=task_scoped_key,
-        return_gufe=False,
-    )
+    try:
+        transformation, _ = n4js.get_task_transformation(
+            task=task_scoped_key,
+            return_gufe=False,
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return str(transformation)
 
@@ -963,7 +991,6 @@ def get_transformation_failures(
     return [str(sk) for sk in n4js.get_transformation_failures(sk)]
 
 
-# TODO: HTTPException
 @router.get(
     "/transformations/{transformation_scoped_key}/{route}/{protocoldagresultref_scoped_key}"
 )
@@ -992,7 +1019,14 @@ def get_protocoldagresult(
     validate_scopes(sk.scope, token)
     validate_scopes(transformation_sk.scope, token)
 
-    protocoldagresultref = n4js.get_gufe(scoped_key=sk)
+    try:
+        protocoldagresultref = n4js.get_gufe(scoped_key=sk)
+    except KeyError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
     pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.dict())
 
     # we leave each ProtocolDAGResult in string form to avoid
