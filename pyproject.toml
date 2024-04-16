@@ -78,5 +78,5 @@ match = ["*"]
 default-tag = "0.0.0"
 
 
-[project.entry-points.pytest11]
-alchemiscale_fixtures = "alchemiscale.tests.integration.conftest"
+#[project.entry-points.pytest11]
+#alchemiscale_fixtures = "alchemiscale.tests.integration.conftest"
