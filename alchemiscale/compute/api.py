@@ -188,7 +188,7 @@ def claim_taskhub_tasks(
         taskhub=taskhub_scoped_key,
         compute_service_id=ComputeServiceID(compute_service_id),
         count=count,
-        protocols=protocols
+        protocols=protocols,
     )
 
     return [str(t) if t is not None else None for t in tasks]

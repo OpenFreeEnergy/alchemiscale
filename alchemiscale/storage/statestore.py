@@ -14,7 +14,13 @@ import weakref
 import numpy as np
 
 import networkx as nx
-from gufe import AlchemicalNetwork, Transformation, NonTransformation, Settings, Protocol
+from gufe import (
+    AlchemicalNetwork,
+    Transformation,
+    NonTransformation,
+    Settings,
+    Protocol,
+)
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 
 from neo4j import Transaction, GraphDatabase, Driver
@@ -1448,7 +1454,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         if protocols is not None and len(protocols) == 0:
-            raise ValueError('`protocols` must be either `None` or not empty')
+            raise ValueError("`protocols` must be either `None` or not empty")
 
         q = f"""
             MATCH (th:TaskHub {{`_scoped_key`: '{taskhub}'}})-[actions:ACTIONS]-(task:Task),
