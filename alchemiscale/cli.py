@@ -450,6 +450,33 @@ def reset(url, user, password, dbname):
     n4js.reset()
 
 
+@database.group(help="Subcommands for database migrations")
+def migrate(): ...
+
+
+@migrate.command()
+@db_params
+def v03_to_v04(url, user, password, dbname):
+    """Perform migration appropriate for transitioning from alchemiscale v0.3
+    to v0.4.
+
+    Note that options here can be set by environment variables, as shown on
+    each option.
+    """
+    from .storage.statestore import get_n4js
+    from .settings import Neo4jStoreSettings
+    from .migrations.v03_to_v04 import migrate
+
+    cli_values = url | user | password | dbname
+    settings = get_settings_from_options(cli_values, Neo4jStoreSettings)
+
+    n4js = get_n4js(settings)
+
+    migrate(n4js)
+
+    click.echo("Migration completed without errors.")
+
+
 def _identity_type_string_to_cls(identity_type: str) -> Type[CredentialedEntity]:
     if identity_type == "user":
         identity_type_cls = CredentialedUserIdentity

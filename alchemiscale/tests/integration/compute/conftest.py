@@ -87,18 +87,8 @@ def n4js_preloaded(
     # set starting contents for many of the tests in this module
     for single_scope in multiple_scopes:
         # Create initial network for this scope
-        sk1 = n4js.create_network(network_tyk2, single_scope)
-
-        # Create another network for this scope
-        sk2 = n4js.create_network(second_network_an2, single_scope)
-
-        # add a taskhub for each network
-        n4js.create_taskhub(sk1)
-        n4js.create_taskhub(sk2)
-
-        # add a taskhub for each network and scope
-        th_sk1 = n4js.create_taskhub(sk1)
-        th_sk2 = n4js.create_taskhub(sk2)
+        sk1, th_sk1, _ = n4js.assemble_network(network_tyk2, single_scope)
+        sk2, th_sk2, _ = n4js.assemble_network(second_network_an2, single_scope)
 
         # Spawn tasks
         task_sks = defaultdict(list)
