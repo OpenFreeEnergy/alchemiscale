@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 from typing import Union, Optional, List, Dict, Tuple
 from pydantic import BaseModel, Field
 
@@ -7,6 +7,9 @@ from ..models import Scope, ScopedKey
 
 class ComputeServiceSettings(BaseModel):
     """Core settings schema for a compute service."""
+
+    class Config:
+        arbitrary_types_allowed = True
 
     api_url: str = Field(
         ..., description="URL of the compute API to execute Tasks for."
@@ -25,10 +28,10 @@ class ComputeServiceSettings(BaseModel):
             "resources, e.g. different hosts or HPC clusters."
         ),
     )
-    shared_basedir: os.PathLike = Field(
+    shared_basedir: Path = Field(
         ..., description="Filesystem path to use for `ProtocolDAG` `shared` space."
     )
-    scratch_basedir: os.PathLike = Field(
+    scratch_basedir: Path = Field(
         ..., description="Filesystem path to use for `ProtocolUnit` `scratch` space."
     )
     keep_shared: bool = Field(
@@ -64,7 +67,7 @@ class ComputeServiceSettings(BaseModel):
         "WARN",
         description="The loglevel at which to report; see the :mod:`logging` docs for available levels.",
     )
-    logfile: Optional[os.PathLike] = Field(
+    logfile: Optional[Path] = Field(
         None,
         description="Path to file for logging output; if not set, logging will only go to STDOUT.",
     )
