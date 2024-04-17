@@ -8,6 +8,7 @@
 import os
 from time import sleep
 from pathlib import Path
+from typing import Union
 
 from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
@@ -17,7 +18,7 @@ from moto.server import ThreadedMotoServer
 
 from neo4j import GraphDatabase
 
-from gufe import ChemicalSystem, Transformation, AlchemicalNetwork
+from gufe import ChemicalSystem, NonTransformation, Transformation, AlchemicalNetwork
 from gufe.protocols.protocoldag import execute_DAG
 from gufe.tests.test_protocol import DummyProtocol, BrokenProtocol
 from openfe_benchmarks import tyk2
@@ -265,14 +266,38 @@ def network_tyk2():
         for edge in tyk2s.connections
     ]
 
+    nontransformations = []
+    for cs in list(solvated.values()) + list(complexes.values()):
+        nt = NonTransformation(
+            system=cs,
+            protocol=DummyProtocol(DummyProtocol.default_settings()),
+            name=f"f{cs.name}_nt",
+        )
+        nontransformations.append(nt)
+
     return AlchemicalNetwork(
-        edges=(solvent_network + complex_network), name="tyk2_relative_benchmark"
+        edges=(solvent_network + complex_network + nontransformations),
+        name="tyk2_relative_benchmark",
     )
+
+
+def get_edge_type(
+    network: AlchemicalNetwork, edge_class
+) -> Union[Transformation, NonTransformation]:
+    for tf in network.edges:
+        if type(tf) is edge_class:
+            return tf
+    raise RuntimeError("Network does not contain a `{edge_class.__qualname__}`")
 
 
 @fixture(scope="module")
 def transformation(network_tyk2):
-    return list(network_tyk2.edges)[0]
+    return get_edge_type(network_tyk2, Transformation)
+
+
+@fixture(scope="module")
+def nontransformation(network_tyk2):
+    return get_edge_type(network_tyk2, NonTransformation)
 
 
 @fixture(scope="module")
@@ -306,7 +331,7 @@ def protocoldagresults(tmpdir_factory, transformation):
 
 @fixture
 def network_tyk2_failure(network_tyk2):
-    transformation = list(network_tyk2.edges)[0]
+    transformation = get_edge_type(network_tyk2, Transformation)
 
     broken_transformation = Transformation(
         stateA=transformation.stateA,
