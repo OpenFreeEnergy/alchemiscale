@@ -284,7 +284,7 @@ def network_tyk2():
 def get_edge_type(
     network: AlchemicalNetwork, edge_class
 ) -> Union[Transformation, NonTransformation]:
-    for tf in network.edges:
+    for tf in sorted(network.edges):
         if type(tf) is edge_class:
             return tf
     raise RuntimeError("Network does not contain a `{edge_class.__qualname__}`")
