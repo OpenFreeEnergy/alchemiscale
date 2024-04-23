@@ -4,7 +4,7 @@
 
 """
 
-from gufe import AlchemicalNetwork, Transformation, NonTransformation
+from gufe import AlchemicalNetwork, Transformation
 
 
 def validate_network_nonself(network: AlchemicalNetwork):
