@@ -8,32 +8,26 @@ import asyncio
 from typing import Union, List, Dict, Optional, Tuple, Any, Iterable
 import json
 from itertools import chain
-from collections import Counter
 from functools import lru_cache
 
-import httpx
 from async_lru import alru_cache
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 
 from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
-    json_to_gufe,
     use_session,
 )
 from ..models import Scope, ScopedKey
 from ..storage.models import (
-    Task,
-    ProtocolDAGResultRef,
     TaskStatusEnum,
     NetworkStateEnum,
 )
 from ..strategies import Strategy
-from ..security.models import CredentialedUserIdentity
 from ..validators import validate_network_nonself
 from ..keyedchain import KeyedChain
 
@@ -531,12 +525,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             return KeyedChain(content).to_gufe()
 
         if visualize:
-            from rich.progress import (
-                Progress,
-                SpinnerColumn,
-                TimeElapsedColumn,
-                TextColumn,
-            )
+            from rich.progress import Progress
 
             with Progress(*self._rich_waiting_columns(), transient=False) as progress:
                 task = progress.add_task(
@@ -587,7 +576,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             return KeyedChain(content).to_gufe()
 
         if visualize:
-            from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
+            from rich.progress import Progress
 
             with Progress(*self._rich_waiting_columns(), transient=False) as progress:
                 task = progress.add_task(
@@ -1214,7 +1203,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """Set the statuses for many Tasks"""
         data = dict(tasks=[t.dict() for t in tasks], status=status.value)
         tasks_updated = await self._post_resource_async(
-            f"/bulk/tasks/status/set", data=data
+            "/bulk/tasks/status/set", data=data
         )
         return [
             ScopedKey.from_str(task_sk) if task_sk is not None else None
@@ -1287,7 +1276,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     ) -> List[Optional[ScopedKey]]:
         data = dict(tasks=[t.dict() for t in tasks], priority=priority)
         tasks_updated = await self._post_resource_async(
-            f"/bulk/tasks/priority/set", data=data
+            "/bulk/tasks/priority/set", data=data
         )
         return [
             ScopedKey.from_str(task_sk) if task_sk is not None else None
@@ -1328,7 +1317,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """Get the priority for many Tasks"""
         data = dict(tasks=[t.dict() for t in tasks])
         priorities = await self._post_resource_async(
-            f"/bulk/tasks/priority/get", data=data
+            "/bulk/tasks/priority/get", data=data
         )
         return priorities
 
@@ -1364,10 +1353,22 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     async def _async_get_protocoldagresult(
         self, protocoldagresultref, transformation, route, compress
     ):
-        pdr_json = await self._get_resource_async(
-            f"/transformations/{transformation}/{route}/{protocoldagresultref}",
-            compress=compress,
-        )
+        # check the disk cache for the PDR
+        if not (
+            pdr_json := self._cache.get(
+                [str(transformation), route, str(protocoldagresultref)]
+            )
+        ):
+            # query the alchemiscale server for the PDR
+            pdr_json = await self._get_resource_async(
+                f"/transformations/{transformation}/{route}/{protocoldagresultref}",
+                compress=compress,
+            )
+
+            # add the resulting PDR to the cache
+            self._cache.add(
+                [str(transformation), route, str(protocoldagresultref)], pdr_json
+            )
 
         pdr = GufeTokenizable.from_dict(
             json.loads(pdr_json[0], cls=JSON_HANDLER.decoder)
@@ -1397,7 +1398,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     *self._rich_progress_columns(), transient=False
                 ) as progress:
                     task = progress.add_task(
-                        f"Retrieving [bold]ProtocolDAGResult[/bold]s",
+                        "Retrieving [bold]ProtocolDAGResult[/bold]s",
                         total=len(protocoldagresultrefs),
                     )
 
