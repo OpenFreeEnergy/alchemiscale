@@ -1,6 +1,8 @@
 import pytest
 from copy import copy
 from time import sleep
+import tempfile
+from pathlib import Path
 
 import uvicorn
 import requests
@@ -49,11 +51,18 @@ def uvicorn_server(user_api):
 
 @pytest.fixture(scope="module")
 def user_client(uvicorn_server, user_identity):
-    return client.AlchemiscaleClient(
-        api_url="http://127.0.0.1:8000/",
-        identifier=user_identity["identifier"],
-        key=user_identity["key"],
-    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        test_client = client.AlchemiscaleClient(
+            api_url="http://127.0.0.1:8000/",
+            identifier=user_identity["identifier"],
+            key=user_identity["key"],
+            cache_directory=tmpdir,
+        )
+        test_client._cache.stats(enable=True, reset=True)
+
+        return test_client
 
 
 @pytest.fixture(scope="module")

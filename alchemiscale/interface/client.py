@@ -1354,25 +1354,24 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self, protocoldagresultref, transformation, route, compress
     ):
         # check the disk cache for the PDR
-        if not (
-            pdr_json := self._cache.get(
-                [str(transformation), route, str(protocoldagresultref)]
-            )
-        ):
+        if pdr_json := self._cache.get(str(protocoldagresultref)):
+            pdr_json = pdr_json.decode("utf-8")
+        else:
             # query the alchemiscale server for the PDR
             pdr_json = await self._get_resource_async(
                 f"/transformations/{transformation}/{route}/{protocoldagresultref}",
                 compress=compress,
             )
 
+            pdr_json = pdr_json[0]
+
             # add the resulting PDR to the cache
             self._cache.add(
-                [str(transformation), route, str(protocoldagresultref)], pdr_json
+                str(protocoldagresultref),
+                pdr_json.encode("utf-8"),
             )
 
-        pdr = GufeTokenizable.from_dict(
-            json.loads(pdr_json[0], cls=JSON_HANDLER.decoder)
-        )
+        pdr = GufeTokenizable.from_dict(json.loads(pdr_json, cls=JSON_HANDLER.decoder))
 
         return pdr
 

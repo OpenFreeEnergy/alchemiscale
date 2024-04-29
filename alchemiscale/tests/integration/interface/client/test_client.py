@@ -1665,6 +1665,47 @@ class TestClient:
 
         return protocoldagresults
 
+    def test_cached_pdr(
+        self, scope_test, n4js_preloaded, s3os_server, user_client, network_tyk2, tmpdir
+    ):
+        network_sk = user_client.get_scoped_key(network_tyk2, scope_test)
+
+        transformation = list(t for t in network_tyk2.edges if "_solvent" in t.name)[0]
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        user_client.create_tasks(transformation_sk, count=3)
+
+        all_tasks = user_client.get_transformation_tasks(transformation_sk)
+        actioned_tasks = user_client.action_tasks(all_tasks, network_sk)
+
+        # execute the actioned tasks and push results directly using statestore and object store
+        with tmpdir.as_cwd():
+            protocoldagresults = self._execute_tasks(
+                actioned_tasks, n4js_preloaded, s3os_server
+            )
+
+        # make sure that we have reset all stats tracking before the intial pull
+        assert user_client._cache.stats(reset=True) == (0, 0)
+
+        user_client.get_transformation_results(transformation_sk)
+
+        # we expect three misses, but now the cache has length 3
+        assert user_client._cache.stats() == (0, 3) and len(user_client._cache) == 3
+
+        # clear the in-memory lru cache, to ensure we check the on-disk cache
+        user_client._async_get_protocoldagresult.cache_clear()
+
+        # running again should now pull results from the on-disk cache
+        user_client.get_transformation_results(transformation_sk)
+
+        assert user_client._cache.stats() == (3, 3) and len(user_client._cache) == 3
+
+        # when the alru is not cleared, we should not see misses or hits on the disk cache
+        # since the alru should populate from the results found on disk
+        user_client.get_transformation_results(transformation_sk)
+
+        assert user_client._cache.stats() == (3, 3) and len(user_client._cache) == 3
+
     def test_get_transformation_and_network_results(
         self,
         scope_test,
