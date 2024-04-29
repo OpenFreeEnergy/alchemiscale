@@ -481,6 +481,37 @@ class TestClient:
         assert an == network_tyk2
         assert an is network_tyk2
 
+    def test_cached_network(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        # clear both the on-disk and in-memory cache
+        user_client._cache.clear()
+        user_client._cache.stats(reset=True)
+        user_client.get_network.cache_clear()
+
+        an_sk = user_client.get_scoped_key(network_tyk2, scope_test)
+
+        # reset stats of cache
+        assert user_client._cache.stats(enable=True, reset=True) == (0, 0)
+
+        # expect a miss and entry in the cache
+        user_client.get_network(an_sk)
+        assert user_client._cache.stats() == (0, 1) and len(user_client._cache) == 1
+
+        # expect the in-memory lru cache to get the last result pulled
+        user_client.get_network(an_sk)
+        assert user_client._cache.stats() == (0, 1) and len(user_client._cache) == 1
+        # clear in-memory cache
+        user_client.get_network.cache_clear()
+
+        # expect a hit
+        user_client.get_network(an_sk)
+        assert user_client._cache.stats() == (1, 1) and len(user_client._cache) == 1
+
     def test_get_network_weight(
         self,
         scope_test,
@@ -621,6 +652,37 @@ class TestClient:
         assert tf == transformation
         assert tf is transformation
 
+    def test_cached_transformation(
+        self,
+        scope_test,
+        n4js_preloaded,
+        transformation,
+        user_client: client.AlchemiscaleClient,
+    ):
+        # clear both the on-disk and in-memory cache
+        user_client._cache.clear()
+        user_client._cache.stats(reset=True)
+        user_client.get_transformation.cache_clear()
+
+        tf_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        # reset stats of cache
+        assert user_client._cache.stats(enable=True, reset=True) == (0, 0)
+
+        # expect a miss and entry in the cache
+        user_client.get_transformation(tf_sk)
+        assert user_client._cache.stats() == (0, 1) and len(user_client._cache) == 1
+
+        # expect the in-memory lru cache to get the last result pulled
+        user_client.get_transformation(tf_sk)
+        assert user_client._cache.stats() == (0, 1) and len(user_client._cache) == 1
+        # clear in-memory cache
+        user_client.get_transformation.cache_clear()
+
+        # expect a hit
+        user_client.get_transformation(tf_sk)
+        assert user_client._cache.stats() == (1, 1) and len(user_client._cache) == 1
+
     def test_get_chemicalsystem(
         self,
         scope_test,
@@ -633,6 +695,37 @@ class TestClient:
 
         assert cs == chemicalsystem
         assert cs is chemicalsystem
+
+    def test_cached_chemicalsystem(
+        self,
+        scope_test,
+        n4js_preloaded,
+        chemicalsystem,
+        user_client: client.AlchemiscaleClient,
+    ):
+        # clear both the on-disk and in-memory cache
+        user_client._cache.clear()
+        user_client._cache.stats(reset=True)
+        user_client.get_chemicalsystem.cache_clear()
+
+        cs_sk = user_client.get_scoped_key(chemicalsystem, scope_test)
+
+        # reset stats of cache
+        assert user_client._cache.stats(enable=True, reset=True) == (0, 0)
+
+        # expect a miss and entry in the cache
+        user_client.get_chemicalsystem(cs_sk)
+        assert user_client._cache.stats() == (0, 1) and len(user_client._cache) == 1
+
+        # expect the in-memory lru cache to get the last result pulled
+        user_client.get_chemicalsystem(cs_sk)
+        assert user_client._cache.stats() == (0, 1) and len(user_client._cache) == 1
+        # clear in-memory cache
+        user_client.get_chemicalsystem.cache_clear()
+
+        # expect a hit
+        user_client.get_chemicalsystem(cs_sk)
+        assert user_client._cache.stats() == (1, 1) and len(user_client._cache) == 1
 
     ### compute
 
@@ -1657,6 +1750,11 @@ class TestClient:
     def test_cached_pdr(
         self, scope_test, n4js_preloaded, s3os_server, user_client, network_tyk2, tmpdir
     ):
+
+        user_client._cache.clear()
+        user_client._cache.stats(reset=True)
+        user_client._async_get_protocoldagresult.cache_clear()
+
         network_sk = user_client.get_scoped_key(network_tyk2, scope_test)
 
         transformation = list(t for t in network_tyk2.edges if "_solvent" in t.name)[0]
@@ -1669,31 +1767,31 @@ class TestClient:
 
         # execute the actioned tasks and push results directly using statestore and object store
         with tmpdir.as_cwd():
-            protocoldagresults = self._execute_tasks(
-                actioned_tasks, n4js_preloaded, s3os_server
-            )
+            self._execute_tasks(actioned_tasks, n4js_preloaded, s3os_server)
 
         # make sure that we have reset all stats tracking before the intial pull
         assert user_client._cache.stats(reset=True) == (0, 0)
 
         user_client.get_transformation_results(transformation_sk)
 
-        # we expect three misses, but now the cache has length 3
-        assert user_client._cache.stats() == (0, 3) and len(user_client._cache) == 3
+        # we expect four misses, but now the cache has length 4
+        # this is because the cache also captures the transformation, not just the PDRs
+        assert user_client._cache.stats() == (0, 4) and len(user_client._cache) == 4
 
         # clear the in-memory lru cache, to ensure we check the on-disk cache
         user_client._async_get_protocoldagresult.cache_clear()
+        user_client.get_transformation.cache_clear()
 
         # running again should now pull results from the on-disk cache
         user_client.get_transformation_results(transformation_sk)
 
-        assert user_client._cache.stats() == (3, 3) and len(user_client._cache) == 3
+        assert user_client._cache.stats() == (4, 4) and len(user_client._cache) == 4
 
         # when the alru is not cleared, we should not see misses or hits on the disk cache
         # since the alru should populate from the results found on disk
         user_client.get_transformation_results(transformation_sk)
 
-        assert user_client._cache.stats() == (3, 3) and len(user_client._cache) == 3
+        assert user_client._cache.stats() == (4, 4) and len(user_client._cache) == 4
 
     def test_get_transformation_and_network_results(
         self,
