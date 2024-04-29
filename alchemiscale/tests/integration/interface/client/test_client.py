@@ -512,6 +512,18 @@ class TestClient:
         user_client.get_network(an_sk)
         assert user_client._cache.stats() == (1, 1) and len(user_client._cache) == 1
 
+        user_client.get_network.cache_clear()
+
+        # manually invalidate the cached network so it won't deserialize
+        cached_bytes = user_client._cache.get(str(an_sk))
+        corrupted_bytes = cached_bytes.replace(b":", b";")
+        user_client._cache.set(str(an_sk), corrupted_bytes)
+        with pytest.warns(UserWarning, match=f"Error decoding cached {an_sk.qualname}"):
+            user_client.get_network(an_sk)
+
+        new_cached_bytes = user_client._cache.get(str(an_sk))
+        assert new_cached_bytes != corrupted_bytes
+
     def test_get_network_weight(
         self,
         scope_test,
@@ -683,6 +695,18 @@ class TestClient:
         user_client.get_transformation(tf_sk)
         assert user_client._cache.stats() == (1, 1) and len(user_client._cache) == 1
 
+        user_client.get_transformation.cache_clear()
+
+        # manually invalidate the cached transformation so it won't deserialize
+        cached_bytes = user_client._cache.get(str(tf_sk))
+        corrupted_bytes = cached_bytes.replace(b":", b";")
+        user_client._cache.set(str(tf_sk), corrupted_bytes)
+        with pytest.warns(UserWarning, match=f"Error decoding cached {tf_sk.qualname}"):
+            user_client.get_transformation(tf_sk)
+
+        new_cached_bytes = user_client._cache.get(str(tf_sk))
+        assert new_cached_bytes != corrupted_bytes
+
     def test_get_chemicalsystem(
         self,
         scope_test,
@@ -726,6 +750,18 @@ class TestClient:
         # expect a hit
         user_client.get_chemicalsystem(cs_sk)
         assert user_client._cache.stats() == (1, 1) and len(user_client._cache) == 1
+
+        user_client.get_chemicalsystem.cache_clear()
+
+        # manually invalidate the cached ChemicalSystem so it won't deserialize
+        cached_bytes = user_client._cache.get(str(cs_sk))
+        corrupted_bytes = cached_bytes.replace(b":", b";")
+        user_client._cache.set(str(cs_sk), corrupted_bytes)
+        with pytest.warns(UserWarning, match=f"Error decoding cached {cs_sk.qualname}"):
+            user_client.get_chemicalsystem(cs_sk)
+
+        new_cached_bytes = user_client._cache.get(str(cs_sk))
+        assert new_cached_bytes != corrupted_bytes
 
     ### compute
 

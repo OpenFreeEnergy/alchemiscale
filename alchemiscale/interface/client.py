@@ -501,7 +501,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         # JSON could not decode
         except json.JSONDecodeError:
             warn(
-                f"Error decoding cached {scopedkey.__qualname__} ({scopedkey}), deleting entry and retriving new content."
+                f"Error decoding cached {scopedkey.qualname} ({scopedkey}), deleting entry and retriving new content."
             )
             self._cache.delete(str(scopedkey))
         # when trying to call the decode method with a None (i.e. cached entry not found)

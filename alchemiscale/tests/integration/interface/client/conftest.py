@@ -49,20 +49,25 @@ def uvicorn_server(user_api):
         yield
 
 
+@pytest.fixture(scope="session")
+def cache_dir(tmp_path_factory):
+    cache_dir = tmp_path_factory.mktemp("alchemiscale-cache")
+    return cache_dir
+
+
 @pytest.fixture(scope="module")
-def user_client(uvicorn_server, user_identity):
+def user_client(uvicorn_server, user_identity, cache_dir):
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        test_client = client.AlchemiscaleClient(
-            api_url="http://127.0.0.1:8000/",
-            identifier=user_identity["identifier"],
-            key=user_identity["key"],
-            cache_directory=tmpdir,
-        )
-        test_client._cache.stats(enable=True, reset=True)
+    test_client = client.AlchemiscaleClient(
+        api_url="http://127.0.0.1:8000/",
+        identifier=user_identity["identifier"],
+        key=user_identity["key"],
+        cache_directory=cache_dir,
+        cache_size_limit=int(1073741824 / 4),
+    )
+    test_client._cache.stats(enable=True, reset=True)
 
-        return test_client
+    return test_client
 
 
 @pytest.fixture(scope="module")
