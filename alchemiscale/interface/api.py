@@ -615,7 +615,7 @@ def get_network_actioned_tasks(
 
     try:
         taskhub_sk = n4js.get_taskhub(network_sk)
-    except Exception as e:
+    except (ValueError, KeyError) as e:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     task_sks = n4js.get_taskhub_actioned_tasks([taskhub_sk])[0]
@@ -688,7 +688,7 @@ def action_tasks(
 
     try:
         taskhub_sk = n4js.get_taskhub(sk)
-    except Exception as e:
+    except (ValueError, KeyError) as e:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     actioned_sks = n4js.action_tasks(tasks, taskhub_sk)
@@ -795,7 +795,7 @@ def cancel_tasks(
 
     try:
         taskhub_sk = n4js.get_taskhub(sk)
-    except Exception as e:
+    except (ValueError, KeyError) as e:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     canceled_sks = n4js.cancel_tasks(tasks, taskhub_sk)
