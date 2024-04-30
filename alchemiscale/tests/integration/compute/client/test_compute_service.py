@@ -21,16 +21,17 @@ class TestSynchronousComputeService:
     def service(self, n4js_preloaded, compute_client, tmpdir):
         with tmpdir.as_cwd():
             return SynchronousComputeService(
-                    ComputeServiceSettings(
-                        api_url=compute_client.api_url,
-                        identifier=compute_client.identifier,
-                        key=compute_client.key,
-                        name="test_compute_service",
-                        shared_basedir=Path("shared").absolute(),
-                        scratch_basedir=Path("scratch").absolute(),
-                        heartbeat_interval=1,
-                        sleep_interval=1,
-            ))
+                ComputeServiceSettings(
+                    api_url=compute_client.api_url,
+                    identifier=compute_client.identifier,
+                    key=compute_client.key,
+                    name="test_compute_service",
+                    shared_basedir=Path("shared").absolute(),
+                    scratch_basedir=Path("scratch").absolute(),
+                    heartbeat_interval=1,
+                    sleep_interval=1,
+                )
+            )
 
     def test_heartbeat(self, n4js_preloaded, service):
         n4js: Neo4jStore = n4js_preloaded

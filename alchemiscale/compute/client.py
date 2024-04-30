@@ -39,7 +39,9 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         return ComputeServiceID(res)
 
     def deregister(self, compute_service_id: ComputeServiceID):
-        res = self._post_resource(f"/computeservice/{compute_service_id}/deregister", {})
+        res = self._post_resource(
+            f"/computeservice/{compute_service_id}/deregister", {}
+        )
         return ComputeServiceID(res)
 
     def heartbeat(self, compute_service_id: ComputeServiceID):
@@ -86,19 +88,19 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]
 
     def claim_tasks(
-            self,
+        self,
         scopes: List[Scope],
         compute_service_id: ComputeServiceID,
         count: int = 1,
         protocols: Optional[List[str]] = None,
-        ):
-        """Claim Tasks from TaskHubs within a list of Scopes.
-
-        """
+    ):
+        """Claim Tasks from TaskHubs within a list of Scopes."""
         data = dict(
-                scopes=[scope.dict() for scope in scopes],
-                compute_service_id=str(compute_service_id), count=count, protocols=protocols
-                )
+            scopes=[scope.dict() for scope in scopes],
+            compute_service_id=str(compute_service_id),
+            count=count,
+            protocols=protocols,
+        )
         tasks = self._post_resource("/claim", data)
 
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]

@@ -195,6 +195,7 @@ def claim_taskhub_tasks(
 
     return [str(t) if t is not None else None for t in tasks]
 
+
 @router.post("/claim")
 def claim_tasks(
     scopes: List[Scope] = Body(),
@@ -214,11 +215,7 @@ def claim_tasks(
     # query each scope for available taskhubs
     # loop might be more removable in the future with a Union like operator on scopes
     for single_query_scope in set(query_scopes):
-        taskhubs.update(
-            n4js.query_taskhubs(
-                scope=single_query_scope, return_gufe=True
-            )
-        )
+        taskhubs.update(n4js.query_taskhubs(scope=single_query_scope, return_gufe=True))
 
     # list of tasks to return
     tasks = []
@@ -235,9 +232,7 @@ def claim_tasks(
             break
 
         # based on weights, choose taskhub to draw from
-        taskhub: ScopedKey = random.choices(
-            list(taskhubs.keys()), weights=weights
-        )[0]
+        taskhub: ScopedKey = random.choices(list(taskhubs.keys()), weights=weights)[0]
 
         # claim tasks from the taskhub
         claimed_tasks = n4js.claim_taskhub_tasks(

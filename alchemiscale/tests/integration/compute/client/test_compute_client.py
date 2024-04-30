@@ -195,12 +195,16 @@ class TestComputeClient:
 
         # claim a single task; should get highest priority task
         task_sks = compute_client.claim_tasks(
-                scopes=[scope_test],
-                compute_service_id=compute_service_id,
+            scopes=[scope_test],
+            compute_service_id=compute_service_id,
         )
         all_tasks = n4js_preloaded.query_tasks(scope=scope_test)
-        priorities = {task_sk: priority for task_sk, priority
-                      in zip(all_tasks, n4js_preloaded.get_task_priority(all_tasks))}
+        priorities = {
+            task_sk: priority
+            for task_sk, priority in zip(
+                all_tasks, n4js_preloaded.get_task_priority(all_tasks)
+            )
+        }
 
         assert len(task_sks) == 1
         assert task_sks[0] in all_tasks

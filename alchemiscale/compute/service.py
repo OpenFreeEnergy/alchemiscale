@@ -174,10 +174,12 @@ class SynchronousComputeService:
 
         """
 
-        tasks = self.client.claim_tasks(scopes=self.scopes,
-                                        compute_service_id=self.compute_service_id,
-                                        count=count,
-                                        protocols=protocols)
+        tasks = self.client.claim_tasks(
+            scopes=self.scopes,
+            compute_service_id=self.compute_service_id,
+            count=count,
+            protocols=protocols,
+        )
 
         return tasks
 
