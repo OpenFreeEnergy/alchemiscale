@@ -13,6 +13,8 @@ from urllib.parse import urljoin
 from functools import wraps
 import gzip
 from pathlib import Path
+import os
+from typing import Union, Optional
 from diskcache import Cache
 
 import requests
@@ -61,7 +63,7 @@ class AlchemiscaleBaseClient:
         api_url: str,
         identifier: str,
         key: str,
-        cache_directory=Path.home() / ".cache" / "alchemiscale",
+        cache_directory: Optional[Union[Path, str]] = None,
         cache_size_limit: int = 1073741824,
         max_retries: int = 5,
         retry_base_seconds: float = 2.0,
@@ -79,7 +81,10 @@ class AlchemiscaleBaseClient:
         key
             Credential for the identity used for authentication.
         cache_directory
-            Location of the cache directory. Defaults to `${HOME}/.cache/alchemiscale`.
+            Location of the cache directory as either a `pathlib.Path` or `str`.
+            If `None` is provided then the directory will be determined via the
+            `XDG_CACHE_HOME` environment variable or default to
+            `${HOME}/.cache/alchemiscale`. Defaults to `None`.
         cache_size_limit
             Maximum size of the client cache. Defaults to 1 GB.
         max_retries
@@ -117,11 +122,33 @@ class AlchemiscaleBaseClient:
         self._session = None
         self._lock = None
 
+        if cache_size_limit < 0:
+            raise ValueError(
+                "`cache_size_limit` must be greater than or equal to zero."
+            )
+
         self._cache = Cache(
-            cache_directory,
+            self._determine_cache_dir(cache_directory),
             size_limit=cache_size_limit,
             eviction_policy="least-recently-used",
         )
+
+    @staticmethod
+    def _determine_cache_dir(cache_directory: Optional[Union[Path, str]]):
+        if not (isinstance(cache_directory, (Path, str)) or cache_directory is None):
+            raise TypeError(
+                "`cache_directory` must be a `str`, `pathlib.Path`, or `None`."
+            )
+
+        if cache_directory is None:
+            default_dir = Path().home() / ".cache"
+            cache_directory = (
+                Path(os.getenv("XDG_CACHE_HOME", default_dir)) / "alchemiscale"
+            )
+        else:
+            cache_directory = Path(cache_directory)
+
+        return cache_directory.absolute()
 
     def _settings(self):
         return dict(

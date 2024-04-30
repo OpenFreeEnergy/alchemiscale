@@ -1,5 +1,6 @@
 import pytest
 from time import sleep
+import os
 from pathlib import Path
 from itertools import chain
 
@@ -19,6 +20,40 @@ from alchemiscale.interface.client import AlchemiscaleClientError
 
 
 class TestClient:
+    def test_cache_size_limit_negative(
+        self, user_client: client.AlchemiscaleBaseClient
+    ):
+        settings = user_client._settings()
+        settings["cache_size_limit"] = -1
+        with pytest.raises(
+            ValueError,
+            match="`cache_size_limit` must be greater than or equal to zero.",
+        ):
+            client.AlchemiscaleClient(**settings)
+
+    def test_cache_dir_not_path_str_none(self, user_client: client.AlchemiscaleClient):
+        settings = user_client._settings()
+        settings["cache_directory"] = 0
+        with pytest.raises(
+            TypeError,
+            match="`cache_directory` must be a `str`, `pathlib.Path`, or `None`.",
+        ):
+            client.AlchemiscaleClient(**settings)
+
+    # here we test the AlchemiscaleClient._determine_cache_dir
+    # so we don't create non-temporary files on the testing platform
+    def test_cache_dir_none(self):
+        # set custom XDG_CACHE_HOME
+        target_dir = Path().home() / ".other_cache"
+        os.environ["XDG_CACHE_HOME"] = str(target_dir)
+        cache_dir = client.AlchemiscaleClient._determine_cache_dir(None)
+        assert cache_dir == target_dir.absolute() / "alchemiscale"
+
+        # remove the env variable to get the default directory location
+        os.environ.pop("XDG_CACHE_HOME", None)
+        cache_dir = client.AlchemiscaleClient._determine_cache_dir(None)
+        assert cache_dir == Path().home() / ".cache" / "alchemiscale"
+
     def test_wrong_credential(
         self,
         scope_test,
