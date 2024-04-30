@@ -4,16 +4,15 @@ from collections import defaultdict
 import pytest
 from fastapi.testclient import TestClient
 
-from gufe import AlchemicalNetwork
+from gufe import AlchemicalNetwork, NonTransformation
 
 from alchemiscale.settings import get_base_api_settings
 from alchemiscale.storage.statestore import Neo4jStore
-from alchemiscale.compute import api, client
+from alchemiscale.compute import api
 from alchemiscale.security.models import CredentialedComputeIdentity, TokenData
 from alchemiscale.security.auth import hash_key
 from alchemiscale.base.api import (
     get_token_data_depends,
-    get_n4js_depends,
     get_s3os_depends,
 )
 
@@ -82,7 +81,9 @@ def n4js_preloaded(
     n4js: Neo4jStore = n4js_fresh
 
     # Set up tasks from select set of transformations
-    transformations = list(network_tyk2.edges)[0:3]
+    transformations = sorted(
+        filter(lambda x: type(x) is not NonTransformation, network_tyk2.edges)
+    )[0:3]
 
     # set starting contents for many of the tests in this module
     for single_scope in multiple_scopes:

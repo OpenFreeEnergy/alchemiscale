@@ -695,7 +695,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # not yet tested though
         """
         MATCH p = (n:AlchemicalNetwork {{_scoped_key: "{network_node['_scoped_key']}")-[r:DEPENDS_ON*]->(m),
-              (n)-[:DEPENDS_ON]->(t:Transformation),
+              (n)-[:DEPENDS_ON]->(t:Transformation|NonTransformation),
               (n)-[:DEPENDS_ON]->(c:ChemicalSystem)
         OPTIONAL MATCH (o:AlchemicalNetwork)
         WHERE NOT o._scoped_key = "{network_node['_scoped_key']}"
@@ -894,7 +894,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Query for `Transformation`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
-            qualname="Transformation", additional=additional, key=key, scope=scope
+            qualname="Transformation|NonTransformation",
+            additional=additional,
+            key=key,
+            scope=scope,
         )
 
     def query_chemicalsystems(self, *, name=None, key=None, scope: Scope = Scope()):
@@ -907,7 +910,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_network_transformations(self, network: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
         q = f"""
-        MATCH (:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(t:Transformation)
+        MATCH (:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(t:Transformation|NonTransformation)
         WITH t._scoped_key as sk
         RETURN sk
         """
@@ -922,7 +925,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
         q = f"""
-        MATCH (:Transformation {{_scoped_key: '{transformation}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        MATCH (:Transformation|NonTransformation {{_scoped_key: '{transformation}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
         WITH an._scoped_key as sk
         RETURN sk
         """
@@ -969,7 +972,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> List[ScopedKey]:
         """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
         q = f"""
-        MATCH (:Transformation {{_scoped_key: '{transformation}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        MATCH (:Transformation|NonTransformation {{_scoped_key: '{transformation}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
         WITH cs._scoped_key as sk
         RETURN sk
         """
@@ -986,7 +989,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> List[ScopedKey]:
         """List ScopedKeys for the Transformations associated with the given ChemicalSystem."""
         q = f"""
-        MATCH (:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(t:Transformation)
+        MATCH (:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(t:Transformation|NonTransformation)
         WITH t._scoped_key as sk
         RETURN sk
         """
@@ -1013,7 +1016,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # get all task result protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
         q = """
-        MATCH (trans:Transformation {_scoped_key: $scoped_key}),
+        MATCH (trans:Transformation|NonTransformation {_scoped_key: $scoped_key}),
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = true
         WITH res._scoped_key as sk
@@ -1027,7 +1030,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # get all task failure protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
         q = """
-        MATCH (trans:Transformation {_scoped_key: $scoped_key}),
+        MATCH (trans:Transformation|NonTransformation {_scoped_key: $scoped_key}),
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = false
         WITH res._scoped_key as sk
@@ -1403,7 +1406,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (th:TaskHub {{_scoped_key: "{taskhub}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
 
         // get the task we want to add to the hub; check that it connects to same network
-        MATCH (task:Task {{_scoped_key: task_sk}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
+        MATCH (task:Task {{_scoped_key: task_sk}})-[:PERFORMS]->(tf:Transformation|NonTransformation)<-[:DEPENDS_ON]-(an)
 
         // only proceed for cases where task is not already actioned on hub
         // and where the task is either in 'waiting', 'running', or 'error' status
@@ -1800,7 +1803,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         q = f"""
             UNWIND {cypher_list_from_scoped_keys(task_list)} as task
-            MATCH (t:Task {{`_scoped_key`: task}})-[PERFORMS]->(tf:Transformation)
+            MATCH (t:Task {{`_scoped_key`: task}})-[PERFORMS]->(tf:Transformation|NonTransformation)
             return t, tf._scoped_key as tf_sk
         """
 
@@ -1988,7 +1991,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> List[ScopedKey]:
         """List ScopedKeys for all Tasks associated with the given AlchemicalNetwork."""
         q = f"""
-        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
+        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation|NonTransformation),
               (tf)<-[:PERFORMS]-(t:Task)
         """
 
@@ -2012,7 +2015,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_task_networks(self, task: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Task."""
         q = f"""
-        MATCH (t:Task {{_scoped_key: '{task}'}})-[:PERFORMS]->(tf:Transformation),
+        MATCH (t:Task {{_scoped_key: '{task}'}})-[:PERFORMS]->(tf:Transformation|NonTransformation),
               (tf)<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
         WITH an._scoped_key as sk
         RETURN sk
@@ -2049,7 +2052,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         q = f"""
-        MATCH (trans:Transformation {{_scoped_key: '{transformation}'}})<-[:PERFORMS]-(task:Task)
+        MATCH (trans:Transformation|NonTransformation {{_scoped_key: '{transformation}'}})<-[:PERFORMS]-(task:Task)
         """
 
         if status is not None:
@@ -2104,7 +2107,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         q = f"""
-        MATCH (task:Task {{_scoped_key: "{task}"}})-[:PERFORMS]->(trans:Transformation)
+        MATCH (task:Task {{_scoped_key: "{task}"}})-[:PERFORMS]->(trans:Transformation|NonTransformation)
         OPTIONAL MATCH (task)-[:EXTENDS]->(prev:Task)-[:RESULTS_IN]->(result:ProtocolDAGResultRef)
         RETURN trans, result
         """
@@ -2300,7 +2303,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             network_state = ".*"
 
         q = f"""
-        MATCH (n:Task {{{prop_string}}})-[:PERFORMS]->(:Transformation)<-[:DEPENDS_ON]-(:AlchemicalNetwork)<-[:MARKS]-(nm:NetworkMark)
+        MATCH (n:Task {{{prop_string}}})-[:PERFORMS]->(:Transformation|NonTransformation)<-[:DEPENDS_ON]-(:AlchemicalNetwork)<-[:MARKS]-(nm:NetworkMark)
         WHERE nm.state =~ $state_pattern
         RETURN n.status AS status, count(DISTINCT n) as counts
         """
@@ -2314,7 +2317,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Return status counts for all Tasks associated with the given AlchemicalNetworks."""
         q = f"""
         UNWIND {cypher_list_from_scoped_keys(networks)} as network
-        MATCH (an:AlchemicalNetwork {{_scoped_key: network}})-[:DEPENDS_ON]->(tf:Transformation),
+        MATCH (an:AlchemicalNetwork {{_scoped_key: network}})-[:DEPENDS_ON]->(tf:Transformation|NonTransformation),
               (tf)<-[:PERFORMS]-(t:Task)
         RETURN an._scoped_key AS sk, t.status AS status, count(t) as counts
         """
@@ -2331,7 +2334,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_transformation_status(self, transformation: ScopedKey) -> Dict[str, int]:
         """Return status counts for all Tasks associated with the given Transformation."""
         q = f"""
-        MATCH (:Transformation {{_scoped_key: "{transformation}"}})<-[:PERFORMS]-(t:Task)
+        MATCH (:Transformation|NonTransformation {{_scoped_key: "{transformation}"}})<-[:PERFORMS]-(t:Task)
         RETURN t.status AS status, count(t) as counts
         """
         with self.transaction() as tx:

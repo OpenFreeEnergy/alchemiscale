@@ -594,7 +594,7 @@ class TestNeo4jStore(TestStateStore):
         task_sk: ScopedKey = n4js.create_task(transformation_sk)
         q = f"""match (n:Task {{_gufe_key: '{task_sk.gufe_key}',
                                              _org: '{task_sk.org}', _campaign: '{task_sk.campaign}',
-                                             _project: '{task_sk.project}'}})-[:PERFORMS]->(m:Transformation)
+                                             _project: '{task_sk.project}'}})-[:PERFORMS]->(m:Transformation|NonTransformation)
                 return m
                 """
         m = n4js.execute_query(q).records[0]["m"]
