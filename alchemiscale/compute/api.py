@@ -200,7 +200,7 @@ def claim_tasks(
     scopes: List[Scope] = Body(),
     compute_service_id: str = Body(),
     count: int = Body(),
-    protocols: Optional[List[str]] = Body(),
+    protocols: Optional[List[str]] = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):

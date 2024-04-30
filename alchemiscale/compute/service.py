@@ -173,44 +173,11 @@ class SynchronousComputeService:
             Regex patterns are allowed.
 
         """
-        # list of tasks to return
-        tasks = []
 
-        taskhubs: Dict[ScopedKey, TaskHub] = self.client.query_taskhubs(
-            scopes=self.scopes, return_gufe=True
-        )
-
-        if len(taskhubs) == 0:
-            return []
-
-        # claim tasks from taskhubs based on weight; keep going till we hit our
-        # total desired task count, or we run out of taskhubs to draw from
-        while len(tasks) < count and len(taskhubs) > 0:
-            weights = [th.weight for th in taskhubs.values()]
-
-            if sum(weights) == 0:
-                break
-
-            # based on weights, choose taskhub to draw from
-            taskhub: List[ScopedKey] = random.choices(
-                list(taskhubs.keys()), weights=weights
-            )[0]
-
-            # claim tasks from the taskhub
-            claimed_tasks = self.client.claim_taskhub_tasks(
-                taskhub,
-                compute_service_id=self.compute_service_id,
-                count=(count - len(tasks)),
-                protocols=protocols,
-            )
-
-            # gather up claimed tasks, if present
-            for t in claimed_tasks:
-                if t is not None:
-                    tasks.append(t)
-
-            # remove this taskhub from the options available; repeat
-            taskhubs.pop(taskhub)
+        tasks = self.client.claim_tasks(scopes=self.scopes,
+                                        compute_service_id=self.compute_service_id,
+                                        count=count,
+                                        protocols=protocols)
 
         return tasks
 
