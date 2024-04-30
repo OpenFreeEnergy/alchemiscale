@@ -1212,7 +1212,11 @@ class Neo4jStore(AlchemiscaleStateStore):
                 match (th:TaskHub {{network: "{network}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
                 return th
                 """
-        node = record_data_to_node(self.execute_query(q).records[0]["th"])
+
+        try:
+            node = record_data_to_node(self.execute_query(q).records[0]["th"])
+        except IndexError:
+            raise KeyError("No such object in database")
 
         if return_gufe:
             return self._subgraph_to_gufe([node], node)[node]

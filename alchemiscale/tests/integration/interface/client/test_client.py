@@ -3,17 +3,15 @@ from time import sleep
 from pathlib import Path
 from itertools import chain
 
-from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
+from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey
 from gufe.protocols.protocoldag import execute_DAG
-from gufe.tests.test_protocol import BrokenProtocol
 import networkx as nx
 
 from alchemiscale.models import ScopedKey, Scope
 from alchemiscale.storage.models import TaskStatusEnum, NetworkStateEnum
 from alchemiscale.storage.cypher import cypher_list_from_scoped_keys
 from alchemiscale.interface import client
-from alchemiscale.utils import RegistryBackup
 from alchemiscale.tests.integration.interface.utils import (
     get_user_settings_override,
 )
@@ -38,7 +36,7 @@ class TestClient:
         uvicorn_server,
     ):
         settings = get_user_settings_override()
-        assert user_client._jwtoken == None
+        assert user_client._jwtoken is None
         user_client._get_token()
 
         token = user_client._jwtoken
@@ -483,6 +481,21 @@ class TestClient:
         assert an == network_tyk2
         assert an is network_tyk2
 
+    def test_get_network_bad_network_key(
+        self,
+        scope_test: Scope,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        invalid_key = "AlchemicalNetwork-00000000000000000000000000000000-test_org-test_campaign-test_project"
+        an_sk = ScopedKey.from_str(invalid_key)
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'No such object in database'",
+        ):
+            user_client.get_network(an_sk)
+
     def test_get_network_weight(
         self,
         scope_test,
@@ -623,6 +636,19 @@ class TestClient:
         assert tf == transformation
         assert tf is transformation
 
+    def test_get_transformation_bad_transformation_key(
+        self, scope_test, n4js_preloaded, user_client
+    ):
+
+        invalid_key = "Transformation-00000000000000000000000000000000-test_org-test_campaign-test_project"
+        tf_sk = ScopedKey.from_str(invalid_key)
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'No such object in database'",
+        ):
+            user_client.get_transformation(tf_sk)
+
     def test_get_chemicalsystem(
         self,
         scope_test,
@@ -635,6 +661,19 @@ class TestClient:
 
         assert cs == chemicalsystem
         assert cs is chemicalsystem
+
+    def test_get_chemicalsystem_bad_chemicalsystem_key(
+        self, scope_test, n4js_preloaded, user_client
+    ):
+
+        invalid_key = "ChemicalSystem-00000000000000000000000000000000-test_org-test_campaign-test_project"
+        cs_sk = ScopedKey.from_str(invalid_key)
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'No such object in database'",
+        ):
+            user_client.get_chemicalsystem(cs_sk)
 
     ### compute
 
@@ -667,6 +706,34 @@ class TestClient:
             n4js.get_transformation_tasks(sk, extends=task_sks[0])
         )
         assert set() == set(n4js.get_transformation_tasks(sk, extends=task_sks[1]))
+
+    def test_create_tasks_extends_qualname_not_task(
+        self,
+        network_tyk2,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        # get Transformation to test against
+        transformation = list(network_tyk2.edges)[0]
+        sk = user_client.get_scoped_key(transformation, scope_test)
+
+        # create the task and get the ScopedKey
+        task_sk = user_client.create_tasks(sk)[0]
+
+        # mess up the qualname
+        scoped_key_wrong_qualname = ScopedKey.from_str(
+            str(task_sk).replace("Task", "NotTask")
+        )
+
+        assert scoped_key_wrong_qualname.qualname == "NotTask"
+
+        # use the incorrect ScopedKey, expect to see an AlchemiscaleClientError
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : `extends` ScopedKey \(",
+        ):
+            user_client.create_tasks(sk, count=4, extends=scoped_key_wrong_qualname)
 
     def test_create_transformations_tasks(
         self,
@@ -809,6 +876,25 @@ class TestClient:
         task_sks = user_client.get_network_tasks(an_sk, status="complete")
         assert len(task_sks) == 0
 
+    def test_get_network_tasks_invalid_status_enum(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        an_sk = user_client.query_networks(scope=scope_test)[0]
+        tf_sks = user_client.get_network_transformations(an_sk)
+
+        task_sks = []
+        for tf_sk in tf_sks[:10]:
+            task_sks.extend(user_client.create_tasks(tf_sk, count=3))
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'notastatus' is not a valid TaskStatusEnum",
+        ):
+            user_client.get_network_tasks(an_sk, status="notastatus")
+
     def test_get_task_networks(
         self,
         scope_test,
@@ -835,8 +921,6 @@ class TestClient:
         user_client: client.AlchemiscaleClient,
         network_tyk2,
     ):
-        n4js = n4js_preloaded
-
         # select the transformation we want to compute
         an = network_tyk2
         transformation = list(an.edges)[0]
@@ -903,6 +987,22 @@ class TestClient:
             for task_sk in tf_task_sks:
                 assert user_client.get_task_transformation(task_sk) == tf_sk
 
+    def test_get_task_transformation_transformation_no_exists(
+        self,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+
+        task_sk = ScopedKey.from_str(
+            "Task-00000000000000000000000000000000-test_org-test_campaign-test_project"
+        )
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'No such object in database'",
+        ):
+            user_client.get_task_transformation(task_sk)
+
     def test_get_scope_status(
         self,
         multiple_scopes,
@@ -931,7 +1031,7 @@ class TestClient:
         other_scope = Scope("other_org", "other_campaign", "other_project")
         n4js_preloaded.assemble_network(network_tyk2, other_scope)
         other_tf_sk = n4js_preloaded.query_transformations(scope=other_scope)[0]
-        task_sk = n4js_preloaded.create_task(other_tf_sk)
+        _ = n4js_preloaded.create_task(other_tf_sk)
 
         # ask for the scope that we don't have access to
         status_counts = user_client.get_scope_status(other_scope)
@@ -1109,8 +1209,6 @@ class TestClient:
         network_tyk2,
         get_weights,
     ):
-        n4js = n4js_preloaded
-
         an = network_tyk2
         transformation = list(an.edges)[0]
 
@@ -1138,6 +1236,26 @@ class TestClient:
             assert list(results.values()) == [0.5, 0.5]
 
         assert set(results) == set(task_sks[:2])
+
+    def test_get_network_actioned_tasks_network_scopedkey_wrong_qualname(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client,
+        network_tyk2,
+    ):
+        an = network_tyk2
+        network_sk = user_client.get_scoped_key(an, scope_test)
+
+        wrong_qualname_sk = ScopedKey.from_str(
+            str(network_sk).replace("AlchemicalNetwork", "NotANetwork")
+        )
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : `network` ScopedKey does not correspond to an `AlchemicalNetwork`",
+        ):
+            user_client.get_network_actioned_tasks(wrong_qualname_sk)
 
     @pytest.mark.parametrize(
         "get_weights",
@@ -1226,7 +1344,6 @@ class TestClient:
         network_tyk2,
         actioned_tasks,
     ):
-        n4js = n4js_preloaded
         an = network_tyk2
 
         transformation = list(an.edges)[0]
@@ -1298,6 +1415,31 @@ class TestClient:
 
         assert set(task_sks_e) == set(actioned_sks_e)
 
+    def test_action_tasks_network_scopedkey_wrong_qualname(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        task_sks = user_client.create_tasks(transformation_sk, count=3)
+
+        wrong_qualname_sk = ScopedKey.from_str(
+            str(network_sk).replace("AlchemicalNetwork", "NotANetwork")
+        )
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : `network` ScopedKey does not correspond to an `AlchemicalNetwork`",
+        ):
+            user_client.action_tasks(task_sks, wrong_qualname_sk)
+
     @pytest.mark.parametrize(
         "weight,shouldfail",
         [
@@ -1330,13 +1472,13 @@ class TestClient:
 
         if shouldfail:
             with pytest.raises(AlchemiscaleClientError):
-                actioned_sks = user_client.action_tasks(
+                user_client.action_tasks(
                     task_sks,
                     network_sk,
                     weight,
                 )
         else:
-            actioned_sks = user_client.action_tasks(
+            user_client.action_tasks(
                 task_sks,
                 network_sk,
                 weight,
@@ -1433,6 +1575,34 @@ class TestClient:
 
         assert canceled_sks_2 == [None]
 
+    def test_cancel_tasks_wrong_qualname(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        task_sks = user_client.create_tasks(transformation_sk, count=3)
+
+        user_client.action_tasks(task_sks[::-1], network_sk)
+
+        wrong_qualname_sk = ScopedKey.from_str(
+            str(network_sk).replace("AlchemicalNetwork", "NotANetwork")
+        )
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : `network` ScopedKey does not correspond to an `AlchemicalNetwork`",
+        ):
+            user_client.cancel_tasks(task_sks[1:2], wrong_qualname_sk)
+
     @pytest.mark.parametrize(
         "status, should_raise",
         [
@@ -1457,7 +1627,6 @@ class TestClient:
         an = network_tyk2
         transformation = list(an.edges)[0]
 
-        network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
         all_tasks = user_client.create_tasks(transformation_sk, count=5)
@@ -1498,7 +1667,6 @@ class TestClient:
         an = network_tyk2
         transformation = list(an.edges)[0]
 
-        network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
         all_tasks = user_client.create_tasks(transformation_sk, count=5)
@@ -1551,7 +1719,6 @@ class TestClient:
         an = network_tyk2
         transformation = list(an.edges)[0]
 
-        network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
         all_tasks = user_client.create_tasks(transformation_sk, count=5)
@@ -1582,7 +1749,6 @@ class TestClient:
         an = network_tyk2
         transformation = list(an.edges)[0]
 
-        network_sk = user_client.get_scoped_key(an, scope_test)
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
         all_tasks = user_client.create_tasks(transformation_sk, count=5)
@@ -1684,7 +1850,7 @@ class TestClient:
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
         # user client : create three independent tasks for the transformation
-        tasks = user_client.create_tasks(transformation_sk, count=3)
+        user_client.create_tasks(transformation_sk, count=3)
 
         # user client : action the tasks for execution
         all_tasks = user_client.get_transformation_tasks(transformation_sk)
@@ -1770,7 +1936,7 @@ class TestClient:
                     raise Exception("Network out doesn't exactly match network in yet")
                 else:
                     break
-            except:
+            except Exception:
                 sleep(0.1)
 
         tf_sks = user_client.get_network_transformations(network_sk)
@@ -1909,7 +2075,7 @@ class TestClient:
                     raise Exception("Network out doesn't exactly match network in yet")
                 else:
                     break
-            except:
+            except Exception:
                 sleep(0.1)
 
         tf_sks = user_client.get_network_transformations(network_sk)
