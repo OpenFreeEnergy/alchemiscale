@@ -1,14 +1,10 @@
 import pytest
 from copy import copy
-from time import sleep
-import tempfile
-from pathlib import Path
 
 import uvicorn
-import requests
 
 from alchemiscale.settings import get_base_api_settings
-from alchemiscale.base.api import get_n4js_depends, get_s3os_depends
+from alchemiscale.base.api import get_s3os_depends
 from alchemiscale.interface import api, client
 
 from alchemiscale.tests.integration.interface.utils import get_user_settings_override
