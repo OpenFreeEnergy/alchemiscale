@@ -1681,7 +1681,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             raise ValueError("`protocols` must be either `None` or not empty")
 
         q = f"""
-            MATCH (th:TaskHub {{`_scoped_key`: '{taskhub}'}})-[actions:ACTIONS]-(task:Task),
+            MATCH (th:TaskHub {{`_scoped_key`: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
             WHERE task.status = '{TaskStatusEnum.waiting.value}'
             AND actions.weight > 0
             OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
@@ -1693,6 +1693,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         if protocols is not None:
             q += f"""
             MATCH (task)-[:PERFORMS]->(:Transformation)-[:DEPENDS_ON]->(protocol:{cypher_or(protocols)})
+            WITH task, other_task, actions
             """
 
         q += f"""
