@@ -198,7 +198,7 @@ class TestComputeClient:
                 scopes=[scope_test],
                 compute_service_id=compute_service_id,
         )
-        all_tasks = n4js_preloaded.query_tasks(scope=scope_test, status='waiting')
+        all_tasks = n4js_preloaded.query_tasks(scope=scope_test)
         priorities = {task_sk: priority for task_sk, priority
                       in zip(all_tasks, n4js_preloaded.get_task_priority(all_tasks))}
 

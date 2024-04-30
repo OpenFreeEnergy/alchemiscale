@@ -179,7 +179,7 @@ def claim_taskhub_tasks(
     *,
     compute_service_id: str = Body(),
     count: int = Body(),
-    protocols: Optional[List[str]] = Body(),
+    protocols: Optional[List[str]] = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -208,13 +208,13 @@ def claim_tasks(
     scopes_reduced = minimize_scope_space(scopes)
     query_scopes = []
     for scope in scopes_reduced:
-        query_scopes.append(validate_scopes_query(scope, token))
+        query_scopes.extend(validate_scopes_query(scope, token))
 
     taskhubs = dict()
     # query each scope for available taskhubs
     # loop might be more removable in the future with a Union like operator on scopes
-    for single_query_scope in query_scopes:
-        taskhubs.update_results(
+    for single_query_scope in set(query_scopes):
+        taskhubs.update(
             n4js.query_taskhubs(
                 scope=single_query_scope, return_gufe=True
             )
@@ -240,7 +240,7 @@ def claim_tasks(
         )[0]
 
         # claim tasks from the taskhub
-        claimed_tasks = n4js.client.claim_taskhub_tasks(
+        claimed_tasks = n4js.claim_taskhub_tasks(
             taskhub,
             compute_service_id=ComputeServiceID(compute_service_id),
             count=(count - len(tasks)),
