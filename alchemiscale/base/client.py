@@ -339,8 +339,12 @@ class AlchemiscaleBaseClient:
             raise AlchemiscaleConnectionError(*e.args)
 
         if not 200 <= resp.status_code < 300:
+            try:
+                detail = resp.json()["detail"]
+            except Exception:
+                detail = resp.text
             raise self._exception(
-                f"Status Code {resp.status_code} : {resp.reason}",
+                f"Status Code {resp.status_code} : {resp.reason} : {detail}",
                 status_code=resp.status_code,
             )
 

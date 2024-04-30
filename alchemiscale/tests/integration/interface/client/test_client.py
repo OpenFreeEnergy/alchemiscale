@@ -524,6 +524,21 @@ class TestClient:
         new_cached_bytes = user_client._cache.get(str(an_sk))
         assert new_cached_bytes != corrupted_bytes
 
+    def test_get_network_bad_network_key(
+        self,
+        scope_test: Scope,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        invalid_key = "AlchemicalNetwork-00000000000000000000000000000000-test_org-test_campaign-test_project"
+        an_sk = ScopedKey.from_str(invalid_key)
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'No such object in database'",
+        ):
+            user_client.get_network(an_sk)
+
     def test_get_network_weight(
         self,
         scope_test,
@@ -707,6 +722,19 @@ class TestClient:
         new_cached_bytes = user_client._cache.get(str(tf_sk))
         assert new_cached_bytes != corrupted_bytes
 
+    def test_get_transformation_bad_transformation_key(
+        self, scope_test, n4js_preloaded, user_client
+    ):
+
+        invalid_key = "Transformation-00000000000000000000000000000000-test_org-test_campaign-test_project"
+        tf_sk = ScopedKey.from_str(invalid_key)
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'No such object in database'",
+        ):
+            user_client.get_transformation(tf_sk)
+
     def test_get_chemicalsystem(
         self,
         scope_test,
@@ -763,6 +791,19 @@ class TestClient:
         new_cached_bytes = user_client._cache.get(str(cs_sk))
         assert new_cached_bytes != corrupted_bytes
 
+    def test_get_chemicalsystem_bad_chemicalsystem_key(
+        self, scope_test, n4js_preloaded, user_client
+    ):
+
+        invalid_key = "ChemicalSystem-00000000000000000000000000000000-test_org-test_campaign-test_project"
+        cs_sk = ScopedKey.from_str(invalid_key)
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'No such object in database'",
+        ):
+            user_client.get_chemicalsystem(cs_sk)
+
     ### compute
 
     def test_create_tasks(
@@ -794,6 +835,34 @@ class TestClient:
             n4js.get_transformation_tasks(sk, extends=task_sks[0])
         )
         assert set() == set(n4js.get_transformation_tasks(sk, extends=task_sks[1]))
+
+    def test_create_tasks_extends_qualname_not_task(
+        self,
+        network_tyk2,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        # get Transformation to test against
+        transformation = list(network_tyk2.edges)[0]
+        sk = user_client.get_scoped_key(transformation, scope_test)
+
+        # create the task and get the ScopedKey
+        task_sk = user_client.create_tasks(sk)[0]
+
+        # mess up the qualname
+        scoped_key_wrong_qualname = ScopedKey.from_str(
+            str(task_sk).replace("Task", "NotTask")
+        )
+
+        assert scoped_key_wrong_qualname.qualname == "NotTask"
+
+        # use the incorrect ScopedKey, expect to see an AlchemiscaleClientError
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : `extends` ScopedKey \(",
+        ):
+            user_client.create_tasks(sk, count=4, extends=scoped_key_wrong_qualname)
 
     def test_create_transformations_tasks(
         self,
@@ -936,6 +1005,25 @@ class TestClient:
         task_sks = user_client.get_network_tasks(an_sk, status="complete")
         assert len(task_sks) == 0
 
+    def test_get_network_tasks_invalid_status_enum(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        an_sk = user_client.query_networks(scope=scope_test)[0]
+        tf_sks = user_client.get_network_transformations(an_sk)
+
+        task_sks = []
+        for tf_sk in tf_sks[:10]:
+            task_sks.extend(user_client.create_tasks(tf_sk, count=3))
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'notastatus' is not a valid TaskStatusEnum",
+        ):
+            user_client.get_network_tasks(an_sk, status="notastatus")
+
     def test_get_task_networks(
         self,
         scope_test,
@@ -1027,6 +1115,22 @@ class TestClient:
         for tf_sk, tf_task_sks in zip(tf_sks, task_sks):
             for task_sk in tf_task_sks:
                 assert user_client.get_task_transformation(task_sk) == tf_sk
+
+    def test_get_task_transformation_transformation_no_exists(
+        self,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+
+        task_sk = ScopedKey.from_str(
+            "Task-00000000000000000000000000000000-test_org-test_campaign-test_project"
+        )
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : 'No such object in database'",
+        ):
+            user_client.get_task_transformation(task_sk)
 
     def test_get_scope_status(
         self,
@@ -1262,6 +1366,26 @@ class TestClient:
 
         assert set(results) == set(task_sks[:2])
 
+    def test_get_network_actioned_tasks_network_scopedkey_wrong_qualname(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client,
+        network_tyk2,
+    ):
+        an = network_tyk2
+        network_sk = user_client.get_scoped_key(an, scope_test)
+
+        wrong_qualname_sk = ScopedKey.from_str(
+            str(network_sk).replace("AlchemicalNetwork", "NotANetwork")
+        )
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : `network` ScopedKey does not correspond to an `AlchemicalNetwork`",
+        ):
+            user_client.get_network_actioned_tasks(wrong_qualname_sk)
+
     @pytest.mark.parametrize(
         "get_weights",
         [
@@ -1420,6 +1544,31 @@ class TestClient:
 
         assert set(task_sks_e) == set(actioned_sks_e)
 
+    def test_action_tasks_network_scopedkey_wrong_qualname(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        task_sks = user_client.create_tasks(transformation_sk, count=3)
+
+        wrong_qualname_sk = ScopedKey.from_str(
+            str(network_sk).replace("AlchemicalNetwork", "NotANetwork")
+        )
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : `network` ScopedKey does not correspond to an `AlchemicalNetwork`",
+        ):
+            user_client.action_tasks(task_sks, wrong_qualname_sk)
+
     @pytest.mark.parametrize(
         "weight,shouldfail",
         [
@@ -1554,6 +1703,34 @@ class TestClient:
         canceled_sks_2 = user_client.cancel_tasks(task_sks[1:2], network_sk)
 
         assert canceled_sks_2 == [None]
+
+    def test_cancel_tasks_wrong_qualname(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+
+        an = network_tyk2
+        transformation = list(an.edges)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        task_sks = user_client.create_tasks(transformation_sk, count=3)
+
+        user_client.action_tasks(task_sks[::-1], network_sk)
+
+        wrong_qualname_sk = ScopedKey.from_str(
+            str(network_sk).replace("AlchemicalNetwork", "NotANetwork")
+        )
+
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 400 : Bad Request : `network` ScopedKey does not correspond to an `AlchemicalNetwork`",
+        ):
+            user_client.cancel_tasks(task_sks[1:2], wrong_qualname_sk)
 
     @pytest.mark.parametrize(
         "status, should_raise",
