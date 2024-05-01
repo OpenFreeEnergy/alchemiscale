@@ -74,10 +74,11 @@ Creating a database dump
                -v ${BACKUPS_DIR}:/tmp \
                --entrypoint /bin/bash \
                neo4j:${NEO4J_VERSION} \
-               -c "neo4j-admin dump --to /tmp/neo4j-$(date -I).dump"
+               -c "neo4j-admin database dump --to-path /tmp neo4j"
 
 This will create a new database dump in the ``$BACKUPS_DIR`` directory.
-
+Note that this command will fail if ``neo4j.dump`` already exists in this directory.
+It is recommended to rename this file with a timestamp (e.g. ``neo4j-${DUMP_DATE}.dump``).
 
 Restoring from a database dump
 ==============================
