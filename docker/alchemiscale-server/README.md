@@ -69,10 +69,10 @@ Some of these are given below.
 
 To add a new user identity, run the following on the host machine:
 
-`docker run --rm -it --network docker_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> <ALCHEMISCALE_DOCKER_IMAGE> identity add -t user -i <user identity> -k <user key>`
+`docker run --rm -it --network alchemiscale-server_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> <ALCHEMISCALE_DOCKER_IMAGE> identity add -t user -i <user identity> -k <user key>`
 
 The important bits here are:
-1. `--network docker_db`
+1. `--network alchemiscale-server_db`
 We need to make sure the docker container we are using can talk to the database container.
 
 2. `-e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD>`

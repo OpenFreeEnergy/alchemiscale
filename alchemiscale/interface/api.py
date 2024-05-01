@@ -4,21 +4,18 @@
 
 """
 
-from typing import Any, Dict, List, Optional, Union
-import os
-import json
+from typing import Dict, List, Optional, Union
 from collections import Counter
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Request
 from fastapi import status as http_status
 from fastapi.middleware.gzip import GZipMiddleware
-from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
-from gufe.protocols import ProtocolDAGResult
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
+
+import json
+from gufe.tokenization import JSON_HANDLER
 
 from ..base.api import (
     GufeJSONResponse,
-    QueryGUFEHandler,
     scope_params,
     get_token_data_depends,
     get_n4js_depends,
@@ -28,17 +25,15 @@ from ..base.api import (
     validate_scopes,
     validate_scopes_query,
     _check_store_connectivity,
-    gufe_to_json,
     GzipRoute,
 )
 from ..settings import get_api_settings
-from ..settings import get_base_api_settings, get_api_settings
+from ..settings import get_base_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import ProtocolDAGResultRef, TaskStatusEnum
+from ..storage.models import TaskStatusEnum
 from ..models import Scope, ScopedKey
-from ..security.auth import get_token_data, oauth2_scheme
-from ..security.models import Token, TokenData, CredentialedUserIdentity
+from ..security.models import TokenData, CredentialedUserIdentity
 from ..keyedchain import KeyedChain
 
 
@@ -125,24 +120,64 @@ async def create_network(
     network = body_["network"]
     an = KeyedChain(network).to_gufe()
 
+    state = body_["state"]
+
     try:
-        an_sk = n4js.create_network(network=an, scope=scope)
+        an_sk, _, _ = n4js.assemble_network(network=an, scope=scope, state=state)
     except ValueError as e:
         raise HTTPException(
             status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=e.args[0],
         )
 
-    # create taskhub for this network
-    n4js.create_taskhub(an_sk)
-
     return an_sk
+
+
+@router.post("/bulk/networks/state/set")
+def set_networks_state(
+    *,
+    networks: List[str] = Body(embed=True),
+    states: List[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Optional[str]]:
+    network_sks = []
+    for network in networks:
+        network_sk = ScopedKey.from_str(network)
+        validate_scopes(network_sk.scope, token)
+        network_sks.append(network_sk)
+
+    try:
+        results = n4js.set_network_state(network_sks, states)
+    except ValueError as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    return [None if network_sk is None else str(network_sk) for network_sk in results]
+
+
+@router.post("/bulk/networks/state/get")
+def get_networks_state(
+    *,
+    networks: List[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Optional[str]]:
+    network_sks = []
+    for network in networks:
+        network_sk = ScopedKey.from_str(network)
+        validate_scopes(network_sk.scope, token)
+        network_sks.append(network_sk)
+
+    results = n4js.get_network_state(network_sks)
+
+    return [None if network_sk is None else str(network_sk) for network_sk in results]
 
 
 @router.get("/networks")
 def query_networks(
     *,
     name: str = None,
+    state: str = None,
     scope: Scope = Depends(scope_params),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
@@ -158,6 +193,7 @@ def query_networks(
             n4js.query_networks(
                 name=name,
                 scope=single_query_scope,
+                state=state,
             )
         )
 
@@ -202,18 +238,6 @@ def query_chemicalsystems(
         results.extend(n4js.query_chemicalsystems(name=name, scope=single_query_scope))
 
     return [str(sk) for sk in results]
-
-
-@router.get("/networks/{network_scoped_key}/weight")
-def get_network_weight(
-    network_scoped_key,
-    *,
-    n4js: Neo4jStore = Depends(get_n4js_depends),
-    token: TokenData = Depends(get_token_data_depends),
-) -> float:
-    sk = ScopedKey.from_str(network_scoped_key)
-    validate_scopes(sk.scope, token)
-    return n4js.get_taskhub_weight(sk)
 
 
 @router.get("/networks/{network_scoped_key}/transformations")
@@ -308,7 +332,14 @@ def get_network(
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
-    network = n4js.get_gufe(scoped_key=sk)
+    try:
+        network = n4js.get_gufe(scoped_key=sk)
+    except KeyError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
     return GufeJSONResponse(network)
 
 
@@ -322,7 +353,14 @@ def get_transformation(
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    transformation = n4js.get_gufe(scoped_key=sk)
+    try:
+        transformation = n4js.get_gufe(scoped_key=sk)
+    except KeyError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
     return GufeJSONResponse(transformation)
 
 
@@ -336,7 +374,14 @@ def get_chemicalsystem(
     sk = ScopedKey.from_str(chemicalsystem_scoped_key)
     validate_scopes(sk.scope, token)
 
-    chemicalsystem = n4js.get_gufe(scoped_key=sk)
+    try:
+        chemicalsystem = n4js.get_gufe(scoped_key=sk)
+    except KeyError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
     return GufeJSONResponse(chemicalsystem)
 
 
@@ -359,11 +404,43 @@ def create_tasks(
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
-    task_sks = []
-    for i in range(count):
-        task_sks.append(
-            n4js.create_task(transformation=sk, extends=extends, creator=token.entity)
+    try:
+        task_sks = n4js.create_tasks([sk] * count, [extends] * count)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
         )
+
+    return [str(sk) for sk in task_sks]
+
+
+@router.post("/bulk/transformations/tasks/create")
+def create_transformations_tasks(
+    *,
+    transformations: List[str] = Body(embed=True),
+    extends: Optional[List[Optional[str]]] = None,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    transformation_sks = [
+        ScopedKey.from_str(transformation_string)
+        for transformation_string in transformations
+    ]
+
+    for transformation_sk in transformation_sks:
+        validate_scopes(transformation_sk.scope, token)
+
+    if extends is not None:
+        extends = [
+            None if not extends_str else ScopedKey.from_str(extends_str)
+            for extends_str in extends
+        ]
+
+    try:
+        task_sks = n4js.create_tasks(transformation_sks, extends)
+    except ValueError as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return [str(sk) for sk in task_sks]
 
@@ -401,7 +478,13 @@ def get_network_tasks(
     validate_scopes(sk.scope, token)
 
     if status is not None:
-        status = TaskStatusEnum(status)
+        try:
+            status = TaskStatusEnum(status)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
 
     return [str(sk) for sk in n4js.get_network_tasks(network=sk, status=status)]
 
@@ -433,7 +516,13 @@ def get_transformation_tasks(
     validate_scopes(sk.scope, token)
 
     if status is not None:
-        status = TaskStatusEnum(status)
+        try:
+            status = TaskStatusEnum(status)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
 
     task_sks = n4js.get_transformation_tasks(
         sk, extends=extends, return_as=return_as, status=status
@@ -457,6 +546,7 @@ def get_transformation_tasks(
 def get_scope_status(
     scope,
     *,
+    network_state: str = None,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -465,7 +555,9 @@ def get_scope_status(
 
     status_counts = Counter()
     for single_scope in scope_space:
-        status_counts.update(n4js.get_scope_status(single_scope))
+        status_counts.update(
+            n4js.get_scope_status(single_scope, network_state=network_state)
+        )
 
     return dict(status_counts)
 
@@ -480,8 +572,28 @@ def get_network_status(
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
-    status_counts = n4js.get_network_status(network_scoped_key)
+    try:
+        status_counts = n4js.get_network_status([network_scoped_key])[0]
+    except Exception as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+    return status_counts
+
+
+@router.post("/bulk/networks/status")
+def get_networks_status(
+    *,
+    networks: List[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Dict[str, int]]:
+
+    network_sks = [ScopedKey.from_str(sk) for sk in networks]
+
+    for sk in network_sks:
+        validate_scopes(sk.scope, token)
+
+    status_counts = n4js.get_network_status(network_sks)
     return status_counts
 
 
@@ -511,13 +623,46 @@ def get_network_actioned_tasks(
     network_sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(network_sk.scope, token)
 
-    taskhub_sk = n4js.get_taskhub(network_sk)
-    task_sks = n4js.get_taskhub_actioned_tasks(taskhub_sk)
+    try:
+        taskhub_sk = n4js.get_taskhub(network_sk)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    task_sks = n4js.get_taskhub_actioned_tasks([taskhub_sk])[0]
 
     if task_weights:
         return {str(task_sk): weight for task_sk, weight in task_sks.items()}
 
     return [str(task_sk) for task_sk in task_sks]
+
+
+@router.post("/bulk/networks/tasks/actioned")
+def get_networks_actioned_tasks(
+    *,
+    networks: List[str] = Body(embed=True),
+    task_weights: bool = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[Union[Dict[str, float], List[str]]]:
+
+    network_sks = [ScopedKey.from_str(network) for network in networks]
+
+    for sk in network_sks:
+        validate_scopes(sk.scope, token)
+
+    taskhub_sks = [n4js.get_taskhub(network_sk) for network_sk in network_sks]
+    grouped_task_sks = n4js.get_taskhub_actioned_tasks(taskhub_sks)
+
+    return_data = []
+    for group in grouped_task_sks:
+        if task_weights:
+            return_data.append(
+                {str(task_sk): weight for task_sk, weight in group.items()}
+            )
+        else:
+            return_data.append([str(task_sk) for task_sk in group])
+
+    return return_data
 
 
 @router.post("/tasks/{task_scoped_key}/networks/actioned")
@@ -551,7 +696,11 @@ def action_tasks(
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
-    taskhub_sk = n4js.get_taskhub(sk)
+    try:
+        taskhub_sk = n4js.get_taskhub(sk)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     actioned_sks = n4js.action_tasks(tasks, taskhub_sk)
 
     try:
@@ -574,6 +723,34 @@ def action_tasks(
     return [str(sk) if sk is not None else None for sk in actioned_sks]
 
 
+@router.get("/networks/{network_scoped_key}/weight")
+def get_network_weight(
+    network_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> float:
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+    return n4js.get_taskhub_weight([sk])[0]
+
+
+@router.post("/bulk/networks/weight/get")
+def get_networks_weight(
+    *,
+    networks: List[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> List[float]:
+
+    network_sks = [ScopedKey.from_str(network_str) for network_str in networks]
+
+    for network_sk in network_sks:
+        validate_scopes(network_sk.scope, token)
+
+    return n4js.get_taskhub_weight(network_sks)
+
+
 @router.post("/networks/{network_scoped_key}/weight")
 def set_network_weight(
     network_scoped_key,
@@ -586,8 +763,32 @@ def set_network_weight(
     validate_scopes(sk.scope, token)
 
     try:
-        n4js.set_taskhub_weight(sk, weight)
+        network_sk = n4js.set_taskhub_weight([sk], [weight])[0]
+        return str(network_sk) if network_sk else None
     except ValueError as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/bulk/networks/weight/set")
+def set_networks_weight(
+    *,
+    networks: List[str] = Body(embed=True),
+    weights: List[float] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> None:
+
+    network_sks = [ScopedKey.from_str(network_str) for network_str in networks]
+
+    for network in network_sks:
+        validate_scopes(network.scope, token)
+
+    try:
+        network_sks = n4js.set_taskhub_weight(
+            [ScopedKey.from_str(network) for network in networks], weights
+        )
+        return [str(network_sk) if network_sk else None for network_sk in network_sks]
+    except Exception as e:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
@@ -602,7 +803,11 @@ def cancel_tasks(
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
-    taskhub_sk = n4js.get_taskhub(sk)
+    try:
+        taskhub_sk = n4js.get_taskhub(sk)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     canceled_sks = n4js.cancel_tasks(tasks, taskhub_sk)
 
     return [str(sk) if sk is not None else None for sk in canceled_sks]
@@ -754,10 +959,13 @@ def get_task_transformation(
 
     transformation: ScopedKey
 
-    transformation, protocoldagresultref = n4js.get_task_transformation(
-        task=task_scoped_key,
-        return_gufe=False,
-    )
+    try:
+        transformation, _ = n4js.get_task_transformation(
+            task=task_scoped_key,
+            return_gufe=False,
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return str(transformation)
 
@@ -819,7 +1027,14 @@ def get_protocoldagresult(
     validate_scopes(sk.scope, token)
     validate_scopes(transformation_sk.scope, token)
 
-    protocoldagresultref = n4js.get_gufe(scoped_key=sk)
+    try:
+        protocoldagresultref = n4js.get_gufe(scoped_key=sk)
+    except KeyError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
     pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.dict())
 
     # we leave each ProtocolDAGResult in string form to avoid
@@ -828,7 +1043,7 @@ def get_protocoldagresult(
         pdr: str = s3os.pull_protocoldagresult(
             pdr_sk, transformation_sk, return_as="json", ok=ok
         )
-    except:
+    except Exception:
         # if we fail to get the object with the above, fall back to
         # location-based retrieval
         pdr: str = s3os.pull_protocoldagresult(

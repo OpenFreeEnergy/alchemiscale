@@ -14,7 +14,7 @@ import weakref
 import numpy as np
 
 import networkx as nx
-from gufe import AlchemicalNetwork, Transformation, Settings
+from gufe import AlchemicalNetwork, Transformation, NonTransformation, Settings
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 
 from neo4j import Transaction, GraphDatabase, Driver
@@ -22,6 +22,8 @@ from neo4j import Transaction, GraphDatabase, Driver
 from .models import (
     ComputeServiceID,
     ComputeServiceRegistration,
+    NetworkMark,
+    NetworkStateEnum,
     Task,
     TaskHub,
     TaskStatusEnum,
@@ -606,25 +608,70 @@ class Neo4jStore(AlchemiscaleStateStore):
         node, subgraph = self._get_node(scoped_key=scoped_key, return_subgraph=True)
         return self._subgraph_to_gufe([node], subgraph)[node]
 
-    def create_network(self, network: AlchemicalNetwork, scope: Scope):
-        """Add an `AlchemicalNetwork` to the target neo4j database, even if
-        some of its components already exist in the database.
+    def assemble_network(
+        self,
+        network: AlchemicalNetwork,
+        scope: Scope,
+        state: Union[NetworkStateEnum, str] = NetworkStateEnum.active,
+    ):
+        """Create all nodes and relationships needed for an AlchemicalNetwork
+        represented in an alchemiscale state store.
 
+        Parameters
+        ----------
+        network
+            The AlchemicalNetwork to submit to the database.
+        scope
+            The Scope where the AlchemicalNetwork resides.
+        state
+            The starting state of the network as marked by the NetworkMark.
+
+        Returns
+        -------
+        A tuple containing the AlchemicalNetwork ScopedKey, the TaskHub
+        ScopedKey, and the NetworkMark ScopedKey.
         """
+
+        nw_subgraph, nw_node, nw_sk = self.create_network_subgraph(network, scope)
+        th_subgraph, th_node, th_sk = self.create_taskhub_subgraph(nw_node)
+        nm_subgraph, nm_node, nm_sk = self.create_network_mark_subgraph(nw_node, state)
+
+        subgraph = nw_subgraph | th_subgraph | nm_subgraph
+
+        with self.transaction() as tx:
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+
+        return nw_sk, th_sk, nm_sk
+
+    def create_network_subgraph(self, network: AlchemicalNetwork, scope: Scope):
+        """Create a Subgraph for the given AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network
+            An AlchemicalNetwork to generate a Subgraph form of.
+        scope
+            The Scope where the AlchemicalNetwork resides.
+
+        Returns
+        -------
+        A tuple containing the AlchemicalNetwork Subgraph, the specific
+        AlchemicalNetwork Node within the Subgraph, and the ScopedKey of the
+        AlchemicalNetwork.
+        """
+
         validate_network_nonself(network)
 
         ndict = network.to_shallow_dict()
 
-        g, n, scoped_key = self._gufe_to_subgraph(
+        subgraph, node, scoped_key = self._gufe_to_subgraph(
             ndict,
             labels=["GufeTokenizable", network.__class__.__name__],
             gufe_key=network.key,
             scope=scope,
         )
-        with self.transaction() as tx:
-            merge_subgraph(tx, g, "GufeTokenizable", "_scoped_key")
 
-        return scoped_key
+        return subgraph, node, scoped_key
 
     def delete_network(
         self,
@@ -642,7 +689,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # not yet tested though
         """
         MATCH p = (n:AlchemicalNetwork {{_scoped_key: "{network_node['_scoped_key']}")-[r:DEPENDS_ON*]->(m),
-              (n)-[:DEPENDS_ON]->(t:Transformation),
+              (n)-[:DEPENDS_ON]->(t:Transformation|NonTransformation),
               (n)-[:DEPENDS_ON]->(c:ChemicalSystem)
         OPTIONAL MATCH (o:AlchemicalNetwork)
         WHERE NOT o._scoped_key = "{network_node['_scoped_key']}"
@@ -653,13 +700,142 @@ class Neo4jStore(AlchemiscaleStateStore):
         # first, delete the network's hub if present
         self.delete_taskhub(network)
 
-        # TODO: why is this not used?
         # then delete the network
         q = f"""
         MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})
         DETACH DELETE an
         """
-        return network
+        raise NotImplementedError
+
+    def get_network_state(self, networks: List[ScopedKey]) -> List[Optional[str]]:
+        """Get the states of a group of networks.
+
+        Parameters
+        ----------
+        networks
+            The list networks to get the states of.
+
+        Returns
+        -------
+        List[Optional[str]]
+            A list containing the states of the given networks, in the same
+            order as they were provided. If a network was not found, ``None``
+            is returned at the corresponding index.
+        """
+
+        q = """
+            UNWIND $networks AS network
+            MATCH (an:AlchemicalNetwork {`_scoped_key`: network})<-[:MARKS]-(nm:NetworkMark)
+            RETURN an._scoped_key as sk, nm.state AS state
+        """
+
+        results = self.execute_query(q, networks=[str(network) for network in networks])
+
+        state_results = {}
+        for record in results.records:
+            sk = record["sk"]
+            state = record["state"]
+
+            state_results[sk] = state
+
+        return [state_results.get(str(network), None) for network in networks]
+
+    def create_network_mark_subgraph(
+        self, network_node: Node, state=NetworkStateEnum.active
+    ):
+        """Create the Subgraph for an AlchemicalNetwork's NetworkMark.
+
+        Parameters
+        ----------
+        network_node
+            A Node representing the target AlchemicalNetwork. This is
+            a returned value from the :py:meth:`create_network_subgraph`
+            method.
+        state
+            The starting state for the AlchemicalNetwork.
+
+        Returns
+        -------
+        A tuple containing the NetworkMark Subgraph, the specific NetworkMark
+        Node within the Subgraph, and the ScopedKey of the NetworkMark.
+        """
+
+        network_sk = ScopedKey.from_str(network_node["_scoped_key"])
+        scope = network_sk.scope
+
+        network_mark = NetworkMark(target=str(network_sk), state=state)
+
+        _, network_mark_node, scoped_key = self._gufe_to_subgraph(
+            network_mark.to_shallow_dict(),
+            labels=["GufeTokenizable", network_mark.__class__.__name__],
+            gufe_key=network_mark.key,
+            scope=scope,
+        )
+
+        subgraph = Relationship.type("MARKS")(
+            network_mark_node,
+            network_node,
+            _org=scope.org,
+            _campaign=scope.campaign,
+            _project=scope.project,
+        )
+
+        return subgraph, network_mark_node, scoped_key
+
+    def set_network_state(
+        self, networks: List[ScopedKey], states: List[str]
+    ) -> List[Optional[ScopedKey]]:
+        """Set the state of a group of AlchemicalNetworks.
+
+        Parameters
+        ----------
+        networks
+            A list networks to set the states for.
+        states
+            A list of states to set the networks to.
+
+        Returns
+        -------
+        List[Optional[ScopedKey]]
+            The list of ScopedKeys for networks that were updated. If the
+            network could not be found in the database, ``None`` is returned at
+            the corresponding index.
+        """
+
+        if len(networks) != len(states):
+            msg = "networks and states must have the same length"
+            raise ValueError(msg)
+
+        for network, state in zip(networks, states):
+            if network.qualname != "AlchemicalNetwork":
+                raise ValueError(
+                    "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+                )
+            try:
+                NetworkStateEnum(state)
+            except ValueError:
+                valid_states = [state.value for state in NetworkStateEnum]
+                msg = f"'{state}' is not a valid state. Valid values include: {valid_states}"
+                raise ValueError(msg)
+
+        q = """
+            WITH $inputs AS inputs
+            UNWIND inputs AS x
+            WITH x[0] as network, x[1] as state
+            MATCH (:AlchemicalNetwork {`_scoped_key`: network})<-[:MARKS]-(nm:NetworkMark)
+            SET nm.state = state
+            RETURN network
+        """
+        inputs = [[str(network), state] for network, state in zip(networks, states)]
+
+        results = self.execute_query(q, inputs=inputs)
+
+        network_results = {}
+        for record in results.records:
+            network_sk_str = record["network"]
+            network_results[network_sk_str] = ScopedKey.from_str(network_sk_str)
+
+        return [network_results.get(str(network), None) for network in networks]
 
     def query_networks(
         self,
@@ -667,23 +843,55 @@ class Neo4jStore(AlchemiscaleStateStore):
         name=None,
         key=None,
         scope: Optional[Scope] = Scope(),
-        return_gufe: bool = False,
-    ):
+        state: Optional[str] = None,
+    ) -> List[ScopedKey]:
         """Query for `AlchemicalNetwork`\s matching given attributes."""
-        additional = {"name": name}
-        return self._query(
-            qualname="AlchemicalNetwork",
-            additional=additional,
-            key=key,
-            scope=scope,
-            return_gufe=return_gufe,
+
+        query_params = dict(
+            name_pattern=name,
+            org_pattern=scope.org,
+            campaign_pattern=scope.campaign,
+            project_pattern=scope.project,
+            state_pattern=state,
+            gufe_key_pattern=None if key is None else str(key),
         )
+
+        for k, v in query_params.items():
+            if v is None:
+                query_params[k] = ".*"
+
+        q = """
+            MATCH (an:AlchemicalNetwork)<-[:MARKS]-(nm:NetworkMark)
+            WHERE
+                    an.name =~ $name_pattern
+                AND an.`_gufe_key` =~ $gufe_key_pattern
+                AND an.`_org` =~ $org_pattern
+                AND an.`_campaign` =~ $campaign_pattern
+                AND an.`_project` =~ $project_pattern
+                AND nm.state =~ $state_pattern
+            RETURN an._scoped_key as sk
+        """
+
+        results = self.execute_query(
+            q,
+            parameters_=query_params,
+        )
+
+        network_sks = []
+        for record in results.records:
+            sk = record["sk"]
+            network_sks.append(ScopedKey.from_str(sk))
+
+        return network_sks
 
     def query_transformations(self, *, name=None, key=None, scope: Scope = Scope()):
         """Query for `Transformation`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
-            qualname="Transformation", additional=additional, key=key, scope=scope
+            qualname="Transformation|NonTransformation",
+            additional=additional,
+            key=key,
+            scope=scope,
         )
 
     def query_chemicalsystems(self, *, name=None, key=None, scope: Scope = Scope()):
@@ -696,7 +904,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_network_transformations(self, network: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
         q = f"""
-        MATCH (:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(t:Transformation)
+        MATCH (:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(t:Transformation|NonTransformation)
         WITH t._scoped_key as sk
         RETURN sk
         """
@@ -711,7 +919,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
         q = f"""
-        MATCH (:Transformation {{_scoped_key: '{transformation}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        MATCH (:Transformation|NonTransformation {{_scoped_key: '{transformation}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
         WITH an._scoped_key as sk
         RETURN sk
         """
@@ -758,7 +966,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> List[ScopedKey]:
         """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
         q = f"""
-        MATCH (:Transformation {{_scoped_key: '{transformation}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        MATCH (:Transformation|NonTransformation {{_scoped_key: '{transformation}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
         WITH cs._scoped_key as sk
         RETURN sk
         """
@@ -775,7 +983,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> List[ScopedKey]:
         """List ScopedKeys for the Transformations associated with the given ChemicalSystem."""
         q = f"""
-        MATCH (:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(t:Transformation)
+        MATCH (:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(t:Transformation|NonTransformation)
         WITH t._scoped_key as sk
         RETURN sk
         """
@@ -802,7 +1010,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # get all task result protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
         q = """
-        MATCH (trans:Transformation {_scoped_key: $scoped_key}),
+        MATCH (trans:Transformation|NonTransformation {_scoped_key: $scoped_key}),
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = true
         WITH res._scoped_key as sk
@@ -816,7 +1024,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # get all task failure protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
         q = """
-        MATCH (trans:Transformation {_scoped_key: $scoped_key}),
+        MATCH (trans:Transformation|NonTransformation {_scoped_key: $scoped_key}),
               (trans)<-[:PERFORMS]-(:Task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef)
         WHERE res.ok = false
         WITH res._scoped_key as sk
@@ -933,31 +1141,25 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## task hubs
 
-    def create_taskhub(
-        self,
-        network: ScopedKey,
-    ) -> ScopedKey:
-        """Create a TaskHub for the given AlchemicalNetwork.
+    def create_taskhub_subgraph(self, network_node: Node):
+        """Create a Subgraph for an AlchemicalNetwork's TaskHub.
 
-        An AlchemicalNetwork can have only one associated TaskHub.
-        A TaskHub is required to action Tasks for a given AlchemicalNetwork.
+        Parameters
+        ----------
+        network_node
+            A Node representing the target AlchemicalNetwork. This is
+            a returned value from the :py:meth:`create_network_subgraph`
+            method.
 
-        This method will only create a TaskHub for an AlchemicalNetwork if it
-        doesn't already exist; it will return the scoped key for the TaskHub
-        either way.
-
+        Returns
+        -------
+        A tuple containing the TaskHub Subgraph, the specific TaskHub
+        Node within the Subgraph, and the ScopedKey of the TaskHub.
         """
-        if network.qualname != "AlchemicalNetwork":
-            raise ValueError(
-                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
-            )
+        network_sk = ScopedKey.from_str(network_node["_scoped_key"])
+        scope = network_sk.scope
 
-        scope = network.scope
-        network_node = self._get_node(network)
-
-        # create a taskhub for the supplied network
-        # use a PERFORMS relationship
-        taskhub = TaskHub(network=str(network))
+        taskhub = TaskHub(network=str(network_sk))
         _, taskhub_node, scoped_key = self._gufe_to_subgraph(
             taskhub.to_shallow_dict(),
             labels=["GufeTokenizable", taskhub.__class__.__name__],
@@ -973,13 +1175,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             _project=scope.project,
         )
 
-        # if the TaskHub already exists, this will rollback transaction
-        # automatically
-        # TODO: this originally used create, but is merge not what we want?
-        with self.transaction(ignore_exceptions=True) as tx:
-            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
-
-        return scoped_key
+        return subgraph, taskhub_node, scoped_key
 
     def query_taskhubs(
         self, scope: Optional[Scope] = Scope(), return_gufe: bool = False
@@ -1016,7 +1212,11 @@ class Neo4jStore(AlchemiscaleStateStore):
                 match (th:TaskHub {{network: "{network}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
                 return th
                 """
-        node = record_data_to_node(self.execute_query(q).records[0]["th"])
+
+        try:
+            node = record_data_to_node(self.execute_query(q).records[0]["th"])
+        except IndexError:
+            raise KeyError("No such object in database")
 
         if return_gufe:
             return self._subgraph_to_gufe([node], node)[node]
@@ -1044,58 +1244,81 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return taskhub
 
-    def set_taskhub_weight(self, network: ScopedKey, weight: float):
-        """Set the weight for the TaskHub associated with the given
-        AlchemicalNetwork.
+    def set_taskhub_weight(
+        self, networks: List[ScopedKey], weights: List[float]
+    ) -> List[Optional[ScopedKey]]:
+        """Set the weights for the TaskHubs associated with the given
+        AlchemicalNetworks.
 
         """
 
-        if not 0 <= weight <= 1:
-            raise ValueError("weight must be between 0 and 1 (inclusive)")
+        for weight in weights:
+            if not 0 <= weight <= 1:
+                raise ValueError("all `weights` must be between 0 and 1 (inclusive)")
 
-        if network.qualname != "AlchemicalNetwork":
-            raise ValueError(
-                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
-            )
+        for network in networks:
+            if network.qualname != "AlchemicalNetwork":
+                raise ValueError(
+                    "a `networks` ScopedKey does not correspond to an `AlchemicalNetwork`"
+                )
 
-        q = f"""
-        MATCH (th:TaskHub {{network: "{network}"}})
-        SET th.weight = {weight}
-        RETURN th
+        if len(networks) != len(weights):
+            raise ValueError("length of `networks` and `weights` must be the same")
+
+        q = """
+        WITH $inputs AS inputs
+        UNWIND inputs AS x
+        WITH x[0] as network, x[1] as weight
+        MATCH (th:TaskHub {network: network})
+        SET th.weight = weight
+        RETURN network
         """
-        with self.transaction() as tx:
-            tx.run(q)
+        inputs = [[str(network), weight] for network, weight in zip(networks, weights)]
+
+        results = self.execute_query(q, inputs=inputs)
+
+        network_results = {}
+        for record in results.records:
+            network_sk_str = record["network"]
+            network_results[network_sk_str] = ScopedKey.from_str(network_sk_str)
+
+        return [network_results.get(str(network), None) for network in networks]
 
     def get_taskhub_actioned_tasks(
         self,
-        taskhub: ScopedKey,
-    ) -> Dict[ScopedKey, float]:
-        """Get the Tasks that a given TaskHub ACTIONS.
+        taskhubs: List[ScopedKey],
+    ) -> List[Dict[ScopedKey, float]]:
+        """Get the Tasks that the given TaskHubs ACTIONS.
 
         Parameters
         ----------
-        taskhub
-            The ScopedKey of the TaskHub to query.
+        taskhubs
+            The ScopedKeys of the TaskHubs to query.
 
         Returns
         -------
         tasks
-            A dict with Task ScopedKeys that are actioned on the given TaskHub
-            as keys, Task weights as values.
+            A list of dicts, one per TaskHub, which contains the Task ScopedKeys that are
+            actioned on the given TaskHub as keys, with their weights as values.
         """
 
-        q = """
-           MATCH (th: TaskHub {_scoped_key: $th_sk})-[a:ACTIONS]->(t:Task)
-           RETURN t._scoped_key, a.weight
+        q = f"""
+           UNWIND {cypher_list_from_scoped_keys(taskhubs)} as th_sk
+           MATCH (th: TaskHub {{_scoped_key: th_sk}})-[a:ACTIONS]->(t:Task)
+           RETURN t._scoped_key, a.weight, th._scoped_key
         """
 
-        with self.transaction() as tx:
-            results = tx.run(q, th_sk=str(taskhub)).to_eager_result()
+        results = self.execute_query(q)
 
-        return {
-            ScopedKey.from_str(record.get("t._scoped_key")): record.get("a.weight")
-            for record in results.records
-        }
+        data = {taskhub: {} for taskhub in taskhubs}
+        for record in results.records:
+            th_sk = ScopedKey.from_str(record["th._scoped_key"])
+            t_sk = ScopedKey.from_str(record["t._scoped_key"])
+            weight = record["a.weight"]
+
+            data[th_sk][t_sk] = weight
+
+        return [data[taskhub] for taskhub in taskhubs]
 
     def get_task_actioned_networks(self, task: ScopedKey) -> Dict[ScopedKey, float]:
         """Get all AlchemicalNetwork ScopedKeys whose TaskHub ACTIONS a given Task.
@@ -1126,25 +1349,33 @@ class Neo4jStore(AlchemiscaleStateStore):
             for record in results.records
         }
 
-    def get_taskhub_weight(self, network: ScopedKey) -> float:
-        """Get the weight for the TaskHub associated with the given
-        AlchemicalNetwork.
+    def get_taskhub_weight(self, networks: List[ScopedKey]) -> List[float]:
+        """Get the weight for the TaskHubs associated with the given
+        AlchemicalNetworks.
 
         """
 
-        if network.qualname != "AlchemicalNetwork":
-            raise ValueError(
-                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
-            )
+        for network in networks:
+            if network.qualname != "AlchemicalNetwork":
+                raise ValueError(
+                    "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+                )
 
         q = f"""
-        MATCH (th:TaskHub {{network: "{network}"}})
-        RETURN th.weight
+        UNWIND {cypher_list_from_scoped_keys(networks)} as network
+        MATCH (th:TaskHub {{network: network}})
+        RETURN network, th.weight
         """
-        with self.transaction() as tx:
-            weight = tx.run(q).data()[0]["th.weight"]
 
-        return weight
+        results = self.execute_query(q)
+
+        network_weights = {str(network): None for network in networks}
+        for record in results.records:
+            weight = record["th.weight"]
+            network_sk_str = record["network"]
+            network_weights[network_sk_str] = weight
+
+        return [network_weights[str(network)] for network in networks]
 
     def action_tasks(
         self,
@@ -1173,7 +1404,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (th:TaskHub {{_scoped_key: "{taskhub}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
 
         // get the task we want to add to the hub; check that it connects to same network
-        MATCH (task:Task {{_scoped_key: task_sk}})-[:PERFORMS]->(tf:Transformation)<-[:DEPENDS_ON]-(an)
+        MATCH (task:Task {{_scoped_key: task_sk}})-[:PERFORMS]->(tf:Transformation|NonTransformation)<-[:DEPENDS_ON]-(an)
 
         // only proceed for cases where task is not already actioned on hub
         // and where the task is either in 'waiting', 'running', or 'error' status
@@ -1544,88 +1775,190 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## tasks
 
+    def _validate_extends_tasks(self, task_list) -> Dict[str, Tuple[Node, str]]:
+
+        if not task_list:
+            return {}
+
+        q = f"""
+            UNWIND {cypher_list_from_scoped_keys(task_list)} as task
+            MATCH (t:Task {{`_scoped_key`: task}})-[PERFORMS]->(tf:Transformation|NonTransformation)
+            return t, tf._scoped_key as tf_sk
+        """
+
+        results = self.execute_query(q)
+
+        nodes = {}
+
+        for record in results.records:
+            node = record_data_to_node(record["t"])
+            transformation_sk = record["tf_sk"]
+
+            status = node.get("status")
+
+            if status in ("invalid", "deleted"):
+                invalid_task_scoped_key = node["_scoped_key"]
+                raise ValueError(
+                    f"Cannot extend a `deleted` or `invalid` Task: {invalid_task_scoped_key}"
+                )
+
+            nodes[node["_scoped_key"]] = (node, transformation_sk)
+
+        return nodes
+
+    def create_tasks(
+        self,
+        transformations: List[ScopedKey],
+        extends: Optional[List[Optional[ScopedKey]]] = None,
+        creator: Optional[str] = None,
+    ) -> List[ScopedKey]:
+        """Create Tasks for the given Transformations.
+
+        Note: this creates Tasks; it does not action them.
+
+        Parameters
+        ----------
+        transformations
+            The Transformations to create Tasks for.
+            One Task is created for each Transformation ScopedKey given; to
+            create multiple Tasks for a given Transformation, provide its
+            ScopedKey multiple times.
+        extends
+            The ScopedKeys of the Tasks to use as a starting point for the
+            created Tasks, in the same order as `transformations`. If ``None``
+            given for a given Task, it will not extend any other Task.
+            Will use the `ProtocolDAGResult` from the given Task as the
+            `extends` input for the Task's eventual call to `Protocol.create`.
+        creator (optional)
+            The creator of the Tasks.
+        """
+        allowed_types = [Transformation.__qualname__, NonTransformation.__qualname__]
+
+        # reshape data to a standard form
+        if extends is None:
+            extends = [None] * len(transformations)
+        elif len(extends) != len(transformations):
+            raise ValueError(
+                "`extends` must either be `None` or have the same length as `transformations`"
+            )
+
+        for i, _extends in enumerate(extends):
+            if _extends is not None:
+                if not (extended_task_qualname := getattr(_extends, "qualname", None)):
+                    raise ValueError(
+                        f"`extends` entry for `Task` {transformations[i]} is not valid"
+                    )
+                if extended_task_qualname != "Task":
+                    raise ValueError(
+                        f"`extends` ScopedKey ({_extends}) does not correspond to a `Task`"
+                    )
+
+        transformation_map = {
+            transformation_type: [[], []] for transformation_type in allowed_types
+        }
+        for i, transformation in enumerate(transformations):
+            if transformation.qualname not in allowed_types:
+                raise ValueError(
+                    f"Got an unsupported `Transformation` type: {transformation.qualname}"
+                )
+            transformation_map[transformation.qualname][0].append(transformation)
+            transformation_map[transformation.qualname][1].append(extends[i])
+
+        extends_nodes = self._validate_extends_tasks(
+            [_extends for _extends in extends if _extends is not None]
+        )
+
+        subgraph = Subgraph()
+
+        sks = []
+        # iterate over all allowed types, unpacking the transformations and extends subsets
+        for node_type, (
+            transformation_subset,
+            extends_subset,
+        ) in transformation_map.items():
+
+            if not transformation_subset:
+                continue
+
+            q = f"""
+            UNWIND {cypher_list_from_scoped_keys(transformation_subset)} as sk
+            MATCH (n:{node_type} {{`_scoped_key`: sk}})
+            RETURN n
+            """
+
+            results = self.execute_query(q)
+
+            transformation_nodes = {}
+            for record in results.records:
+                node = record_data_to_node(record["n"])
+                transformation_nodes[node["_scoped_key"]] = node
+
+            for _transformation, _extends in zip(transformation_subset, extends_subset):
+
+                scope = transformation.scope
+
+                _task = Task(
+                    creator=creator,
+                    extends=str(_extends) if _extends is not None else None,
+                )
+                _, task_node, scoped_key = self._gufe_to_subgraph(
+                    _task.to_shallow_dict(),
+                    labels=["GufeTokenizable", _task.__class__.__name__],
+                    gufe_key=_task.key,
+                    scope=scope,
+                )
+
+                sks.append(scoped_key)
+
+                if _extends is not None:
+
+                    extends_task_node, extends_transformation_sk = extends_nodes[
+                        str(_extends)
+                    ]
+
+                    if extends_transformation_sk != str(_transformation):
+                        raise ValueError(
+                            f"{_extends} extends a Transformation other than {_transformation}"
+                        )
+
+                    subgraph |= Relationship.type("EXTENDS")(
+                        task_node,
+                        extends_task_node,
+                        _org=scope.org,
+                        _campaign=scope.campaign,
+                        _project=scope.project,
+                    )
+
+                subgraph |= Relationship.type("PERFORMS")(
+                    task_node,
+                    transformation_nodes[str(_transformation)],
+                    _org=scope.org,
+                    _campaign=scope.campaign,
+                    _project=scope.project,
+                )
+
+        with self.transaction() as tx:
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+
+        return sks
+
     def create_task(
         self,
         transformation: ScopedKey,
         extends: Optional[ScopedKey] = None,
         creator: Optional[str] = None,
     ) -> ScopedKey:
-        """Add a compute Task to a Transformation.
+        """Create a single Task for a Transformation.
 
-        Note: this creates a compute Task, but does not add it to any TaskHubs.
-
-        Parameters
-        ----------
-        transformation
-            The Transformation to compute.
-        scope
-            The scope the Transformation is in; ignored if `transformation` is a ScopedKey.
-        extends
-            The ScopedKey of the Task to use as a starting point for this Task.
-            Will use the `ProtocolDAGResult` from the given Task as the
-            `extends` input for the Task's eventual call to `Protocol.create`.
+        This is a convenience method that wraps around the more general
+        `create_tasks` method.
 
         """
-        if transformation.qualname not in ["Transformation", "NonTransformation"]:
-            raise ValueError(
-                "`transformation` ScopedKey does not correspond to a `Transformation`"
-            )
-
-        if extends is not None and extends.qualname != "Task":
-            raise ValueError("`extends` ScopedKey does not correspond to a `Task`")
-
-        scope = transformation.scope
-        transformation_node = self._get_node(transformation)
-
-        # create a new task for the supplied transformation
-        # use a PERFORMS relationship
-        task = Task(
-            creator=creator, extends=str(extends) if extends is not None else None
-        )
-
-        _, task_node, scoped_key = self._gufe_to_subgraph(
-            task.to_shallow_dict(),
-            labels=["GufeTokenizable", task.__class__.__name__],
-            gufe_key=task.key,
-            scope=scope,
-        )
-
-        subgraph = Subgraph()
-
-        if extends is not None:
-            previous_task_node = self._get_node(extends)
-            stat = previous_task_node.get("status")
-            # do not allow creation of a task that extends an invalid or deleted task.
-            if (stat == "invalid") or (stat == "deleted"):
-                # py2neo Node doesn't like the neo4j datetime object
-                # manually cast since we're raising anyways
-                # and the results are ephemeral
-                previous_task_node["datetime_created"] = str(
-                    previous_task_node["datetime_created"]
-                )
-                raise ValueError(
-                    f"Cannot extend a `deleted` or `invalid` Task: {previous_task_node}"
-                )
-            subgraph = subgraph | Relationship.type("EXTENDS")(
-                task_node,
-                previous_task_node,
-                _org=scope.org,
-                _campaign=scope.campaign,
-                _project=scope.project,
-            )
-
-        subgraph = subgraph | Relationship.type("PERFORMS")(
-            task_node,
-            transformation_node,
-            _org=scope.org,
-            _campaign=scope.campaign,
-            _project=scope.project,
-        )
-
-        with self.transaction() as tx:
-            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
-
-        return scoped_key
+        return self.create_tasks(
+            [transformation],
+            extends=[extends] if extends is not None else [None],
+            creator=creator,
+        )[0]
 
     def query_tasks(self, *, status=None, key=None, scope: Scope = Scope()):
         """Query for `Task`\s matching given attributes."""
@@ -1637,7 +1970,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> List[ScopedKey]:
         """List ScopedKeys for all Tasks associated with the given AlchemicalNetwork."""
         q = f"""
-        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
+        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation|NonTransformation),
               (tf)<-[:PERFORMS]-(t:Task)
         """
 
@@ -1661,7 +1994,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_task_networks(self, task: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Task."""
         q = f"""
-        MATCH (t:Task {{_scoped_key: '{task}'}})-[:PERFORMS]->(tf:Transformation),
+        MATCH (t:Task {{_scoped_key: '{task}'}})-[:PERFORMS]->(tf:Transformation|NonTransformation),
               (tf)<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
         WITH an._scoped_key as sk
         RETURN sk
@@ -1698,7 +2031,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         q = f"""
-        MATCH (trans:Transformation {{_scoped_key: '{transformation}'}})<-[:PERFORMS]-(task:Task)
+        MATCH (trans:Transformation|NonTransformation {{_scoped_key: '{transformation}'}})<-[:PERFORMS]-(task:Task)
         """
 
         if status is not None:
@@ -1713,7 +2046,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             RETURN task
             """
         else:
-            q += f"""
+            q += """
             RETURN task
             """
 
@@ -1753,7 +2086,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         q = f"""
-        MATCH (task:Task {{_scoped_key: "{task}"}})-[:PERFORMS]->(trans:Transformation)
+        MATCH (task:Task {{_scoped_key: "{task}"}})-[:PERFORMS]->(trans:Transformation|NonTransformation)
         OPTIONAL MATCH (task)-[:EXTENDS]->(prev:Task)-[:RESULTS_IN]->(result:ProtocolDAGResultRef)
         RETURN trans, result
         """
@@ -1914,8 +2247,21 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         raise NotImplementedError
 
-    def get_scope_status(self, scope: Scope) -> Dict[str, int]:
-        """Return status counts for all Tasks within the given Scope."""
+    def get_scope_status(
+        self,
+        scope: Scope,
+        network_state: Optional[Union[NetworkStateEnum, str]] = NetworkStateEnum.active,
+    ) -> Dict[str, int]:
+        """Return status counts for all Tasks within the given Scope.
+
+        Parameters
+        ----------
+        scope
+            Scope to get status for; may be non-specific.
+        network_state
+            Network state to restrict status returns for; may be a regex pattern.
+
+        """
 
         properties = {
             "_org": scope.org,
@@ -1929,33 +2275,45 @@ class Neo4jStore(AlchemiscaleStateStore):
             if value is not None
         )
 
+        if isinstance(network_state, NetworkStateEnum):
+            network_state = network_state.value
+
+        if network_state is None:
+            network_state = ".*"
+
         q = f"""
-        MATCH (n:Task {{{prop_string}}})
-        RETURN n.status AS status, count(n) as counts
+        MATCH (n:Task {{{prop_string}}})-[:PERFORMS]->(:Transformation|NonTransformation)<-[:DEPENDS_ON]-(:AlchemicalNetwork)<-[:MARKS]-(nm:NetworkMark)
+        WHERE nm.state =~ $state_pattern
+        RETURN n.status AS status, count(DISTINCT n) as counts
         """
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, state_pattern=network_state)
             counts = {rec["status"]: rec["counts"] for rec in res}
 
         return counts
 
-    def get_network_status(self, network: ScopedKey) -> Dict[str, int]:
-        """Return status counts for all Tasks associated with the given AlchemicalNetwork."""
+    def get_network_status(self, networks: List[ScopedKey]) -> List[Dict[str, int]]:
+        """Return status counts for all Tasks associated with the given AlchemicalNetworks."""
         q = f"""
-        MATCH (:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation),
+        UNWIND {cypher_list_from_scoped_keys(networks)} as network
+        MATCH (an:AlchemicalNetwork {{_scoped_key: network}})-[:DEPENDS_ON]->(tf:Transformation|NonTransformation),
               (tf)<-[:PERFORMS]-(t:Task)
-        RETURN t.status AS status, count(t) as counts
+        RETURN an._scoped_key AS sk, t.status AS status, count(t) as counts
         """
-        with self.transaction() as tx:
-            res = tx.run(q)
-            counts = {rec["status"]: rec["counts"] for rec in res}
 
-        return counts
+        network_data = {str(network_sk): {} for network_sk in networks}
+        for rec in self.execute_query(q).records:
+            sk = rec["sk"]
+            status = rec["status"]
+            counts = rec["counts"]
+            network_data[sk][status] = counts
+
+        return [network_data[str(an)] for an in networks]
 
     def get_transformation_status(self, transformation: ScopedKey) -> Dict[str, int]:
         """Return status counts for all Tasks associated with the given Transformation."""
         q = f"""
-        MATCH (:Transformation {{_scoped_key: "{transformation}"}})<-[:PERFORMS]-(t:Task)
+        MATCH (:Transformation|NonTransformation {{_scoped_key: "{transformation}"}})<-[:PERFORMS]-(t:Task)
         RETURN t.status AS status, count(t) as counts
         """
         with self.transaction() as tx:
