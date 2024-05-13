@@ -206,7 +206,7 @@ class TestNeo4jStore(TestStateStore):
 
     def test_query_networks(self, n4js, network_tyk2, scope_test, multiple_scopes):
         an = network_tyk2
-        an2 = AlchemicalNetwork(edges=list(an.edges)[:-2], name="incomplete")
+        an2 = AlchemicalNetwork(edges=list(an.edges)[:-2], name=None)
 
         sk: ScopedKey = n4js.assemble_network(an, scope_test)[0]
         sk2: ScopedKey = n4js.assemble_network(an2, scope_test)[0]
