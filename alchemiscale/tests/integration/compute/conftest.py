@@ -81,8 +81,10 @@ def n4js_preloaded(
     n4js: Neo4jStore = n4js_fresh
 
     # Set up tasks from select set of transformations
+    # we need to use second_network_an2 because its edges
+    # are a subset of network_tyk2's edges
     transformations = sorted(
-        filter(lambda x: type(x) is not NonTransformation, network_tyk2.edges)
+        filter(lambda x: type(x) is not NonTransformation, second_network_an2.edges)
     )[0:3]
 
     # set starting contents for many of the tests in this module
