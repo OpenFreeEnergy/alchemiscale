@@ -58,7 +58,7 @@ class ComputeServiceSettings(BaseModel):
     )
     protocols: Optional[List[str]] = Field(
         None,
-        description="Names of Protocols to run with this service; `None` means no restriction",
+        description="Names of Protocols to run with this service; `None` means no restriction.",
     )
     claim_limit: int = Field(
         1000, description="Maximum number of Tasks to claim at a time from a TaskHub."
