@@ -69,6 +69,7 @@ Creating a database dump
 
 **With the Neo4j service shut down**, navigate to the directory containing your database data, set ``$BACKUPS_DIR`` to the absolute path of your choice and ``$NEO4J_VERSION`` to the version of Neo4j you are using, then run::
 
+    # create the dump `neo4j.dump`
     docker run --rm \
                -v $(pwd):/var/lib/neo4j/data \
                -v ${BACKUPS_DIR}:/tmp \
@@ -76,9 +77,12 @@ Creating a database dump
                neo4j:${NEO4J_VERSION} \
                -c "neo4j-admin database dump --to-path /tmp neo4j"
 
+    # create a copy of the dump with a timestamp
+    cp ${BACKUPS_DIR}/neo4j.dump ${BACKUPS_DIR}/neo4j-$(date -I).dump
+
 This will create a new database dump in the ``$BACKUPS_DIR`` directory.
 Note that this command will fail if ``neo4j.dump`` already exists in this directory.
-It is recommended to rename this file with a timestamp (e.g. ``neo4j-${DUMP_DATE}.dump``).
+It is recommended to copy this file to one with a timestamp (e.g. ``neo4j-$(date -I).dump``), as above.
 
 Restoring from a database dump
 ==============================
@@ -87,12 +91,16 @@ To later restore from a database dump, navigate to the directory containing your
 
 **With the Neo4j service shut down**, choose ``$DUMP_DATE`` and set ``$NEO4J_VERSION`` to the version of Neo4j you are using, then run::
 
+    # create a copy of the timestamped dump to `neo4j.dump`
+    cp ${BACKUPS_DIR}/neo4j-$(date -I).dump ${BACKUPS_DIR}/neo4j.dump 
+
+    # load the dump `neo4j.dump`
     docker run --rm \
                -v $(pwd):/var/lib/neo4j/data \
                -v ${BACKUPS_DIR}:/tmp \
                --entrypoint /bin/bash \
                neo4j:${NEO4J_VERSION} \
-               -c "neo4j-admin load --from /tmp/neo4j-${DUMP_DATE}.dump"
+               -c "neo4j-admin database load --from-path=/tmp neo4j"
 
 You may need to perform a ``chown -R`` following this operation to set correct ownership of the newly-loaded database contents.
 
