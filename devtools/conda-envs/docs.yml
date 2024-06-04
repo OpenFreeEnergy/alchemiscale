@@ -1,6 +1,7 @@
 name: alchemiscale-docs
 channels:
   - conda-forge
+
 dependencies:
   - sphinx>=5.0,<6
   - sphinx_rtd_theme
