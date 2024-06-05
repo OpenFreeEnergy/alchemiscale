@@ -162,10 +162,17 @@ class TestComputeClient:
 
         taskhub_sks = compute_client.query_taskhubs([scope_test])
 
+        remaining_tasks = n4js_preloaded.get_taskhub_unclaimed_tasks(taskhub_sks[0])
+        assert len(remaining_tasks) == 3
+
         # claim a single task; should get highest priority task
         task_sks = compute_client.claim_taskhub_tasks(
             taskhub_sks[0], compute_service_id=compute_service_id
         )
+
+        remaining_tasks = n4js_preloaded.get_taskhub_unclaimed_tasks(taskhub_sks[0])
+        assert len(remaining_tasks) == 2
+
         all_tasks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0], return_gufe=True)
 
         assert len(task_sks) == 1
