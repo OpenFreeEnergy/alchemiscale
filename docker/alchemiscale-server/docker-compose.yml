@@ -8,7 +8,7 @@ networks:
 
 services:
   neo4j:
-    image: ${NEO4J_DOCKER_IMAGE:-neo4j:5.16}
+    image: ${NEO4J_DOCKER_IMAGE:-neo4j:5.18}
     hostname: neo4j
     # Service-level network, which specifies the networks, from the list of the top-level networks (in this case only neo4j-internal), that the server will connect to.
     # Adds a network alias (used in neo4j.conf when configuring the discovery members)

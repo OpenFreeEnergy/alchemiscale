@@ -5,32 +5,33 @@
 """
 
 import asyncio
-from typing import Union, List, Dict, Optional, Tuple, Any
+from typing import Union, List, Dict, Optional, Tuple, Any, Iterable
 import json
 from itertools import chain
-from collections import Counter
 from functools import lru_cache
 
-import httpx
 from async_lru import alru_cache
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER, GufeKey
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 
 from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
-    json_to_gufe,
     use_session,
 )
 from ..models import Scope, ScopedKey
-from ..storage.models import Task, ProtocolDAGResultRef, TaskStatusEnum
+from ..storage.models import (
+    TaskStatusEnum,
+    NetworkStateEnum,
+)
 from ..strategies import Strategy
-from ..security.models import CredentialedUserIdentity
 from ..validators import validate_network_nonself
 from ..keyedchain import KeyedChain
+
+from warnings import warn
 
 
 class AlchemiscaleClientError(AlchemiscaleBaseClientError): ...
@@ -68,6 +69,18 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         gufe object and a Scope.
 
         """
+
+        msg = """`get_scoped_key` will be removed in v0.5.0
+
+        For accurate server-side ScopedKeys, use the relevant methods for the GufeTokenizable of interest.
+        For instance, `get_network_transformations` should be used to get Transformation ScopedKeys for a given AlchemicalNetwork.
+
+        """
+        warn(
+            msg,
+            DeprecationWarning,
+        )
+
         if scope.specific():
             return ScopedKey(gufe_key=obj.key, **scope.dict())
         else:
@@ -83,6 +96,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         network: AlchemicalNetwork,
         scope: Scope,
+        state: Union[NetworkStateEnum, str] = NetworkStateEnum.active,
         compress: Union[bool, int] = True,
         visualize: bool = True,
     ) -> ScopedKey:
@@ -95,6 +109,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         scope
             The Scope in which to submit the AlchemicalNetwork.
             This must be a *specific* Scope; it must not contain wildcards.
+        state
+            The starting state of the AlchemicalNetwork in the database.
+            See :meth:`AlchemiscaleClient.set_network_state` for valid states.
         compress
             If ``True``, compress the AlchemicalNetwork client-side before
             shipping to the API service. This can reduce submission time
@@ -122,11 +139,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         validate_network_nonself(network)
 
-        sk = self.get_scoped_key(network, scope)
+        state = NetworkStateEnum(state)
+
+        sk = ScopedKey(gufe_key=network.key, **scope.dict())
 
         def post():
             keyed_chain = KeyedChain.gufe_to_keyed_chain_rep(network)
-            data = dict(network=keyed_chain, scope=scope.dict())
+            data = dict(network=keyed_chain, scope=scope.dict(), state=state.value)
             return self._post_resource("/networks", data, compress=compress)
 
         if visualize:
@@ -145,10 +164,96 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return ScopedKey.from_dict(scoped_key)
 
+    def set_network_state(
+        self, network: ScopedKey, state: Union[NetworkStateEnum, str]
+    ) -> Optional[ScopedKey]:
+        """Set the state of an AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network
+            The network whose state will be updated.
+        state
+            The state to set the network to. Valid options include "active",
+            "inactive", "invalid", and "deleted".
+
+        Returns
+        -------
+        Optional[ScopedKey]
+            The ScopedKey of the updated network. If the network was not found, ``None``
+            is returned.
+        """
+        return self.set_networks_state([network], [state])[0]
+
+    def set_networks_state(
+        self, networks: List[ScopedKey], states: List[Union[NetworkStateEnum, str]]
+    ) -> List[Optional[ScopedKey]]:
+        """Set the state of a list of AlchemicalNetworks.
+
+        Parameters
+        ----------
+        networks
+            The networks whose states will be updated.
+        states
+            The states to set the networks to, in the same order as `networks`.
+            Values must be in a list of the same length as the networks
+            parameter. Valid options include "active", "inactive", "invalid",
+            and "deleted".
+
+        Returns
+        -------
+        List[Optional[ScopedKey]]
+            The ScopedKeys of the updated networks. If a network was not found, ``None``
+            is returned at the corresponding index.
+        """
+        data = dict(networks=list(map(str, networks)), states=states)
+        networks_updated = self._post_resource("/bulk/networks/state/set", data=data)
+        return [
+            ScopedKey.from_str(network_sk) if network_sk is not None else None
+            for network_sk in networks_updated
+        ]
+
+    def get_network_state(self, network: ScopedKey) -> Optional[str]:
+        """Get the state of an AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network
+            The ScopedKey of the AlchemicalNetwork to get the state for.
+
+        Returns
+        -------
+        Optional[str]
+            The state of the AlchemicalNetwork. If the network was not found in
+            the database, ``None`` is returned instead.
+        """
+        return self.get_networks_state([network])[0]
+
+    def get_networks_state(self, networks: List[ScopedKey]) -> List[Optional[str]]:
+        """Get the states for a list of AlchemicalNetworks.
+
+        Parameters
+        ----------
+        networks
+            A list of ScopedKeys for the AlchemicalNetworks to get the states
+            of.
+
+        Returns
+        -------
+        List[Optional[str]]
+            A list of network states, in the same order as the specified
+            networks. If a network was not found in the database, the
+            corresponding entry in this list is ``None``.
+        """
+        data = dict(networks=list(map(str, networks)))
+        states = self._post_resource("/bulk/networks/state/get", data=data)
+        return states
+
     def query_networks(
         self,
         name: Optional[str] = None,
         scope: Optional[Scope] = None,
+        state: Optional[Union[NetworkStateEnum, str]] = NetworkStateEnum.active,
     ) -> List[ScopedKey]:
         """Query for AlchemicalNetworks, optionally by name or Scope.
 
@@ -156,11 +261,30 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         all AlchemicalNetworks that are within the Scopes this user has access
         to.
 
+        Parameters
+        ----------
+        name : optional
+            Regex expression for the network names. Defaults to a wildcard.
+        scope : optional
+            A Scope to filter AlchemicalNetworks on.
+        state : optional
+            Regex expression for the network states. Nonexistent state values
+            entered will not raise any warnings. Use ``None`` to get networks
+            regardless of state. Defaults to the "active" state.
+
+        Returns
+        -------
+        List[ScopedKey]
+            A list of ScopedKeys for the networks matching the query
+            parameters.
         """
         if scope is None:
             scope = Scope()
 
-        params = dict(name=name, **scope.dict())
+        if isinstance(state, NetworkStateEnum):
+            state = state.value
+
+        params = dict(name=name, **scope.dict(), state=state)
 
         return self._query_resource("/networks", params=params)
 
@@ -219,7 +343,46 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         return self._get_resource(f"/networks/{network}/weight")
 
-    def set_network_weight(self, network: ScopedKey, weight: float) -> None:
+    async def _get_network_weight(self, networks: List[ScopedKey]) -> List[float]:
+        data = dict(networks=[str(network) for network in networks])
+        weights = await self._post_resource_async(
+            "/bulk/networks/weight/get", data=data
+        )
+        return weights
+
+    def get_networks_weight(
+        self, networks: List[ScopedKey], batch_size: int = 1000
+    ) -> List[float]:
+        """Get the weight of the TaskHubs associated with the given AlchemicalNetworks.
+
+        Compute services perform a weighted selection of the AlchemicalNetworks
+        visible to them before claiming Tasks actioned on those networks.
+        Networks with higher weight are more likely to be selected than those
+        with lower weight, and so will generally get more compute attention
+        over time.
+
+        A weight of ``0`` means the AlchemicalNetwork will not receive any
+        compute for its actioned Tasks.
+
+        Parameters
+        ----------
+        networks
+            A list of AlchemicalNetwork ScopedKeys.
+
+        Returns
+        -------
+        List[float]
+            The weights of the TaskHubs associated with the specified AlchemicalNetworks.
+            If the network was not found in the database, then None is returned in the
+            corresponding index.
+        """
+        return self._batched_attribute_getter(
+            networks, self._get_network_weight, batch_size
+        )
+
+    def set_network_weight(
+        self, network: ScopedKey, weight: float
+    ) -> Optional[ScopedKey]:
         """Set the weight of the TaskHub associated with the given AlchemicalNetwork.
 
         Compute services perform a weighted selection of the AlchemicalNetworks
@@ -239,9 +402,66 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The weight to set for the network. This must be between 0 and 1
             (inclusive). Setting the value to 0 will effectively disable
             compute on this network without cancelling its actioned Tasks.
-
         """
-        self._post_resource(f"/networks/{network}/weight", weight)
+        network_sk = self._post_resource(f"/networks/{network}/weight", weight)
+        return ScopedKey.from_str(network_sk) if network_sk else None
+
+    async def _set_network_weight(
+        self,
+        items: List[Tuple[ScopedKey, float]],
+    ) -> List[Optional[ScopedKey]]:
+
+        networks = []
+        weights = []
+        for item in items:
+            networks.append(str(item[0]))
+            weights.append(item[1])
+
+        data = dict(networks=networks, weights=weights)
+        return await self._post_resource_async("/bulk/networks/weight/set", data=data)
+
+    def set_networks_weight(
+        self,
+        networks: List[ScopedKey],
+        weights: List[float],
+        batch_size: int = 1000,
+    ) -> List[Optional[ScopedKey]]:
+        """Set the weights of the TaskHubs associated with the given
+        AlchemicalNetworks.
+
+        Compute services perform a weighted selection of the AlchemicalNetworks
+        visible to them before claiming Tasks actioned on those networks.
+        Networks with higher weight are more likely to be selected than those
+        with lower weight, and so will generally get more compute attention
+        over time.
+
+        A weight of ``0`` means the AlchemicalNetwork will not receive any
+        compute for its actioned Tasks.
+
+        Parameters
+        ----------
+        networks
+            The ScopedKeys of the AlchemicalNetworks to set the weights for.
+        weight
+            The weights to set for the `networks`, in the same order. Each must
+            be between 0 and 1 (inclusive). Setting the value to 0 will
+            effectively disable compute on the networks without cancelling its
+            actioned Tasks. Should be a list of the same length as `networks`.
+
+        Returns
+        -------
+        List[Optional[ScopedKey]]
+            The ScopedKeys of the TaskHubs whose weight changed, in the order
+            that the AlchemicalNetworks ScopedKeys were provided. If one of
+            the specified networks could not be found, a None is returned
+            at its corresponding index.
+        """
+        values = self._batched_attribute_setter(
+            [(network, weight) for network, weight in zip(networks, weights)],
+            self._set_network_weight,
+            batch_size=batch_size,
+        )
+        return [ScopedKey.from_str(value) if value else None for value in values]
 
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
@@ -305,12 +525,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             return KeyedChain(content).to_gufe()
 
         if visualize:
-            from rich.progress import (
-                Progress,
-                SpinnerColumn,
-                TimeElapsedColumn,
-                TextColumn,
-            )
+            from rich.progress import Progress
 
             with Progress(*self._rich_waiting_columns(), transient=False) as progress:
                 task = progress.add_task(
@@ -361,7 +576,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             return KeyedChain(content).to_gufe()
 
         if visualize:
-            from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
+            from rich.progress import Progress
 
             with Progress(*self._rich_waiting_columns(), transient=False) as progress:
                 task = progress.add_task(
@@ -469,6 +684,64 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
         return [ScopedKey.from_str(i) for i in task_sks]
 
+    def create_transformations_tasks(
+        self,
+        transformations: List[ScopedKey],
+        extends: Optional[List[Optional[ScopedKey]]] = None,
+    ) -> List[ScopedKey]:
+        """Create Tasks for multiple Transformations.
+
+        Unlike `create_tasks`, this method can create Tasks for many
+        Transformations. This method should be used instead of `create_tasks`
+        whenever creating Tasks for more than one unique Transformation since it
+        minimizes the number of API requests to the alchemiscale server.
+
+        Parameters
+        ----------
+        transformations
+            A list of ScopedKeys of Transformations to create Tasks for. The
+            same ScopedKey can be repeated to create multiple Tasks for the
+            same Transformation.
+        extends
+            A list of ScopedKeys for the Tasks to be extended. When not `None`,
+            `extends` must be a list of the same length as `transformations`. If
+            a transformation in `transformations` should not extend a Task, use
+            a `None` as a placeholder in the `extends` list.
+
+        Returns
+        -------
+        List[ScopedKey]
+            A list giving the ScopedKeys of the new Tasks created.
+
+        Examples
+        --------
+
+        Instead of looping over Transformations and calling `create_tasks`, make
+        one call to `create_transformations_tasks`.
+
+        >>> client.create_transformations_tasks([transformation_1_sk, transformation_2_sk])
+
+        The behavior of the `count` keyword argument from `create_tasks` can be
+        recreated by repeating the same transformation in the list while also
+        allowing the addition of other transformtions.
+
+        >>> client.create_transformations_tasks([transformation_1_sk] * 3 + [transformation_2_sk] * 2)
+
+        """
+
+        data = dict(
+            transformations=[str(transformation) for transformation in transformations],
+            extends=(
+                None
+                if not extends
+                else [
+                    str(task_sk) if task_sk is not None else None for task_sk in extends
+                ]
+            ),
+        )
+        task_sks = self._post_resource("/bulk/transformations/tasks/create", data)
+        return [ScopedKey.from_str(i) for i in task_sks]
+
     def query_tasks(
         self,
         scope: Optional[Scope] = None,
@@ -570,6 +843,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         scope: Optional[Scope] = None,
         visualize: Optional[bool] = True,
+        network_state: Optional[Union[NetworkStateEnum, str]] = NetworkStateEnum.active,
     ) -> Dict[str, int]:
         """Return status counts for all Tasks within the given Scope.
 
@@ -581,6 +855,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             Scope access to. Defaults to all Scopes.
         visualize
             If ``True``, print a table of status counts.
+        network_state
+            Regex expression for the network states. Nonexistent state values
+            entered will not raise any warnings. Use ``None`` to get networks
+            regardless of state. Defaults to the "active" state.
 
         Returns
         -------
@@ -590,7 +868,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        status_counts = self._get_resource(f"/scopes/{scope}/status")
+        if isinstance(network_state, NetworkStateEnum):
+            network_state = network_state.value
+
+        params = dict(network_state=network_state)
+
+        status_counts = self._get_resource(f"/scopes/{scope}/status", params=params)
 
         if visualize:
             self._visualize_status(status_counts, scope)
@@ -607,7 +890,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         Parameters
         ----------
         network
-            ScopedKey for the Alchemicalnetwork to obtain status counts for.
+            ScopedKey for the AlchemicalNetwork to obtain status counts for.
         visualize
             If ``True``, print a table of status counts.
 
@@ -621,6 +904,31 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if visualize:
             self._visualize_status(status_counts, network)
 
+        return status_counts
+
+    def get_networks_status(
+        self,
+        networks: List[ScopedKey],
+    ) -> List[Dict[str, int]]:
+        """Get the status counts of Tasks for a list of AlchemicalNetworks.
+
+        Parameters
+        ----------
+        networks
+            List of AlchemicalNetwork ScopedKeys to obtain status counts for.
+
+        Returns
+        -------
+        List[Dict[str, int]]
+            A list of dictionaries, in the same order as the provided networks,
+            containing the Task status counts for all Tasks in each network.
+            The dictionary keys are the statuses and the values are the number
+            of Tasks with that status. If either no tasks exist for the
+            Transformations in a network, or the network does not exist in the
+            database, a empty dictionary is returned at the corresponding index.
+        """
+        data = {"networks": [str(network) for network in networks]}
+        status_counts = self._post_resource("/bulk/networks/status", data=data)
         return status_counts
 
     def get_transformation_status(
@@ -679,6 +987,44 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             return {ScopedKey.from_str(t): w for t, w in tasks.items()}
 
         return [ScopedKey.from_str(t) for t in tasks]
+
+    def get_networks_actioned_tasks(
+        self,
+        networks: List[ScopedKey],
+        task_weights: bool = False,
+    ) -> List[Union[Dict[ScopedKey, float], List[ScopedKey]]]:
+        """Get all actioned Tasks for a list of AlchemicalNetwork ScopedKeys.
+
+        Parameters
+        ----------
+        networks
+            A list of AlchemicalNetwork ScopedKeys to retrieve actioned
+            Tasks for.
+
+        Returns
+        -------
+        List[Union[Dict[ScopedKey, float], List[ScopedKey]]]
+            If task_weights is True, a list of dictionaries is returned with
+            the same length as the specified network list. The keys and values
+            of the contained dictionaries are the ScopedKeys and weights of
+            the actioned Tasks, respectively.
+
+            If task_weights is False, only a list of actioned Task ScopedKeys
+            is returned for each network in the specified list.
+        """
+        data = dict(
+            networks=[str(network) for network in networks], task_weights=task_weights
+        )
+        grouped_tasks = self._post_resource("/bulk/networks/tasks/actioned", data=data)
+
+        return_data = []
+        for tasks in grouped_tasks:
+            if task_weights:
+                return_data.append({ScopedKey.from_str(t): w for t, w in tasks.items()})
+            else:
+                return_data.append([ScopedKey.from_str(t) for t in tasks])
+
+        return return_data
 
     def get_task_actioned_networks(
         self, task: ScopedKey, task_weights: bool = False
@@ -783,20 +1129,19 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return [ScopedKey.from_str(i) if i is not None else None for i in canceled_sks]
 
-    def _task_attribute_getter(
-        self, tasks: List[ScopedKey], getter_function, batch_size
+    def _batched_attribute_getter(
+        self,
+        batchables: List[Any],
+        getter_function,
+        batch_size,
     ) -> List[Any]:
-        tasks = [
-            ScopedKey.from_str(task) if isinstance(task, str) else task
-            for task in tasks
-        ]
 
         @use_session
         async def async_request(self):
             values = await asyncio.gather(
                 *[
-                    getter_function(task_batch)
-                    for task_batch in self._batched(tasks, batch_size)
+                    getter_function(batch)
+                    for batch in self._batched(batchables, batch_size)
                 ]
             )
 
@@ -814,22 +1159,29 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             nest_asyncio.apply()
             return asyncio.run(coro)
 
-    def _task_attribute_setter(
-        self, tasks: List[ScopedKey], setter_function, setter_args, batch_size
+    def _batched_attribute_setter(
+        self,
+        batchables: List[Any],
+        setter_function,
+        setter_args: Iterable[Any] = None,
+        batch_size: int = 1000,
+        should_return=True,
     ) -> List[Optional[ScopedKey]]:
-        tasks = [
-            ScopedKey.from_str(task) if isinstance(task, str) else task
-            for task in tasks
-        ]
+
+        if setter_args is None:
+            setter_args = []
 
         @use_session
         async def async_request(self):
             scoped_keys = await asyncio.gather(
                 *[
-                    setter_function(task_batch, *setter_args)
-                    for task_batch in self._batched(tasks, batch_size)
+                    setter_function(batch, *setter_args)
+                    for batch in self._batched(batchables, batch_size)
                 ]
             )
+
+            if not should_return:
+                return None
 
             return list(chain.from_iterable(scoped_keys))
 
@@ -851,7 +1203,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """Set the statuses for many Tasks"""
         data = dict(tasks=[t.dict() for t in tasks], status=status.value)
         tasks_updated = await self._post_resource_async(
-            f"/bulk/tasks/status/set", data=data
+            "/bulk/tasks/status/set", data=data
         )
         return [
             ScopedKey.from_str(task_sk) if task_sk is not None else None
@@ -887,14 +1239,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         status = TaskStatusEnum(status)
 
-        return self._task_attribute_setter(
+        return self._batched_attribute_setter(
             tasks, self._set_task_status, (status,), batch_size
         )
 
     async def _get_task_status(self, tasks: List[ScopedKey]) -> List[TaskStatusEnum]:
         """Get the statuses for many Tasks"""
         data = dict(tasks=[t.dict() for t in tasks])
-        statuses = await self._post_resource_async(f"/bulk/tasks/status/get", data=data)
+        statuses = await self._post_resource_async("/bulk/tasks/status/get", data=data)
         return statuses
 
     def get_tasks_status(
@@ -917,14 +1269,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             given Task doesn't exist, ``None`` will be returned in its place.
 
         """
-        return self._task_attribute_getter(tasks, self._get_task_status, batch_size)
+        return self._batched_attribute_getter(tasks, self._get_task_status, batch_size)
 
     async def _set_task_priority(
         self, tasks: List[ScopedKey], priority: int
     ) -> List[Optional[ScopedKey]]:
         data = dict(tasks=[t.dict() for t in tasks], priority=priority)
         tasks_updated = await self._post_resource_async(
-            f"/bulk/tasks/priority/set", data=data
+            "/bulk/tasks/priority/set", data=data
         )
         return [
             ScopedKey.from_str(task_sk) if task_sk is not None else None
@@ -957,7 +1309,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             as given in `tasks`. If a given Task doesn't exist, ``None`` will
             be returned in its place.
         """
-        return self._task_attribute_setter(
+        return self._batched_attribute_setter(
             tasks, self._set_task_priority, (priority,), batch_size
         )
 
@@ -965,7 +1317,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """Get the priority for many Tasks"""
         data = dict(tasks=[t.dict() for t in tasks])
         priorities = await self._post_resource_async(
-            f"/bulk/tasks/priority/get", data=data
+            "/bulk/tasks/priority/get", data=data
         )
         return priorities
 
@@ -991,7 +1343,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             given Task doesn't exist, ``None`` will be returned in its place.
 
         """
-        return self._task_attribute_getter(tasks, self._get_task_priority, batch_size)
+        return self._batched_attribute_getter(
+            tasks, self._get_task_priority, batch_size
+        )
 
     ### results
 
@@ -1032,7 +1386,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     *self._rich_progress_columns(), transient=False
                 ) as progress:
                     task = progress.add_task(
-                        f"Retrieving [bold]ProtocolDAGResult[/bold]s",
+                        "Retrieving [bold]ProtocolDAGResult[/bold]s",
                         total=len(protocoldagresultrefs),
                     )
 

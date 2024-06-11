@@ -4,16 +4,15 @@ from collections import defaultdict
 import pytest
 from fastapi.testclient import TestClient
 
-from gufe import AlchemicalNetwork
+from gufe import AlchemicalNetwork, NonTransformation
 
 from alchemiscale.settings import get_base_api_settings
 from alchemiscale.storage.statestore import Neo4jStore
-from alchemiscale.compute import api, client
+from alchemiscale.compute import api
 from alchemiscale.security.models import CredentialedComputeIdentity, TokenData
 from alchemiscale.security.auth import hash_key
 from alchemiscale.base.api import (
     get_token_data_depends,
-    get_n4js_depends,
     get_s3os_depends,
 )
 
@@ -82,23 +81,17 @@ def n4js_preloaded(
     n4js: Neo4jStore = n4js_fresh
 
     # Set up tasks from select set of transformations
-    transformations = list(network_tyk2.edges)[0:3]
+    # we need to use second_network_an2 because its edges
+    # are a subset of network_tyk2's edges
+    transformations = sorted(
+        filter(lambda x: type(x) is not NonTransformation, second_network_an2.edges)
+    )[0:3]
 
     # set starting contents for many of the tests in this module
     for single_scope in multiple_scopes:
         # Create initial network for this scope
-        sk1 = n4js.create_network(network_tyk2, single_scope)
-
-        # Create another network for this scope
-        sk2 = n4js.create_network(second_network_an2, single_scope)
-
-        # add a taskhub for each network
-        n4js.create_taskhub(sk1)
-        n4js.create_taskhub(sk2)
-
-        # add a taskhub for each network and scope
-        th_sk1 = n4js.create_taskhub(sk1)
-        th_sk2 = n4js.create_taskhub(sk2)
+        sk1, th_sk1, _ = n4js.assemble_network(network_tyk2, single_scope)
+        sk2, th_sk2, _ = n4js.assemble_network(second_network_an2, single_scope)
 
         # Spawn tasks
         task_sks = defaultdict(list)
