@@ -2,6 +2,7 @@ name: alchemiscale-compute
 channels:
   - conda-forge
   - openeye
+
 dependencies:
   - pip
   - python =3.10

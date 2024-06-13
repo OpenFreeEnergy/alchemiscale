@@ -862,19 +862,26 @@ class Neo4jStore(AlchemiscaleStateStore):
             gufe_key_pattern=None if key is None else str(key),
         )
 
-        for k, v in query_params.items():
-            if v is None:
-                query_params[k] = ".*"
+        where_params = dict(
+            name_pattern="an.name",
+            org_pattern="an.`_org`",
+            campaign_pattern="an.`_campaign`",
+            project_pattern="an.`_project`",
+            state_pattern="nm.state",
+            gufe_key_pattern="an.`_gufe_key`",
+        )
 
-        q = """
+        conditions = []
+
+        for k, v in query_params.items():
+            if v is not None:
+                conditions.append(f"{where_params[k]} =~ ${k}")
+
+        where_clause = "WHERE " + " AND ".join(conditions) if len(conditions) else ""
+
+        q = f"""
             MATCH (an:AlchemicalNetwork)<-[:MARKS]-(nm:NetworkMark)
-            WHERE
-                    an.name =~ $name_pattern
-                AND an.`_gufe_key` =~ $gufe_key_pattern
-                AND an.`_org` =~ $org_pattern
-                AND an.`_campaign` =~ $campaign_pattern
-                AND an.`_project` =~ $project_pattern
-                AND nm.state =~ $state_pattern
+            {where_clause}
             RETURN an._scoped_key as sk
         """
 

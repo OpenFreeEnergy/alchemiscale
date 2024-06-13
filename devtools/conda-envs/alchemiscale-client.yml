@@ -3,6 +3,7 @@ channels:
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
   - openeye
+
 dependencies:
   - pip
   - python =3.10
