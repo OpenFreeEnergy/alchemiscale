@@ -16,6 +16,8 @@ dependencies:
   - click
   - httpx
   - pydantic<2.0
+  - openff-nagl
+  - espaloma_charge
 
   # perses dependencies
   - openeye-toolkits
