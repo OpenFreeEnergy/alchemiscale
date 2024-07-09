@@ -81,7 +81,7 @@ services:
       - "traefik.http.routers.alchemiscale-client-API.rule=Host(`api.${HOST_DOMAIN:?err}`)"
       - "traefik.http.routers.alchemiscale-client-API.entrypoints=websecure"
       - "traefik.http.routers.alchemiscale-client-API.tls.certresolver=myresolver"
-      - "traefik.docker.network=docker_internal"
+      - "traefik.docker.network=alchemiscale-server_internal"
     healthcheck:
       test: ["CMD", "/opt/conda/bin/curl", "-f", "http://localhost:1840/ping"]
       interval: 1m
@@ -125,7 +125,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.alchemiscale-compute-API.rule=Host(`compute.${HOST_DOMAIN:?err}`)"
-      - "traefik.docker.network=docker_internal"
+      - "traefik.docker.network=alchemiscale-server_internal"
       - "traefik.http.routers.alchemiscale-compute-API.entrypoints=websecure"
       - "traefik.http.routers.alchemiscale-compute-API.tls.certresolver=myresolver"
     healthcheck:

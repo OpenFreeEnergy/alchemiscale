@@ -1,6 +1,6 @@
 FROM mambaorg/micromamba:1.4.1
 
-LABEL org.opencontainers.image.source=https://github.com/openforcefield/alchemiscale-compute
+LABEL org.opencontainers.image.source=https://github.com/openforcefield/alchemiscale
 LABEL org.opencontainers.image.description="deployable compute services for an alchemiscale server"
 LABEL org.opencontainers.image.licenses=MIT
 
