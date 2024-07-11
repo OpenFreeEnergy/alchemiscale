@@ -1324,6 +1324,55 @@ class TestNeo4jStore(TestStateStore):
         claimed6 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=2)
         assert claimed6 == [None] * 2
 
+    def test_claim_taskhub_tasks_protocol_split(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
+        an = network_tyk2
+        network_sk, taskhub_sk, _ = n4js.assemble_network(an, scope_test)
+
+        from ..conftest import DummyProtocolA, DummyProtocolB, DummyProtocolC
+        from functools import reduce
+
+        def reducer(collection, transformation):
+            protocol = transformation.protocol.__class__
+            if len(collection[protocol]) >= 3:
+                return collection
+            sk = n4js.get_scoped_key(transformation, scope_test)
+            collection[transformation.protocol.__class__].append(sk)
+            return collection
+
+        transformations = reduce(
+            reducer,
+            an.edges,
+            {DummyProtocolA: [], DummyProtocolB: [], DummyProtocolC: []},
+        )
+
+        transformation_sks = [
+            value for _, values in transformations.items() for value in values
+        ]
+
+        task_sks = n4js.create_tasks(transformation_sks)
+        assert len(task_sks) == 9
+
+        # action the tasks
+        n4js.action_tasks(task_sks, taskhub_sk)
+        assert len(n4js.get_taskhub_unclaimed_tasks(taskhub_sk)) == 9
+
+        csid = ComputeServiceID("another task handler")
+        n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
+
+        claimedA = n4js.claim_taskhub_tasks(
+            taskhub_sk, csid, protocols=["DummyProtocolA"], count=9
+        )
+
+        assert len([sk for sk in claimedA if sk]) == 3
+
+        claimedBC = n4js.claim_taskhub_tasks(
+            taskhub_sk, csid, protocols=["DummyProtocolB", "DummyProtocolC"], count=9
+        )
+
+        assert len([sk for sk in claimedBC if sk]) == 6
+
     def test_claim_taskhub_tasks_deregister(
         self, n4js: Neo4jStore, network_tyk2, scope_test
     ):
