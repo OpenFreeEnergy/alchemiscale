@@ -6,7 +6,7 @@ channels:
 dependencies:
   - pip
   - python =3.10
-  - cudatoolkit <=11.7  # many actual compute resources are not yet compatible with cudatoolkit >=11.8
+  - cudatoolkit =11.8  # many actual compute resources are not yet compatible with cudatoolkit >=11.8
 
   # alchemiscale dependencies
   - gufe=0.9.5
