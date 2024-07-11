@@ -3,6 +3,7 @@ import random
 from typing import List, Dict
 from pathlib import Path
 from itertools import chain
+from functools import reduce
 
 import pytest
 from gufe import AlchemicalNetwork
@@ -26,6 +27,8 @@ from alchemiscale.security.models import (
     CredentialedComputeIdentity,
 )
 from alchemiscale.security.auth import hash_key
+
+from ..conftest import DummyProtocolA, DummyProtocolB, DummyProtocolC
 
 
 class TestStateStore: ...
@@ -1329,9 +1332,6 @@ class TestNeo4jStore(TestStateStore):
     ):
         an = network_tyk2
         network_sk, taskhub_sk, _ = n4js.assemble_network(an, scope_test)
-
-        from ..conftest import DummyProtocolA, DummyProtocolB, DummyProtocolC
-        from functools import reduce
 
         def reducer(collection, transformation):
             protocol = transformation.protocol.__class__
