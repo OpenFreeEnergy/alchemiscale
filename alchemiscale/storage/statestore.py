@@ -1665,7 +1665,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         taskhub: ScopedKey,
         compute_service_id: ComputeServiceID,
         count: int = 1,
-        protocols: Optional[List[Protocol]] = None,
+        protocols: Optional[List[Union[Protocol, str]]] = None,
     ) -> List[Union[ScopedKey, None]]:
         """Claim a TaskHub Task.
 
@@ -1705,8 +1705,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         # filter down to `protocols`, if specified
         if protocols is not None:
+            # need to extract qualnames if given protocol classes
+            protocols = [
+                protocol.__qualname__ if isinstance(protocol, Protocol) else protocol
+                for protocol in protocols
+            ]
+
             q += f"""
-            MATCH (task)-[:PERFORMS]->(:Transformation)-[:DEPENDS_ON]->(protocol:{cypher_or(protocols)})
+            MATCH (task)-[:PERFORMS]->(:Transformation|NonTransformation)-[:DEPENDS_ON]->(protocol:{cypher_or(protocols)})
             WITH task, other_task, actions
             """
 
