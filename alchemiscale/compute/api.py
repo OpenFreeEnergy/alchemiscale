@@ -250,7 +250,7 @@ def claim_tasks(
         # remove this taskhub from the options available; repeat
         taskhubs.pop(taskhub)
 
-    return [str(t) if t is not None else None for t in tasks]
+    return [str(t) for t in tasks]
 
 
 @router.get("/tasks/{task_scoped_key}/transformation")
