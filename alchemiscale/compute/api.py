@@ -265,7 +265,7 @@ def get_task_transformation(
 
     transformation: ScopedKey
 
-    transformation, protocoldagresultref = n4js.get_task_transformation(
+    transformation, _ = n4js.get_task_transformation(
         task=task_scoped_key,
         return_gufe=False,
     )
