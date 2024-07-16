@@ -1,7 +1,7 @@
 import pytest
 
 from fastapi import HTTPException
-from pydantic import ValidationError
+from alchemiscale._pydantic import ValidationError
 
 from alchemiscale.base.api import validate_scopes, validate_scopes_query
 from alchemiscale.models import Scope, ScopedKey

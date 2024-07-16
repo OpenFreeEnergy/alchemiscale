@@ -13,7 +13,7 @@ from uuid import uuid4
 import hashlib
 
 
-from pydantic import BaseModel, Field
+from alchemiscale._pydantic import BaseModel, Field
 from gufe.tokenization import GufeTokenizable, GufeKey
 
 from ..models import ScopedKey, Scope
