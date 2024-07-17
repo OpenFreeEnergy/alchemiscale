@@ -38,3 +38,37 @@ class TestNetworkState(object):
             assert len(suggested_states) == len(NetworkStateEnum)
             for state in suggested_states:
                 NetworkStateEnum(state)
+
+
+class TestTaskRestartPattern(object):
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_empty_pattern(self):
+        raise NotImplementedError
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_negative_max_retries(self):
+        raise NotImplementedError
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_non_int_max_retries(self):
+        raise NotImplementedError
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_to_dict(self):
+        raise NotImplementedError
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_from_dict(self):
+        raise NotImplementedError
+
+
+class TestTraceback(object):
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_to_dict(self):
+        raise NotImplementedError
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_from_dict(self):
+        raise NotImplementedError
