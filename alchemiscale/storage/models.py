@@ -151,18 +151,34 @@ class TaskRestartPattern(GufeTokenizable):
     ----------
     pattern: str
         A regular expression pattern that can match to returned tracebacks of errored Tasks.
-    retry_count: int
+    max_retries: int
         The number of times the pattern can trigger a restart for a Task.
     """
 
     pattern: str
-    retry_count: int
+    max_retries: int
 
-    def __init__(self, pattern: str):
+    def __init__(self, pattern: str, max_retries: int):
         self.pattern = pattern
 
+        if not isinstance(max_retries, int) or max_retries <= 0:
+            raise ValueError("`max_retries` must have a positive integer value.")
+        self.max_retries = max_retries
+
+    # TODO: these hashes can overlap across TaskHubs
     def _gufe_tokenize(self):
-        return hashlib.md5(self.pattern).hexdigest()
+        return hashlib.md5(self.pattern.encode()).hexdigest()
+
+    @classmethod
+    def _defaults(cls):
+        raise NotImplementedError
+
+    @classmethod
+    def _from_dict(cls, dct):
+        return cls(**dct)
+
+    def _to_dict(self):
+        return {"pattern": self.pattern, "max_retries": self.max_retries}
 
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
@@ -170,53 +186,24 @@ class TaskRestartPattern(GufeTokenizable):
         return self.pattern == other.pattern
 
 
-# TODO: fill in docstrings
-class TaskRestartPolicy(GufeTokenizable):
-    """Restart policy that enforces a TaskHub.
+class Traceback(GufeTokenizable):
 
-    Attributes
-    ----------
-    taskhub: str
-        ScopedKey of the TaskHub this TaskRestartPolicy enforces.
-    """
-
-    taskhub: str
-
-    def __init__(self, taskhub: ScopedKey):
-        self.taskhub = taskhub
-
-    def _gufe_tokenize(self):
-        return hashlib.md5(
-            self.__class__.__qualname__ + str(self.taskhub), usedforsecurity=False
-        ).hexdigest()
-
-
-# TODO: fill in docstrings
-class TaskHistory(GufeTokenizable):
-    """History attached to a `Task`.
-
-    Attributes
-    ----------
-    task: str
-        ScopedKey of the Task this TaskHistory corresponds to.
-    tracebacks: List[str]
-        The history of tracebacks returned with the newest entries appearing at the end of the list.
-    times_restarted: int
-        The number of times the task has bee
-    """
-
-    task: str
-    tracebacks: list
-    times_restarted: int
-
-    def __init__(self, task: ScopedKey, tracebacks: List[str]):
-        self.task = task
+    def __init__(self, tracebacks: List[str]):
         self.tracebacks = tracebacks
 
     def _gufe_tokenize(self):
-        return hashlib.md5(
-            self.__class__.__qualname__ + str(self.task), usedforsecurity=False
-        ).hexdigest()
+        return hashlib.md5(str(self.tracebacks).encode()).hexdigest()
+
+    @classmethod
+    def _defaults(cls):
+        raise NotImplementedError
+
+    @classmethod
+    def _from_dict(cls, dct):
+        return Traceback(**dct)
+
+    def _to_dict(self):
+        return {"tracebacks": self.tracebacks}
 
 
 class TaskHub(GufeTokenizable):
