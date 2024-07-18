@@ -159,6 +159,10 @@ class TaskRestartPattern(GufeTokenizable):
     max_retries: int
 
     def __init__(self, pattern: str, max_retries: int):
+
+        if not isinstance(pattern, str) or pattern == "":
+            raise ValueError("`pattern` must be a non-empty string")
+
         self.pattern = pattern
 
         if not isinstance(max_retries, int) or max_retries <= 0:
@@ -189,6 +193,17 @@ class TaskRestartPattern(GufeTokenizable):
 class Traceback(GufeTokenizable):
 
     def __init__(self, tracebacks: List[str]):
+        value_error = ValueError(
+            "`tracebacks` must be a non-empty list of string values"
+        )
+        if not isinstance(tracebacks, list) or tracebacks == []:
+            raise value_error
+        else:
+            # in the case where tracebacks is not an iterable, this will raise a TypeError
+            all_string_values = all([isinstance(value, str) for value in tracebacks])
+            if not all_string_values or "" in tracebacks:
+                raise value_error
+
         self.tracebacks = tracebacks
 
     def _gufe_tokenize(self):
