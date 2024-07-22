@@ -153,12 +153,17 @@ class TaskRestartPattern(GufeTokenizable):
         A regular expression pattern that can match to returned tracebacks of errored Tasks.
     max_retries: int
         The number of times the pattern can trigger a restart for a Task.
+    taskhub_sk: str
+        The TaskHub the pattern is bound to. This is needed to properly set a unique Gufe key.
     """
 
     pattern: str
     max_retries: int
+    taskhub_sk: str
 
-    def __init__(self, pattern: str, max_retries: int):
+    def __init__(
+        self, pattern: str, max_retries: int, taskhub_scoped_key: Union[str, ScopedKey]
+    ):
 
         if not isinstance(pattern, str) or pattern == "":
             raise ValueError("`pattern` must be a non-empty string")
@@ -169,9 +174,11 @@ class TaskRestartPattern(GufeTokenizable):
             raise ValueError("`max_retries` must have a positive integer value.")
         self.max_retries = max_retries
 
-    # TODO: these hashes can overlap across TaskHubs
+        self.taskhub_scoped_key = str(taskhub_scoped_key)
+
     def _gufe_tokenize(self):
-        return hashlib.md5(self.pattern.encode()).hexdigest()
+        key_string = self.pattern + self.taskhub_scoped_key
+        return hashlib.md5(key_string.encode()).hexdigest()
 
     @classmethod
     def _defaults(cls):
@@ -182,8 +189,13 @@ class TaskRestartPattern(GufeTokenizable):
         return cls(**dct)
 
     def _to_dict(self):
-        return {"pattern": self.pattern, "max_retries": self.max_retries}
+        return {
+            "pattern": self.pattern,
+            "max_retries": self.max_retries,
+            "taskhub_scoped_key": self.taskhub_scoped_key,
+        }
 
+    # TODO: should this also compare taskhub scoped keys?
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
             return False

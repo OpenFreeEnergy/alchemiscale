@@ -52,35 +52,61 @@ class TestTaskRestartPattern(object):
 
     def test_empty_pattern(self):
         with pytest.raises(ValueError, match=self.pattern_value_error):
-            _ = TaskRestartPattern("", 3)
+            _ = TaskRestartPattern(
+                "", 3, "FakeScopedKey-1234-fake_org-fake_campaign-fake_project"
+            )
 
     def test_non_string_pattern(self):
         with pytest.raises(ValueError, match=self.pattern_value_error):
-            _ = TaskRestartPattern(None, 3)
+            _ = TaskRestartPattern(
+                None, 3, "FakeScopedKey-1234-fake_org-fake_campaign-fake_project"
+            )
 
         with pytest.raises(ValueError, match=self.pattern_value_error):
-            _ = TaskRestartPattern([], 3)
+            _ = TaskRestartPattern(
+                [], 3, "FakeScopedKey-1234-fake_org-fake_campaign-fake_project"
+            )
 
     def test_non_positive_max_retries(self):
 
         with pytest.raises(ValueError, match=self.max_retries_value_error):
-            TaskRestartPattern("Example pattern", 0)
+            TaskRestartPattern(
+                "Example pattern",
+                0,
+                "FakeScopedKey-1234-fake_org-fake_campaign-fake_project",
+            )
 
         with pytest.raises(ValueError, match=self.max_retries_value_error):
-            TaskRestartPattern("Example pattern", -1)
+            TaskRestartPattern(
+                "Example pattern",
+                -1,
+                "FakeScopedKey-1234-fake_org-fake_campaign-fake_project",
+            )
 
     def test_non_int_max_retries(self):
         with pytest.raises(ValueError, match=self.max_retries_value_error):
-            TaskRestartPattern("Example pattern", 4.0)
+            TaskRestartPattern(
+                "Example pattern",
+                4.0,
+                "FakeScopedKey-1234-fake_org-fake_campaign-fake_project",
+            )
 
     def test_to_dict(self):
-        trp = TaskRestartPattern("Example pattern", 3)
+        trp = TaskRestartPattern(
+            "Example pattern",
+            3,
+            "FakeScopedKey-1234-fake_org-fake_campaign-fake_project",
+        )
         dict_trp = trp.to_dict()
 
-        assert len(dict_trp.keys()) == 5
+        assert len(dict_trp.keys()) == 6
 
         assert dict_trp.pop("__qualname__") == "TaskRestartPattern"
         assert dict_trp.pop("__module__") == "alchemiscale.storage.models"
+        assert (
+            dict_trp.pop("taskhub_scoped_key")
+            == "FakeScopedKey-1234-fake_org-fake_campaign-fake_project"
+        )
 
         # light test of the version key
         try:
@@ -96,13 +122,19 @@ class TestTaskRestartPattern(object):
 
         original_pattern = "Example pattern"
         original_max_retries = 3
+        original_taskhub_scoped_key = (
+            "FakeScopedKey-1234-fake_org-fake_campaign-fake_project"
+        )
 
-        trp_orig = TaskRestartPattern(original_pattern, original_max_retries)
+        trp_orig = TaskRestartPattern(
+            original_pattern, original_max_retries, original_taskhub_scoped_key
+        )
         trp_dict = trp_orig.to_dict()
         trp_reconstructed: TaskRestartPattern = TaskRestartPattern.from_dict(trp_dict)
 
         assert trp_reconstructed.pattern == original_pattern
         assert trp_reconstructed.max_retries == original_max_retries
+        assert trp_reconstructed.taskhub_scoped_key == original_taskhub_scoped_key
 
 
 class TestTraceback(object):
