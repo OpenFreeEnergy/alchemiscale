@@ -27,6 +27,7 @@ from .models import (
     ProtocolDAGResultRef,
     Task,
     TaskHub,
+    TaskRestartPattern,
     TaskStatusEnum,
 )
 from ..strategies import Strategy
@@ -2706,7 +2707,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ## task restart policy
 
     # TODO: fill in docstring
-    def add_task_restart_policy_patterns(
+    def add_task_restart_patterns(
         self, taskhub: ScopedKey, patterns: List[str], number_of_retries: int
     ):
         """Add a list of restart policy patterns to a `TaskHub` along with the number of retries allowed.
@@ -2714,8 +2715,87 @@ class Neo4jStore(AlchemiscaleStateStore):
         Parameters
         ----------
 
+
+        Raises
+        ------
         """
-        raise NotImplementedError
+
+        # get taskhub node
+        q = """
+        MATCH (th:TaskHub {`_scoped_key`: $taskhub})
+        RETURN th
+        """
+        results = self.execute_query(q, taskhub=str(taskhub))
+        ## raise error if taskhub not found
+
+        if not results.records:
+            raise KeyError("No such TaskHub in the database")
+
+        record_data = results.records[0]["th"]
+        taskhub_node = record_data_to_node(record_data)
+        scope = taskhub.scope
+
+        subgraph = Subgraph()
+
+        for pattern in patterns:
+            task_restart_pattern = TaskRestartPattern(
+                pattern,
+                max_retries=number_of_retries,
+                taskhub_scoped_key=str(taskhub),
+            )
+
+            _, task_restart_policy_node, scoped_key = self._gufe_to_subgraph(
+                task_restart_pattern.to_shallow_dict(),
+                labels=["GufeTokenizable", task_restart_pattern.__class__.__name__],
+                gufe_key=task_restart_pattern.key,
+                scope=scope,
+            )
+
+            subgraph |= Relationship.type("ENFORCES")(
+                task_restart_policy_node,
+                taskhub_node,
+                _org=scope.org,
+                _campaign=scope.campaign,
+                _project=scope.project,
+            )
+
+        with self.transaction() as tx:
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+
+    # TODO: fill in docstring
+    def remove_task_restart_patterns(self, taskhub: ScopedKey, patterns: List[str]):
+        q = """
+        UNWIND $patterns AS pattern
+
+        MATCH (trp: TaskRestartPattern {pattern: pattern, taskhub_scoped_key: $taskhub_scoped_key})
+
+        DETACH DELETE trp
+        """
+
+        self.execute_query(q, patterns=patterns, taskhub_scoped_key=str(taskhub))
+
+    # TODO: fill in docstring
+    def get_task_restart_patterns(self, taskhubs: List[ScopedKey]):
+
+        q = """
+            UNWIND $taskhub_scoped_keys as taskhub_scoped_key
+            MATCH (trp: TaskRestartPattern)-[ENFORCES]->(th: TaskHub {`_scoped_key`: taskhub_scoped_key})
+            RETURN th, trp
+        """
+
+        records = self.execute_query(
+            q, taskhub_scoped_keys=list(map(str, taskhubs))
+        ).records
+
+        data = {taskhub: set() for taskhub in taskhubs}
+
+        for record in records:
+            pattern = record["trp"]["pattern"]
+            max_retries = record["trp"]["max_retries"]
+            taskhub_sk = ScopedKey.from_str(record["th"]["_scoped_key"])
+            data[taskhub_sk].add((pattern, max_retries))
+
+        return dict(data)
 
     ## authentication
 

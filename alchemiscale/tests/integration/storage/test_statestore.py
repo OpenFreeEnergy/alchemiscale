@@ -3,6 +3,7 @@ import random
 from typing import List, Dict
 from pathlib import Path
 from itertools import chain
+from collections import defaultdict
 
 import pytest
 from gufe import AlchemicalNetwork
@@ -1850,6 +1851,163 @@ class TestNeo4jStore(TestStateStore):
         assert len(failure_pdr_ref_sks) == 2
         assert pdr_ref_sk in failure_pdr_ref_sks
         assert pdr_ref2_sk in failure_pdr_ref_sks
+
+    ### task restart policies
+
+    def test_add_task_restart_patterns(self, n4js, network_tyk2, scope_test):
+        # create three new alchemical networks (and taskhubs)
+        taskhub_sks = []
+        for network_index in range(3):
+            an = network_tyk2.copy_with_replacements(
+                name=network_tyk2.name
+                + f"_test_add_task_restart_patterns_{network_index}"
+            )
+            _, taskhub_scoped_key, _ = n4js.assemble_network(an, scope_test)
+            taskhub_sks.append(taskhub_scoped_key)
+
+        # test a shared pattern with and without shared number of restarts
+        # this will create 6 unique patterns
+        for network_index in range(3):
+            taskhub_scoped_key = taskhub_sks[network_index]
+            n4js.add_task_restart_patterns(
+                taskhub_scoped_key, ["shared_pattern_and_restarts.+"], 5
+            )
+            n4js.add_task_restart_patterns(
+                taskhub_scoped_key,
+                ["shared_pattern_and_different_restarts.+"],
+                network_index + 1,
+            )
+
+        q = """UNWIND $taskhub_sks AS taskhub_sk
+        MATCH (trp: TaskRestartPattern)-[ENFORCES]->(th: TaskHub {`_scoped_key`: taskhub_sk}) RETURN trp, th
+        """
+
+        taskhub_sks = list(map(str, taskhub_sks))
+        records = n4js.execute_query(q, taskhub_sks=taskhub_sks).records
+
+        assert len(records) == 6
+
+        taskhub_scoped_key_set = set()
+        taskrestartpattern_scoped_key_set = set()
+
+        for record in records:
+            taskhub_scoped_key = ScopedKey.from_str(record["th"]["_scoped_key"])
+            taskrestartpattern_scoped_key = ScopedKey.from_str(
+                record["trp"]["_scoped_key"]
+            )
+
+            taskhub_scoped_key_set.add(taskhub_scoped_key)
+            taskrestartpattern_scoped_key_set.add(taskrestartpattern_scoped_key)
+
+        assert len(taskhub_scoped_key_set) == 3
+        assert len(taskrestartpattern_scoped_key_set) == 6
+
+    def test_remove_task_restart_patterns(self, n4js, network_tyk2, scope_test):
+
+        # collect what we expect `get_task_restart_patterns` to return
+        expected_results = defaultdict(set)
+
+        # create three new alchemical networks (and taskhubs)
+        taskhub_sks = []
+        for network_index in range(3):
+            an = network_tyk2.copy_with_replacements(
+                name=network_tyk2.name
+                + f"_test_remove_task_restart_patterns_{network_index}"
+            )
+            _, taskhub_scoped_key, _ = n4js.assemble_network(an, scope_test)
+            taskhub_sks.append(taskhub_scoped_key)
+
+        # test a shared pattern with and without shared number of restarts
+        # this will create 6 unique patterns
+        for network_index in range(3):
+            taskhub_scoped_key = taskhub_sks[network_index]
+            n4js.add_task_restart_patterns(
+                taskhub_scoped_key, ["shared_pattern_and_restarts.+"], 5
+            )
+            expected_results[taskhub_scoped_key].add(
+                ("shared_pattern_and_restarts.+", 5)
+            )
+
+            n4js.add_task_restart_patterns(
+                taskhub_scoped_key,
+                ["shared_pattern_and_different_restarts.+"],
+                network_index + 1,
+            )
+            expected_results[taskhub_scoped_key].add(
+                ("shared_pattern_and_different_restarts.+", network_index + 1)
+            )
+
+        # remove both patterns enforcing the first taskhub at the same time, two patterns
+        target_taskhub = taskhub_sks[0]
+        target_patterns = []
+
+        for pattern, _ in expected_results[target_taskhub]:
+            target_patterns.append(pattern)
+
+        expected_results[target_taskhub].clear()
+
+        n4js.remove_task_restart_patterns(target_taskhub, target_patterns)
+        assert expected_results == n4js.get_task_restart_patterns(taskhub_sks)
+
+        # remove both patterns enforcing the second taskhub one at a time, two patterns
+        target_taskhub = taskhub_sks[1]
+        # pointer to underlying set, pops will update comparison data structure
+        target_patterns = expected_results[target_taskhub]
+
+        pattern, _ = target_patterns.pop()
+        n4js.remove_task_restart_patterns(target_taskhub, [pattern])
+        assert expected_results == n4js.get_task_restart_patterns(taskhub_sks)
+
+        pattern, _ = target_patterns.pop()
+        n4js.remove_task_restart_patterns(target_taskhub, [pattern])
+        assert expected_results == n4js.get_task_restart_patterns(taskhub_sks)
+
+    def test_get_task_restart_patterns(self, n4js, network_tyk2, scope_test):
+        # create three new alchemical networks (and taskhubs)
+        taskhub_sks = []
+        for network_index in range(3):
+            an = network_tyk2.copy_with_replacements(
+                name=network_tyk2.name
+                + f"_test_add_task_restart_patterns_{network_index}"
+            )
+            _, taskhub_scoped_key, _ = n4js.assemble_network(an, scope_test)
+            taskhub_sks.append(taskhub_scoped_key)
+
+        expected_results = defaultdict(set)
+        # test a shared pattern with and without shared number of restarts
+        # this will create 6 unique patterns
+        for network_index in range(3):
+            taskhub_scoped_key = taskhub_sks[network_index]
+            n4js.add_task_restart_patterns(
+                taskhub_scoped_key, ["shared_pattern_and_restarts.+"], 5
+            )
+            expected_results[taskhub_scoped_key].add(
+                ("shared_pattern_and_restarts.+", 5)
+            )
+            n4js.add_task_restart_patterns(
+                taskhub_scoped_key,
+                ["shared_pattern_and_different_restarts.+"],
+                network_index + 1,
+            )
+            expected_results[taskhub_scoped_key].add(
+                ("shared_pattern_and_different_restarts.+", network_index + 1)
+            )
+
+        taskhub_grouped_patterns = n4js.get_task_restart_patterns(taskhub_sks)
+
+        assert taskhub_grouped_patterns == expected_results
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_task_actioning_applies_relationship(self):
+        raise NotImplementedError
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_add_restart_applies_relationship(self):
+        raise NotImplementedError
+
+    @pytest.mark.xfail(raises=NotImplementedError)
+    def test_task_deaction_applies_relationship(self):
+        raise NotImplementedError
 
     ### authentication
 
