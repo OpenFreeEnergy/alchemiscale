@@ -1,11 +1,10 @@
 name: alchemiscale-compute
 channels:
   - conda-forge
-  - openeye
 
 dependencies:
   - pip
-  - python =3.10
+  - python =3.11
   - cudatoolkit <=11.7  # many actual compute resources are not yet compatible with cudatoolkit >=11.8
 
   # alchemiscale dependencies
@@ -17,16 +16,6 @@ dependencies:
   - httpx
   - pydantic<2.0
 
-  # perses dependencies
-  - openeye-toolkits
-  - openmoltools
-  - cloudpathlib
-  - dask
-  - distributed
-  - numba
-  - pymbar >=3.0.6,<4
-
   - pip:
     - async_lru
-    - git+https://github.com/openforcefield/alchemiscale.git@v0.4.0
-    - git+https://github.com/choderalab/perses.git@protocol-neqcyc
+    - git+https://github.com/openforcefield/alchemiscale.git@v0.5.0
