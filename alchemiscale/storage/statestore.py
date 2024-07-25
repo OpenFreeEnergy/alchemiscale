@@ -9,7 +9,7 @@ from datetime import datetime
 from contextlib import contextmanager
 import json
 from functools import lru_cache
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Union, Tuple, Set
 import weakref
 import numpy as np
 
@@ -2735,31 +2735,56 @@ class Neo4jStore(AlchemiscaleStateStore):
         taskhub_node = record_data_to_node(record_data)
         scope = taskhub.scope
 
-        subgraph = Subgraph()
-
-        for pattern in patterns:
-            task_restart_pattern = TaskRestartPattern(
-                pattern,
-                max_retries=number_of_retries,
-                taskhub_scoped_key=str(taskhub),
-            )
-
-            _, task_restart_policy_node, scoped_key = self._gufe_to_subgraph(
-                task_restart_pattern.to_shallow_dict(),
-                labels=["GufeTokenizable", task_restart_pattern.__class__.__name__],
-                gufe_key=task_restart_pattern.key,
-                scope=scope,
-            )
-
-            subgraph |= Relationship.type("ENFORCES")(
-                task_restart_policy_node,
-                taskhub_node,
-                _org=scope.org,
-                _campaign=scope.campaign,
-                _project=scope.project,
-            )
-
         with self.transaction() as tx:
+            actioned_tasks_query = """
+            MATCH (taskhub: TaskHub {`_scoped_key`: $taskhub_scoped_key})-[:ACTIONS]->(task: Task)
+            RETURN task
+            """
+
+            subgraph = Subgraph()
+
+            actioned_task_nodes = []
+
+            for actioned_tasks_record in (
+                tx.run(actioned_tasks_query, taskhub_scoped_key=str(taskhub))
+                .to_eager_result()
+                .records
+            ):
+                actioned_task_nodes.append(
+                    record_data_to_node(actioned_tasks_record["task"])
+                )
+
+            for pattern in patterns:
+                task_restart_pattern = TaskRestartPattern(
+                    pattern,
+                    max_retries=number_of_retries,
+                    taskhub_scoped_key=str(taskhub),
+                )
+
+                _, task_restart_pattern_node, scoped_key = self._gufe_to_subgraph(
+                    task_restart_pattern.to_shallow_dict(),
+                    labels=["GufeTokenizable", task_restart_pattern.__class__.__name__],
+                    gufe_key=task_restart_pattern.key,
+                    scope=scope,
+                )
+
+                subgraph |= Relationship.type("ENFORCES")(
+                    task_restart_pattern_node,
+                    taskhub_node,
+                    _org=scope.org,
+                    _campaign=scope.campaign,
+                    _project=scope.project,
+                )
+
+                for actioned_task_node in actioned_task_nodes:
+                    subgraph |= Relationship.type("APPLIES")(
+                        task_restart_pattern_node,
+                        actioned_task_node,
+                        num_retries=0,
+                        _org=scope.org,
+                        _campaign=scope.campaign,
+                        _project=scope.project,
+                    )
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
     # TODO: fill in docstring
@@ -2775,7 +2800,29 @@ class Neo4jStore(AlchemiscaleStateStore):
         self.execute_query(q, patterns=patterns, taskhub_scoped_key=str(taskhub))
 
     # TODO: fill in docstring
-    def get_task_restart_patterns(self, taskhubs: List[ScopedKey]):
+    def set_task_restart_patterns_max_retries(
+        self,
+        taskhub_scoped_key: Union[ScopedKey, str],
+        patterns: List[str],
+        max_retries: int,
+    ):
+        query = """
+        UNWIND $patterns AS pattern
+        MATCH (trp: TaskRestartPattern {pattern: pattern, taskhub_scoped_key: $taskhub_scoped_key})
+        SET trp.max_retries = $max_retries
+        """
+
+        self.execute_query(
+            query,
+            patterns=patterns,
+            taskhub_scoped_key=str(taskhub_scoped_key),
+            max_retries=max_retries,
+        )
+
+    # TODO: fill in docstring
+    def get_task_restart_patterns(
+        self, taskhubs: List[ScopedKey]
+    ) -> Dict[ScopedKey, Set[Tuple[str, int]]]:
 
         q = """
             UNWIND $taskhub_scoped_keys as taskhub_scoped_key
@@ -2795,7 +2842,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             taskhub_sk = ScopedKey.from_str(record["th"]["_scoped_key"])
             data[taskhub_sk].add((pattern, max_retries))
 
-        return dict(data)
+        return data
 
     ## authentication
 
