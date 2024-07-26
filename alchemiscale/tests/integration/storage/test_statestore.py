@@ -1096,6 +1096,65 @@ class TestNeo4jStore(TestStateStore):
         task_sks_fail = n4js.action_tasks(task_sks, taskhub_sk2)
         assert all([i is None for i in task_sks_fail])
 
+        # test for APPLIES relationship between an ACTIONED task and a TaskRestartPattern
+
+        ## create a restart pattern, should already create APPLIES relationships with those
+        ## already actioned
+        n4js.add_task_restart_patterns(taskhub_sk, ["test_pattern"], 5)
+
+        query = """
+        MATCH (:TaskRestartPattern)-[applies:APPLIES]->(Task)<-[:ACTIONS]-(:TaskHub {`_scoped_key`: $taskhub_scoped_key})
+        // change this so that later tests can show the value was not overwritten
+        SET applies.num_retries = 1
+        RETURN count(applies) AS applies_count
+        """
+
+        ## sanity check that this number makes sense
+        applies_count = n4js.execute_query(
+            query, taskhub_scoped_key=str(taskhub_sk)
+        ).records[0]["applies_count"]
+
+        assert applies_count == 10
+
+        # create 10 more tasks and action them
+        task_sks = n4js.create_tasks([transformation_sk] * 10)
+        n4js.action_tasks(task_sks, taskhub_sk)
+
+        assert len(n4js.get_taskhub_actioned_tasks([taskhub_sk])[0]) == 20
+
+        # same as above query without the set num_retries = 1
+        query = """
+        MATCH (:TaskRestartPattern)-[applies:APPLIES]->(:Task)<-[:ACTIONS]-(:TaskHub {`_scoped_key`: $taskhub_scoped_key})
+        RETURN count(applies) AS applies_count
+        """
+
+        applies_count = n4js.execute_query(
+            query, taskhub_scoped_key=str(taskhub_sk)
+        ).records[0]["applies_count"]
+
+        query = """
+        MATCH (:TaskRestartPattern)-[applies:APPLIES]->(:Task)
+        RETURN applies
+        """
+
+        results = n4js.execute_query(query)
+
+        count_0, count_1 = 0, 0
+        for count in map(
+            lambda record: record["applies"]["num_retries"], results.records
+        ):
+            match count:
+                case 0:
+                    count_0 += 1
+                case 1:
+                    count_1 += 1
+                case _:
+                    raise AssertionError(
+                        "Unexpected count value found in num_retries field"
+                    )
+
+        assert count_0 == count_1 == 10
+
     def test_action_task_other_statuses(
         self, n4js: Neo4jStore, network_tyk2, scope_test
     ):

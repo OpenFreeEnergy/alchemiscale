@@ -1406,30 +1406,54 @@ class Neo4jStore(AlchemiscaleStateStore):
         # so we can properly return `None` if needed
         task_map = {str(task): None for task in tasks}
 
-        q = f"""
+        query_safe_task_list = [str(task) for task in tasks if task]
+
+        q = """
         // get our TaskHub
-        UNWIND {cypher_list_from_scoped_keys(tasks)} AS task_sk
-        MATCH (th:TaskHub {{_scoped_key: "{taskhub}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
+        UNWIND $query_safe_task_list AS task_sk
+        MATCH (th:TaskHub {_scoped_key: $taskhub_scoped_key})-[:PERFORMS]->(an:AlchemicalNetwork)
 
         // get the task we want to add to the hub; check that it connects to same network
-        MATCH (task:Task {{_scoped_key: task_sk}})-[:PERFORMS]->(tf:Transformation|NonTransformation)<-[:DEPENDS_ON]-(an)
+        MATCH (task:Task {_scoped_key: task_sk})-[:PERFORMS]->(:Transformation|NonTransformation)<-[:DEPENDS_ON]-(an)
 
         // only proceed for cases where task is not already actioned on hub
         // and where the task is either in 'waiting', 'running', or 'error' status
         WITH th, an, task
         WHERE NOT (th)-[:ACTIONS]->(task)
-          AND task.status IN ['{TaskStatusEnum.waiting.value}', '{TaskStatusEnum.running.value}', '{TaskStatusEnum.error.value}']
+          AND task.status IN [$waiting, $running, $error]
 
         // create the connection
-        CREATE (th)-[ar:ACTIONS {{weight: 0.5}}]->(task)
+        CREATE (th)-[ar:ACTIONS {weight: 0.5}]->(task)
 
         // set the task property to the scoped key of the Task
         // this is a convenience for when we have to loop over relationships in Python
         SET ar.task = task._scoped_key
 
+        // we want to preserve the list of tasks for the return, so we need to make a subquery
+        // since the subsequent WHERE clause could reduce the records in task
+        WITH task, th
+        CALL {
+            WITH task, th
+            MATCH (trp: TaskRestartPattern)-[:ENFORCES]->(th)
+            WHERE NOT (trp)-[:APPLIES]->(task)
+
+            CREATE (trp)-[:APPLIES {num_retries: 0, `_campaign`: $campaign, `_org`: $org, `_project`: $project}]->(task)
+        }
+
         RETURN task
         """
-        results = self.execute_query(q)
+
+        results = self.execute_query(
+            q,
+            query_safe_task_list=query_safe_task_list,
+            waiting=TaskStatusEnum.waiting.value,
+            running=TaskStatusEnum.running.value,
+            error=TaskStatusEnum.error.value,
+            taskhub_scoped_key=str(taskhub),
+            campaign=taskhub.campaign,
+            org=taskhub.org,
+            project=taskhub.project,
+        )
 
         # update our map with the results, leaving None for tasks that aren't found
         for task_record in results.records:
@@ -1587,6 +1611,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 // get our task hub, as well as the task :ACTIONS relationship we want to remove
                 MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
                 DELETE ar
+
                 RETURN task
                 """
                 _task = tx.run(q).to_eager_result()
