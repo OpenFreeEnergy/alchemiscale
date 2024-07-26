@@ -1437,7 +1437,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             MATCH (trp: TaskRestartPattern)-[:ENFORCES]->(th)
             WHERE NOT (trp)-[:APPLIES]->(task)
 
-            CREATE (trp)-[:APPLIES {num_retries: 0, `_campaign`: $campaign, `_org`: $org, `_project`: $project}]->(task)
+            CREATE (trp)-[:APPLIES {num_retries: 0}]->(task)
         }
 
         RETURN task
@@ -1450,9 +1450,6 @@ class Neo4jStore(AlchemiscaleStateStore):
             running=TaskStatusEnum.running.value,
             error=TaskStatusEnum.error.value,
             taskhub_scoped_key=str(taskhub),
-            campaign=taskhub.campaign,
-            org=taskhub.org,
-            project=taskhub.project,
         )
 
         # update our map with the results, leaving None for tasks that aren't found
@@ -1606,15 +1603,24 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         canceled_sks = []
         with self.transaction() as tx:
-            for t in tasks:
-                q = f"""
+            for task in tasks:
+                query = """
                 // get our task hub, as well as the task :ACTIONS relationship we want to remove
-                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
+                MATCH (th:TaskHub {_scoped_key: $taskhub_scoped_key})-[ar:ACTIONS]->(task:Task {_scoped_key: $task_scoped_key})
                 DELETE ar
+
+                WITH task
+                CALL {
+                    WITH task
+                    MATCH (task)<-[applies:APPLIES]-(:TaskRestartPattern)
+                    DELETE applies
+                }
 
                 RETURN task
                 """
-                _task = tx.run(q).to_eager_result()
+                _task = tx.run(
+                    query, taskhub_scoped_key=str(taskhub), task_scoped_key=str(task)
+                ).to_eager_result()
 
                 if _task.records:
                     sk = _task.records[0].data()["task"]["_scoped_key"]
@@ -2806,9 +2812,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                         task_restart_pattern_node,
                         actioned_task_node,
                         num_retries=0,
-                        _org=scope.org,
-                        _campaign=scope.campaign,
-                        _project=scope.project,
                     )
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 

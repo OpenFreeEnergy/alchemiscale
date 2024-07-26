@@ -1270,6 +1270,14 @@ class TestNeo4jStore(TestStateStore):
         # cancel the second and third task we created
         canceled = n4js.cancel_tasks(task_sks[1:3], taskhub_sk)
 
+        # cancel a fake task
+        fake_canceled = n4js.cancel_tasks(
+            [ScopedKey.from_str("Task-FAKE-test_org-test_campaign-test_project")],
+            taskhub_sk,
+        )
+
+        assert fake_canceled[0] is None
+
         # check that the hub has the contents we expect
         q = f"""MATCH (tq:TaskHub {{_scoped_key: '{taskhub_sk}'}})-[:ACTIONS]->(task:Task)
                 return task
@@ -1282,6 +1290,31 @@ class TestNeo4jStore(TestStateStore):
         assert set([ScopedKey.from_str(t["_scoped_key"]) for t in tasks]) == set(
             actioned
         ) - set(canceled)
+
+        # create a TaskRestartPattern
+        n4js.add_task_restart_patterns(taskhub_sk, ["Test pattern"], 1)
+
+        query = """
+        MATCH (:TaskHub {`_scoped_key`: $taskhub_scoped_key})<-[:ENFORCES]-(:TaskRestartPattern)-[applies:APPLIES]->(:Task)
+        RETURN count(applies) AS applies_count
+        """
+
+        assert (
+            n4js.execute_query(query, taskhub_scoped_key=str(taskhub_sk)).records[0][
+                "applies_count"
+            ]
+            == 8
+        )
+
+        # cancel the fourth and fifth task we created
+        canceled = n4js.cancel_tasks(task_sks[3:5], taskhub_sk)
+
+        assert (
+            n4js.execute_query(query, taskhub_scoped_key=str(taskhub_sk)).records[0][
+                "applies_count"
+            ]
+            == 6
+        )
 
     def test_get_taskhub_tasks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
