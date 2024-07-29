@@ -7,7 +7,7 @@
 from functools import lru_cache
 from typing import Optional
 
-from alchemiscale._pydantic import BaseSettings
+from pydantic.v1 import BaseSettings
 
 
 class FrozenSettings(BaseSettings):
