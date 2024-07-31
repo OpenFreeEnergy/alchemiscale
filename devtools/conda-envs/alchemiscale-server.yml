@@ -11,7 +11,6 @@ dependencies:
   - gufe=1.0.0
   - openfe=1.0.1
 
-  - openmmforcefields>=0.14.1
   - requests
   - click
   - pydantic<2.0
@@ -36,7 +35,12 @@ dependencies:
   - httpx
   - cryptography
 
+  # additional pins
+  - openmm=8.1.2
+  - openmmforcefields>=0.14.1
+
   - pip:
     - async_lru
-    - git+https://github.com/openforcefield/alchemiscale.git@v0.5.0-beta.1
+    - git+https://github.com/openforcefield/alchemiscale.git@release-0.5.0-prep
     - git+https://github.com/choderalab/feflow.git@main
+    - git+https://github.com/openforcefield/alchemiscale-fah.git@live-testing-alchemiscale-0.5.0-beta.a
