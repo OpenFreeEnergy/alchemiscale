@@ -56,7 +56,7 @@ jobs:
 
       - name: "Run tests"
         run: |
-          pytest -v --cov=alchemiscale --cov-report=xml alchemiscale/tests --durations=20
+          pytest -v --cov=alchemiscale --cov-report=xml alchemiscale/tests --durations=20 -x
 
       - name: codecov
         if: ${{ github.repository == 'openforcefield/alchemiscale'
