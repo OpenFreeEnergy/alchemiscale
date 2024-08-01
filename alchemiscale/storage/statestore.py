@@ -2584,7 +2584,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         // if we changed the status to complete,
         // drop all ACTIONS relationships
         OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (t_)<-[applies:APPLIES]-(:TaskRestartPattern)
         DELETE ar
+        DELETE applies
 
         WITH scoped_key, t, t_
 
@@ -2667,9 +2669,11 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
         OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (t_)<-[applies:APPLIES]-(:TaskRestartPattern)
 
         DELETE ar
         DELETE are
+        DELETE applies
 
         WITH scoped_key, t, t_
 
@@ -2717,9 +2721,11 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
         OPTIONAL MATCH (extends_task)<-[are:ACTIONS]-(th:TaskHub)
+        OPTIONAL MATCH (t_)<-[applies:APPLIES]-(:TaskRestartPattern)
 
         DELETE ar
         DELETE are
+        DELETE applies
 
         WITH scoped_key, t, t_
 
