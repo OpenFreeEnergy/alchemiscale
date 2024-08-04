@@ -1948,6 +1948,56 @@ class TestNeo4jStore(TestStateStore):
 
     class TestTaskRestartPolicy:
 
+        @pytest.mark.parametrize("status", ("complete", "invalid", "deleted"))
+        def test_task_status_change(self, n4js, network_tyk2, scope_test, status):
+            an = network_tyk2.copy_with_replacements(
+                name=network_tyk2.name + f"_test_task_status_change"
+            )
+            _, taskhub_scoped_key, _ = n4js.assemble_network(an, scope_test)
+            transformation = list(an.edges)[0]
+            transformation_scoped_key = n4js.get_scoped_key(transformation, scope_test)
+            task_scoped_keys = n4js.create_tasks([transformation_scoped_key])
+            n4js.action_tasks(task_scoped_keys, taskhub_scoped_key)
+
+            n4js.add_task_restart_patterns(taskhub_scoped_key, ["Test pattern"], 10)
+
+            query = """
+            MATCH (:TaskRestartPattern)-[:APPLIES]->(task:Task {`_scoped_key`: $task_scoped_key})<-[:ACTIONS]-(:TaskHub {`_scoped_key`: $taskhub_scoped_key})
+            RETURN task
+            """
+
+            results = n4js.execute_query(
+                query,
+                task_scoped_key=str(task_scoped_keys[0]),
+                taskhub_scoped_key=str(taskhub_scoped_key),
+            )
+
+            assert len(results.records) == 1
+
+            target_method = {
+                "complete": n4js.set_task_complete,
+                "invalid": n4js.set_task_invalid,
+                "deleted": n4js.set_task_deleted,
+            }
+
+            if status == "complete":
+                n4js.set_task_running(task_scoped_keys)
+
+            assert target_method[status](task_scoped_keys)[0] is not None
+
+            query = """
+            MATCH (:TaskRestartPattern)-[:APPLIES]->(task:Task)
+            RETURN task
+            """
+
+            results = n4js.execute_query(
+                query,
+                task_scoped_key=str(task_scoped_keys[0]),
+                taskhub_scoped_key=str(taskhub_scoped_key),
+            )
+
+            assert len(results.records) == 0
+
         def test_add_task_restart_patterns(self, n4js, network_tyk2, scope_test):
             # create three new alchemical networks (and taskhubs)
             taskhub_sks = []
