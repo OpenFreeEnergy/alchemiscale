@@ -16,6 +16,7 @@ import numpy as np
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, NonTransformation, Settings
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
+from gufe.protocols import ProtocolUnitFailure
 
 from neo4j import Transaction, GraphDatabase, Driver
 
@@ -2416,6 +2417,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._get_protocoldagresultrefs(q, task)
 
+    def add_task_traceback(
+        self,
+        task_scoped_key: ScopedKey,
+        protocol_unit_failures: List[ProtocolUnitFailure],
+        protocol_dag_result_ref_scoped_key: ScopedKey,
+    ):
+        raise NotImplementedError
+
     def set_task_status(
         self, tasks: List[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
     ) -> List[Optional[ScopedKey]]:
@@ -2778,15 +2787,17 @@ class Neo4jStore(AlchemiscaleStateStore):
             RETURN task
             """
 
+            actioned_task_records = (
+                tx.run(actioned_tasks_query, taskhub_scoped_key=str(taskhub))
+                .to_eager_result()
+                .records
+            )
+
             subgraph = Subgraph()
 
             actioned_task_nodes = []
 
-            for actioned_tasks_record in (
-                tx.run(actioned_tasks_query, taskhub_scoped_key=str(taskhub))
-                .to_eager_result()
-                .records
-            ):
+            for actioned_tasks_record in actioned_task_records:
                 actioned_task_nodes.append(
                     record_data_to_node(actioned_tasks_record["task"])
                 )
@@ -2820,6 +2831,15 @@ class Neo4jStore(AlchemiscaleStateStore):
                         num_retries=0,
                     )
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+
+            actioned_task_scoped_keys: List[ScopedKey] = []
+
+            for actioned_task_record in actioned_task_records:
+                actioned_task_scoped_keys.append(
+                    ScopedKey(actioned_task_record["task"]["_scoped_key"])
+                )
+
+            self.resolve_task_restarts(actioned_task_scoped_keys)
 
     # TODO: fill in docstring
     def remove_task_restart_patterns(self, taskhub: ScopedKey, patterns: List[str]):
@@ -2877,6 +2897,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             data[taskhub_sk].add((pattern, max_retries))
 
         return data
+
+    def resolve_task_restarts(self, task_scoped_keys: List[ScopedKey]):
+        raise NotImplementedError
 
     ## authentication
 
