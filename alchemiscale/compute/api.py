@@ -271,7 +271,9 @@ def set_task_result(
     if protocoldagresultref.ok:
         n4js.set_task_complete(tasks=[task_sk])
     else:
-        n4js.add_task_traceback(task_sk, pdr.protocol_unit_failures, result_sk)
+        n4js.add_protocol_dag_result_ref_traceback(
+            pdr.protocol_unit_failures, result_sk
+        )
         n4js.set_task_error(tasks=[task_sk])
         n4js.resolve_task_restarts(tasks=[task_sk])
 

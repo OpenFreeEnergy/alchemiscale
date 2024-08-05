@@ -30,6 +30,7 @@ from .models import (
     TaskHub,
     TaskRestartPattern,
     TaskStatusEnum,
+    Traceback,
 )
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
@@ -2417,13 +2418,50 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._get_protocoldagresultrefs(q, task)
 
-    def add_task_traceback(
+    def add_protocol_dag_result_ref_traceback(
         self,
-        task_scoped_key: ScopedKey,
         protocol_unit_failures: List[ProtocolUnitFailure],
         protocol_dag_result_ref_scoped_key: ScopedKey,
     ):
-        raise NotImplementedError
+        subgraph = Subgraph()
+
+        with self.transaction() as tx:
+
+            query = """
+            MATCH (pdrr:ProtocolDAGResultRef {`_scoped_key`: $protocol_dag_result_ref_scoped_key})
+            RETURN pdrr
+            """
+
+            pdrr_result = tx.run(
+                query,
+                protocol_dag_result_ref_scoped_key=str(
+                    protocol_dag_result_ref_scoped_key
+                ),
+            ).to_eager_result()
+
+            try:
+                protocol_dag_result_ref_node = record_data_to_node(
+                    pdrr_result.records[0]["pdrr"]
+                )
+            except IndexError:
+                raise KeyError("Could not find ProtocolDAGResultRef in database.")
+
+            tracebacks = list(map(lambda puf: puf.traceback, protocol_unit_failures))
+            traceback = Traceback(tracebacks)
+
+            _, traceback_node, _ = self._gufe_to_subgraph(
+                traceback.to_shallow_dict(),
+                labels=["GufeTokenizable", traceback.__class__.__name__],
+                gufe_key=traceback.key,
+                scope=protocol_dag_result_ref_scoped_key.scope,
+            )
+
+            subgraph |= Relationship.type("DETAILS")(
+                traceback_node,
+                protocol_dag_result_ref_node,
+            )
+
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
     def set_task_status(
         self, tasks: List[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
