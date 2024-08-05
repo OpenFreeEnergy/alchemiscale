@@ -39,6 +39,9 @@ dependencies:
   - openmm=8.1.2
   - openmmforcefields>=0.14.1
 
+  # deployment
+  - curl         # used in healthchecks for API services
+
   - pip:
     - async_lru
     - git+https://github.com/openforcefield/alchemiscale.git@release-0.5.0-prep
