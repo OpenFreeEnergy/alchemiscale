@@ -2937,6 +2937,21 @@ class Neo4jStore(AlchemiscaleStateStore):
         return data
 
     def resolve_task_restarts(self, task_scoped_keys: List[ScopedKey]):
+
+        query = """
+        UNWIND $task_scoped_keys AS task_scoped_key
+        MATCH (task:Task {status: $error, `_scoped_key`: task_scoped_key})<-[app:APPLIES]-(trp:TaskRestartPattern)
+        CALL {
+            WITH task
+            OPTIONAL MATCH (task:Task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)<-[:DETAILS]-(traceback:Traceback)
+            RETURN traceback
+            ORDER BY pdrr.date DESCENDING
+            LIMIT 1
+        }
+        WITH traceback
+        RETURN task, app, trp, traceback
+        """
+
         raise NotImplementedError
 
     ## authentication

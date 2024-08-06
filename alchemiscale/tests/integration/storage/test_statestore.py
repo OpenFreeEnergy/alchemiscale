@@ -2284,6 +2284,47 @@ class TestNeo4jStore(TestStateStore):
             assert taskhub_grouped_patterns == expected_results
 
         @pytest.mark.xfail(raises=NotImplementedError)
+        def test_resolve_task_restarts(
+            self,
+            n4js,
+            network_tyk2_failure,
+            scope_test,
+            transformation_failure,
+            protocoldagresults_failure,
+        ):
+
+            an = network_tyk2_failure.copy_with_replacements(
+                name=network_tyk2_failure.name
+                + "_test_add_protocol_dag_result_ref_traceback"
+            )
+            n4js.assemble_network(an, scope_test)
+            transformation_scoped_key = n4js.get_scoped_key(
+                transformation_failure, scope_test
+            )
+
+            # create a task; pretend we computed it, submit reference for pre-baked
+            # result
+            task_scoped_key = n4js.create_task(transformation_scoped_key)
+
+            protocol_unit_failure = protocoldagresults_failure[
+                0
+            ].protocol_unit_failures[0]
+
+            from datetime import datetime
+
+            for index in range(5):
+                pdrr = ProtocolDAGResultRef(
+                    scope=task_scoped_key.scope,
+                    obj_key=protocoldagresults_failure[0].key,
+                    ok=protocoldagresults_failure[0].ok(),
+                    datetime_created=datetime.utcnow(),
+                )
+
+                pdrr_scoped_key = n4js.set_task_result(task_scoped_key, pdrr)
+
+            raise NotImplementedError
+
+        @pytest.mark.xfail(raises=NotImplementedError)
         def test_task_actioning_applies_relationship(self):
             raise NotImplementedError
 
