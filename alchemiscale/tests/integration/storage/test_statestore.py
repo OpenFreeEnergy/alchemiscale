@@ -1979,6 +1979,7 @@ class TestNeo4jStore(TestStateStore):
         # push the result
         pdrr_scoped_key = n4js.set_task_result(task_scoped_key, pdrr)
 
+        # simulating many failures
         protocol_unit_failures = []
         for failure_index in range(failure_count):
             protocol_unit_failures.append(

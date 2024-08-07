@@ -2447,7 +2447,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                 raise KeyError("Could not find ProtocolDAGResultRef in database.")
 
             tracebacks = list(map(lambda puf: puf.traceback, protocol_unit_failures))
-            traceback = Traceback(tracebacks)
+            source_keys = list(map(lambda puf: puf.source_key, protocol_unit_failures))
+            failure_keys = list(map(lambda puf: puf.key, protocol_unit_failures))
+            traceback = Traceback(tracebacks, source_keys, failure_keys)
 
             _, traceback_node, _ = self._gufe_to_subgraph(
                 traceback.to_shallow_dict(),
@@ -2877,7 +2879,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     ScopedKey(actioned_task_record["task"]["_scoped_key"])
                 )
 
-            self.resolve_task_restarts(actioned_task_scoped_keys)
+            self.resolve_task_restarts(actioned_task_scoped_keys, transaction=tx)
 
     # TODO: fill in docstring
     def remove_task_restart_patterns(self, taskhub: ScopedKey, patterns: List[str]):
@@ -2936,7 +2938,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return data
 
-    def resolve_task_restarts(self, task_scoped_keys: List[ScopedKey]):
+    def resolve_task_restarts(
+        self, task_scoped_keys: List[ScopedKey], transaction=None
+    ):
 
         query = """
         UNWIND $task_scoped_keys AS task_scoped_key
@@ -2945,7 +2949,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             WITH task
             OPTIONAL MATCH (task:Task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)<-[:DETAILS]-(traceback:Traceback)
             RETURN traceback
-            ORDER BY pdrr.date DESCENDING
+            ORDER BY pdrr.datetime_created DESCENDING
             LIMIT 1
         }
         WITH traceback
