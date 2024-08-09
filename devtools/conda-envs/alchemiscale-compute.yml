@@ -4,7 +4,7 @@ channels:
 
 dependencies:
   - pip
-  - python =3.10
+  - python =3.12
   - cudatoolkit =11.8
   
   # alchemiscale dependencies
@@ -15,6 +15,9 @@ dependencies:
   - httpx
   - pydantic<2.0
 
+  # openmm protocols
+  - feflow=0.1.0
+
   # additional pins
   - openmm=8.1.2
   - openmmforcefields>=0.14.1
@@ -23,4 +26,4 @@ dependencies:
     - async_lru
     - git+https://github.com/openforcefield/alchemiscale.git@release-0.5.0-prep
     - git+https://github.com/choderalab/feflow.git@0.1.0
-    - git+https://github.com/openforcefield/alchemiscale-fah.git@live-testing-alchemiscale-0.5.0-beta.a
+    #- git+https://github.com/openforcefield/alchemiscale-fah.git@live-testing-alchemiscale-0.5.0-beta.a
