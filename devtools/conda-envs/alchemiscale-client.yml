@@ -33,4 +33,4 @@ dependencies:
     - nest_asyncio
     - async_lru
     - git+https://github.com/openforcefield/alchemiscale.git@release-0.5.0-prep
-    #- git+https://github.com/openforcefield/alchemiscale-fah.git@live-testing-alchemiscale-0.5.0-beta.a
+    - git+https://github.com/openforcefield/alchemiscale-fah.git@live-testing-alchemiscale-0.5.0-beta.a
