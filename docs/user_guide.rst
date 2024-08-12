@@ -12,27 +12,23 @@ It assumes that you already have a user identity on the target ``alchemiscale`` 
 Installation
 ************
 
-Create a conda environment on your workstation::
-
-    $ conda env create openforcefield/alchemiscale-client
-
-You can also use ``mamba`` instead of conda above if you prefer a faster solver and have it installed, e.g. via `mambaforge`_.
-
-If this doesn’t work, clone alchemiscale from Github, and install from there::
+Clone alchemiscale from Github, and switch to the latest release tag::
 
     $ git clone https://github.com/openforcefield/alchemiscale.git
     $ cd alchemiscale
-    $ git checkout v0.4.0
+    $ git checkout v0.5.0
 
-    $ conda env create -f devtools/conda-envs/alchemiscale-client.yml
+Create a conda environment using, e.g. `micromamba`_::
+
+    $ micromamba create -f devtools/conda-envs/alchemiscale-client.yml
 
 Once installed, activate the environment::
 
-    $ conda activate alchemiscale-client
+    $ micromamba activate alchemiscale-client
 
 You may wish to install other packages into this environment, such as jupyterlab.
 
-.. _mambaforge: https://github.com/conda-forge/miniforge#mambaforge
+.. _micromamba: https://github.com/mamba-org/micromamba-releases
 
 
 Installing on ARM-based Macs
