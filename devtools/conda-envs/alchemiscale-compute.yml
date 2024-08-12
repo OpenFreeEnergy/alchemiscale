@@ -4,7 +4,7 @@ channels:
 
 dependencies:
   - pip
-  - python =3.12
+  - python =3.11
   - cudatoolkit =11.8
   
   # alchemiscale dependencies
