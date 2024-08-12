@@ -9,7 +9,6 @@ dependencies:
   # alchemiscale dependencies
   - gufe>=1.0.0
   - openfe>=1.0.1
-  - openmmforcefields>=0.12.0
   - pydantic<2.0
 
   ## state store
@@ -36,6 +35,9 @@ dependencies:
   - httpx
   - cryptography
 
+  # openmm protocols
+  - feflow>=0.1.0
+
   ## cli
   - click
 
@@ -45,6 +47,10 @@ dependencies:
   - pytest-cov
   - coverage
   - moto
+
+  # additional pins
+  - openmm=8.1.2
+  - openmmforcefields>=0.14.1
 
   - pip:
     - async_lru
