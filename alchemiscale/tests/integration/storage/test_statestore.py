@@ -2,12 +2,15 @@ from datetime import datetime, timedelta
 import random
 from typing import List, Dict
 from pathlib import Path
+from functools import reduce
 from itertools import chain
+from operator import and_
 from collections import defaultdict
 
 import pytest
 from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
+from gufe.protocols import ProtocolUnitFailure
 from gufe.protocols.protocoldag import execute_DAG
 
 from alchemiscale.storage.statestore import Neo4jStore
@@ -2287,43 +2290,124 @@ class TestNeo4jStore(TestStateStore):
         @pytest.mark.xfail(raises=NotImplementedError)
         def test_resolve_task_restarts(
             self,
-            n4js,
-            network_tyk2_failure,
-            scope_test,
-            transformation_failure,
-            protocoldagresults_failure,
+            scope_test: Scope,
+            n4js_task_restart_policy: Neo4jStore,
         ):
 
-            an = network_tyk2_failure.copy_with_replacements(
-                name=network_tyk2_failure.name
-                + "_test_add_protocol_dag_result_ref_traceback"
-            )
-            n4js.assemble_network(an, scope_test)
-            transformation_scoped_key = n4js.get_scoped_key(
-                transformation_failure, scope_test
-            )
+            def spoof_failure():
+                raise NotImplementedError
 
-            # create a task; pretend we computed it, submit reference for pre-baked
-            # result
-            task_scoped_key = n4js.create_task(transformation_scoped_key)
-
-            protocol_unit_failure = protocoldagresults_failure[
-                0
-            ].protocol_unit_failures[0]
-
-            from datetime import datetime
-
-            for index in range(5):
-                pdrr = ProtocolDAGResultRef(
-                    scope=task_scoped_key.scope,
-                    obj_key=protocoldagresults_failure[0].key,
-                    ok=protocoldagresults_failure[0].ok(),
-                    datetime_created=datetime.utcnow(),
+            # get the actioned tasks for each taskhub
+            taskhub_actioned_tasks = {}
+            for taskhub_scoped_key in n4js_task_restart_policy.query_taskhubs():
+                taskhub_actioned_tasks[taskhub_scoped_key] = set(
+                    n4js_task_restart_policy.get_taskhub_actioned_tasks(
+                        [taskhub_scoped_key]
+                    )[0]
                 )
 
-                pdrr_scoped_key = n4js.set_task_result(task_scoped_key, pdrr)
+            restart_patterns = n4js_task_restart_policy.get_task_restart_patterns(
+                list(taskhub_actioned_tasks.keys())
+            )
 
-            raise NotImplementedError
+            transformation_tasks = defaultdict(list)
+            for task in n4js_task_restart_policy.query_tasks(
+                status=TaskStatusEnum.waiting.value
+            ):
+                transformation_scoped_key, _ = (
+                    n4js_task_restart_policy.get_task_transformation(
+                        task, return_gufe=False
+                    )
+                )
+                transformation_tasks[transformation_scoped_key].append(task)
+
+            # get a list of all tasks for more convient calls of the resolve method
+            all_tasks = []
+            for task_group in transformation_tasks.values():
+                all_tasks.extend(task_group)
+
+            taskhub_scoped_key_no_policy = None
+            taskhub_scoped_key_with_policy = None
+
+            for taskhub_scoped_key, patterns in restart_patterns.items():
+                if not patterns:
+                    taskhub_scoped_key_no_policy = taskhub_scoped_key
+                    continue
+                else:
+                    taskhub_scoped_key_with_policy = taskhub_scoped_key
+                    continue
+
+                if patterns and taskhub_scoped_key_with_policy:
+                    raise AssertionError("More than one TaskHub has restart patterns")
+
+            assert (
+                taskhub_scoped_key_no_policy
+                and taskhub_scoped_key_with_policy
+                and (taskhub_scoped_key_no_policy != taskhub_scoped_key_with_policy)
+            )
+
+            # we first check the behavior involving tasks that are actioned by both taskhubs
+            # this involves confirming:
+            #
+            # 1. Completed Tasks do not have an actions relationship with either TaskHub
+            # 2. A Task entering the error state is switched back to waiting if any restart patterns apply
+            # 3. A Task entering the error state is left in the error state if no patterns apply and only the TaskHub with
+            #    an enforcing task restart policy exists
+            #
+            # Tasks will be set to the error state with a spoofing method, which will create a fake ProtocolDAGResultRef
+            # and Traceback. This is done since making a protocol fail systematically in the testing environment is not
+            # obvious at this time.
+
+            # reduce down all tasks until only the common elements between taskhubs exist
+            tasks_actioned_by_all_taskhubs: List[ScopedKey] = list(
+                reduce(and_, taskhub_actioned_tasks.values(), set(all_tasks))
+            )
+
+            assert len(tasks_actioned_by_all_taskhubs) == 4
+
+            # we're going to just pass the first 2 and fail the second 2
+            tasks_to_complete = tasks_actioned_by_all_taskhubs[:2]
+            tasks_to_fail = tasks_actioned_by_all_taskhubs[3:]
+
+            # TODO: either check the results after the loop or within it, whichever makes more sense
+            for task in tasks_to_complete:
+                n4js_task_restart_policy.set_task_running([task])
+                ok_pdrr = ProtocolDAGResultRef(
+                    ok=True,
+                    datetime_created=datetime.utcnow(),
+                    obj_key=task.gufe_key,
+                    scope=task.scope,
+                )
+
+                _ = n4js_task_restart_policy.set_task_result(task, ok_pdrr)
+
+                # this should do nothing to the database state since all
+                # relationships are removed in the previous method call
+                # TODO: perhaps counts of the connections will be a good test
+                n4js_task_restart_policy.set_task_complete([task])
+
+            # TODO: it's unclear the best way to fake a systematic error here
+            for i, task in enumerate(tasks_to_fail):
+                n4js_task_restart_policy.set_task_running([task])
+
+                not_ok_pdrr = ProtocolDAGResultRef(
+                    ok=False,
+                    datetime_created=datetime.utcnow(),
+                    obj_key=task.gufe_key,
+                    scope=task.scope,
+                )
+
+                error_messages = (
+                    "Error message 1",
+                    "Error message 2",
+                    "Error message 3",
+                )
+
+                n4js_task_restart_policy.add_protocol_dag_result_ref_traceback()
+                n4js_task_restart_policy.set_task_error([task])
+
+                # always feed in all tasks to test for side effects
+                n4js_task_restart_policy.resolve_task_restarts(all_tasks)
 
         @pytest.mark.xfail(raises=NotImplementedError)
         def test_task_actioning_applies_relationship(self):

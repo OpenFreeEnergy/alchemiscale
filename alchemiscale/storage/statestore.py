@@ -2876,10 +2876,13 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             for actioned_task_record in actioned_task_records:
                 actioned_task_scoped_keys.append(
-                    ScopedKey(actioned_task_record["task"]["_scoped_key"])
+                    ScopedKey.from_str(actioned_task_record["task"]["_scoped_key"])
                 )
 
-            self.resolve_task_restarts(actioned_task_scoped_keys, transaction=tx)
+            try:
+                self.resolve_task_restarts(actioned_task_scoped_keys, transaction=tx)
+            except NotImplementedError:
+                pass
 
     # TODO: fill in docstring
     def remove_task_restart_patterns(self, taskhub: ScopedKey, patterns: List[str]):
@@ -2914,6 +2917,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
     # TODO: fill in docstring
+    # TODO: validation of taskhubs variable, will fail in weird ways if not enforced
     def get_task_restart_patterns(
         self, taskhubs: List[ScopedKey]
     ) -> Dict[ScopedKey, Set[Tuple[str, int]]]:
