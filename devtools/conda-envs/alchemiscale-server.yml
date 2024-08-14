@@ -14,6 +14,7 @@ dependencies:
   - requests
   - click
   - pydantic<2.0
+  - async-lru
 
   ## state store
   - neo4j-python-driver
@@ -46,9 +47,7 @@ dependencies:
   - curl         # used in healthchecks for API services
 
   # alchemiscale-fah dependencies
-  - cryptography
   - plyvel
 
   - pip:
-    - async_lru
     - git+https://github.com/openforcefield/alchemiscale.git@v0.5.0
