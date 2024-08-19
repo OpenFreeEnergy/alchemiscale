@@ -8,6 +8,7 @@ import abc
 from datetime import datetime
 from contextlib import contextmanager
 import json
+import re
 from functools import lru_cache
 from typing import Dict, List, Optional, Union, Tuple, Set
 import weakref
@@ -174,6 +175,17 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             else:
                 tx.commit()
+
+    def chainable(func):
+        def inner(self, *args, **kwargs):
+            if kwargs.get("tx") is not None:
+                return func(self, *args, **kwargs)
+
+            with self.transaction() as tx:
+                kwargs.update(tx=tx)
+                return func(self, *args, **kwargs)
+
+        return inner
 
     def execute_query(self, *args, **kwargs):
         kwargs.update({"database_": self.db_name})
@@ -1590,10 +1602,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return weights
 
+    @chainable
     def cancel_tasks(
         self,
         tasks: List[ScopedKey],
         taskhub: ScopedKey,
+        tx=None,
     ) -> List[Union[ScopedKey, None]]:
         """Remove Tasks from the TaskHub for a given AlchemicalNetwork.
 
@@ -1604,31 +1618,30 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         canceled_sks = []
-        with self.transaction() as tx:
-            for task in tasks:
-                query = """
-                // get our task hub, as well as the task :ACTIONS relationship we want to remove
-                MATCH (th:TaskHub {_scoped_key: $taskhub_scoped_key})-[ar:ACTIONS]->(task:Task {_scoped_key: $task_scoped_key})
-                DELETE ar
+        for task in tasks:
+            query = """
+            // get our task hub, as well as the task :ACTIONS relationship we want to remove
+            MATCH (th:TaskHub {_scoped_key: $taskhub_scoped_key})-[ar:ACTIONS]->(task:Task {_scoped_key: $task_scoped_key})
+            DELETE ar
 
+            WITH task
+            CALL {
                 WITH task
-                CALL {
-                    WITH task
-                    MATCH (task)<-[applies:APPLIES]-(:TaskRestartPattern)
-                    DELETE applies
-                }
+                MATCH (task)<-[applies:APPLIES]-(:TaskRestartPattern)
+                DELETE applies
+            }
 
-                RETURN task
-                """
-                _task = tx.run(
-                    query, taskhub_scoped_key=str(taskhub), task_scoped_key=str(task)
-                ).to_eager_result()
+            RETURN task
+            """
+            _task = tx.run(
+                query, taskhub_scoped_key=str(taskhub), task_scoped_key=str(task)
+            ).to_eager_result()
 
-                if _task.records:
-                    sk = _task.records[0].data()["task"]["_scoped_key"]
-                    canceled_sks.append(ScopedKey.from_str(sk))
-                else:
-                    canceled_sks.append(None)
+            if _task.records:
+                sk = _task.records[0].data()["task"]["_scoped_key"]
+                canceled_sks.append(ScopedKey.from_str(sk))
+            else:
+                canceled_sks.append(None)
 
         return canceled_sks
 
@@ -2879,10 +2892,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     ScopedKey.from_str(actioned_task_record["task"]["_scoped_key"])
                 )
 
-            try:
-                self.resolve_task_restarts(actioned_task_scoped_keys, transaction=tx)
-            except NotImplementedError:
-                pass
+            self.resolve_task_restarts(actioned_task_scoped_keys, tx=tx)
 
     # TODO: fill in docstring
     def remove_task_restart_patterns(self, taskhub: ScopedKey, patterns: List[str]):
@@ -2942,13 +2952,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return data
 
-    def resolve_task_restarts(
-        self, task_scoped_keys: List[ScopedKey], transaction=None
-    ):
+    @chainable
+    def resolve_task_restarts(self, task_scoped_keys: List[ScopedKey], *, tx=None):
 
         query = """
         UNWIND $task_scoped_keys AS task_scoped_key
-        MATCH (task:Task {status: $error, `_scoped_key`: task_scoped_key})<-[app:APPLIES]-(trp:TaskRestartPattern)
+        MATCH (task:Task {status: $error, `_scoped_key`: task_scoped_key})<-[app:APPLIES]-(trp:TaskRestartPattern)-[:ENFORCES]->(taskhub:TaskHub)
         CALL {
             WITH task
             OPTIONAL MATCH (task:Task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)<-[:DETAILS]-(traceback:Traceback)
@@ -2956,11 +2965,57 @@ class Neo4jStore(AlchemiscaleStateStore):
             ORDER BY pdrr.datetime_created DESCENDING
             LIMIT 1
         }
-        WITH traceback
-        RETURN task, app, trp, traceback
+        WITH task, traceback, trp, app, taskhub
+        RETURN task, traceback, trp, app, taskhub
         """
 
-        raise NotImplementedError
+        results = tx.run(
+            query,
+            task_scoped_keys=list(map(str, task_scoped_keys)),
+            error=TaskStatusEnum.error.value,
+        ).to_eager_result()
+
+        if not results:
+            return
+
+        to_increment: List[Tuple[str, str]] = []
+        to_cancel: List[Tuple[str, str]] = []
+        for record in results.records:
+            task_restart_pattern = record["trp"]
+            applies_relationship = record["app"]
+            task = record["task"]
+            taskhub = record["taskhub"]
+            # TODO: what happens if there is no traceback? i.e. older errored tasks
+            traceback = record["traceback"]
+
+            num_retries = applies_relationship["num_retries"]
+            max_retries = task_restart_pattern["max_retries"]
+            pattern = task_restart_pattern["pattern"]
+            tracebacks: List[str] = traceback["tracebacks"]
+
+            # exit early if we already know a task is being canceled on a TaskHub
+            if (task["_scoped_key"], taskhub["_scoped_key"]) in to_cancel:
+                continue
+
+            # we will always increment (even above the max_retries) and
+            # cancel later
+            to_increment.append(
+                (task["_scoped_key"], task_restart_pattern["_scoped_key"])
+            )
+            if any([re.search(pattern, message) for message in tracebacks]):
+                if num_retries + 1 > max_retries:
+                    to_cancel.append((task["_scoped_key"], taskhub["_scoped_key"]))
+
+        increment_query = """
+        UNWIND $trp_and_task_pairs as pairs
+        WITH pairs[0] as task_scoped_key, pairs[1] as task_restart_pattern_scoped_key
+        MATCH (:Task {`_scoped_key`: task_scoped_key})<-[app:APPLIES]-(:TaskRestartPattern {`_scoped_key`: task_restart_pattern_scoped_key})
+        SET app.num_retries = app.num_retries + 1
+        """
+
+        tx.run(increment_query, trp_and_task_pairs=to_increment)
+        for task, taskhub in to_cancel:
+            self.cancel_tasks([task], taskhub, tx=tx)
 
     ## authentication
 

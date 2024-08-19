@@ -120,8 +120,6 @@ def n4js_task_restart_policy(
     assert all(n4js.action_tasks(task_scoped_keys, taskhub_scoped_key_no_policy))
     assert all(n4js.action_tasks(task_scoped_keys, taskhub_scoped_key_with_policy))
 
-    breakpoint()
-
 
 @pytest.fixture(scope="module")
 def scope_consistent_token_data_depends_override(scope_test):
