@@ -2396,7 +2396,6 @@ class TestNeo4jStore(TestStateStore):
                 error_messages = [
                     f"Error message {repeat}, round {i}" for repeat in range(3)
                 ]
-
                 protocol_unit_failures = []
                 for j, message in enumerate(error_messages):
                     puf = ProtocolUnitFailure(
@@ -2436,6 +2435,40 @@ class TestNeo4jStore(TestStateStore):
             ).records[0]["renewed_waiting_tasks"]
 
             assert renewed_waiting == 2
+
+            # we want the resolve restarts to cancel a task.
+            # deconstruct the tasks to fail, where the first
+            # one will be cancelled and the second will once again be continued
+            # but with an additional traceback
+            task_to_cancel, task_to_wait = tasks_to_fail
+
+            query = """
+            MATCH (task:Task {`_scoped_key`: $task_scoped_key_fail})<-[app:APPLIES]-(:TaskRestartPattern)
+            SET app.num_retries = 2
+            SET task.status = $error
+            """
+
+            n4js_task_restart_policy.execute_query(
+                query,
+                task_scoped_key_fail=str(task_to_cancel),
+                task_scoped_key_wait=str(task_to_wait),
+                error=TaskStatusEnum.error.value,
+            )
+
+            n4js_task_restart_policy.resolve_task_restarts(tasks_to_fail)
+
+            query = """
+            MATCH (task:Task {_scoped_key: $task_scoped_key})<-[:ACTIONS]-(:TaskHub {_scoped_key: $taskhub_scoped_key})
+            RETURN task
+            """
+
+            results = n4js_task_restart_policy.execute_query(
+                query,
+                task_scoped_key=str(task_to_cancel),
+                taskhub_scoped_key=str(taskhub_scoped_key_with_policy),
+            )
+
+            assert len(results.records) == 0
 
         @pytest.mark.xfail(raises=NotImplementedError)
         def test_task_actioning_applies_relationship(self):

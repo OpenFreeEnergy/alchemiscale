@@ -11,6 +11,7 @@ import json
 import re
 from functools import lru_cache
 from typing import Dict, List, Optional, Union, Tuple, Set
+from collections import defaultdict
 from collections.abc import Iterable
 import weakref
 import numpy as np
@@ -2986,8 +2987,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         # iterate over all of the results to determine if an applied pattern needs
         # to be iterated or if the task needs to be cancelled outright
 
+        # Keep track of which task/taskhub pairs would need to be canceled
+        # None => the pair never had a matching restart pattern
+        # True => at least one patterns max_retries was exceeded
+        # False => at least one regex matched, but no pattern max_retries were exceeded
+        cancel_map: defaultdict[Tuple[str, str], Optional[bool]] = defaultdict(
+            lambda: None
+        )
         to_increment: List[Tuple[str, str]] = []
-        to_cancel: List[Tuple[str, str]] = []
         for record in results.records:
             task_restart_pattern = record["trp"]
             applies_relationship = record["app"]
@@ -2996,23 +3003,27 @@ class Neo4jStore(AlchemiscaleStateStore):
             # TODO: what happens if there is no traceback? i.e. older errored tasks
             traceback = record["traceback"]
 
+            task_taskhub_tuple = (task["_scoped_key"], taskhub["_scoped_key"])
+
+            # we have already determined that the task is to be canceled
+            # is only ever truthy when we say a task needs to be canceled
+            if cancel_map[task_taskhub_tuple]:
+                continue
+
             num_retries = applies_relationship["num_retries"]
             max_retries = task_restart_pattern["max_retries"]
             pattern = task_restart_pattern["pattern"]
             tracebacks: List[str] = traceback["tracebacks"]
 
-            # exit early if we already know a task is being canceled on a TaskHub
-            if (task["_scoped_key"], taskhub["_scoped_key"]) in to_cancel:
-                continue
-
-            # we will always increment (even above the max_retries) and
-            # cancel later
-            to_increment.append(
-                (task["_scoped_key"], task_restart_pattern["_scoped_key"])
-            )
             if any([re.search(pattern, message) for message in tracebacks]):
                 if num_retries + 1 > max_retries:
-                    to_cancel.append((task["_scoped_key"], taskhub["_scoped_key"]))
+                    cancel_map[task_taskhub_tuple] = True
+                else:
+                    # to_increment.append(task_taskhub_tuple)
+                    to_increment.append(
+                        (task["_scoped_key"], task_restart_pattern["_scoped_key"])
+                    )
+                    cancel_map[task_taskhub_tuple] = False
 
         increment_query = """
         UNWIND $trp_and_task_pairs as pairs
@@ -3022,11 +3033,15 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         tx.run(increment_query, trp_and_task_pairs=to_increment)
-        for task, taskhub in to_cancel:
+
+        # cancel all tasks that didn't trigger any restart patterns (None)
+        # or exceeded a patterns max_retries value (True)
+        for (task, taskhub), _ in filter(
+            lambda values: values[1] is True or values[1] is None, cancel_map.items()
+        ):
             self.cancel_tasks([task], taskhub, tx=tx)
 
         # any remaining tasks must then be okay to switch to waiting
-
         renew_waiting_status_query = """
         UNWIND $task_scoped_keys AS task_scoped_key
         MATCH (task:Task {status: $error, `_scoped_key`: task_scoped_key})<-[app:APPLIES]-(trp:TaskRestartPattern)-[:ENFORCES]->(taskhub:TaskHub)

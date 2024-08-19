@@ -196,8 +196,8 @@ def n4js_task_restart_policy(
     assert all(n4js.action_tasks(task_scoped_keys, taskhub_scoped_key_with_policy))
 
     patterns = [
-        "This is an example pattern that will be used as a restart string. 1",
-        "This is an example pattern that will be used as a restart string. 2",
+        r"Error message \d, round \d",
+        "This is an example pattern that will be used as a restart string.",
     ]
 
     n4js.add_task_restart_patterns(
