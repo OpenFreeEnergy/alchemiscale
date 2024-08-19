@@ -11,6 +11,7 @@ import json
 import re
 from functools import lru_cache
 from typing import Dict, List, Optional, Union, Tuple, Set
+from collections.abc import Iterable
 import weakref
 import numpy as np
 
@@ -2952,9 +2953,13 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return data
 
+    # TODO: docstrings
     @chainable
-    def resolve_task_restarts(self, task_scoped_keys: List[ScopedKey], *, tx=None):
+    def resolve_task_restarts(self, task_scoped_keys: Iterable[ScopedKey], *, tx=None):
 
+        # Given the scoped keys of a list of Tasks, find all tasks that have an
+        # error status and have a TaskRestartPattern applied. A subquery is executed
+        # to optionally get the latest traceback associated with the task
         query = """
         UNWIND $task_scoped_keys AS task_scoped_key
         MATCH (task:Task {status: $error, `_scoped_key`: task_scoped_key})<-[app:APPLIES]-(trp:TaskRestartPattern)-[:ENFORCES]->(taskhub:TaskHub)
@@ -2977,6 +2982,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         if not results:
             return
+
+        # iterate over all of the results to determine if an applied pattern needs
+        # to be iterated or if the task needs to be cancelled outright
 
         to_increment: List[Tuple[str, str]] = []
         to_cancel: List[Tuple[str, str]] = []
@@ -3016,6 +3024,21 @@ class Neo4jStore(AlchemiscaleStateStore):
         tx.run(increment_query, trp_and_task_pairs=to_increment)
         for task, taskhub in to_cancel:
             self.cancel_tasks([task], taskhub, tx=tx)
+
+        # any remaining tasks must then be okay to switch to waiting
+
+        renew_waiting_status_query = """
+        UNWIND $task_scoped_keys AS task_scoped_key
+        MATCH (task:Task {status: $error, `_scoped_key`: task_scoped_key})<-[app:APPLIES]-(trp:TaskRestartPattern)-[:ENFORCES]->(taskhub:TaskHub)
+        SET task.status = $waiting
+        """
+
+        tx.run(
+            renew_waiting_status_query,
+            task_scoped_keys=list(map(str, task_scoped_keys)),
+            waiting=TaskStatusEnum.waiting.value,
+            error=TaskStatusEnum.error.value,
+        )
 
     ## authentication
 

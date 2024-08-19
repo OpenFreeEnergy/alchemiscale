@@ -2294,9 +2294,6 @@ class TestNeo4jStore(TestStateStore):
             n4js_task_restart_policy: Neo4jStore,
         ):
 
-            def spoof_failure():
-                raise NotImplementedError
-
             # get the actioned tasks for each taskhub
             taskhub_actioned_tasks = {}
             for taskhub_scoped_key in n4js_task_restart_policy.query_taskhubs():
@@ -2367,7 +2364,7 @@ class TestNeo4jStore(TestStateStore):
 
             # we're going to just pass the first 2 and fail the second 2
             tasks_to_complete = tasks_actioned_by_all_taskhubs[:2]
-            tasks_to_fail = tasks_actioned_by_all_taskhubs[3:]
+            tasks_to_fail = tasks_actioned_by_all_taskhubs[2:]
 
             # TODO: either check the results after the loop or within it, whichever makes more sense
             for task in tasks_to_complete:
@@ -2386,7 +2383,6 @@ class TestNeo4jStore(TestStateStore):
                 # TODO: perhaps counts of the connections will be a good test
                 n4js_task_restart_policy.set_task_complete([task])
 
-            # TODO: it's unclear the best way to fake a systematic error here
             for i, task in enumerate(tasks_to_fail):
                 n4js_task_restart_policy.set_task_running([task])
 
@@ -2397,17 +2393,49 @@ class TestNeo4jStore(TestStateStore):
                     scope=task.scope,
                 )
 
-                error_messages = (
-                    "Error message 1",
-                    "Error message 2",
-                    "Error message 3",
-                )
+                error_messages = [
+                    f"Error message {repeat}, round {i}" for repeat in range(3)
+                ]
 
-                n4js_task_restart_policy.add_protocol_dag_result_ref_traceback()
+                protocol_unit_failures = []
+                for j, message in enumerate(error_messages):
+                    puf = ProtocolUnitFailure(
+                        source_key=f"FakeProtocolUnitKey-123{j}",
+                        inputs={},
+                        outputs={},
+                        exception=RuntimeError,
+                        traceback=message,
+                    )
+                    protocol_unit_failures.append(puf)
+
+                pdrr_scoped_key = n4js_task_restart_policy.set_task_result(
+                    task, not_ok_pdrr
+                )
+                # the following mimics what the compute API would do for a failed task
+                n4js_task_restart_policy.add_protocol_dag_result_ref_traceback(
+                    protocol_unit_failures, pdrr_scoped_key
+                )
                 n4js_task_restart_policy.set_task_error([task])
 
                 # always feed in all tasks to test for side effects
                 n4js_task_restart_policy.resolve_task_restarts(all_tasks)
+
+            # both tasks should have the waiting status and the APPLIES
+            # relationship num_retries should have incremented by 1
+
+            query = """
+            UNWIND $task_scoped_keys as task_scoped_key
+            MATCH (task:Task {`_scoped_key`: task_scoped_key, status: $waiting})<-[:APPLIES {num_retries: 1}]-(:TaskRestartPattern {max_retries: 2})
+            RETURN count(DISTINCT task) as renewed_waiting_tasks
+            """
+
+            renewed_waiting = n4js_task_restart_policy.execute_query(
+                query,
+                task_scoped_keys=list(map(str, tasks_to_fail)),
+                waiting=TaskStatusEnum.waiting.value,
+            ).records[0]["renewed_waiting_tasks"]
+
+            assert renewed_waiting == 2
 
         @pytest.mark.xfail(raises=NotImplementedError)
         def test_task_actioning_applies_relationship(self):
