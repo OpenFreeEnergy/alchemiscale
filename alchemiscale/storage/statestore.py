@@ -14,7 +14,13 @@ import weakref
 import numpy as np
 
 import networkx as nx
-from gufe import AlchemicalNetwork, Transformation, NonTransformation, Settings
+from gufe import (
+    AlchemicalNetwork,
+    Transformation,
+    NonTransformation,
+    Settings,
+    Protocol,
+)
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 
 from neo4j import Transaction, GraphDatabase, Driver
@@ -31,7 +37,7 @@ from .models import (
 )
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
-from .cypher import cypher_list_from_scoped_keys
+from .cypher import cypher_list_from_scoped_keys, cypher_or
 
 from ..security.models import CredentialedEntity
 from ..settings import Neo4jStoreSettings
@@ -856,19 +862,26 @@ class Neo4jStore(AlchemiscaleStateStore):
             gufe_key_pattern=None if key is None else str(key),
         )
 
-        for k, v in query_params.items():
-            if v is None:
-                query_params[k] = ".*"
+        where_params = dict(
+            name_pattern="an.name",
+            org_pattern="an.`_org`",
+            campaign_pattern="an.`_campaign`",
+            project_pattern="an.`_project`",
+            state_pattern="nm.state",
+            gufe_key_pattern="an.`_gufe_key`",
+        )
 
-        q = """
+        conditions = []
+
+        for k, v in query_params.items():
+            if v is not None:
+                conditions.append(f"{where_params[k]} =~ ${k}")
+
+        where_clause = "WHERE " + " AND ".join(conditions) if len(conditions) else ""
+
+        q = f"""
             MATCH (an:AlchemicalNetwork)<-[:MARKS]-(nm:NetworkMark)
-            WHERE
-                    an.name =~ $name_pattern
-                AND an.`_gufe_key` =~ $gufe_key_pattern
-                AND an.`_org` =~ $org_pattern
-                AND an.`_campaign` =~ $campaign_pattern
-                AND an.`_project` =~ $project_pattern
-                AND nm.state =~ $state_pattern
+            {where_clause}
             RETURN an._scoped_key as sk
         """
 
@@ -1648,7 +1661,11 @@ class Neo4jStore(AlchemiscaleStateStore):
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
     def claim_taskhub_tasks(
-        self, taskhub: ScopedKey, compute_service_id: ComputeServiceID, count: int = 1
+        self,
+        taskhub: ScopedKey,
+        compute_service_id: ComputeServiceID,
+        count: int = 1,
+        protocols: Optional[List[Union[Protocol, str]]] = None,
     ) -> List[Union[ScopedKey, None]]:
         """Claim a TaskHub Task.
 
@@ -1669,8 +1686,13 @@ class Neo4jStore(AlchemiscaleStateStore):
             Unique identifier for the compute service claiming the Tasks for execution.
         count
             Claim the given number of Tasks in a single transaction.
+        protocols
+            Protocols to restrict Task claiming to. `None` means no restriction.
+            If an empty list, raises ValueError.
 
         """
+        if protocols is not None and len(protocols) == 0:
+            raise ValueError("`protocols` must be either `None` or not empty")
 
         q = f"""
             MATCH (th:TaskHub {{`_scoped_key`: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
@@ -1679,6 +1701,22 @@ class Neo4jStore(AlchemiscaleStateStore):
             OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
             WITH task, other_task, actions
+            """
+
+        # filter down to `protocols`, if specified
+        if protocols is not None:
+            # need to extract qualnames if given protocol classes
+            protocols = [
+                protocol.__qualname__ if isinstance(protocol, Protocol) else protocol
+                for protocol in protocols
+            ]
+
+            q += f"""
+            MATCH (task)-[:PERFORMS]->(:Transformation|NonTransformation)-[:DEPENDS_ON]->(protocol:{cypher_or(protocols)})
+            WITH task, other_task, actions
+            """
+
+        q += f"""
             WHERE other_task.status = '{TaskStatusEnum.complete.value}' OR other_task IS NULL
 
             RETURN task.`_scoped_key`, task.priority, actions.weight

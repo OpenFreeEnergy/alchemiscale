@@ -162,10 +162,17 @@ class TestComputeClient:
 
         taskhub_sks = compute_client.query_taskhubs([scope_test])
 
+        remaining_tasks = n4js_preloaded.get_taskhub_unclaimed_tasks(taskhub_sks[0])
+        assert len(remaining_tasks) == 3
+
         # claim a single task; should get highest priority task
         task_sks = compute_client.claim_taskhub_tasks(
             taskhub_sks[0], compute_service_id=compute_service_id
         )
+
+        remaining_tasks = n4js_preloaded.get_taskhub_unclaimed_tasks(taskhub_sks[0])
+        assert len(remaining_tasks) == 2
+
         all_tasks = n4js_preloaded.get_taskhub_tasks(taskhub_sks[0], return_gufe=True)
 
         assert len(task_sks) == 1
@@ -181,6 +188,36 @@ class TestComputeClient:
         )
         assert task_sks2[0] in remaining_tasks
         assert task_sks2[1] in remaining_tasks
+
+    def test_claim_tasks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        compute_service_id,
+        uvicorn_server,
+    ):
+        # register compute service id
+        compute_client.register(compute_service_id)
+
+        # claim a single task; should get highest priority task
+        task_sks = compute_client.claim_tasks(
+            scopes=[scope_test],
+            compute_service_id=compute_service_id,
+        )
+        all_tasks = n4js_preloaded.query_tasks(scope=scope_test)
+        priorities = {
+            task_sk: priority
+            for task_sk, priority in zip(
+                all_tasks, n4js_preloaded.get_task_priority(all_tasks)
+            )
+        }
+
+        assert len(task_sks) == 1
+        assert task_sks[0] in all_tasks
+        assert [t.gufe_key for t in task_sks] == [
+            t.gufe_key for t in all_tasks if priorities[t] == 1
+        ]
 
     def test_get_task_transformation(
         self,
@@ -208,7 +245,7 @@ class TestComputeClient:
         (
             transformation_,
             extends_protocoldagresult,
-        ) = compute_client.get_task_transformation(task_sks[0])
+        ) = compute_client.retrieve_task_transformation(task_sks[0])
 
         assert transformation_ == transformation
         assert extends_protocoldagresult is None
@@ -242,7 +279,7 @@ class TestComputeClient:
         (
             transformation_,
             extends_protocoldagresult,
-        ) = compute_client.get_task_transformation(task_sks[0])
+        ) = compute_client.retrieve_task_transformation(task_sks[0])
 
         assert transformation_ == transformation
         assert extends_protocoldagresult is None
@@ -258,7 +295,7 @@ class TestComputeClient:
         (
             transformation2,
             extends_protocoldagresult2,
-        ) = compute_client.get_task_transformation(task_sk2)
+        ) = compute_client.retrieve_task_transformation(task_sk2)
 
         assert transformation2 == transformation_
         assert extends_protocoldagresult2 == protocoldagresults[0]
