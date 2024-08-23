@@ -4,7 +4,7 @@ from typing import List, Dict
 from pathlib import Path
 from functools import reduce
 from itertools import chain
-from operator import and_
+import operator
 from collections import defaultdict
 
 import pytest
@@ -30,6 +30,13 @@ from alchemiscale.security.models import (
     CredentialedComputeIdentity,
 )
 from alchemiscale.security.auth import hash_key
+
+from alchemiscale.tests.integration.storage.utils import (
+    complete_tasks,
+    fail_task,
+    tasks_are_errored,
+    tasks_are_not_actioned_on_taskhub,
+)
 
 
 class TestStateStore: ...
@@ -2013,7 +2020,7 @@ class TestNeo4jStore(TestStateStore):
         @pytest.mark.parametrize("status", ("complete", "invalid", "deleted"))
         def test_task_status_change(self, n4js, network_tyk2, scope_test, status):
             an = network_tyk2.copy_with_replacements(
-                name=network_tyk2.name + f"_test_task_status_change"
+                name=network_tyk2.name + "_test_task_status_change"
             )
             _, taskhub_scoped_key, _ = n4js.assemble_network(an, scope_test)
             transformation = list(an.edges)[0]
@@ -2287,34 +2294,29 @@ class TestNeo4jStore(TestStateStore):
 
             assert taskhub_grouped_patterns == expected_results
 
-        @pytest.mark.xfail(raises=NotImplementedError)
         def test_resolve_task_restarts(
             self,
             scope_test: Scope,
             n4js_task_restart_policy: Neo4jStore,
         ):
+            n4js = n4js_task_restart_policy
 
             # get the actioned tasks for each taskhub
             taskhub_actioned_tasks = {}
-            for taskhub_scoped_key in n4js_task_restart_policy.query_taskhubs():
+            for taskhub_scoped_key in n4js.query_taskhubs():
                 taskhub_actioned_tasks[taskhub_scoped_key] = set(
-                    n4js_task_restart_policy.get_taskhub_actioned_tasks(
-                        [taskhub_scoped_key]
-                    )[0]
+                    n4js.get_taskhub_actioned_tasks([taskhub_scoped_key])[0]
                 )
 
-            restart_patterns = n4js_task_restart_policy.get_task_restart_patterns(
+            restart_patterns = n4js.get_task_restart_patterns(
                 list(taskhub_actioned_tasks.keys())
             )
 
-            transformation_tasks = defaultdict(list)
-            for task in n4js_task_restart_policy.query_tasks(
-                status=TaskStatusEnum.waiting.value
-            ):
-                transformation_scoped_key, _ = (
-                    n4js_task_restart_policy.get_task_transformation(
-                        task, return_gufe=False
-                    )
+            # create a map of the transformations and all of the tasks that perform them
+            transformation_tasks: dict[ScopedKey, list[ScopedKey]] = defaultdict(list)
+            for task in n4js.query_tasks(status=TaskStatusEnum.waiting.value):
+                transformation_scoped_key, _ = n4js.get_task_transformation(
+                    task, return_gufe=False
                 )
                 transformation_tasks[transformation_scoped_key].append(task)
 
@@ -2326,6 +2328,7 @@ class TestNeo4jStore(TestStateStore):
             taskhub_scoped_key_no_policy = None
             taskhub_scoped_key_with_policy = None
 
+            # bind taskhub scoped keys to variables for convenience later
             for taskhub_scoped_key, patterns in restart_patterns.items():
                 if not patterns:
                     taskhub_scoped_key_no_policy = taskhub_scoped_key
@@ -2357,7 +2360,7 @@ class TestNeo4jStore(TestStateStore):
 
             # reduce down all tasks until only the common elements between taskhubs exist
             tasks_actioned_by_all_taskhubs: List[ScopedKey] = list(
-                reduce(and_, taskhub_actioned_tasks.values(), set(all_tasks))
+                reduce(operator.and_, taskhub_actioned_tasks.values(), set(all_tasks))
             )
 
             assert len(tasks_actioned_by_all_taskhubs) == 4
@@ -2366,69 +2369,43 @@ class TestNeo4jStore(TestStateStore):
             tasks_to_complete = tasks_actioned_by_all_taskhubs[:2]
             tasks_to_fail = tasks_actioned_by_all_taskhubs[2:]
 
-            # TODO: either check the results after the loop or within it, whichever makes more sense
-            for task in tasks_to_complete:
-                n4js_task_restart_policy.set_task_running([task])
-                ok_pdrr = ProtocolDAGResultRef(
-                    ok=True,
-                    datetime_created=datetime.utcnow(),
-                    obj_key=task.gufe_key,
-                    scope=task.scope,
-                )
+            complete_tasks(n4js, tasks_to_complete)
 
-                _ = n4js_task_restart_policy.set_task_result(task, ok_pdrr)
+            records = n4js.execute_query(
+                """
+                UNWIND $task_scoped_keys as task_scoped_key
+                MATCH (task:Task {_scoped_key: task_scoped_key})-[:RESULTS_IN]->(:ProtocolDAGResultRef)
+                RETURN count(task) as task_count
+            """,
+                task_scoped_keys=list(map(str, tasks_to_complete)),
+            ).records
 
-                # this should do nothing to the database state since all
-                # relationships are removed in the previous method call
-                # TODO: perhaps counts of the connections will be a good test
-                n4js_task_restart_policy.set_task_complete([task])
+            assert records[0]["task_count"] == 2
 
+            # test the behavior of the compute API
             for i, task in enumerate(tasks_to_fail):
-                n4js_task_restart_policy.set_task_running([task])
-
-                not_ok_pdrr = ProtocolDAGResultRef(
-                    ok=False,
-                    datetime_created=datetime.utcnow(),
-                    obj_key=task.gufe_key,
-                    scope=task.scope,
-                )
-
                 error_messages = [
                     f"Error message {repeat}, round {i}" for repeat in range(3)
                 ]
-                protocol_unit_failures = []
-                for j, message in enumerate(error_messages):
-                    puf = ProtocolUnitFailure(
-                        source_key=f"FakeProtocolUnitKey-123{j}",
-                        inputs={},
-                        outputs={},
-                        exception=RuntimeError,
-                        traceback=message,
-                    )
-                    protocol_unit_failures.append(puf)
 
-                pdrr_scoped_key = n4js_task_restart_policy.set_task_result(
-                    task, not_ok_pdrr
+                fail_task(
+                    n4js,
+                    task,
+                    resolve=False,
+                    error_messages=error_messages,
                 )
-                # the following mimics what the compute API would do for a failed task
-                n4js_task_restart_policy.add_protocol_dag_result_ref_traceback(
-                    protocol_unit_failures, pdrr_scoped_key
-                )
-                n4js_task_restart_policy.set_task_error([task])
 
-                # always feed in all tasks to test for side effects
-                n4js_task_restart_policy.resolve_task_restarts(all_tasks)
+                n4js.resolve_task_restarts(all_tasks)
 
             # both tasks should have the waiting status and the APPLIES
             # relationship num_retries should have incremented by 1
-
             query = """
             UNWIND $task_scoped_keys as task_scoped_key
             MATCH (task:Task {`_scoped_key`: task_scoped_key, status: $waiting})<-[:APPLIES {num_retries: 1}]-(:TaskRestartPattern {max_retries: 2})
             RETURN count(DISTINCT task) as renewed_waiting_tasks
             """
 
-            renewed_waiting = n4js_task_restart_policy.execute_query(
+            renewed_waiting = n4js.execute_query(
                 query,
                 task_scoped_keys=list(map(str, tasks_to_fail)),
                 waiting=TaskStatusEnum.waiting.value,
@@ -2442,33 +2419,27 @@ class TestNeo4jStore(TestStateStore):
             # but with an additional traceback
             task_to_cancel, task_to_wait = tasks_to_fail
 
-            query = """
-            MATCH (task:Task {`_scoped_key`: $task_scoped_key_fail})<-[app:APPLIES]-(:TaskRestartPattern)
-            SET app.num_retries = 2
-            SET task.status = $error
-            """
+            for _ in range(2):
+                error_messages = [
+                    f"Error message {repeat}, round {i}" for repeat in range(3)
+                ]
 
-            n4js_task_restart_policy.execute_query(
-                query,
-                task_scoped_key_fail=str(task_to_cancel),
-                task_scoped_key_wait=str(task_to_wait),
-                error=TaskStatusEnum.error.value,
+                fail_task(
+                    n4js,
+                    task_to_cancel,
+                    resolve=False,
+                    error_messages=error_messages,
+                )
+
+                n4js.resolve_task_restarts(tasks_to_fail)
+
+            assert tasks_are_not_actioned_on_taskhub(
+                n4js,
+                [task_to_cancel],
+                taskhub_scoped_key_with_policy,
             )
 
-            n4js_task_restart_policy.resolve_task_restarts(tasks_to_fail)
-
-            query = """
-            MATCH (task:Task {_scoped_key: $task_scoped_key})<-[:ACTIONS]-(:TaskHub {_scoped_key: $taskhub_scoped_key})
-            RETURN task
-            """
-
-            results = n4js_task_restart_policy.execute_query(
-                query,
-                task_scoped_key=str(task_to_cancel),
-                taskhub_scoped_key=str(taskhub_scoped_key_with_policy),
-            )
-
-            assert len(results.records) == 0
+            assert tasks_are_errored(n4js, [task_to_cancel])
 
         @pytest.mark.xfail(raises=NotImplementedError)
         def test_task_actioning_applies_relationship(self):
