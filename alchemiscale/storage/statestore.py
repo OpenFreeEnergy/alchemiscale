@@ -2944,7 +2944,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             q, taskhub_scoped_keys=list(map(str, taskhubs))
         ).records
 
-        data = {taskhub: set() for taskhub in taskhubs}
+        data: dict[ScopedKey, set[tuple[str, int]]] = {
+            taskhub: set() for taskhub in taskhubs
+        }
 
         for record in records:
             pattern = record["trp"]["pattern"]
@@ -3000,10 +3002,14 @@ class Neo4jStore(AlchemiscaleStateStore):
             applies_relationship = record["app"]
             task = record["task"]
             taskhub = record["taskhub"]
-            # TODO: what happens if there is no traceback? i.e. older errored tasks
             traceback = record["traceback"]
 
             task_taskhub_tuple = (task["_scoped_key"], taskhub["_scoped_key"])
+
+            # TODO: remove in v1.0.0
+            # tasks that errored, prior to the indtroduction of task restart policies will have no tracebacks in the database
+            if traceback is None:
+                cancel_map[task_taskhub_tuple] = True
 
             # we have already determined that the task is to be canceled
             # is only ever truthy when we say a task needs to be canceled
