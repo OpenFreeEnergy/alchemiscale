@@ -2461,9 +2461,15 @@ class Neo4jStore(AlchemiscaleStateStore):
             except IndexError:
                 raise KeyError("Could not find ProtocolDAGResultRef in database.")
 
-            tracebacks = list(map(lambda puf: puf.traceback, protocol_unit_failures))
-            source_keys = list(map(lambda puf: puf.source_key, protocol_unit_failures))
-            failure_keys = list(map(lambda puf: puf.key, protocol_unit_failures))
+            failure_keys = []
+            source_keys = []
+            tracebacks = []
+
+            for puf in protocol_unit_failures:
+                failure_keys.append(puf.key)
+                source_keys.append(puf.source_key)
+                tracebacks.append(puf.traceback)
+
             traceback = Traceback(tracebacks, source_keys, failure_keys)
 
             _, traceback_node, _ = self._gufe_to_subgraph(
