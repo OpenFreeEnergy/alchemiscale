@@ -1585,24 +1585,24 @@ class Neo4jStore(AlchemiscaleStateStore):
         none at all.
 
         """
-        canceled_sks = []
-        with self.transaction() as tx:
-            for t in tasks:
-                q = f"""
-                // get our task hub, as well as the task :ACTIONS relationship we want to remove
-                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
-                DELETE ar
-                RETURN task
-                """
-                _task = tx.run(q).to_eager_result()
+        query = """
+        UNWIND $task_scoped_keys AS task_scoped_key
+        MATCH (:TaskHub {_scoped_key: $taskhub_scoped_key})-[ar:ACTIONS]->(task:Task {_scoped_key: task_scoped_key})
+        DELETE ar
+        RETURN task._scoped_key as task_scoped_key
+        """
+        results = self.execute_query(
+            query,
+            task_scoped_keys=list(map(str, tasks)),
+            taskhub_scoped_key=str(taskhub),
+        )
 
-                if _task.records:
-                    sk = _task.records[0].data()["task"]["_scoped_key"]
-                    canceled_sks.append(ScopedKey.from_str(sk))
-                else:
-                    canceled_sks.append(None)
+        returned_keys = {record["task_scoped_key"] for record in results.records}
+        filtered_tasks = [
+            task if str(task) in returned_keys else None for task in tasks
+        ]
 
-        return canceled_sks
+        return filtered_tasks
 
     def get_taskhub_tasks(
         self, taskhub: ScopedKey, return_gufe=False
