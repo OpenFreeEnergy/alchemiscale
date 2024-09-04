@@ -3031,7 +3031,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                 if num_retries + 1 > max_retries:
                     cancel_map[task_taskhub_tuple] = True
                 else:
-                    # to_increment.append(task_taskhub_tuple)
                     to_increment.append(
                         (task["_scoped_key"], task_restart_pattern["_scoped_key"])
                     )
