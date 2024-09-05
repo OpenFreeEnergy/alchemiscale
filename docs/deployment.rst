@@ -65,9 +65,9 @@ For example, using the location set in ``.env.testing``::
 
 Now start the service with::
 
-    $ USER_ID=$(id -u) GROUP_ID=$(id -g) docker-compose up -d
+    $ USER_ID=$(id -u) GROUP_ID=$(id -g) docker compose up -d
 
-We set ``USER_ID`` and ``GROUP_ID`` to be the same as the user running the ``docker-compose up -d`` command.
+We set ``USER_ID`` and ``GROUP_ID`` to be the same as the user running the ``docker compose up -d`` command.
 
 
 Setting up a host on AWS EC2
