@@ -61,7 +61,7 @@ class ComputeServiceSettings(BaseModel):
         description="Names of Protocols to run with this service; `None` means no restriction.",
     )
     claim_limit: int = Field(
-        1000, description="Maximum number of Tasks to claim at a time from a TaskHub."
+        1, description="Maximum number of Tasks to claim at a time from a TaskHub."
     )
     loglevel: str = Field(
         "WARN",
