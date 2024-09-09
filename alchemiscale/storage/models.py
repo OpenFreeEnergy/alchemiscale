@@ -223,12 +223,9 @@ class Traceback(GufeTokenizable):
         self.source_keys = source_keys
         self.failure_keys = failure_keys
 
-    def _gufe_tokenize(self):
-        return hashlib.md5(str(self.tracebacks).encode()).hexdigest()
-
     @classmethod
     def _defaults(cls):
-        raise NotImplementedError
+        return {"tracebacks": [], "source_keys": [], "failure_keys": []}
 
     @classmethod
     def _from_dict(cls, dct):
