@@ -1998,12 +1998,12 @@ class TestNeo4jStore(TestStateStore):
                 )
             )
 
-        n4js.add_protocol_dag_result_ref_traceback(
+        n4js.add_protocol_dag_result_ref_tracebacks(
             protocol_unit_failures, pdrr_scoped_key
         )
 
         query = """
-        MATCH (traceback:Traceback)-[:DETAILS]->(:ProtocolDAGResultRef {`_scoped_key`: $pdrr_scoped_key})
+        MATCH (traceback:Tracebacks)-[:DETAILS]->(:ProtocolDAGResultRef {`_scoped_key`: $pdrr_scoped_key})
         RETURN traceback
         """
 
@@ -2355,7 +2355,7 @@ class TestNeo4jStore(TestStateStore):
             #    an enforcing task restart policy exists
             #
             # Tasks will be set to the error state with a spoofing method, which will create a fake ProtocolDAGResultRef
-            # and Traceback. This is done since making a protocol fail systematically in the testing environment is not
+            # and Tracebacks. This is done since making a protocol fail systematically in the testing environment is not
             # obvious at this time.
 
             # reduce down all tasks until only the common elements between taskhubs exist

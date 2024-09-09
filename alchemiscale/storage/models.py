@@ -202,7 +202,7 @@ class TaskRestartPattern(GufeTokenizable):
         return self.pattern == other.pattern
 
 
-class Traceback(GufeTokenizable):
+class Tracebacks(GufeTokenizable):
 
     def __init__(
         self, tracebacks: List[str], source_keys: List[str], failure_keys: List[str]
@@ -229,7 +229,7 @@ class Traceback(GufeTokenizable):
 
     @classmethod
     def _from_dict(cls, dct):
-        return Traceback(**dct)
+        return Tracebacks(**dct)
 
     def _to_dict(self):
         return {

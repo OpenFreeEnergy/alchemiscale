@@ -83,7 +83,7 @@ def fail_task(
 
     pdrr_scoped_key = n4js.set_task_result(task, not_ok_pdrr)
 
-    n4js.add_protocol_dag_result_ref_traceback(protocol_unit_failures, pdrr_scoped_key)
+    n4js.add_protocol_dag_result_ref_tracebacks(protocol_unit_failures, pdrr_scoped_key)
     n4js.set_task_error([task])
 
     if resolve:

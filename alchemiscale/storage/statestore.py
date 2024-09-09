@@ -33,7 +33,7 @@ from .models import (
     TaskHub,
     TaskRestartPattern,
     TaskStatusEnum,
-    Traceback,
+    Tracebacks,
 )
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
@@ -2435,7 +2435,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._get_protocoldagresultrefs(q, task)
 
-    def add_protocol_dag_result_ref_traceback(
+    def add_protocol_dag_result_ref_tracebacks(
         self,
         protocol_unit_failures: List[ProtocolUnitFailure],
         protocol_dag_result_ref_scoped_key: ScopedKey,
@@ -2472,7 +2472,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 source_keys.append(puf.source_key)
                 tracebacks.append(puf.traceback)
 
-            traceback = Traceback(tracebacks, source_keys, failure_keys)
+            traceback = Tracebacks(tracebacks, source_keys, failure_keys)
 
             _, traceback_node, _ = self._gufe_to_subgraph(
                 traceback.to_shallow_dict(),
@@ -2976,13 +2976,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (task:Task {status: $error, `_scoped_key`: task_scoped_key})<-[app:APPLIES]-(trp:TaskRestartPattern)-[:ENFORCES]->(taskhub:TaskHub)
         CALL {
             WITH task
-            OPTIONAL MATCH (task:Task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)<-[:DETAILS]-(traceback:Traceback)
-            RETURN traceback
+            OPTIONAL MATCH (task:Task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)<-[:DETAILS]-(tracebacks:Tracebacks)
+            RETURN tracebacks
             ORDER BY pdrr.datetime_created DESCENDING
             LIMIT 1
         }
-        WITH task, traceback, trp, app, taskhub
-        RETURN task, traceback, trp, app, taskhub
+        WITH task, tracebacks, trp, app, taskhub
+        RETURN task, tracebacks, trp, app, taskhub
         """
 
         results = tx.run(
@@ -3010,13 +3010,13 @@ class Neo4jStore(AlchemiscaleStateStore):
             applies_relationship = record["app"]
             task = record["task"]
             taskhub = record["taskhub"]
-            traceback = record["traceback"]
+            _tracebacks = record["tracebacks"]
 
             task_taskhub_tuple = (task["_scoped_key"], taskhub["_scoped_key"])
 
             # TODO: remove in v1.0.0
             # tasks that errored, prior to the indtroduction of task restart policies will have no tracebacks in the database
-            if traceback is None:
+            if _tracebacks is None:
                 cancel_map[task_taskhub_tuple] = True
 
             # we have already determined that the task is to be canceled
@@ -3027,9 +3027,11 @@ class Neo4jStore(AlchemiscaleStateStore):
             num_retries = applies_relationship["num_retries"]
             max_retries = task_restart_pattern["max_retries"]
             pattern = task_restart_pattern["pattern"]
-            tracebacks: List[str] = traceback["tracebacks"]
+            tracebacks: List[str] = _tracebacks["tracebacks"]
 
-            if any([re.search(pattern, message) for message in tracebacks]):
+            compiled_pattern = re.compile(pattern)
+
+            if any([compiled_pattern.search(message) for message in tracebacks]):
                 if num_retries + 1 > max_retries:
                     cancel_map[task_taskhub_tuple] = True
                 else:
