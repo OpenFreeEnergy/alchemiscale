@@ -36,6 +36,7 @@ from alchemiscale.tests.integration.storage.utils import (
     fail_task,
     tasks_are_errored,
     tasks_are_not_actioned_on_taskhub,
+    tasks_are_waiting,
 )
 
 
@@ -2351,8 +2352,8 @@ class TestNeo4jStore(TestStateStore):
             #
             # 1. Completed Tasks do not have an actions relationship with either TaskHub
             # 2. A Task entering the error state is switched back to waiting if any restart patterns apply
-            # 3. A Task entering the error state is left in the error state if no patterns apply and only the TaskHub with
-            #    an enforcing task restart policy exists
+            # 3. A Task entering the error state is left in the error state if no patterns apply and only the TaskHub without
+            #    an enforcing task restart policy actions the Task
             #
             # Tasks will be set to the error state with a spoofing method, which will create a fake ProtocolDAGResultRef
             # and Tracebacks. This is done since making a protocol fail systematically in the testing environment is not
@@ -2360,7 +2361,7 @@ class TestNeo4jStore(TestStateStore):
 
             # reduce down all tasks until only the common elements between taskhubs exist
             tasks_actioned_by_all_taskhubs: List[ScopedKey] = list(
-                reduce(operator.and_, taskhub_actioned_tasks.values(), set(all_tasks))
+                reduce(operator.and_, taskhub_actioned_tasks.values())
             )
 
             assert len(tasks_actioned_by_all_taskhubs) == 4
@@ -2415,10 +2416,10 @@ class TestNeo4jStore(TestStateStore):
 
             # we want the resolve restarts to cancel a task.
             # deconstruct the tasks to fail, where the first
-            # one will be cancelled and the second will once again be continued
-            # but with an additional traceback
+            # one will be cancelled and the second will continue to wait
             task_to_cancel, task_to_wait = tasks_to_fail
 
+            # error out the first task
             for _ in range(2):
                 error_messages = [
                     f"Error message {repeat}, round {i}" for repeat in range(3)
@@ -2433,13 +2434,52 @@ class TestNeo4jStore(TestStateStore):
 
                 n4js.resolve_task_restarts(tasks_to_fail)
 
+            # check that it is no longer actioned on the enforced taskhub
             assert tasks_are_not_actioned_on_taskhub(
                 n4js,
                 [task_to_cancel],
                 taskhub_scoped_key_with_policy,
             )
 
+            # check that it is still actioned on the unenforced taskhub
+            assert not tasks_are_not_actioned_on_taskhub(
+                n4js,
+                [task_to_cancel],
+                taskhub_scoped_key_no_policy,
+            )
+
+            # it should still be errored though!
             assert tasks_are_errored(n4js, [task_to_cancel])
+
+            # fail the second task one time
+            error_messages = [
+                f"Error message {repeat}, round {i}" for repeat in range(3)
+            ]
+
+            fail_task(
+                n4js,
+                task_to_wait,
+                resolve=False,
+                error_messages=error_messages,
+            )
+
+            n4js.resolve_task_restarts(tasks_to_fail)
+
+            # check that the waiting task is actioned on both taskhubs
+            assert not tasks_are_not_actioned_on_taskhub(
+                n4js,
+                [task_to_wait],
+                taskhub_scoped_key_with_policy,
+            )
+
+            assert not tasks_are_not_actioned_on_taskhub(
+                n4js,
+                [task_to_wait],
+                taskhub_scoped_key_no_policy,
+            )
+
+            # it should be waiting
+            assert tasks_are_waiting(n4js, [task_to_wait])
 
         @pytest.mark.xfail(raises=NotImplementedError)
         def test_task_actioning_applies_relationship(self):

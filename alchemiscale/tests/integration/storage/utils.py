@@ -37,6 +37,22 @@ def tasks_are_errored(n4js: Neo4jStore, task_scoped_keys: list[ScopedKey]) -> bo
     return len(results.records) == len(task_scoped_keys)
 
 
+def tasks_are_waiting(n4js: Neo4jStore, task_scoped_keys: list[ScopedKey]) -> bool:
+    query = """
+    UNWIND $task_scoped_keys as task_scoped_key
+    MATCH (task:Task {_scoped_key: task_scoped_key, status: $waiting})
+    RETURN task
+    """
+
+    results = n4js.execute_query(
+        query,
+        task_scoped_keys=list(map(str, task_scoped_keys)),
+        waiting=TaskStatusEnum.waiting.value,
+    )
+
+    return len(results.records) == len(task_scoped_keys)
+
+
 def complete_tasks(
     n4js: Neo4jStore,
     tasks: list[ScopedKey],
