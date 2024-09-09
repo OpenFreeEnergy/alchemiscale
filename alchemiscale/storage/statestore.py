@@ -1628,10 +1628,10 @@ class Neo4jStore(AlchemiscaleStateStore):
             MATCH (th:TaskHub {_scoped_key: $taskhub_scoped_key})-[ar:ACTIONS]->(task:Task {_scoped_key: $task_scoped_key})
             DELETE ar
 
-            WITH task
+            WITH task, th
             CALL {
-                WITH task
-                MATCH (task)<-[applies:APPLIES]-(:TaskRestartPattern)
+                WITH task, th
+                MATCH (task)<-[applies:APPLIES]-(:TaskRestartPattern)-[:ENFORCES]->(th)
                 DELETE applies
             }
 
