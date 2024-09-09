@@ -9,7 +9,7 @@ from datetime import datetime
 from contextlib import contextmanager
 import json
 import re
-from functools import lru_cache
+from functools import lru_cache, update_wrapper
 from typing import Dict, List, Optional, Union, Tuple, Set
 from collections import defaultdict
 from collections.abc import Iterable
@@ -186,6 +186,8 @@ class Neo4jStore(AlchemiscaleStateStore):
             with self.transaction() as tx:
                 kwargs.update(tx=tx)
                 return func(self, *args, **kwargs)
+
+        update_wrapper(inner, func)
 
         return inner
 
