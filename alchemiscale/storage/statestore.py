@@ -3001,10 +3001,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         # None => the pair never had a matching restart pattern
         # True => at least one patterns max_retries was exceeded
         # False => at least one regex matched, but no pattern max_retries were exceeded
-        cancel_map: defaultdict[Tuple[str, str], Optional[bool]] = defaultdict(
-            lambda: None
-        )
+        cancel_map: dict[Tuple[str, str], Optional[bool]] = {}
         to_increment: List[Tuple[str, str]] = []
+        all_task_taskhub_pairs: set[Tuple[str, str]] = set()
         for record in results.records:
             task_restart_pattern = record["trp"]
             applies_relationship = record["app"]
@@ -3014,14 +3013,16 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             task_taskhub_tuple = (task["_scoped_key"], taskhub["_scoped_key"])
 
+            all_task_taskhub_pairs.add(task_taskhub_tuple)
+
             # TODO: remove in v1.0.0
             # tasks that errored, prior to the indtroduction of task restart policies will have no tracebacks in the database
             if _tracebacks is None:
                 cancel_map[task_taskhub_tuple] = True
 
-            # we have already determined that the task is to be canceled
-            # is only ever truthy when we say a task needs to be canceled
-            if cancel_map[task_taskhub_tuple]:
+            # we have already determined that the task is to be canceled.
+            # this is only ever truthy when we say a task needs to be canceled.
+            if cancel_map.get(task_taskhub_tuple):
                 continue
 
             num_retries = applies_relationship["num_retries"]
@@ -3051,10 +3052,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         # cancel all tasks that didn't trigger any restart patterns (None)
         # or exceeded a patterns max_retries value (True)
-        for (task, taskhub), _ in filter(
-            lambda values: values[1] is True or values[1] is None, cancel_map.items()
-        ):
-            self.cancel_tasks([task], taskhub, tx=tx)
+        cancel_groups: defaultdict[str, list[str]] = defaultdict(list)
+        for task_taskhub_pair in all_task_taskhub_pairs:
+            cancel_result = cancel_map.get(task_taskhub_pair)
+            if cancel_result is True or cancel_result is None:
+                cancel_groups[task_taskhub_pair[1]].append(task_taskhub_pair[0])
+
+        for taskhub, tasks in cancel_groups.items():
+            self.cancel_tasks(tasks, taskhub, tx=tx)
 
         # any remaining tasks must then be okay to switch to waiting
         renew_waiting_status_query = """
