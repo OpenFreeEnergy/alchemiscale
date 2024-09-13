@@ -225,11 +225,11 @@ class Tracebacks(GufeTokenizable):
 
     @classmethod
     def _defaults(cls):
-        return {"tracebacks": [], "source_keys": [], "failure_keys": []}
+        return super()._defaults()
 
     @classmethod
     def _from_dict(cls, dct):
-        return Tracebacks(**dct)
+        return cls(**dct)
 
     def _to_dict(self):
         return {
