@@ -4,7 +4,7 @@ from alchemiscale.storage.models import (
     NetworkStateEnum,
     NetworkMark,
     TaskRestartPattern,
-    Traceback,
+    Tracebacks,
 )
 from alchemiscale import ScopedKey
 
@@ -137,40 +137,40 @@ class TestTaskRestartPattern(object):
         assert trp_reconstructed.taskhub_scoped_key == original_taskhub_scoped_key
 
 
-class TestTraceback(object):
+class TestTracebacks(object):
 
     valid_entry = ["traceback1", "traceback2", "traceback3"]
     tracebacks_value_error = "`tracebacks` must be a non-empty list of string values"
 
     def test_empty_string_element(self):
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
-            Traceback(self.valid_entry + [""])
+            Tracebacks(self.valid_entry + [""])
 
     def test_non_list_parameter(self):
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
-            Traceback(None)
+            Tracebacks(None)
 
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
-            Traceback(100)
+            Tracebacks(100)
 
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
-            Traceback("not a list, but still an iterable that yields strings")
+            Tracebacks("not a list, but still an iterable that yields strings")
 
     def test_list_non_string_elements(self):
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
-            Traceback(self.valid_entry + [None])
+            Tracebacks(self.valid_entry + [None])
 
     def test_empty_list(self):
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
-            Traceback([])
+            Tracebacks([])
 
     def test_to_dict(self):
-        tb = Traceback(self.valid_entry)
+        tb = Tracebacks(self.valid_entry)
         tb_dict = tb.to_dict()
 
         assert len(tb_dict) == 4
 
-        assert tb_dict.pop("__qualname__") == "Traceback"
+        assert tb_dict.pop("__qualname__") == "Tracebacks"
         assert tb_dict.pop("__module__") == "alchemiscale.storage.models"
 
         # light test of the version key
@@ -184,7 +184,7 @@ class TestTraceback(object):
         assert expected == tb_dict
 
     def test_from_dict(self):
-        tb_orig = Traceback(self.valid_entry)
+        tb_orig = Tracebacks(self.valid_entry)
         tb_dict = tb_orig.to_dict()
         tb_reconstructed: TaskRestartPattern = TaskRestartPattern.from_dict(tb_dict)
 

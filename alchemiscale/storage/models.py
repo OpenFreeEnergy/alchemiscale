@@ -202,9 +202,11 @@ class TaskRestartPattern(GufeTokenizable):
         return self.pattern == other.pattern
 
 
-class Traceback(GufeTokenizable):
+class Tracebacks(GufeTokenizable):
 
-    def __init__(self, tracebacks: List[str]):
+    def __init__(
+        self, tracebacks: List[str], source_keys: List[str], failure_keys: List[str]
+    ):
         value_error = ValueError(
             "`tracebacks` must be a non-empty list of string values"
         )
@@ -216,21 +218,25 @@ class Traceback(GufeTokenizable):
             if not all_string_values or "" in tracebacks:
                 raise value_error
 
+        # TODO: validate
         self.tracebacks = tracebacks
-
-    def _gufe_tokenize(self):
-        return hashlib.md5(str(self.tracebacks).encode()).hexdigest()
+        self.source_keys = source_keys
+        self.failure_keys = failure_keys
 
     @classmethod
     def _defaults(cls):
-        raise NotImplementedError
+        return super()._defaults()
 
     @classmethod
     def _from_dict(cls, dct):
-        return Traceback(**dct)
+        return cls(**dct)
 
     def _to_dict(self):
-        return {"tracebacks": self.tracebacks}
+        return {
+            "tracebacks": self.tracebacks,
+            "source_keys": self.source_keys,
+            "failure_keys": self.failure_keys,
+        }
 
 
 class TaskHub(GufeTokenizable):

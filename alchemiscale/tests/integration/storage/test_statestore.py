@@ -2,12 +2,15 @@ from datetime import datetime, timedelta
 import random
 from typing import List, Dict
 from pathlib import Path
+from functools import reduce
 from itertools import chain
+import operator
 from collections import defaultdict
 
 import pytest
 from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
+from gufe.protocols import ProtocolUnitFailure
 from gufe.protocols.protocoldag import execute_DAG
 
 from alchemiscale.storage.statestore import Neo4jStore
@@ -27,6 +30,14 @@ from alchemiscale.security.models import (
     CredentialedComputeIdentity,
 )
 from alchemiscale.security.auth import hash_key
+
+from alchemiscale.tests.integration.storage.utils import (
+    complete_tasks,
+    fail_task,
+    tasks_are_errored,
+    tasks_are_not_actioned_on_taskhub,
+    tasks_are_waiting,
+)
 
 
 class TestStateStore: ...
@@ -1944,6 +1955,65 @@ class TestNeo4jStore(TestStateStore):
         assert pdr_ref_sk in failure_pdr_ref_sks
         assert pdr_ref2_sk in failure_pdr_ref_sks
 
+    @pytest.mark.parametrize("failure_count", (1, 2, 3, 4))
+    def test_add_protocol_dag_result_ref_traceback(
+        self,
+        network_tyk2_failure,
+        n4js,
+        scope_test,
+        transformation_failure,
+        protocoldagresults_failure,
+        failure_count: int,
+    ):
+
+        an = network_tyk2_failure.copy_with_replacements(
+            name=network_tyk2_failure.name
+            + "_test_add_protocol_dag_result_ref_traceback"
+        )
+        n4js.assemble_network(an, scope_test)
+        transformation_scoped_key = n4js.get_scoped_key(
+            transformation_failure, scope_test
+        )
+
+        # create a task; pretend we computed it, submit reference for pre-baked
+        # result
+        task_scoped_key = n4js.create_task(transformation_scoped_key)
+
+        protocol_unit_failure = protocoldagresults_failure[0].protocol_unit_failures[0]
+
+        pdrr = ProtocolDAGResultRef(
+            scope=task_scoped_key.scope,
+            obj_key=protocoldagresults_failure[0].key,
+            ok=protocoldagresults_failure[0].ok(),
+        )
+
+        # push the result
+        pdrr_scoped_key = n4js.set_task_result(task_scoped_key, pdrr)
+
+        # simulating many failures
+        protocol_unit_failures = []
+        for failure_index in range(failure_count):
+            protocol_unit_failures.append(
+                protocol_unit_failure.copy_with_replacements(
+                    traceback=protocol_unit_failure.traceback + "_" + str(failure_index)
+                )
+            )
+
+        n4js.add_protocol_dag_result_ref_tracebacks(
+            protocol_unit_failures, pdrr_scoped_key
+        )
+
+        query = """
+        MATCH (traceback:Tracebacks)-[:DETAILS]->(:ProtocolDAGResultRef {`_scoped_key`: $pdrr_scoped_key})
+        RETURN traceback
+        """
+
+        results = n4js.execute_query(query, pdrr_scoped_key=str(pdrr_scoped_key))
+
+        returned_tracebacks = results.records[0]["traceback"]["tracebacks"]
+
+        assert returned_tracebacks == [puf.traceback for puf in protocol_unit_failures]
+
     ### task restart policies
 
     class TestTaskRestartPolicy:
@@ -1951,7 +2021,7 @@ class TestNeo4jStore(TestStateStore):
         @pytest.mark.parametrize("status", ("complete", "invalid", "deleted"))
         def test_task_status_change(self, n4js, network_tyk2, scope_test, status):
             an = network_tyk2.copy_with_replacements(
-                name=network_tyk2.name + f"_test_task_status_change"
+                name=network_tyk2.name + "_test_task_status_change"
             )
             _, taskhub_scoped_key, _ = n4js.assemble_network(an, scope_test)
             transformation = list(an.edges)[0]
@@ -2224,6 +2294,192 @@ class TestNeo4jStore(TestStateStore):
             taskhub_grouped_patterns = n4js.get_task_restart_patterns(taskhub_sks)
 
             assert taskhub_grouped_patterns == expected_results
+
+        def test_resolve_task_restarts(
+            self,
+            scope_test: Scope,
+            n4js_task_restart_policy: Neo4jStore,
+        ):
+            n4js = n4js_task_restart_policy
+
+            # get the actioned tasks for each taskhub
+            taskhub_actioned_tasks = {}
+            for taskhub_scoped_key in n4js.query_taskhubs():
+                taskhub_actioned_tasks[taskhub_scoped_key] = set(
+                    n4js.get_taskhub_actioned_tasks([taskhub_scoped_key])[0]
+                )
+
+            restart_patterns = n4js.get_task_restart_patterns(
+                list(taskhub_actioned_tasks.keys())
+            )
+
+            # create a map of the transformations and all of the tasks that perform them
+            transformation_tasks: dict[ScopedKey, list[ScopedKey]] = defaultdict(list)
+            for task in n4js.query_tasks(status=TaskStatusEnum.waiting.value):
+                transformation_scoped_key, _ = n4js.get_task_transformation(
+                    task, return_gufe=False
+                )
+                transformation_tasks[transformation_scoped_key].append(task)
+
+            # get a list of all tasks for more convient calls of the resolve method
+            all_tasks = []
+            for task_group in transformation_tasks.values():
+                all_tasks.extend(task_group)
+
+            taskhub_scoped_key_no_policy = None
+            taskhub_scoped_key_with_policy = None
+
+            # bind taskhub scoped keys to variables for convenience later
+            for taskhub_scoped_key, patterns in restart_patterns.items():
+                if not patterns:
+                    taskhub_scoped_key_no_policy = taskhub_scoped_key
+                    continue
+                else:
+                    taskhub_scoped_key_with_policy = taskhub_scoped_key
+                    continue
+
+                if patterns and taskhub_scoped_key_with_policy:
+                    raise AssertionError("More than one TaskHub has restart patterns")
+
+            assert (
+                taskhub_scoped_key_no_policy
+                and taskhub_scoped_key_with_policy
+                and (taskhub_scoped_key_no_policy != taskhub_scoped_key_with_policy)
+            )
+
+            # we first check the behavior involving tasks that are actioned by both taskhubs
+            # this involves confirming:
+            #
+            # 1. Completed Tasks do not have an actions relationship with either TaskHub
+            # 2. A Task entering the error state is switched back to waiting if any restart patterns apply
+            # 3. A Task entering the error state is left in the error state if no patterns apply and only the TaskHub without
+            #    an enforcing task restart policy actions the Task
+            #
+            # Tasks will be set to the error state with a spoofing method, which will create a fake ProtocolDAGResultRef
+            # and Tracebacks. This is done since making a protocol fail systematically in the testing environment is not
+            # obvious at this time.
+
+            # reduce down all tasks until only the common elements between taskhubs exist
+            tasks_actioned_by_all_taskhubs: List[ScopedKey] = list(
+                reduce(operator.and_, taskhub_actioned_tasks.values())
+            )
+
+            assert len(tasks_actioned_by_all_taskhubs) == 4
+
+            # we're going to just pass the first 2 and fail the second 2
+            tasks_to_complete = tasks_actioned_by_all_taskhubs[:2]
+            tasks_to_fail = tasks_actioned_by_all_taskhubs[2:]
+
+            complete_tasks(n4js, tasks_to_complete)
+
+            records = n4js.execute_query(
+                """
+                UNWIND $task_scoped_keys as task_scoped_key
+                MATCH (task:Task {_scoped_key: task_scoped_key})-[:RESULTS_IN]->(:ProtocolDAGResultRef)
+                RETURN count(task) as task_count
+            """,
+                task_scoped_keys=list(map(str, tasks_to_complete)),
+            ).records
+
+            assert records[0]["task_count"] == 2
+
+            # test the behavior of the compute API
+            for i, task in enumerate(tasks_to_fail):
+                error_messages = [
+                    f"Error message {repeat}, round {i}" for repeat in range(3)
+                ]
+
+                fail_task(
+                    n4js,
+                    task,
+                    resolve=False,
+                    error_messages=error_messages,
+                )
+
+                n4js.resolve_task_restarts(all_tasks)
+
+            # both tasks should have the waiting status and the APPLIES
+            # relationship num_retries should have incremented by 1
+            query = """
+            UNWIND $task_scoped_keys as task_scoped_key
+            MATCH (task:Task {`_scoped_key`: task_scoped_key, status: $waiting})<-[:APPLIES {num_retries: 1}]-(:TaskRestartPattern {max_retries: 2})
+            RETURN count(DISTINCT task) as renewed_waiting_tasks
+            """
+
+            renewed_waiting = n4js.execute_query(
+                query,
+                task_scoped_keys=list(map(str, tasks_to_fail)),
+                waiting=TaskStatusEnum.waiting.value,
+            ).records[0]["renewed_waiting_tasks"]
+
+            assert renewed_waiting == 2
+
+            # we want the resolve restarts to cancel a task.
+            # deconstruct the tasks to fail, where the first
+            # one will be cancelled and the second will continue to wait
+            task_to_cancel, task_to_wait = tasks_to_fail
+
+            # error out the first task
+            for _ in range(2):
+                error_messages = [
+                    f"Error message {repeat}, round {i}" for repeat in range(3)
+                ]
+
+                fail_task(
+                    n4js,
+                    task_to_cancel,
+                    resolve=False,
+                    error_messages=error_messages,
+                )
+
+                n4js.resolve_task_restarts(tasks_to_fail)
+
+            # check that it is no longer actioned on the enforced taskhub
+            assert tasks_are_not_actioned_on_taskhub(
+                n4js,
+                [task_to_cancel],
+                taskhub_scoped_key_with_policy,
+            )
+
+            # check that it is still actioned on the unenforced taskhub
+            assert not tasks_are_not_actioned_on_taskhub(
+                n4js,
+                [task_to_cancel],
+                taskhub_scoped_key_no_policy,
+            )
+
+            # it should still be errored though!
+            assert tasks_are_errored(n4js, [task_to_cancel])
+
+            # fail the second task one time
+            error_messages = [
+                f"Error message {repeat}, round {i}" for repeat in range(3)
+            ]
+
+            fail_task(
+                n4js,
+                task_to_wait,
+                resolve=False,
+                error_messages=error_messages,
+            )
+
+            n4js.resolve_task_restarts(tasks_to_fail)
+
+            # check that the waiting task is actioned on both taskhubs
+            assert not tasks_are_not_actioned_on_taskhub(
+                n4js,
+                [task_to_wait],
+                taskhub_scoped_key_with_policy,
+            )
+
+            assert not tasks_are_not_actioned_on_taskhub(
+                n4js,
+                [task_to_wait],
+                taskhub_scoped_key_no_policy,
+            )
+
+            # it should be waiting
+            assert tasks_are_waiting(n4js, [task_to_wait])
 
         @pytest.mark.xfail(raises=NotImplementedError)
         def test_task_actioning_applies_relationship(self):

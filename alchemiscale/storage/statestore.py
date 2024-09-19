@@ -8,14 +8,18 @@ import abc
 from datetime import datetime
 from contextlib import contextmanager
 import json
-from functools import lru_cache
+import re
+from functools import lru_cache, update_wrapper
 from typing import Dict, List, Optional, Union, Tuple, Set
+from collections import defaultdict
+from collections.abc import Iterable
 import weakref
 import numpy as np
 
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, NonTransformation, Settings
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
+from gufe.protocols import ProtocolUnitFailure
 
 from neo4j import Transaction, GraphDatabase, Driver
 
@@ -29,6 +33,7 @@ from .models import (
     TaskHub,
     TaskRestartPattern,
     TaskStatusEnum,
+    Tracebacks,
 )
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
@@ -172,6 +177,19 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             else:
                 tx.commit()
+
+    def chainable(func):
+        def inner(self, *args, **kwargs):
+            if kwargs.get("tx") is not None:
+                return func(self, *args, **kwargs)
+
+            with self.transaction() as tx:
+                kwargs.update(tx=tx)
+                return func(self, *args, **kwargs)
+
+        update_wrapper(inner, func)
+
+        return inner
 
     def execute_query(self, *args, **kwargs):
         kwargs.update({"database_": self.db_name})
@@ -1588,10 +1606,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return weights
 
+    @chainable
     def cancel_tasks(
         self,
         tasks: List[ScopedKey],
         taskhub: ScopedKey,
+        tx=None,
     ) -> List[Union[ScopedKey, None]]:
         """Remove Tasks from the TaskHub for a given AlchemicalNetwork.
 
@@ -1602,31 +1622,30 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         canceled_sks = []
-        with self.transaction() as tx:
-            for task in tasks:
-                query = """
-                // get our task hub, as well as the task :ACTIONS relationship we want to remove
-                MATCH (th:TaskHub {_scoped_key: $taskhub_scoped_key})-[ar:ACTIONS]->(task:Task {_scoped_key: $task_scoped_key})
-                DELETE ar
+        for task in tasks:
+            query = """
+            // get our task hub, as well as the task :ACTIONS relationship we want to remove
+            MATCH (th:TaskHub {_scoped_key: $taskhub_scoped_key})-[ar:ACTIONS]->(task:Task {_scoped_key: $task_scoped_key})
+            DELETE ar
 
-                WITH task
-                CALL {
-                    WITH task
-                    MATCH (task)<-[applies:APPLIES]-(:TaskRestartPattern)
-                    DELETE applies
-                }
+            WITH task, th
+            CALL {
+                WITH task, th
+                MATCH (task)<-[applies:APPLIES]-(:TaskRestartPattern)-[:ENFORCES]->(th)
+                DELETE applies
+            }
 
-                RETURN task
-                """
-                _task = tx.run(
-                    query, taskhub_scoped_key=str(taskhub), task_scoped_key=str(task)
-                ).to_eager_result()
+            RETURN task
+            """
+            _task = tx.run(
+                query, taskhub_scoped_key=str(taskhub), task_scoped_key=str(task)
+            ).to_eager_result()
 
-                if _task.records:
-                    sk = _task.records[0].data()["task"]["_scoped_key"]
-                    canceled_sks.append(ScopedKey.from_str(sk))
-                else:
-                    canceled_sks.append(None)
+            if _task.records:
+                sk = _task.records[0].data()["task"]["_scoped_key"]
+                canceled_sks.append(ScopedKey.from_str(sk))
+            else:
+                canceled_sks.append(None)
 
         return canceled_sks
 
@@ -2416,6 +2435,59 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._get_protocoldagresultrefs(q, task)
 
+    def add_protocol_dag_result_ref_tracebacks(
+        self,
+        protocol_unit_failures: List[ProtocolUnitFailure],
+        protocol_dag_result_ref_scoped_key: ScopedKey,
+    ):
+        subgraph = Subgraph()
+
+        with self.transaction() as tx:
+
+            query = """
+            MATCH (pdrr:ProtocolDAGResultRef {`_scoped_key`: $protocol_dag_result_ref_scoped_key})
+            RETURN pdrr
+            """
+
+            pdrr_result = tx.run(
+                query,
+                protocol_dag_result_ref_scoped_key=str(
+                    protocol_dag_result_ref_scoped_key
+                ),
+            ).to_eager_result()
+
+            try:
+                protocol_dag_result_ref_node = record_data_to_node(
+                    pdrr_result.records[0]["pdrr"]
+                )
+            except IndexError:
+                raise KeyError("Could not find ProtocolDAGResultRef in database.")
+
+            failure_keys = []
+            source_keys = []
+            tracebacks = []
+
+            for puf in protocol_unit_failures:
+                failure_keys.append(puf.key)
+                source_keys.append(puf.source_key)
+                tracebacks.append(puf.traceback)
+
+            traceback = Tracebacks(tracebacks, source_keys, failure_keys)
+
+            _, traceback_node, _ = self._gufe_to_subgraph(
+                traceback.to_shallow_dict(),
+                labels=["GufeTokenizable", traceback.__class__.__name__],
+                gufe_key=traceback.key,
+                scope=protocol_dag_result_ref_scoped_key.scope,
+            )
+
+            subgraph |= Relationship.type("DETAILS")(
+                traceback_node,
+                protocol_dag_result_ref_node,
+            )
+
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+
     def set_task_status(
         self, tasks: List[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
     ) -> List[Optional[ScopedKey]]:
@@ -2778,15 +2850,17 @@ class Neo4jStore(AlchemiscaleStateStore):
             RETURN task
             """
 
+            actioned_task_records = (
+                tx.run(actioned_tasks_query, taskhub_scoped_key=str(taskhub))
+                .to_eager_result()
+                .records
+            )
+
             subgraph = Subgraph()
 
             actioned_task_nodes = []
 
-            for actioned_tasks_record in (
-                tx.run(actioned_tasks_query, taskhub_scoped_key=str(taskhub))
-                .to_eager_result()
-                .records
-            ):
+            for actioned_tasks_record in actioned_task_records:
                 actioned_task_nodes.append(
                     record_data_to_node(actioned_tasks_record["task"])
                 )
@@ -2821,6 +2895,15 @@ class Neo4jStore(AlchemiscaleStateStore):
                     )
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
+            actioned_task_scoped_keys: List[ScopedKey] = []
+
+            for actioned_task_record in actioned_task_records:
+                actioned_task_scoped_keys.append(
+                    ScopedKey.from_str(actioned_task_record["task"]["_scoped_key"])
+                )
+
+            self.resolve_task_restarts(actioned_task_scoped_keys, tx=tx)
+
     # TODO: fill in docstring
     def remove_task_restart_patterns(self, taskhub: ScopedKey, patterns: List[str]):
         q = """
@@ -2854,6 +2937,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
     # TODO: fill in docstring
+    # TODO: validation of taskhubs variable, will fail in weird ways if not enforced
     def get_task_restart_patterns(
         self, taskhubs: List[ScopedKey]
     ) -> Dict[ScopedKey, Set[Tuple[str, int]]]:
@@ -2868,7 +2952,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             q, taskhub_scoped_keys=list(map(str, taskhubs))
         ).records
 
-        data = {taskhub: set() for taskhub in taskhubs}
+        data: dict[ScopedKey, set[tuple[str, int]]] = {
+            taskhub: set() for taskhub in taskhubs
+        }
 
         for record in records:
             pattern = record["trp"]["pattern"]
@@ -2877,6 +2963,117 @@ class Neo4jStore(AlchemiscaleStateStore):
             data[taskhub_sk].add((pattern, max_retries))
 
         return data
+
+    # TODO: docstrings
+    @chainable
+    def resolve_task_restarts(self, task_scoped_keys: Iterable[ScopedKey], *, tx=None):
+
+        # Given the scoped keys of a list of Tasks, find all tasks that have an
+        # error status and have a TaskRestartPattern applied. A subquery is executed
+        # to optionally get the latest traceback associated with the task
+        query = """
+        UNWIND $task_scoped_keys AS task_scoped_key
+        MATCH (task:Task {status: $error, `_scoped_key`: task_scoped_key})<-[app:APPLIES]-(trp:TaskRestartPattern)-[:ENFORCES]->(taskhub:TaskHub)
+        CALL {
+            WITH task
+            OPTIONAL MATCH (task:Task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)<-[:DETAILS]-(tracebacks:Tracebacks)
+            RETURN tracebacks
+            ORDER BY pdrr.datetime_created DESCENDING
+            LIMIT 1
+        }
+        WITH task, tracebacks, trp, app, taskhub
+        RETURN task, tracebacks, trp, app, taskhub
+        """
+
+        results = tx.run(
+            query,
+            task_scoped_keys=list(map(str, task_scoped_keys)),
+            error=TaskStatusEnum.error.value,
+        ).to_eager_result()
+
+        if not results:
+            return
+
+        # iterate over all of the results to determine if an applied pattern needs
+        # to be iterated or if the task needs to be cancelled outright
+
+        # Keep track of which task/taskhub pairs would need to be canceled
+        # None => the pair never had a matching restart pattern
+        # True => at least one patterns max_retries was exceeded
+        # False => at least one regex matched, but no pattern max_retries were exceeded
+        cancel_map: dict[Tuple[str, str], Optional[bool]] = {}
+        to_increment: List[Tuple[str, str]] = []
+        all_task_taskhub_pairs: set[Tuple[str, str]] = set()
+        for record in results.records:
+            task_restart_pattern = record["trp"]
+            applies_relationship = record["app"]
+            task = record["task"]
+            taskhub = record["taskhub"]
+            _tracebacks = record["tracebacks"]
+
+            task_taskhub_tuple = (task["_scoped_key"], taskhub["_scoped_key"])
+
+            all_task_taskhub_pairs.add(task_taskhub_tuple)
+
+            # TODO: remove in v1.0.0
+            # tasks that errored, prior to the indtroduction of task restart policies will have no tracebacks in the database
+            if _tracebacks is None:
+                cancel_map[task_taskhub_tuple] = True
+
+            # we have already determined that the task is to be canceled.
+            # this is only ever truthy when we say a task needs to be canceled.
+            if cancel_map.get(task_taskhub_tuple):
+                continue
+
+            num_retries = applies_relationship["num_retries"]
+            max_retries = task_restart_pattern["max_retries"]
+            pattern = task_restart_pattern["pattern"]
+            tracebacks: List[str] = _tracebacks["tracebacks"]
+
+            compiled_pattern = re.compile(pattern)
+
+            if any([compiled_pattern.search(message) for message in tracebacks]):
+                if num_retries + 1 > max_retries:
+                    cancel_map[task_taskhub_tuple] = True
+                else:
+                    to_increment.append(
+                        (task["_scoped_key"], task_restart_pattern["_scoped_key"])
+                    )
+                    cancel_map[task_taskhub_tuple] = False
+
+        increment_query = """
+        UNWIND $trp_and_task_pairs as pairs
+        WITH pairs[0] as task_scoped_key, pairs[1] as task_restart_pattern_scoped_key
+        MATCH (:Task {`_scoped_key`: task_scoped_key})<-[app:APPLIES]-(:TaskRestartPattern {`_scoped_key`: task_restart_pattern_scoped_key})
+        SET app.num_retries = app.num_retries + 1
+        """
+
+        tx.run(increment_query, trp_and_task_pairs=to_increment)
+
+        # cancel all tasks that didn't trigger any restart patterns (None)
+        # or exceeded a patterns max_retries value (True)
+        cancel_groups: defaultdict[str, list[str]] = defaultdict(list)
+        for task_taskhub_pair in all_task_taskhub_pairs:
+            cancel_result = cancel_map.get(task_taskhub_pair)
+            if cancel_result is True or cancel_result is None:
+                cancel_groups[task_taskhub_pair[1]].append(task_taskhub_pair[0])
+
+        for taskhub, tasks in cancel_groups.items():
+            self.cancel_tasks(tasks, taskhub, tx=tx)
+
+        # any remaining tasks must then be okay to switch to waiting
+        renew_waiting_status_query = """
+        UNWIND $task_scoped_keys AS task_scoped_key
+        MATCH (task:Task {status: $error, `_scoped_key`: task_scoped_key})<-[app:APPLIES]-(trp:TaskRestartPattern)-[:ENFORCES]->(taskhub:TaskHub)
+        SET task.status = $waiting
+        """
+
+        tx.run(
+            renew_waiting_status_query,
+            task_scoped_keys=list(map(str, task_scoped_keys)),
+            waiting=TaskStatusEnum.waiting.value,
+            error=TaskStatusEnum.error.value,
+        )
 
     ## authentication
 
