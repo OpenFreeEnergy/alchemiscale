@@ -140,35 +140,45 @@ class TestTaskRestartPattern(object):
 class TestTracebacks(object):
 
     valid_entry = ["traceback1", "traceback2", "traceback3"]
+    source_keys = ["ProtocolUnit-ABC123", "ProtocolUnit-DEF456", "ProtocolUnit-GHI789"]
+    failure_keys = [
+        "ProtocolUnitFailure-ABC123",
+        "ProtocolUnitFailure-DEF456",
+        "ProtocolUnitFailure-GHI789",
+    ]
     tracebacks_value_error = "`tracebacks` must be a non-empty list of string values"
 
     def test_empty_string_element(self):
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
-            Tracebacks(self.valid_entry + [""])
+            Tracebacks(self.valid_entry + [""], self.source_keys, self.failure_keys)
 
     def test_non_list_parameter(self):
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
-            Tracebacks(None)
+            Tracebacks(None, self.source_keys, self.failure_keys)
 
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
-            Tracebacks(100)
+            Tracebacks(100, self.source_keys, self.failure_keys)
 
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
-            Tracebacks("not a list, but still an iterable that yields strings")
+            Tracebacks(
+                "not a list, but still an iterable that yields strings",
+                self.source_keys,
+                self.failure_keys,
+            )
 
     def test_list_non_string_elements(self):
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
-            Tracebacks(self.valid_entry + [None])
+            Tracebacks(self.valid_entry + [None], self.source_keys, self.failure_keys)
 
     def test_empty_list(self):
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
-            Tracebacks([])
+            Tracebacks([], self.source_keys, self.failure_keys)
 
     def test_to_dict(self):
-        tb = Tracebacks(self.valid_entry)
+        tb = Tracebacks(self.valid_entry, self.source_keys, self.failure_keys)
         tb_dict = tb.to_dict()
 
-        assert len(tb_dict) == 4
+        assert len(tb_dict) == 6
 
         assert tb_dict.pop("__qualname__") == "Tracebacks"
         assert tb_dict.pop("__module__") == "alchemiscale.storage.models"
@@ -179,12 +189,16 @@ class TestTracebacks(object):
         except KeyError:
             raise AssertionError("expected to find :version:")
 
-        expected = {"tracebacks": self.valid_entry}
+        expected = {
+            "tracebacks": self.valid_entry,
+            "source_keys": self.source_keys,
+            "failure_keys": self.failure_keys,
+        }
 
         assert expected == tb_dict
 
     def test_from_dict(self):
-        tb_orig = Tracebacks(self.valid_entry)
+        tb_orig = Tracebacks(self.valid_entry, self.source_keys, self.failure_keys)
         tb_dict = tb_orig.to_dict()
         tb_reconstructed: TaskRestartPattern = TaskRestartPattern.from_dict(tb_dict)
 
