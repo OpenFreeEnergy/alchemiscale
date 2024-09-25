@@ -202,6 +202,7 @@ class TaskRestartPattern(GufeTokenizable):
         return self.pattern == other.pattern
 
 
+# TODO: docstrings
 class Tracebacks(GufeTokenizable):
 
     def __init__(

@@ -947,6 +947,66 @@ def get_task_status(
     return status[0].value
 
 
+# TODO docstring
+@router.post("/networks/{network_scoped_key}/restartpolicy/add")
+def add_task_restart_patterns(
+    network_scoped_key: str,
+    *,
+    patterns: list[str],
+    number_of_retries: int,
+    request: Request,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+
+    taskhub_scoped_key = n4js.get_taskhub(ScopedKey.from_str(network_scoped_key))
+    n4js.add_task_restart_patterns(taskhub_scoped_key, patterns, number_of_retries)
+
+
+# TODO docstring
+@router.post("/networks/{network_scoped_key}/restartpolicy/remove")
+def remove_task_restart_patterns(
+    network_scoped_key: str,
+    *,
+    patterns: list[str],
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    taskhub_scoped_key = n4js.get_taskhub(ScopedKey.from_str(network_scoped_key))
+    n4js.remove_task_restart_patterns(taskhub_scoped_key, patterns)
+
+
+# TODO docstring
+@router.get("/bulk/networks/restartpolicy/get")
+def get_task_restart_patterns(
+    *,
+    networks: list[str],
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> dict[str, set[tuple[str, int]]]:
+
+    network_scoped_keys = [ScopedKey.from_str(network) for network in networks]
+    taskhubs_scoped_keys = n4js.get_taskhubs(network_scoped_keys)
+    restart_patterns = n4js.get_task_restart_patterns(network_scoped_key)
+
+    return restart_patterns
+
+
+@router.post("/networks/{network_scoped_key}/restartpolicy/maxretries")
+def set_task_restart_patterns_max_retries(
+    network_scoped_key: str,
+    *,
+    patterns: list[str],
+    max_retries: int,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    taskhub_scoped_key = n4js.get_taskhub(ScopedKey.from_str(network_scoped_key))
+    n4js.set_task_restart_patterns_max_retries(
+        taskhub_scoped_key, patterns, max_retries
+    )
+
+
 @router.get("/tasks/{task_scoped_key}/transformation")
 def get_task_transformation(
     task_scoped_key,

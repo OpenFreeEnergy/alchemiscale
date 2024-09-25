@@ -1249,6 +1249,46 @@ class Neo4jStore(AlchemiscaleStateStore):
         else:
             return ScopedKey.from_str(node["_scoped_key"])
 
+    # TODO: write docstring
+    # TODO: can we replace the above method with this one?
+    def get_taskhubs(
+        self, network_scoped_keys: list[ScopedKey], return_gufe: bool = False
+    ) -> list[Union[ScopedKey, TaskHub]]:
+        # TODO: this could fail better, report all instances rather than first
+        for network_scoped_key in network_scoped_keys:
+            if network.qualname != "AlchemicalNetwork":
+                raise ValueError(
+                    "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
+                )
+
+        query = """
+        UNWIND $network_scoped_keys AS network_scoped_key
+        MATCH (th:TaskHub {network: network_scoped_key})-[:PERFORMS]->(an:AlchemicalNetwork)
+        RETURN th, an
+        """
+
+        query_results = self.execute_query(
+            query, network_scoped_keys=list(map(str, network_scoped_key))
+        )
+
+        def _node_to_gufe(node):
+            return self._subgraph_to_gufe([node], node)[node]
+
+        def _node_to_scoped_key(node):
+            return ScopedKey.from_str(node["_scoped_key"])
+
+        transform_function = _node_to_gufe if return_gufe else _node_to_scoped_key
+        transform_results = defaultdict(None)
+        for record in query_results.records:
+            node = record_data_to_node(record["th"])
+            network_scoped_key = record["an"]["_scoped_key"]
+            transform_results[network_scoped_key] = transform_function(node)
+
+        return [
+            transform_results[str(network_scoped_key)]
+            for network_scoped_key in network_scoped_keys
+        ]
+
     def delete_taskhub(
         self,
         network: ScopedKey,
