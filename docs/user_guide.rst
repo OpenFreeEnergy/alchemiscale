@@ -14,7 +14,7 @@ Installation
 
 Clone alchemiscale from Github, and switch to the latest release tag::
 
-    $ git clone https://github.com/openforcefield/alchemiscale.git
+    $ git clone https://github.com/OpenFreeEnergy/alchemiscale.git
     $ cd alchemiscale
     $ git checkout v0.5.0
 

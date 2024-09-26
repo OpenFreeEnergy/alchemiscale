@@ -36,7 +36,7 @@ First install the `docker engine <https://docs.docker.com/engine/install/#server
 
 Now clone the repository and then navigate to the ``alchemiscale/docker/alchemiscale-server`` folder::
     
-    $ git clone https://github.com/openforcefield/alchemiscale.git
+    $ git clone https://github.com/OpenFreeEnergy/alchemiscale.git
     $ cd alchemiscale/docker/alchemiscale-server
 
 .. note ::
