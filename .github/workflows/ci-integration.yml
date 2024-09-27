@@ -53,7 +53,7 @@ jobs:
           pytest -v --cov=alchemiscale --cov-report=xml alchemiscale/tests
 
       - name: codecov
-        if: ${{ github.repository == 'openforcefield/alchemiscale'
+        if: ${{ github.repository == 'OpenFreeEnergy/alchemiscale'
                 && github.event != 'schedule' }}
         uses: codecov/codecov-action@v2
         with:
