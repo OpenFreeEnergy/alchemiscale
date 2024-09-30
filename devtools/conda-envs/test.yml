@@ -1,5 +1,6 @@
 name: alchemiscale-test
 channels:
+  - conda-forge/label/openmm_rc
   - jaimergp/label/unsupported-cudatoolkit-shim
   - conda-forge
 
@@ -49,7 +50,7 @@ dependencies:
   - moto
 
   # additional pins
-  - openmm=8.1.2
+  - openmm==8.2.0beta
   - openmmforcefields>=0.14.1
 
   - pip:
