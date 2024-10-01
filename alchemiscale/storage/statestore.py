@@ -1256,7 +1256,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> list[Union[ScopedKey, TaskHub]]:
         # TODO: this could fail better, report all instances rather than first
         for network_scoped_key in network_scoped_keys:
-            if network.qualname != "AlchemicalNetwork":
+            if network_scoped_key.qualname != "AlchemicalNetwork":
                 raise ValueError(
                     "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
                 )
@@ -1268,7 +1268,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         query_results = self.execute_query(
-            query, network_scoped_keys=list(map(str, network_scoped_key))
+            query, network_scoped_keys=list(map(str, network_scoped_keys))
         )
 
         def _node_to_gufe(node):
@@ -2958,7 +2958,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def clear_task_restart_patterns(self, taskhub: ScopedKey):
         q = """
-        MATCH (trp: TaskRestartpattern {taskhub_scoped_key: $taskhub_scoped_key})
+        MATCH (trp: TaskRestartPattern {taskhub_scoped_key: $taskhub_scoped_key})
         DETACH DELETE trp
         """
         self.execute_query(q, taskhub_scoped_key=str(taskhub))

@@ -952,13 +952,11 @@ def get_task_status(
 def add_task_restart_patterns(
     network_scoped_key: str,
     *,
-    patterns: list[str],
-    number_of_retries: int,
-    request: Request,
+    patterns: list[str] = Body(embed=True),
+    number_of_retries: int = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-
     taskhub_scoped_key = n4js.get_taskhub(ScopedKey.from_str(network_scoped_key))
     n4js.add_task_restart_patterns(taskhub_scoped_key, patterns, number_of_retries)
 
@@ -968,7 +966,7 @@ def add_task_restart_patterns(
 def remove_task_restart_patterns(
     network_scoped_key: str,
     *,
-    patterns: list[str],
+    patterns: list[str] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -986,30 +984,44 @@ def clear_task_restart_patterns(
 ):
     taskhub_scoped_key = n4js.get_taskhub(ScopedKey.from_str(network_scoped_key))
     n4js.clear_task_restart_patterns(taskhub_scoped_key)
+    return [network_scoped_key]
 
 
 # TODO docstring
 @router.post("/bulk/networks/restartpolicy/get")
 def get_task_restart_patterns(
     *,
-    networks: list[str],
+    networks: list[str] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> dict[str, set[tuple[str, int]]]:
 
     network_scoped_keys = [ScopedKey.from_str(network) for network in networks]
-    taskhubs_scoped_keys = n4js.get_taskhubs(network_scoped_keys)
-    restart_patterns = n4js.get_task_restart_patterns(network_scoped_key)
+    taskhub_scoped_keys = n4js.get_taskhubs(network_scoped_keys)
 
-    return restart_patterns
+    taskhub_network_map = {
+        taskhub_scoped_key: network_scoped_key
+        for taskhub_scoped_key, network_scoped_key in zip(
+            taskhub_scoped_keys, network_scoped_keys
+        )
+    }
+
+    restart_patterns = n4js.get_task_restart_patterns(taskhub_scoped_keys)
+
+    as_str = {}
+    for key, value in restart_patterns.items():
+        network_scoped_key = taskhub_network_map[key]
+        as_str[str(network_scoped_key)] = value
+
+    return as_str
 
 
 @router.post("/networks/{network_scoped_key}/restartpolicy/maxretries")
 def set_task_restart_patterns_max_retries(
     network_scoped_key: str,
     *,
-    patterns: list[str],
-    max_retries: int,
+    patterns: list[str] = Body(embed=True),
+    max_retries: int = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
