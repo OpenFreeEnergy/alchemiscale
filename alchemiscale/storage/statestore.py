@@ -2956,6 +2956,13 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         self.execute_query(q, patterns=patterns, taskhub_scoped_key=str(taskhub))
 
+    def clear_task_restart_patterns(self, taskhub: ScopedKey):
+        q = """
+        MATCH (trp: TaskRestartpattern {taskhub_scoped_key: $taskhub_scoped_key})
+        DETACH DELETE trp
+        """
+        self.execute_query(q, taskhub_scoped_key=str(taskhub))
+
     # TODO: fill in docstring
     def set_task_restart_patterns_max_retries(
         self,

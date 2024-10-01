@@ -976,8 +976,20 @@ def remove_task_restart_patterns(
     n4js.remove_task_restart_patterns(taskhub_scoped_key, patterns)
 
 
+# TODO: docstring
+@router.get("/networks/{network_scoped_key}/restartpolicy/clear")
+def clear_task_restart_patterns(
+    network_scoped_key: str,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    taskhub_scoped_key = n4js.get_taskhub(ScopedKey.from_str(network_scoped_key))
+    n4js.clear_task_restart_patterns(taskhub_scoped_key)
+
+
 # TODO docstring
-@router.get("/bulk/networks/restartpolicy/get")
+@router.post("/bulk/networks/restartpolicy/get")
 def get_task_restart_patterns(
     *,
     networks: list[str],
