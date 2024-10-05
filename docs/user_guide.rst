@@ -16,7 +16,7 @@ Clone alchemiscale from Github, and switch to the latest release tag::
 
     $ git clone https://github.com/OpenFreeEnergy/alchemiscale.git
     $ cd alchemiscale
-    $ git checkout v0.5.0
+    $ git checkout v0.5.1
 
 Create a conda environment using, e.g. `micromamba`_::
 
