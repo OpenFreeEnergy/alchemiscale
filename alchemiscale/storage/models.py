@@ -143,7 +143,6 @@ class Task(GufeTokenizable):
         return super()._defaults()
 
 
-# TODO: fill in docstrings
 class TaskRestartPattern(GufeTokenizable):
     """A pattern to compare returned Task tracebacks to.
 
@@ -202,8 +201,17 @@ class TaskRestartPattern(GufeTokenizable):
         return self.pattern == other.pattern
 
 
-# TODO: docstrings
 class Tracebacks(GufeTokenizable):
+    """
+    Attributes
+    ----------
+    tracebacks: list[str]
+        The tracebacks returned with the ProtocolUnitFailures.
+    source_keys:list[ScopedKey]
+        The ScopedKeys of the Protocols that failed.
+    failure_keys: list[ScopedKey]
+        The ScopedKeys of the ProtocolUnitFailures.
+    """
 
     def __init__(
         self, tracebacks: List[str], source_keys: List[str], failure_keys: List[str]

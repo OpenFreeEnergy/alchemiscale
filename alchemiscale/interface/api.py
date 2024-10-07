@@ -947,7 +947,6 @@ def get_task_status(
     return status[0].value
 
 
-# TODO docstring
 @router.post("/networks/{network_scoped_key}/restartpolicy/add")
 def add_task_restart_patterns(
     network_scoped_key: str,
@@ -961,7 +960,6 @@ def add_task_restart_patterns(
     n4js.add_task_restart_patterns(taskhub_scoped_key, patterns, number_of_retries)
 
 
-# TODO docstring
 @router.post("/networks/{network_scoped_key}/restartpolicy/remove")
 def remove_task_restart_patterns(
     network_scoped_key: str,
@@ -974,7 +972,6 @@ def remove_task_restart_patterns(
     n4js.remove_task_restart_patterns(taskhub_scoped_key, patterns)
 
 
-# TODO: docstring
 @router.get("/networks/{network_scoped_key}/restartpolicy/clear")
 def clear_task_restart_patterns(
     network_scoped_key: str,
@@ -987,7 +984,6 @@ def clear_task_restart_patterns(
     return [network_scoped_key]
 
 
-# TODO docstring
 @router.post("/bulk/networks/restartpolicy/get")
 def get_task_restart_patterns(
     *,
