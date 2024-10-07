@@ -1217,43 +1217,19 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._query(qualname="TaskHub", scope=scope, return_gufe=return_gufe)
 
-    def get_taskhub(
-        self, network: ScopedKey, return_gufe: bool = False
-    ) -> Union[ScopedKey, TaskHub]:
-        """Get the TaskHub for the given AlchemicalNetwork.
+    def get_taskhubs(
+        self, network_scoped_keys: list[ScopedKey], return_gufe: bool = False
+    ) -> list[Union[ScopedKey, TaskHub]]:
+        """Get the TaskHubs for the given AlchemicalNetworks.
 
         Parameters
         ----------
         return_gufe
-            If True, return a `TaskHub` instance.
-            Otherwise, return a `ScopedKey`.
+            If True, return `TaskHub` instances.
+            Otherwise, return `ScopedKey`s.
 
         """
-        if network.qualname != "AlchemicalNetwork":
-            raise ValueError(
-                "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
-            )
 
-        q = f"""
-                match (th:TaskHub {{network: "{network}"}})-[:PERFORMS]->(an:AlchemicalNetwork)
-                return th
-                """
-
-        try:
-            node = record_data_to_node(self.execute_query(q).records[0]["th"])
-        except IndexError:
-            raise KeyError("No such object in database")
-
-        if return_gufe:
-            return self._subgraph_to_gufe([node], node)[node]
-        else:
-            return ScopedKey.from_str(node["_scoped_key"])
-
-    # TODO: write docstring
-    # TODO: can we replace the above method with this one?
-    def get_taskhubs(
-        self, network_scoped_keys: list[ScopedKey], return_gufe: bool = False
-    ) -> list[Union[ScopedKey, TaskHub]]:
         # TODO: this could fail better, report all instances rather than first
         for network_scoped_key in network_scoped_keys:
             if network_scoped_key.qualname != "AlchemicalNetwork":
@@ -1288,6 +1264,21 @@ class Neo4jStore(AlchemiscaleStateStore):
             transform_results[str(network_scoped_key)]
             for network_scoped_key in network_scoped_keys
         ]
+
+    def get_taskhub(
+        self, network: ScopedKey, return_gufe: bool = False
+    ) -> Union[ScopedKey, TaskHub]:
+        """Get the TaskHub for the given AlchemicalNetwork.
+
+        Parameters
+        ----------
+        return_gufe
+            If True, return a `TaskHub` instance.
+            Otherwise, return a `ScopedKey`.
+
+        """
+
+        return self.get_taskhubs([network], return_gufe)[0]
 
     def delete_taskhub(
         self,
