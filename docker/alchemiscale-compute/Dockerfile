@@ -1,7 +1,7 @@
-FROM mambaorg/micromamba:1.4.1
+FROM mambaorg/micromamba:1.5.10
 
-LABEL org.opencontainers.image.source=https://github.com/openforcefield/alchemiscale-compute
-LABEL org.opencontainers.image.description="deployable compute services for an alchemiscale server"
+LABEL org.opencontainers.image.source=https://github.com/OpenFreeEnergy/alchemiscale
+LABEL org.opencontainers.image.description="deployable compute services for alchemiscale"
 LABEL org.opencontainers.image.licenses=MIT
 
 # Don't buffer stdout & stderr streams, so if there is a crash no partial buffer output is lost

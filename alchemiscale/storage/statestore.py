@@ -17,7 +17,13 @@ import weakref
 import numpy as np
 
 import networkx as nx
-from gufe import AlchemicalNetwork, Transformation, NonTransformation, Settings
+from gufe import (
+    AlchemicalNetwork,
+    Transformation,
+    NonTransformation,
+    Settings,
+    Protocol,
+)
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 from gufe.protocols import ProtocolUnitFailure
 
@@ -37,7 +43,7 @@ from .models import (
 )
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
-from .cypher import cypher_list_from_scoped_keys
+from .cypher import cypher_list_from_scoped_keys, cypher_or
 
 from ..security.models import CredentialedEntity
 from ..settings import Neo4jStoreSettings
@@ -1652,33 +1658,32 @@ class Neo4jStore(AlchemiscaleStateStore):
         none at all.
 
         """
-        canceled_sks = []
-        for task in tasks:
-            query = """
-            // get our task hub, as well as the task :ACTIONS relationship we want to remove
-            MATCH (th:TaskHub {_scoped_key: $taskhub_scoped_key})-[ar:ACTIONS]->(task:Task {_scoped_key: $task_scoped_key})
-            DELETE ar
+        query = """
+        UNWIND $task_scoped_keys AS task_scoped_key
+        MATCH (th:TaskHub {_scoped_key: $taskhub_scoped_key})-[ar:ACTIONS]->(task:Task {_scoped_key: task_scoped_key})
+        DELETE ar
 
+        WITH task, th
+        CALL {
             WITH task, th
-            CALL {
-                WITH task, th
-                MATCH (task)<-[applies:APPLIES]-(:TaskRestartPattern)-[:ENFORCES]->(th)
-                DELETE applies
-            }
+            MATCH (task)<-[applies:APPLIES]-(:TaskRestartPattern)-[:ENFORCES]->(th)
+            DELETE applies
+        }
 
-            RETURN task
-            """
-            _task = tx.run(
-                query, taskhub_scoped_key=str(taskhub), task_scoped_key=str(task)
-            ).to_eager_result()
+        RETURN task._scoped_key as task_scoped_key
+        """
+        results = tx.run(
+            query,
+            task_scoped_keys=list(map(str, tasks)),
+            taskhub_scoped_key=str(taskhub),
+        ).to_eager_result()
 
-            if _task.records:
-                sk = _task.records[0].data()["task"]["_scoped_key"]
-                canceled_sks.append(ScopedKey.from_str(sk))
-            else:
-                canceled_sks.append(None)
+        returned_keys = {record["task_scoped_key"] for record in results.records}
+        filtered_tasks = [
+            task if str(task) in returned_keys else None for task in tasks
+        ]
 
-        return canceled_sks
+        return filtered_tasks
 
     def get_taskhub_tasks(
         self, taskhub: ScopedKey, return_gufe=False
@@ -1737,7 +1742,11 @@ class Neo4jStore(AlchemiscaleStateStore):
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
     def claim_taskhub_tasks(
-        self, taskhub: ScopedKey, compute_service_id: ComputeServiceID, count: int = 1
+        self,
+        taskhub: ScopedKey,
+        compute_service_id: ComputeServiceID,
+        count: int = 1,
+        protocols: Optional[List[Union[Protocol, str]]] = None,
     ) -> List[Union[ScopedKey, None]]:
         """Claim a TaskHub Task.
 
@@ -1758,8 +1767,13 @@ class Neo4jStore(AlchemiscaleStateStore):
             Unique identifier for the compute service claiming the Tasks for execution.
         count
             Claim the given number of Tasks in a single transaction.
+        protocols
+            Protocols to restrict Task claiming to. `None` means no restriction.
+            If an empty list, raises ValueError.
 
         """
+        if protocols is not None and len(protocols) == 0:
+            raise ValueError("`protocols` must be either `None` or not empty")
 
         q = f"""
             MATCH (th:TaskHub {{`_scoped_key`: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
@@ -1768,6 +1782,22 @@ class Neo4jStore(AlchemiscaleStateStore):
             OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
 
             WITH task, other_task, actions
+            """
+
+        # filter down to `protocols`, if specified
+        if protocols is not None:
+            # need to extract qualnames if given protocol classes
+            protocols = [
+                protocol.__qualname__ if isinstance(protocol, Protocol) else protocol
+                for protocol in protocols
+            ]
+
+            q += f"""
+            MATCH (task)-[:PERFORMS]->(:Transformation|NonTransformation)-[:DEPENDS_ON]->(protocol:{cypher_or(protocols)})
+            WITH task, other_task, actions
+            """
+
+        q += f"""
             WHERE other_task.status = '{TaskStatusEnum.complete.value}' OR other_task IS NULL
 
             RETURN task.`_scoped_key`, task.priority, actions.weight
@@ -2873,7 +2903,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN th
         """
         results = self.execute_query(q, taskhub=str(taskhub))
-        
+
         # raise error if taskhub not found
         if not results.records:
             raise KeyError("No such TaskHub in the database")

@@ -38,6 +38,7 @@ from alchemiscale.tests.integration.storage.utils import (
     tasks_are_not_actioned_on_taskhub,
     tasks_are_waiting,
 )
+from ..conftest import DummyProtocolA, DummyProtocolB, DummyProtocolC
 
 
 class TestStateStore: ...
@@ -1290,17 +1291,18 @@ class TestNeo4jStore(TestStateStore):
         assert fake_canceled[0] is None
 
         # check that the hub has the contents we expect
-        q = f"""MATCH (tq:TaskHub {{_scoped_key: '{taskhub_sk}'}})-[:ACTIONS]->(task:Task)
-                return task
-                """
+        q = """
+        MATCH (:TaskHub {_scoped_key: $taskhub_scoped_key})-[:ACTIONS]->(task:Task)
+        RETURN task._scoped_key AS task_scoped_key
+        """
 
-        tasks = n4js.execute_query(q)
-        tasks = [record["task"] for record in tasks.records]
+        tasks = n4js.execute_query(q, taskhub_scoped_key=str(taskhub_sk))
+        tasks = [
+            ScopedKey.from_str(record["task_scoped_key"]) for record in tasks.records
+        ]
 
         assert len(tasks) == 8
-        assert set([ScopedKey.from_str(t["_scoped_key"]) for t in tasks]) == set(
-            actioned
-        ) - set(canceled)
+        assert set(tasks) == set(actioned) - set(canceled)
 
         # create a TaskRestartPattern
         n4js.add_task_restart_patterns(taskhub_sk, ["Test pattern"], 1)
@@ -1427,6 +1429,52 @@ class TestNeo4jStore(TestStateStore):
         # try to claim from a hub with no tasks available
         claimed6 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=2)
         assert claimed6 == [None] * 2
+
+    def test_claim_taskhub_tasks_protocol_split(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
+        an = network_tyk2
+        network_sk, taskhub_sk, _ = n4js.assemble_network(an, scope_test)
+
+        def reducer(collection, transformation):
+            protocol = transformation.protocol.__class__
+            if len(collection[protocol]) >= 3:
+                return collection
+            sk = n4js.get_scoped_key(transformation, scope_test)
+            collection[transformation.protocol.__class__].append(sk)
+            return collection
+
+        transformations = reduce(
+            reducer,
+            an.edges,
+            {DummyProtocolA: [], DummyProtocolB: [], DummyProtocolC: []},
+        )
+
+        transformation_sks = [
+            value for _, values in transformations.items() for value in values
+        ]
+
+        task_sks = n4js.create_tasks(transformation_sks)
+        assert len(task_sks) == 9
+
+        # action the tasks
+        n4js.action_tasks(task_sks, taskhub_sk)
+        assert len(n4js.get_taskhub_unclaimed_tasks(taskhub_sk)) == 9
+
+        csid = ComputeServiceID("another task handler")
+        n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
+
+        claimedA = n4js.claim_taskhub_tasks(
+            taskhub_sk, csid, protocols=["DummyProtocolA"], count=9
+        )
+
+        assert len([sk for sk in claimedA if sk]) == 3
+
+        claimedBC = n4js.claim_taskhub_tasks(
+            taskhub_sk, csid, protocols=["DummyProtocolB", "DummyProtocolC"], count=9
+        )
+
+        assert len([sk for sk in claimedBC if sk]) == 6
 
     def test_claim_taskhub_tasks_deregister(
         self, n4js: Neo4jStore, network_tyk2, scope_test
