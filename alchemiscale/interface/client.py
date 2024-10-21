@@ -1747,6 +1747,25 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         patterns: list[str],
         num_allowed_restarts: int,
     ) -> ScopedKey:
+        """Add a list of restart patterns to an `AlchemicalNetwork`.
+
+        Parameters
+        ----------
+        network_scoped_key: ScopedKey
+            The ScopedKey for the AlchemicalNetwork to add the patterns to.
+        patterns: list[str]
+            The regular expression strings to compare to ProtocolUnitFailure tracebacks.
+            Matching patterns will set the Task status back to 'waiting'.
+        num_allowed_restarts: int
+            The number of times each pattern will be able to restart each `Task`. When
+            this number is exceeded, the `Task` is canceled from the `AlchemicalNetwork`
+            and left with the `error` status.
+
+        Returns
+        -------
+        network_scoped_key: ScopedKey
+            The ScopedKey of the AlchemicalNetwork the patterns were added to.
+        """
         data = {"patterns": patterns, "number_of_retries": num_allowed_restarts}
         self._post_resource(f"/networks/{network_scoped_key}/restartpolicy/add", data)
         return network_scoped_key
@@ -1754,6 +1773,19 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_task_restart_patterns(
         self, network_scoped_key: ScopedKey
     ) -> dict[str, int]:
+        """Get the Task restart patterns enforcing an AlchemicalNetwork along with the number of retries allowed for each pattern.
+
+        Parameters
+        ----------
+        network_scoped_key: ScopedKey
+            The ScopedKey of the AlchemicalNetwork to query.
+
+        Returns
+        -------
+        patterns : dict[str, int]
+            A dictionary whose keys are all of the patterns enforcing the `AlchemicalNetwork` and whose
+            values are the number of retries each pattern will allow.
+        """
         data = {"networks": [str(network_scoped_key)]}
         mapped_patterns = self._post_resource(
             "/bulk/networks/restartpolicy/get", data=data
@@ -1767,7 +1799,18 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         network_scoped_key: ScopedKey,
         patterns: list[str],
         num_allowed_restarts: int,
-    ):
+    ) -> None:
+        """Set the number of allowed restarts that patterns allowed to perform within an AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network_scoped_key : ScopedKey
+            The ScopedKey of the `AlchemicalNetwork` enforced by `patterns`.
+        patterns: list[str]
+            The patterns to set the number of allowed restarts for.
+        num_allowed_restarts : int
+            The new number of allowed restarts.
+        """
         data = {"patterns": patterns, "max_retries": num_allowed_restarts}
         self._post_resource(
             f"/networks/{network_scoped_key}/restartpolicy/maxretries", data
@@ -1775,11 +1818,27 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     def remove_task_restart_patterns(
         self, network_scoped_key: ScopedKey, patterns: list[str]
-    ):
+    ) -> None:
+        """Remove specific patterns from an `AlchemicalNetwork`.
+
+        Parameters
+        ----------
+        network_scoped_key : ScopedKey
+            The ScopedKey of the `AlchemicalNetwork` enforced by `patterns`.
+        patterns: list[str]
+            The patterns to remove from the `AlchemicalNetwork`.
+        """
         data = {"patterns": patterns}
         self._post_resource(
             f"/networks/{network_scoped_key}/restartpolicy/remove", data
         )
 
-    def clear_task_restart_patterns(self, network_scoped_key: ScopedKey):
+    def clear_task_restart_patterns(self, network_scoped_key: ScopedKey) -> None:
+        """Clear all restart patterns from an `AlchemicalNetwork`.
+
+        Parameters
+        ----------
+        network_scoped_key : ScopedKey
+            The ScopeKey of the `AlchemicalNetwork` to be cleared of restart patterns.
+        """
         self._query_resource(f"/networks/{network_scoped_key}/restartpolicy/clear")
