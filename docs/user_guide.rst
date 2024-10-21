@@ -516,11 +516,11 @@ Re-running Errored Tasks with Task Restart Patterns
 
 Re-running errored :py:class`~alchemiscale.storage.models.Task`\s manually for known failure modes (such as those described in the previous section) quickly becomes tedious, especially for large networks.
 Alternatively, you can add `regular expression <https://en.wikipedia.org/wiki/Regular_expression>`_ strings as Task restart patterns to an :external+gufe:py:class`~gufe.network.AlchemicalNetwork`.
-These patterns _enforce_ the `AlchemicalNetwork` and there is no limit to the number of patterns that can enforce an `AlchemicalNetwork`.
-As a result, `Task`\s actioned on that `AlchemicalNetwork` now support automatic restarts if the `Task` fails during any part of its execution, provided that an enforcing pattern matches a traceback returned by any of the `Task`\'s returned `ProtocolUnitFailure`\s.
-The number of restarts is controlled by the ``num_allowed_restarts`` parameter of the `AlchemiscaleClient.add_task_restart_patterns` method.
-If a `Task` is restarted more than ``num_allowed_restarts`` times, the `Task` is canceled and left with an ``error`` status.
-As an example, if you wanted to rerun any `Task` that failed with a ``RuntimeError`` _or_ a ``MemoryError`` and attempt it at least 5 times, you could add the following patterns:::
+These patterns _enforce_ the :external+gufe:py:class`~gufe.network.AlchemicalNetwork` and there is no limit to the number of patterns that can enforce an :external+gufe:py:class`~gufe.network.AlchemicalNetwork`.
+As a result, :py:class`~alchemiscale.storage.models.Task`\s actioned on that :external+gufe:py:class`~gufe.network.AlchemicalNetwork` now support automatic restarts if the :py:class`~alchemiscale.storage.models.Task` fails during any part of its execution, provided that an enforcing pattern matches a traceback returned by any of the :py:class`~alchemiscale.storage.models.Task`\'s returned :external+gufe:py:class`~gufe.protocols.ProtocolUnitFailure`\s.
+The number of restarts is controlled by the ``num_allowed_restarts`` parameter of the :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.add_task_restart_patterns` method.
+If a :py:class`~alchemiscale.storage.models.Task` is restarted more than ``num_allowed_restarts`` times, the :py:class`~alchemiscale.storage.models.Task` is canceled and left with an ``error`` status.
+As an example, if you wanted to rerun any :py:class`~alchemiscale.storage.models.Task` that failed with a ``RuntimeError`` _or_ a ``MemoryError`` and attempt it at least 5 times, you could add the following patterns:::
 
   >>> asc.add_task_restart_patterns(network_scoped_key, [r"RuntimeError: .+", r"MemoryError: Unable to allocate \d+ GiB"], 5)
 
@@ -528,7 +528,7 @@ Providing too general a pattern, such as the example above, you may consume comp
 On the other hand, an overly strict pattern (such as specifying explicit Gufe keys) will likely do nothing.
 Therefore, it is best to find a balance in your patterns that matches your use-case.
 
-Restart patterns _enforcing_ an `AlchemicalNetwork` can be retrieved with::
+Restart patterns enforcing an :external+gufe:py:class`~gufe.network.AlchemicalNetwork` can be retrieved with::
 
   >>> asc.get_task_restart_patterns(network_scoped_key)
   {"RuntimeError: .+": 5, "MemoryError: Unable to allocate \d+ GiB": 5}
