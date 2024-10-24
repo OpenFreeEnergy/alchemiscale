@@ -85,14 +85,19 @@ def unwind_merge_nodes_query(data, merge_key, labels=None, keys=None, preserve=N
     """Generate a parameterised ``UNWIND...MERGE`` query for bulk
     loading nodes into Neo4j.
 
-    :param data:
-    :param merge_key:
-    :param labels:
-    :param keys:
-    :param preserve:
+    Parameters
+    ----------
+    data
+    merge_key
+    labels
+    keys
+    preserve
         Collection of key names for values that should be protected
         should the node already exist.
-    :return: (query, parameters) tuple
+
+    Returns
+    -------
+    (query, parameters) tuple
     """
     return cypher_join(
         "UNWIND $data AS r",
@@ -111,15 +116,20 @@ def unwind_merge_relationships_query(
     """Generate a parameterised ``UNWIND...MERGE`` query for bulk
     loading relationships into Neo4j.
 
-    :param data:
-    :param merge_key: tuple of (rel_type, key1, key2...)
-    :param start_node_key:
-    :param end_node_key:
-    :param keys:
-    :param preserve:
+    Parameters
+    ----------
+    data
+    merge_key : tuple[str, ...]
+    start_node_key
+    end_node_key
+    keys
+    preserve
         Collection of key names for values that should be protected
         should the relationship already exist.
-    :return: (query, parameters) tuple
+
+    Returns
+    -------
+    (query, parameters) : tuple
     """
     return cypher_join(
         "UNWIND $data AS r",
@@ -137,10 +147,15 @@ def unwind_create_nodes_query(data, labels=None, keys=None):
     """Generate a parameterised ``UNWIND...CREATE`` query for bulk
     loading nodes into Neo4j.
 
-    :param data:
-    :param labels:
-    :param keys:
-    :return: (query, parameters) tuple
+    Parameters
+    ----------
+    data
+    labels
+    keys
+
+    Returns
+    -------
+    (query, parameters) : tuple
     """
     return cypher_join(
         "UNWIND $data AS r",
