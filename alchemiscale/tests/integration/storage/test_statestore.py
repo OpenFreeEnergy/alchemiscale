@@ -1214,17 +1214,22 @@ class TestNeo4jStore(TestStateStore):
         canceled = n4js.cancel_tasks(task_sks[1:3], taskhub_sk)
 
         # check that the hub has the contents we expect
-        q = f"""MATCH (tq:TaskHub {{_scoped_key: '{taskhub_sk}'}})-[:ACTIONS]->(task:Task)
-                return task
-                """
+        q = """
+        MATCH (:TaskHub {_scoped_key: $taskhub_scoped_key})-[:ACTIONS]->(task:Task)
+        RETURN task._scoped_key AS task_scoped_key
+        """
 
-        tasks = n4js.execute_query(q)
-        tasks = [record["task"] for record in tasks.records]
+        tasks = n4js.execute_query(q, taskhub_scoped_key=str(taskhub_sk))
+        tasks = [
+            ScopedKey.from_str(record["task_scoped_key"]) for record in tasks.records
+        ]
 
         assert len(tasks) == 8
-        assert set([ScopedKey.from_str(t["_scoped_key"]) for t in tasks]) == set(
-            actioned
-        ) - set(canceled)
+        assert set(tasks) == set(actioned) - set(canceled)
+
+        # cancel the remaining tasks and check for Nones
+        canceled = n4js.cancel_tasks(task_sks, taskhub_sk)
+        assert canceled == [task_sks[0]] + [None, None] + task_sks[3:]
 
     def test_get_taskhub_tasks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2

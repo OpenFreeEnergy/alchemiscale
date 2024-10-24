@@ -20,6 +20,7 @@ services:
     ports:
       - 7687:7687
       - 7474:7474
+    restart: unless-stopped
     # Uncomment the volumes to be mounted to make them accessible from outside the container.
     volumes:
       #- ./neo4j.conf:/conf/neo4j.conf # This is the main configuration file.
@@ -75,6 +76,7 @@ services:
     depends_on: 
       - neo4j
       - alchemiscale-db-init
+    restart: unless-stopped
     command: "api --host 0.0.0.0 --port 1840 --workers 2"
     labels:
       - "traefik.enable=true"
@@ -121,6 +123,7 @@ services:
         condition: service_healthy
       alchemiscale-db-init:
         condition: service_completed_successfully
+    restart: unless-stopped
     command: "compute api --host 0.0.0.0 --port 1841 --workers 2"
     labels:
       - "traefik.enable=true"
@@ -179,6 +182,7 @@ services:
     depends_on: 
       - alchemiscale-client-API
       - alchemiscale-compute-API
+    restart: unless-stopped
     command: 
       - "--log.level=DEBUG"
       - "--providers.docker"

@@ -9,11 +9,12 @@ dependencies:
   
   # alchemiscale dependencies
   - gufe=1.0.0
-  - openfe=1.0.1
+  - openfe=1.1.0
   - requests
   - click
   - httpx
   - pydantic<2.0
+  - async-lru
 
   # openmm protocols
   - feflow=0.1.0
@@ -23,5 +24,4 @@ dependencies:
   - openmmforcefields>=0.14.1
 
   - pip:
-    - async_lru
-    - git+https://github.com/openforcefield/alchemiscale.git@v0.5.0
+    - git+https://github.com/OpenFreeEnergy/alchemiscale.git@v0.5.1

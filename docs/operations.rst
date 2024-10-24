@@ -92,7 +92,7 @@ To later restore from a database dump, navigate to the directory containing your
 **With the Neo4j service shut down**, choose ``$DUMP_DATE`` and set ``$NEO4J_VERSION`` to the version of Neo4j you are using, then run::
 
     # create a copy of the timestamped dump to `neo4j.dump`
-    cp ${BACKUPS_DIR}/neo4j-$(date -I).dump ${BACKUPS_DIR}/neo4j.dump 
+    cp ${BACKUPS_DIR}/neo4j-${DUMP_DATE}.dump ${BACKUPS_DIR}/neo4j.dump
 
     # load the dump `neo4j.dump`
     docker run --rm \
