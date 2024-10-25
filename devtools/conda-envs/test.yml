@@ -30,7 +30,7 @@ dependencies:
   - python-jose
   - passlib
   - bcrypt
-  - python-multipart
+  - python-multipart=0.0.12    # temporarily pinned due to broken 0.14 release on conda-forge
   - starlette
   - httpx
   - cryptography
