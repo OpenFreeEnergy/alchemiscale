@@ -30,7 +30,7 @@ dependencies:
   - python-jose
   - passlib
   - bcrypt
-  - python-multipart
+  - python-multipart=0.0.12
   - starlette
   - httpx
   - cryptography
