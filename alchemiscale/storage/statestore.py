@@ -18,9 +18,9 @@ from gufe import (
     AlchemicalNetwork,
     Transformation,
     NonTransformation,
-    Settings,
     Protocol,
 )
+from gufe.settings import SettingsBaseModel
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 
 from neo4j import Transaction, GraphDatabase, Driver
@@ -342,7 +342,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 ):
                     node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
                     node["_json_props"].append(key)
-            elif isinstance(value, Settings):
+            elif isinstance(value, SettingsBaseModel):
                 node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
                 node["_json_props"].append(key)
             elif isinstance(value, GufeTokenizable):
