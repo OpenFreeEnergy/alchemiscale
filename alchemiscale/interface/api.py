@@ -96,7 +96,15 @@ def check_existence(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    sk = ScopedKey.from_str(scoped_key)
+    try:
+        sk = ScopedKey.from_str(scoped_key)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=e.args[0],
+        )
+
+
     validate_scopes(sk.scope, token)
 
     return n4js.check_existence(scoped_key=sk)
