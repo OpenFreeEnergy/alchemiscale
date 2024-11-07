@@ -106,14 +106,17 @@ class TestClient:
 
         # check that an AlchemicalNetwork that doesn't exist shows as not existing
         an_sk = an_sks[0]
-        an_sk_nonexistent = ScopedKey(gufe_key=GufeKey('AlchemicalNetwork-lol'), **scope_test.dict())
+        an_sk_nonexistent = ScopedKey(
+            gufe_key=GufeKey("AlchemicalNetwork-lol"), **scope_test.dict()
+        )
         assert not user_client.check_exists(an_sk_nonexistent)
 
         # check that we get an exception when we try a malformed key
-        with pytest.raises(AlchemiscaleClientError,
+        with pytest.raises(
+            AlchemiscaleClientError,
             match="Status Code 422 : Unprocessable Entity : input does not appear to be a `ScopedKey`",
-                           ):
-            user_client.check_exists('lol')
+        ):
+            user_client.check_exists("lol")
 
     @pytest.mark.parametrize(("state",), [[state.value] for state in NetworkStateEnum])
     def test_set_network_state(

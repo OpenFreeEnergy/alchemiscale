@@ -104,7 +104,6 @@ def check_existence(
             detail=e.args[0],
         )
 
-
     validate_scopes(sk.scope, token)
 
     return n4js.check_existence(scoped_key=sk)
