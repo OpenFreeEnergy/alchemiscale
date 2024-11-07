@@ -53,5 +53,5 @@ dependencies:
   - openmmforcefields>=0.14.1
 
   - pip:
-    - git+https://github.com/datryllic/grolt@neo4j-5.23-fix # neo4j test server deployment
+    - git+https://github.com/datryllic/grolt # neo4j test server deployment
     - git+https://github.com/OpenFreeEnergy/openfe-benchmarks
