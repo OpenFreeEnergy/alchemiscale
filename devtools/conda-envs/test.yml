@@ -8,8 +8,9 @@ dependencies:
 
   # alchemiscale dependencies
   - gufe>=1.0.0
-  - openfe>=1.0.1
+  - openfe>=1.1.0
   - pydantic<2.0
+  - async-lru
 
   ## state store
   - neo4j-python-driver
@@ -29,7 +30,6 @@ dependencies:
   - gunicorn
   - python-jose
   - bcrypt
-  - python-multipart
   - starlette
   - httpx
   - cryptography
@@ -50,8 +50,8 @@ dependencies:
   # additional pins
   - openmm=8.1.2
   - openmmforcefields>=0.14.1
+  - openff-units=0.2.2
 
   - pip:
-    - async_lru
-    - git+https://github.com/datryllic/grolt@neo4j-5.x # neo4j test server deployment
+    - git+https://github.com/datryllic/grolt # neo4j test server deployment
     - git+https://github.com/OpenFreeEnergy/openfe-benchmarks

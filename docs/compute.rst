@@ -14,7 +14,7 @@ This documentation will expand over time as these variants become available; for
 In all cases, you will need to define a configuration file for your compute services to consume on startup.
 A template for this file can be found here; replace ``$ALCHEMISCALE_VERSION`` with the version tag, e.g. ``v0.1.4``, you have deployed for your server::
 
-    https://raw.githubusercontent.com/openforcefield/alchemiscale/$ALCHEMISCALE_VERSION/devtools/configs/synchronous-compute-settings.yaml
+    https://raw.githubusercontent.com/OpenFreeEnergy/alchemiscale/$ALCHEMISCALE_VERSION/devtools/configs/synchronous-compute-settings.yaml
 
 
 ***********
@@ -35,7 +35,7 @@ Deploying with conda/mamba
 To deploy via ``conda``/``mamba``, first create an environment (we recommend ``mamba`` for its performance)::
 
     mamba env create -n alchemiscale-compute-$ALCHEMISCALE_VERSION \
-                     -f https://raw.githubusercontent.com/openforcefield/alchemiscale/$ALCHEMISCALE_VERSION/devtools/conda-envs/alchemiscale-compute.yml
+                     -f https://raw.githubusercontent.com/OpenFreeEnergy/alchemiscale/$ALCHEMISCALE_VERSION/devtools/conda-envs/alchemiscale-compute.yml
 
 Once created, activate the environment in your current shell::
 
@@ -55,7 +55,7 @@ Assuming your configuration file is in the current working directory, to deploy 
 
     docker run --gpus all \
                --rm \
-               -v $(pwd):/mnt ghcr.io/openforcefield/alchemiscale-compute:$ALCHEMISCALE_VERSION \
+               -v $(pwd):/mnt ghcr.io/OpenFreeEnergy/alchemiscale-compute:$ALCHEMISCALE_VERSION \
                compute synchronous -c /mnt/synchronous-compute-settings.yaml
 
 
@@ -157,7 +157,7 @@ We define a k8s `Deployment`_ featuring a single container spec as the file ``co
         spec:
           containers:
           - name: alchemiscale-synchronous-container
-            image: ghcr.io/openforcefield/alchemiscale-compute:$ALCHEMISCALE_VERSION
+            image: ghcr.io/OpenFreeEnergy/alchemiscale-compute:$ALCHEMISCALE_VERSION
             args: ["compute", "synchronous", "-c", "/mnt/settings/synchronous-compute-settings.yaml"]
             resources:
               limits:
