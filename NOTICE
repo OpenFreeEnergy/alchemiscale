@@ -29,7 +29,7 @@ This project includes software developed by py2neo (https://github.com/neo4j-con
         - switched all usage of the id function to elementId
 
 - alchemiscale/storage/subgraph.py
-    - Functions modified form the py2neo.data module:
+    - Functions modified from the py2neo.data module:
          - Subgraph.__db_merge__ (moved to merge_subgraph)
          - Subgraph.__db_create__ (moved to create_subgraph)
     - Modifications made:
