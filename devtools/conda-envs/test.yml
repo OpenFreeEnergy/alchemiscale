@@ -51,6 +51,7 @@ dependencies:
   # additional pins
   - openmm=8.1.2
   - openmmforcefields>=0.14.1
+  - openff-units=0.2.2
 
   - pip:
     - git+https://github.com/datryllic/grolt # neo4j test server deployment
