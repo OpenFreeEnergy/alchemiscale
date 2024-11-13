@@ -12,7 +12,7 @@ from fastapi import status as http_status
 from fastapi.middleware.gzip import GZipMiddleware
 
 import json
-from gufe.tokenization import JSON_HANDLER
+from gufe.tokenization import JSON_HANDLER, KeyedChain
 
 from ..base.api import (
     GufeJSONResponse,
@@ -34,7 +34,6 @@ from ..storage.objectstore import S3ObjectStore
 from ..storage.models import TaskStatusEnum
 from ..models import Scope, ScopedKey
 from ..security.models import TokenData, CredentialedUserIdentity
-from ..keyedchain import KeyedChain
 
 
 app = FastAPI(title="AlchemiscaleAPI")
