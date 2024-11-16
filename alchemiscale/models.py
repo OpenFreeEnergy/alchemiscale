@@ -136,10 +136,10 @@ class ScopedKey(BaseModel):
     def gufe_key_validator(cls, v):
         v = str(v)
 
-        # GufeKey is of form <prefix>-<token>
+        # GufeKey is of form <prefix>-<hex>
         prefix, token = v.split("-")
         if not prefix or not token:
-            raise InvalidGufeKeyError("gufe_key must be of the form '<prefix>-<token>'")
+            raise InvalidGufeKeyError("gufe_key must be of the form '<prefix>-<hex>'")
 
         # Normalize the input to NFC form
 

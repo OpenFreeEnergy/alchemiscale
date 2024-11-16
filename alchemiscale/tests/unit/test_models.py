@@ -118,3 +118,16 @@ def test_gufe_key_invalid(gufe_key):
         ScopedKey(
             gufe_key=gufe_key, org="org1", campaign="campaignA", project="projectI"
         )
+
+@pytest.mark.parametrize(
+    "gufe_key",
+    [
+        "ClassName-uuid4hex",
+        "DummyProtocol-1234567890abcdef",
+        "DummyProtocol-1234567890abcdef41234567890abcdef",
+    ],
+)
+def test_gufe_key_valid(gufe_key):
+    scoped_key = ScopedKey(
+        gufe_key=gufe_key, org="org1", campaign="campaignA", project="projectI"
+    )
