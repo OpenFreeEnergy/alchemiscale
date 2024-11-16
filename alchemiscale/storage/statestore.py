@@ -468,26 +468,21 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> Union[Node, Tuple[Node, Subgraph]]:
         """
         If `return_subgraph = True`, also return subgraph for gufe object.
-
         """
+
+        # Safety: qualname comes from GufeKey which is validated
         qualname = scoped_key.qualname
-
-        properties = {"_scoped_key": str(scoped_key)}
-        prop_string = ", ".join(
-            "{}: '{}'".format(key, value) for key, value in properties.items()
-        )
-
-        prop_string = f" {{{prop_string}}}"
+        parameters = {"scoped_key": str(scoped_key)}
 
         q = f"""
-        MATCH (n:{qualname}{prop_string})
+        MATCH (n:{qualname} {{ _scoped_key: $scoped_key }})
         """
 
         if return_subgraph:
             q += """
             OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m)
             WHERE NOT (m)-[:DEPENDS_ON]->()
-            RETURN n,p
+            RETURN n, p
             """
         else:
             q += """
@@ -497,10 +492,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         nodes = set()
         subgraph = Subgraph()
 
-        for record in self.execute_query(q).records:
+        result = self.execute_query(q, parameters_=parameters)
+
+        for record in result.records:
             node = record_data_to_node(record["n"])
             nodes.add(node)
-            if return_subgraph and record["p"] is not None:
+            if return_subgraph and record.get("p") is not None:
                 subgraph = subgraph | subgraph_from_path_record(record["p"])
             else:
                 subgraph = node
@@ -521,8 +518,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         *,
         qualname: str,
-        additional: Dict = None,
-        key: GufeKey = None,
+        additional: Optional[Dict] = None,
+        key: Optional[GufeKey] = None,
         scope: Scope = Scope(),
         return_gufe=False,
     ):
@@ -532,9 +529,8 @@ class Neo4jStore(AlchemiscaleStateStore):
             "_project": scope.project,
         }
 
-        for k, v in list(properties.items()):
-            if v is None:
-                properties.pop(k)
+        # Remove None values from properties
+        properties = {k: v for k, v in properties.items() if v is not None}
 
         if key is not None:
             properties["_gufe_key"] = str(key)
@@ -547,7 +543,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             prop_string = ""
         else:
             prop_string = ", ".join(
-                "{}: '{}'".format(key, value) for key, value in properties.items()
+                "{}: ${}".format(key, key) for key in properties.keys()
             )
 
             prop_string = f" {{{prop_string}}}"
@@ -568,7 +564,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
 
         with self.transaction() as tx:
-            res = tx.run(q).to_eager_result()
+            res = tx.run(q, **properties).to_eager_result()
 
         nodes = list()
         subgraph = Subgraph()
