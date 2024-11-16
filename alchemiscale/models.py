@@ -114,6 +114,7 @@ class Scope(BaseModel):
         """Return `True` if this Scope has no unspecified elements."""
         return all(self.to_tuple())
 
+class InvalidGufeKeyError(ValueError): ...
 
 class ScopedKey(BaseModel):
     """Unique identifier for GufeTokenizables in state store.
@@ -135,13 +136,18 @@ class ScopedKey(BaseModel):
     def gufe_key_validator(cls, v):
         v = str(v)
 
+        # GufeKey is of form <prefix>-<token>
+        prefix, token = v.split("-")
+        if not prefix or not token:
+            raise InvalidGufeKeyError("gufe_key must be of the form '<prefix>-<token>'")
+
         # Normalize the input to NFC form
 
         v_normalized = unicodedata.normalize("NFC", v)
 
         # Ensure that there are no control characters
         if any(unicodedata.category(c) == "Cc" for c in v_normalized):
-            raise ValueError("gufe_key contains invalid control characters")
+            raise InvalidGufeKeyError("gufe_key contains invalid control characters")
 
         # Allowed characters: letters, numbers, underscores, hyphens
         allowed_chars = set(
@@ -149,7 +155,7 @@ class ScopedKey(BaseModel):
         )
 
         if not set(v_normalized).issubset(allowed_chars):
-            raise ValueError("gufe_key contains invalid characters")
+            raise InvalidGufeKeyError("gufe_key contains invalid characters")
 
         # Cast to GufeKey
         return GufeKey(v_normalized)
