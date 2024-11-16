@@ -5,7 +5,7 @@
 """
 
 import abc
-from datetime import UTC, datetime
+from datetime import datetime
 from contextlib import contextmanager
 import json
 from functools import lru_cache
@@ -1795,7 +1795,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 tx.run(
                     CLAIM_QUERY,
                     tasks_list=[str(task) for task in tasks if task is not None],
-                    datetimestr=datetime.now(UTC).isoformat(),
+                    datetimestr=str(datetime.utcnow().isoformat()),
                     compute_service_id=str(compute_service_id),
                 )
 
