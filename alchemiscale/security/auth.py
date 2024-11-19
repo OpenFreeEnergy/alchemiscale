@@ -5,6 +5,8 @@
 """
 
 import secrets
+import base64
+import hashlib
 from datetime import datetime, timedelta
 from typing import Optional, Union
 
@@ -17,46 +19,36 @@ from pydantic import BaseModel
 from .models import CredentialedEntity, Token, TokenData
 
 MAX_PASSWORD_SIZE = 4096
-_dummy_secret = "dummy"
 
 
 class BcryptPasswordHandler(object):
-    rounds: int = 12
-    ident: str = "$2b$"
-    salt: str = ""
-    checksum: str = ""
 
-    def __init__(self, rounds: int = 12, ident: str = "$2b$"):
+    def __init__(self, rounds: int = 12, ident: str = "2b"):
         self.rounds = rounds
         self.ident = ident
 
-    def _get_config(self) -> bytes:
-        config = bcrypt.gensalt(
-            self.rounds, prefix=self.ident.strip("$").encode("ascii")
-        )
-        self.salt = config.decode("ascii")[len(self.ident) + 3 :]
-        return config
-
-    def to_string(self) -> str:
-        return "%s%02d$%s%s" % (self.ident, self.rounds, self.salt, self.checksum)
-
     def hash(self, key: str) -> str:
         validate_secret(key)
-        config = self._get_config()
-        hash_ = bcrypt.hashpw(key.encode("utf-8"), config)
-        if not hash_.startswith(config) or len(hash_) != len(config) + 31:
-            raise ValueError("bcrypt.hashpw returned an invalid hash")
-        self.checksum = hash_[-31:].decode("ascii")
-        return self.to_string()
 
-    def verify(self, key: str, hash: str) -> bool:
+        # generate a salt unique to this key
+        salt = bcrypt.gensalt(rounds=self.rounds, prefix=self.ident.encode("ascii"))
+
+        # bcrypt can handle up to 72 characters
+        # to go beyond this, we first perform sha256 hashing,
+        # then base64 encode to avoid NULL byte problems
+        # details: https://github.com/pyca/bcrypt/?tab=readme-ov-file#maximum-password-length
+        hashed = base64.b64encode(hashlib.sha256(key.encode("utf-8")).digest())
+        hashed_salted = bcrypt.hashpw(hashed, salt)
+
+        return hashed_salted
+
+    def verify(self, key: str, hashed_salted: str) -> bool:
         validate_secret(key)
 
-        if hash is None:
-            self.hash(_dummy_secret)
-            return False
+        # see note above on why we perform sha256 hashing first
+        key_hashed = base64.b64encode(hashlib.sha256(key.encode("utf-8")).digest())
 
-        return bcrypt.checkpw(key.encode("utf-8"), hash.encode("utf-8"))
+        return bcrypt.checkpw(key_hashed, hashed_salted.encode("utf-8"))
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
