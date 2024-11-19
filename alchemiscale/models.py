@@ -11,6 +11,7 @@ from re import fullmatch
 import unicodedata
 import string
 
+
 class Scope(BaseModel):
     org: Optional[str] = None
     campaign: Optional[str] = None
@@ -114,7 +115,9 @@ class Scope(BaseModel):
         """Return `True` if this Scope has no unspecified elements."""
         return all(self.to_tuple())
 
+
 class InvalidGufeKeyError(ValueError): ...
+
 
 class ScopedKey(BaseModel):
     """Unique identifier for GufeTokenizables in state store.

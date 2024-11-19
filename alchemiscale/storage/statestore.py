@@ -99,6 +99,7 @@ def _select_tasks_from_taskpool(taskpool: List[Tuple[str, float]], count) -> Lis
 
     return list(np.random.choice(tasks, count, replace=False, p=prob))
 
+
 CLAIM_QUERY = f"""
     // only match the task if it doesn't have an existing CLAIMS relationship
     UNWIND $tasks_list AS task_sk
@@ -115,6 +116,7 @@ CLAIM_QUERY = f"""
 
     RETURN t
 """
+
 
 class Neo4jStore(AlchemiscaleStateStore):
     # uniqueness constraints applied to the database; key is node label,

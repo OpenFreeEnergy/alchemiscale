@@ -102,6 +102,7 @@ def test_scope_non_alphanumeric_invalid(scope_string):
 def test_underscore_scopes_valid(scope_string):
     scope = Scope.from_str(scope_string)
 
+
 @pytest.mark.parametrize(
     "gufe_key",
     [
@@ -118,6 +119,7 @@ def test_gufe_key_invalid(gufe_key):
         ScopedKey(
             gufe_key=gufe_key, org="org1", campaign="campaignA", project="projectI"
         )
+
 
 @pytest.mark.parametrize(
     "gufe_key",
