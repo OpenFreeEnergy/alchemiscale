@@ -271,6 +271,59 @@ class TestNeo4jStore(TestStateStore):
             == 1
         )
 
+    def test_query_transformations_exploit(self, n4js, multiple_scopes, network_tyk2):
+        # This test is to show that common cypher exploits are mitigated by using parameters
+
+        an = network_tyk2
+
+        n4js.assemble_network(an, multiple_scopes[0])
+        n4js.assemble_network(an, multiple_scopes[1])
+
+        malicious_name = """'})
+        WITH {_org: '', _campaign: '', _project: '', _gufe_key: ''} AS n
+        RETURN n
+        UNION
+        MATCH (m) DETACH DELETE m
+        WITH {_org: '', _campaign: '', _project: '', _gufe_key: ''} AS n
+        RETURN n
+        UNION
+        CREATE (mark:InjectionMark {_scoped_key: 'InjectionMark-12345-test-testcamp-testproj'})
+        WITH {_org: '', _campaign: '', _project: '', _gufe_key: ''} AS n // """
+        try:
+            n4js.query_transformations(name=malicious_name)
+        except AttributeError as e:
+            # With old _query, AttributeError would be thrown AFTER the transaction has finished, and the database is already corrupted
+            assert "'dict' object has no attribute 'labels'" in str(e)
+            assert len(n4js.query_transformations(scope=multiple_scopes[0])) == 0
+
+        mark_from__query = n4js._query(qualname="InjectionMark")
+        # Just to be double sure, check explicitly
+        q = """
+            match (m:InjectionMark)
+            return m
+            """
+        mark_explicit = n4js.execute_query(q).records
+
+        assert len(mark_from__query) == len(mark_explicit) == 0
+
+        assert len(n4js.query_transformations()) == len(network_tyk2.edges) * 2
+        assert len(n4js.query_transformations(scope=multiple_scopes[0])) == len(
+            network_tyk2.edges
+        )
+
+        assert (
+            len(n4js.query_transformations(name="lig_ejm_31_to_lig_ejm_50_complex"))
+            == 2
+        )
+        assert (
+            len(
+                n4js.query_transformations(
+                    scope=multiple_scopes[0], name="lig_ejm_31_to_lig_ejm_50_complex"
+                )
+            )
+            == 1
+        )
+
     def test_query_chemicalsystems(self, n4js, network_tyk2, multiple_scopes):
         an = network_tyk2
 
