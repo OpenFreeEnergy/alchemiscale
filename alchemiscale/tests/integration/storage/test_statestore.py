@@ -296,8 +296,15 @@ class TestNeo4jStore(TestStateStore):
             assert "'dict' object has no attribute 'labels'" in str(e)
             assert len(n4js.query_transformations(scope=multiple_scopes[0])) == 0
 
-        mark = n4js._query(qualname="InjectionMark")
-        assert len(mark) == 0
+        mark_from__query = n4js._query(qualname="InjectionMark")
+        # Just to be double sure, check explicitly
+        q = """
+            match (m:InjectionMark)
+            return m
+            """
+        mark_explicit = n4js.execute_query(q).records
+
+        assert len(mark_from__query) == len(mark_explicit) == 0
 
         assert len(n4js.query_transformations()) == len(network_tyk2.edges) * 2
         assert len(n4js.query_transformations(scope=multiple_scopes[0])) == len(
