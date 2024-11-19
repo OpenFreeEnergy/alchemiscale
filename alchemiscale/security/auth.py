@@ -18,7 +18,13 @@ from pydantic import BaseModel
 
 from .models import CredentialedEntity, Token, TokenData
 
-MAX_PASSWORD_SIZE = 4096
+
+# we set a max size to avoid denial-of-service attacks
+# since an extremely large secret attempted by an attacker can take
+# increasing amounts of time or memory to validate;
+# this is deliberately higher than any reasonable key length
+# this is the same max size that `passlib` defaults to
+MAX_SECRET_SIZE = 4096
 
 
 class BcryptPasswordHandler(object):
@@ -59,9 +65,9 @@ def validate_secret(secret):
     """ensure secret has correct type & size"""
     if not isinstance(secret, (str, bytes)):
         raise TypeError("secret must be a string or bytes")
-    if len(secret) > MAX_PASSWORD_SIZE:
+    if len(secret) > MAX_SECRET_SIZE:
         raise ValueError(
-            f"secret is too long, maximum length is {MAX_PASSWORD_SIZE} characters"
+            f"secret is too long, maximum length is {MAX_SECRET_SIZE} characters"
         )
 
 
