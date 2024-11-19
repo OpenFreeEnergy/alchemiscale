@@ -151,7 +151,11 @@ class ScopedKey(BaseModel):
 
     @classmethod
     def from_str(cls, string):
-        prefix, token, org, campaign, project = string.split("-")
+        try:
+            prefix, token, org, campaign, project = string.split("-")
+        except ValueError:
+            raise ValueError("input does not appear to be a `ScopedKey`")
+
         gufe_key = GufeKey(f"{prefix}-{token}")
 
         return cls(gufe_key=gufe_key, org=org, campaign=campaign, project=project)
