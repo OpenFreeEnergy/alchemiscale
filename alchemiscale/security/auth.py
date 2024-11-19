@@ -46,7 +46,7 @@ class BcryptPasswordHandler(object):
         hashed = base64.b64encode(hashlib.sha256(key.encode("utf-8")).digest())
         hashed_salted = bcrypt.hashpw(hashed, salt)
 
-        return hashed_salted
+        return hashed_salted.decode('utf-8')
 
     def verify(self, key: str, hashed_salted: str) -> bool:
         validate_secret(key)
