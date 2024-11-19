@@ -24,7 +24,7 @@ from .models import CredentialedEntity, Token, TokenData
 # increasing amounts of time or memory to validate;
 # this is deliberately higher than any reasonable key length
 # this is the same max size that `passlib` defaults to
-MAX_SECRET_SIZE = 72
+MAX_SECRET_SIZE = 4096
 
 
 class BcryptPasswordHandler(object):
