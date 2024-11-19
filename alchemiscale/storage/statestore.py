@@ -682,7 +682,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         # then delete the network
         q = """
-        MATCH (an:AlchemicalNetwork {{_scoped_key: $network}})
+        MATCH (an:AlchemicalNetwork {_scoped_key: $network})
         DETACH DELETE an
         """
         raise NotImplementedError
