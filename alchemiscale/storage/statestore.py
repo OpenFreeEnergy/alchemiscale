@@ -1551,15 +1551,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         with self.transaction() as tx:
-            tasks_list = [str(t) for t in tasks if t is not None]
-
             q = """
             UNWIND $tasks_list AS task_scoped_key
             OPTIONAL MATCH (th:TaskHub {_scoped_key: $taskhub})-[ar:ACTIONS]->(task:Task {_scoped_key: task_scoped_key})
             RETURN task_scoped_key, ar.weight AS weight
             """
 
-            result = tx.run(q, taskhub=str(taskhub), tasks_list=tasks_list)
+            result = tx.run(q, taskhub=str(taskhub), tasks_list=list(map(str, tasks)))
             results = result.data()
 
         weights = [record["weight"] for record in results]
@@ -2239,7 +2237,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
             res = tx.run(
                 q,
-                scoped_keys=[str(t) for t in tasks if t is not None],
+                scoped_keys=list(map(str, tasks)),
                 priority=priority,
             ).to_eager_result()
 
@@ -2277,7 +2275,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             WHERE t._scoped_key = scoped_key
             RETURN t.priority as priority
             """
-            res = tx.run(q, scoped_keys=[str(t) for t in tasks if t is not None])
+            res = tx.run(q, scoped_keys=list(map(str, tasks)))
             priorities = [rec["priority"] for rec in res]
 
         return priorities
