@@ -25,6 +25,10 @@ from .models import CredentialedEntity, Token, TokenData
 # this is deliberately higher than any reasonable key length
 # this is the same max size that `passlib` defaults to
 MAX_SECRET_SIZE = 4096
+# Bcrypt truncates the secret at first NULL it encounters. For this reason,
+# passlib forbids NULL bytes in the secret. This is not necessary for backwards
+# compatibility, but we follow passlib's lead.
+_BNULL = b"\x00"
 
 
 class BcryptPasswordHandler(object):
@@ -52,14 +56,16 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 pwd_context = BcryptPasswordHandler()
 
 
-def validate_secret(secret):
+def validate_secret(secret: str):
     """ensure secret has correct type & size"""
-    if not isinstance(secret, (str, bytes)):
-        raise TypeError("secret must be a string or bytes")
+    if not isinstance(secret, str):
+        raise TypeError("secret must be a string")
     if len(secret) > MAX_SECRET_SIZE:
         raise ValueError(
             f"secret is too long, maximum length is {MAX_SECRET_SIZE} characters"
         )
+    if _BNULL in secret.encode("utf-8"):
+        raise ValueError("secret contains NULL byte")
 
 
 def generate_secret_key():
