@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, validator, root_validator
 from gufe.tokenization import GufeKey
 from re import fullmatch
 import unicodedata
-
+import string
 
 class Scope(BaseModel):
     org: Optional[str] = None
@@ -137,22 +137,16 @@ class ScopedKey(BaseModel):
         v = str(v)
 
         # GufeKey is of form <prefix>-<hex>
-        prefix, token = v.split("-")
-        if not prefix or not token:
+        try:
+            _prefix, _token = v.split("-")
+        except ValueError:
             raise InvalidGufeKeyError("gufe_key must be of the form '<prefix>-<hex>'")
 
         # Normalize the input to NFC form
-
         v_normalized = unicodedata.normalize("NFC", v)
 
-        # Ensure that there are no control characters
-        if any(unicodedata.category(c) == "Cc" for c in v_normalized):
-            raise InvalidGufeKeyError("gufe_key contains invalid control characters")
-
         # Allowed characters: letters, numbers, underscores, hyphens
-        allowed_chars = set(
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
-        )
+        allowed_chars = set(string.ascii_letters + string.digits + "_-")
 
         if not set(v_normalized).issubset(allowed_chars):
             raise InvalidGufeKeyError("gufe_key contains invalid characters")
