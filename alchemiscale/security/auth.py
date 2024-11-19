@@ -38,33 +38,14 @@ class BcryptPasswordHandler(object):
 
         # generate a salt unique to this key
         salt = bcrypt.gensalt(rounds=self.rounds, prefix=self.ident.encode("ascii"))
-
-        # bcrypt can handle up to 72 characters
-        # to go beyond this, we first perform sha256 hashing,
-        # then base64 encode to avoid NULL byte problems
-        # details: https://github.com/pyca/bcrypt/?tab=readme-ov-file#maximum-password-length
-
-        # to reproduce `passlib` behavior, we only perform sha256 hashing if
-        # key is longer than the sha256 default block size of 64
-        key_ = key.encode("utf-8")
-        if len(key_) > 64:
-            key_ = base64.b64encode(hashlib.sha256(key_).digest())
-
-        hashed_salted = bcrypt.hashpw(key_, salt)
+        hashed_salted = bcrypt.hashpw(key.encode("utf-8"), salt)
 
         return hashed_salted.decode("utf-8")
 
     def verify(self, key: str, hashed_salted: str) -> bool:
         validate_secret(key)
 
-        # see note above on why we perform sha256 hashing first
-        # to reproduce `passlib` behavior, we only perform sha256 hashing if
-        # key is longer than the sha256 default block size of 64
-        key_ = key.encode("utf-8")
-        if len(key_) > 64:
-            key_ = base64.b64encode(hashlib.sha256(key_).digest())
-
-        return bcrypt.checkpw(key_, hashed_salted.encode("utf-8"))
+        return bcrypt.checkpw(key.encode("utf-8"), hashed_salted.encode("utf-8"))
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
