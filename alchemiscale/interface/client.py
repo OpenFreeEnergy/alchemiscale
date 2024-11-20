@@ -13,7 +13,7 @@ from functools import lru_cache
 from async_lru import alru_cache
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER, KeyedChain
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 
@@ -29,7 +29,6 @@ from ..storage.models import (
 )
 from ..strategies import Strategy
 from ..validators import validate_network_nonself
-from ..keyedchain import KeyedChain
 
 from warnings import warn
 
