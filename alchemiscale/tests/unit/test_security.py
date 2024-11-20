@@ -50,3 +50,16 @@ def test_bcrypt_against_passlib():
     # test that we get the same thing back from our bcrypt handler
     handler = auth.BcryptPasswordHandler()
     assert handler.verify(test_password, test_hash)
+
+
+def test_bcrypt_against_passlib_long():
+    """Test the our bcrypt handler has the same behavior as passlib did for passwords longer than 72 characters, in which bcrypt truncates"""
+
+    # pre-generated hash from
+    # `passlib.context.CryptContext(schemes=["bcrypt"], deprecated="auto").hash()`
+    test_password = "this password is so long, it's longer than 72 characters; this should get truncated by bcrypt, so we can ensure we get the same verification behavior as passlib gives"
+    test_hash = "$2b$12$DQd5IPjlc8z4FZjBIdaquOlVc9whAqnkpZRsnuUUWvfHvwWy.dZ16"
+
+    # test that we get the same thing back from our bcrypt handler
+    handler = auth.BcryptPasswordHandler()
+    assert handler.verify(test_password, test_hash)
