@@ -29,4 +29,4 @@ dependencies:
   - openff-units=0.2.2
 
   - pip:
-    - git+https://github.com/OpenFreeEnergy/alchemiscale.git@v0.5.2-release
+    - git+https://github.com/OpenFreeEnergy/alchemiscale.git@v0.5.2
