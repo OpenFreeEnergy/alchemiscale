@@ -15,6 +15,7 @@ dependencies:
   - httpx
   - pydantic<2.0
   - async-lru
+  - zstandard
 
   # openmm protocols
   - feflow=0.1.0
