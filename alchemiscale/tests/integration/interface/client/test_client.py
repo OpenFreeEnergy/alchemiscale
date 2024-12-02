@@ -8,6 +8,7 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey
 from gufe.protocols.protocoldag import execute_DAG
 import networkx as nx
 
+from alchemiscale.compression import compress_gufe_zstd
 from alchemiscale.models import ScopedKey, Scope
 from alchemiscale.storage.models import TaskStatusEnum, NetworkStateEnum
 from alchemiscale.storage.cypher import cypher_list_from_scoped_keys
@@ -1850,7 +1851,7 @@ class TestClient:
             protocoldagresults.append(protocoldagresult)
 
             protocoldagresultref = s3os_server.push_protocoldagresult(
-                protocoldagresult, transformation=transformation_sk
+                compress_gufe_zstd(protocoldagresult), transformation=transformation_sk
             )
 
             n4js.set_task_result(

@@ -22,6 +22,7 @@ from ..base.client import (
     AlchemiscaleBaseClientError,
     use_session,
 )
+from ..compression import decompress_gufe_zstd
 from ..models import Scope, ScopedKey
 from ..storage.models import (
     TaskStatusEnum,
@@ -1352,14 +1353,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     async def _async_get_protocoldagresult(
         self, protocoldagresultref, transformation, route, compress
     ):
-        pdr_json = await self._get_resource_async(
+        pdr_compressed_latin1 = await self._get_resource_async(
             f"/transformations/{transformation}/{route}/{protocoldagresultref}",
             compress=compress,
         )
-
-        pdr = GufeTokenizable.from_dict(
-            json.loads(pdr_json[0], cls=JSON_HANDLER.decoder)
-        )
+        pdr = decompress_gufe_zstd(pdr_compressed_latin1[0].encode("latin-1"))
 
         return pdr
 

@@ -9,7 +9,6 @@ import os
 import json
 from datetime import datetime, timedelta
 import random
-import base64
 
 from fastapi import FastAPI, APIRouter, Body, Depends, Request
 from fastapi.middleware.gzip import GZipMiddleware
@@ -31,6 +30,7 @@ from ..base.api import (
     gufe_to_json,
     GzipRoute,
 )
+from ..compression import decompress_gufe_zstd
 from ..settings import (
     get_base_api_settings,
     get_compute_api_settings,
@@ -298,18 +298,17 @@ def retrieve_task_transformation(
 
         # we keep this as a string to avoid useless deserialization/reserialization here
         try:
-            pdr: str = s3os.pull_protocoldagresult(
-                pdr_sk, transformation_sk, return_as="json", ok=True
+            pdr_bytes: bytes = s3os.pull_protocoldagresult(
+                pdr_sk, transformation_sk, ok=True
             )
         except:
             # if we fail to get the object with the above, fall back to
             # location-based retrieval
-            pdr: str = s3os.pull_protocoldagresult(
+            pdr_bytes: bytes = s3os.pull_protocoldagresult(
                 location=protocoldagresultref.location,
-                return_as="json",
                 ok=True,
             )
-
+        pdr = pdr_bytes.decode("latin-1")
     else:
         pdr = None
 
@@ -329,20 +328,13 @@ async def set_task_result(
     body = await request.body()
     body_ = json.loads(body.decode("utf-8"), cls=JSON_HANDLER.decoder)
 
-    protocoldagresult = body_['protocoldagresult']
-    compute_service_id = body_['compute_service_id']
+    protocoldagresult_ = body_["protocoldagresult"]
+    compute_service_id = body_["compute_service_id"]
 
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
 
-    # decode b64 and decompress the zstd bytes back into json
-    protocoldagresult = base64.b64decode(protocoldagresult)
-    decompressor = zstd.ZstdDecompressor()
-    protocoldagresult = decompressor.decompress(protocoldagresult)
-
-    pdr_keyed_chain_rep = json.loads(protocoldagresult, cls=JSON_HANDLER.decoder)
-    pdr_keyed_chain = KeyedChain.from_keyed_chain_rep(pdr_keyed_chain_rep)
-    pdr = pdr_keyed_chain.to_gufe()
+    pdr = decompress_gufe_zstd(protocoldagresult_)
 
     tf_sk, _ = n4js.get_task_transformation(
         task=task_scoped_key,
@@ -351,7 +343,7 @@ async def set_task_result(
 
     # push the ProtocolDAGResult to the object store
     protocoldagresultref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
-        pdr, transformation=tf_sk, creator=compute_service_id
+        protocoldagresult_, transformation=tf_sk, creator=compute_service_id
     )
 
     # push the reference to the state store

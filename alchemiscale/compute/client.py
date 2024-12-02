@@ -9,7 +9,6 @@ from typing import List, Tuple, Optional, Dict, Union
 import json
 from urllib.parse import urljoin
 from functools import wraps
-import base64
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -25,6 +24,7 @@ from ..base.client import (
     AlchemiscaleBaseClientError,
     json_to_gufe,
 )
+from ..compression import compress_gufe_zstd, decompress_gufe_zstd
 from ..models import Scope, ScopedKey
 from ..storage.models import TaskHub, Task, ComputeServiceID, TaskStatusEnum
 
@@ -120,9 +120,14 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
             f"/tasks/{task}/transformation/gufe"
         )
 
+        if protocoldagresult is not None:
+            protocoldagresult = decompress_gufe_zstd(
+                protocoldagresult.encode("latin-1")
+            )
+
         return (
             json_to_gufe(transformation),
-            json_to_gufe(protocoldagresult) if protocoldagresult is not None else None,
+            protocoldagresult,
         )
 
     def set_task_result(
@@ -132,17 +137,8 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         compute_service_id: Optional[ComputeServiceID] = None,
     ) -> ScopedKey:
 
-        keyed_chain_rep = KeyedChain.from_gufe(protocoldagresult).to_keyed_chain_rep()
-        json_rep = json.dumps(keyed_chain_rep, cls=JSON_HANDLER.encoder)
-        json_bytes = json_rep.encode("utf-8")
-
-        compressor = zstd.ZstdCompressor()
-        compressed = compressor.compress(json_bytes)
-
-        base64_encoded = base64.b64encode(compressed).decode("utf-8")
-
         data = dict(
-            protocoldagresult=base64_encoded,
+            protocoldagresult=compress_gufe_zstd(protocoldagresult),
             compute_service_id=str(compute_service_id),
         )
 

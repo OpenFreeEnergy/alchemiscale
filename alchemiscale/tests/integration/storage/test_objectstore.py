@@ -3,6 +3,7 @@ import os
 
 import pytest
 
+from alchemiscale.compression import compress_gufe_zstd, decompress_gufe_zstd
 from alchemiscale.models import ScopedKey
 from alchemiscale.storage.objectstore import S3ObjectStore
 from alchemiscale.storage.models import ProtocolDAGResultRef
@@ -21,7 +22,7 @@ class TestS3ObjectStore:
 
         # try to push the result
         objstoreref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
-            protocoldagresults[0], transformation=transformation_sk
+            compress_gufe_zstd(protocoldagresults[0]), transformation=transformation_sk
         )
 
         assert objstoreref.obj_key == protocoldagresults[0].key
@@ -38,7 +39,7 @@ class TestS3ObjectStore:
         transformation_sk = ScopedKey(gufe_key=transformation.key, **scope_test.dict())
 
         objstoreref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
-            protocoldagresults[0], transformation=transformation_sk
+            compress_gufe_zstd(protocoldagresults[0]), transformation=transformation_sk
         )
 
         # round trip it
@@ -46,13 +47,15 @@ class TestS3ObjectStore:
         tf_sk = ScopedKey(
             gufe_key=protocoldagresults[0].transformation_key, **scope_test.dict()
         )
-        pdr = s3os.pull_protocoldagresult(sk, tf_sk)
+        pdr = decompress_gufe_zstd(s3os.pull_protocoldagresult(sk, tf_sk))
 
         assert pdr.key == protocoldagresults[0].key
         assert pdr.protocol_unit_results == pdr.protocol_unit_results
 
         # test location-based pull
-        pdr = s3os.pull_protocoldagresult(location=objstoreref.location)
+        pdr = decompress_gufe_zstd(
+            s3os.pull_protocoldagresult(location=objstoreref.location)
+        )
 
         assert pdr.key == protocoldagresults[0].key
         assert pdr.protocol_unit_results == pdr.protocol_unit_results
