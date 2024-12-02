@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import random
 import base64
 
-from fastapi import FastAPI, APIRouter, Body, Depends
+from fastapi import FastAPI, APIRouter, Body, Depends, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER, KeyedChain
 import zstandard as zstd
@@ -318,15 +318,20 @@ def retrieve_task_transformation(
 
 # TODO: support compression performed client-side
 @router.post("/tasks/{task_scoped_key}/results", response_model=ScopedKey)
-def set_task_result(
+async def set_task_result(
     task_scoped_key,
     *,
-    protocoldagresult: str = Body(embed=True),
-    compute_service_id: Optional[str] = Body(embed=True),
+    request: Request,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
+    body = await request.body()
+    body_ = json.loads(body.decode("utf-8"), cls=JSON_HANDLER.decoder)
+
+    protocoldagresult = body_['protocoldagresult']
+    compute_service_id = body_['compute_service_id']
+
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
 

@@ -129,7 +129,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         self,
         task: ScopedKey,
         protocoldagresult: ProtocolDAGResult,
-        compute_service_id=Optional[ComputeServiceID],
+        compute_service_id: Optional[ComputeServiceID] = None,
     ) -> ScopedKey:
 
         keyed_chain_rep = KeyedChain.from_gufe(protocoldagresult).to_keyed_chain_rep()
