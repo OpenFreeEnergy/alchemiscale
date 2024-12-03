@@ -173,7 +173,7 @@ class SynchronousComputeService:
             compute_service_id=self.compute_service_id,
             count=count,
             protocols=self.settings.protocols,
-            )
+        )
 
         return tasks
 
