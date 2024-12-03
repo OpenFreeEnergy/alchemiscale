@@ -86,9 +86,37 @@ class TestClient:
         network_sks = user_client.query_networks()
         assert an_sk in network_sks
 
+        assert user_client.check_exists(an_sk)
+
         # TODO: make a network in a scope that doesn't have any components in
         # common with an existing network
         # user_client.create_network(
+
+    def test_check_exists(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        an_sks = user_client.query_networks()
+
+        # check that a known existing AlchemicalNetwork exists
+        assert user_client.check_exists(an_sks[0])
+
+        # check that an AlchemicalNetwork that doesn't exist shows as not existing
+        an_sk = an_sks[0]
+        an_sk_nonexistent = ScopedKey(
+            gufe_key=GufeKey("AlchemicalNetwork-lol"), **scope_test.dict()
+        )
+        assert not user_client.check_exists(an_sk_nonexistent)
+
+        # check that we get an exception when we try a malformed key
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 422 : Unprocessable Entity : input does not appear to be a `ScopedKey`",
+        ):
+            user_client.check_exists("lol")
 
     @pytest.mark.parametrize(("state",), [[state.value] for state in NetworkStateEnum])
     def test_set_network_state(

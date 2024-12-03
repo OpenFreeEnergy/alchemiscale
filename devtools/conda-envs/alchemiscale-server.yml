@@ -8,8 +8,8 @@ dependencies:
   - python=3.12
 
   # alchemiscale dependencies
-  - gufe=1.0.0
-  - openfe=1.1.0
+  - gufe=1.1.0
+  - openfe=1.2.0
 
   - requests
   - click
@@ -29,9 +29,7 @@ dependencies:
   - uvicorn
   - gunicorn
   - python-jose
-  - passlib
   - bcrypt
-  - python-multipart=0.0.12    # temporarily pinned due to broken 0.14 release on conda-forge
   - starlette
   - httpx
   - cryptography
@@ -42,12 +40,10 @@ dependencies:
   # additional pins
   - openmm=8.1.2
   - openmmforcefields>=0.14.1
+  - openff-units=0.2.2
 
   # deployment
   - curl         # used in healthchecks for API services
 
-  # alchemiscale-fah dependencies
-  - plyvel
-
   - pip:
-    - git+https://github.com/OpenFreeEnergy/alchemiscale.git@v0.5.1
+    - git+https://github.com/OpenFreeEnergy/alchemiscale.git@v0.5.2

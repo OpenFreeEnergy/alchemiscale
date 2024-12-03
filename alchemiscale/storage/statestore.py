@@ -21,9 +21,9 @@ from gufe import (
     AlchemicalNetwork,
     Transformation,
     NonTransformation,
-    Settings,
     Protocol,
 )
+from gufe.settings import SettingsBaseModel
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
 from gufe.protocols import ProtocolUnitFailure
 
@@ -105,43 +105,22 @@ def _select_tasks_from_taskpool(taskpool: List[Tuple[str, float]], count) -> Lis
     return list(np.random.choice(tasks, count, replace=False, p=prob))
 
 
-def _generate_claim_query(
-    task_sks: List[ScopedKey], compute_service_id: ComputeServiceID
-) -> str:
-    """Generate a query to claim a list of Tasks.
-
-    Parameters
-    ----------
-    task_sks
-        A list of ScopedKeys of Tasks to claim.
-    compute_service_id
-        ComputeServiceID of the claiming service.
-
-    Returns
-    -------
-    query: str
-        The Cypher query to claim the Task.
-    """
-
-    task_data = cypher_list_from_scoped_keys(task_sks)
-
-    query = f"""
+CLAIM_QUERY = f"""
     // only match the task if it doesn't have an existing CLAIMS relationship
-    UNWIND {task_data} AS task_sk
+    UNWIND $tasks_list AS task_sk
     MATCH (t:Task {{_scoped_key: task_sk}})
     WHERE NOT (t)<-[:CLAIMS]-(:ComputeServiceRegistration)
 
     WITH t
 
     // create CLAIMS relationship with given compute service
-    MATCH (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
-    CREATE (t)<-[cl:CLAIMS {{claimed: localdatetime('{datetime.utcnow().isoformat()}')}}]-(csreg)
+    MATCH (csreg:ComputeServiceRegistration {{identifier: $compute_service_id}})
+    CREATE (t)<-[cl:CLAIMS {{claimed: localdatetime($datetimestr)}}]-(csreg)
 
     SET t.status = '{TaskStatusEnum.running.value}'
 
     RETURN t
-    """
-    return query
+"""
 
 
 class Neo4jStore(AlchemiscaleStateStore):
@@ -361,7 +340,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 ):
                     node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
                     node["_json_props"].append(key)
-            elif isinstance(value, Settings):
+            elif isinstance(value, SettingsBaseModel):
                 node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
                 node["_json_props"].append(key)
             elif isinstance(value, GufeTokenizable):
@@ -487,26 +466,21 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> Union[Node, Tuple[Node, Subgraph]]:
         """
         If `return_subgraph = True`, also return subgraph for gufe object.
-
         """
+
+        # Safety: qualname comes from GufeKey which is validated
         qualname = scoped_key.qualname
-
-        properties = {"_scoped_key": str(scoped_key)}
-        prop_string = ", ".join(
-            "{}: '{}'".format(key, value) for key, value in properties.items()
-        )
-
-        prop_string = f" {{{prop_string}}}"
+        parameters = {"scoped_key": str(scoped_key)}
 
         q = f"""
-        MATCH (n:{qualname}{prop_string})
+        MATCH (n:{qualname} {{ _scoped_key: $scoped_key }})
         """
 
         if return_subgraph:
             q += """
             OPTIONAL MATCH p = (n)-[r:DEPENDS_ON*]->(m)
             WHERE NOT (m)-[:DEPENDS_ON]->()
-            RETURN n,p
+            RETURN n, p
             """
         else:
             q += """
@@ -516,10 +490,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         nodes = set()
         subgraph = Subgraph()
 
-        for record in self.execute_query(q).records:
+        result = self.execute_query(q, parameters_=parameters)
+
+        for record in result.records:
             node = record_data_to_node(record["n"])
             nodes.add(node)
-            if return_subgraph and record["p"] is not None:
+            if return_subgraph and record.get("p") is not None:
                 subgraph = subgraph | subgraph_from_path_record(record["p"])
             else:
                 subgraph = node
@@ -540,8 +516,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         *,
         qualname: str,
-        additional: Dict = None,
-        key: GufeKey = None,
+        additional: Optional[Dict] = None,
+        key: Optional[GufeKey] = None,
         scope: Scope = Scope(),
         return_gufe=False,
     ):
@@ -551,9 +527,8 @@ class Neo4jStore(AlchemiscaleStateStore):
             "_project": scope.project,
         }
 
-        for k, v in list(properties.items()):
-            if v is None:
-                properties.pop(k)
+        # Remove None values from properties
+        properties = {k: v for k, v in properties.items() if v is not None}
 
         if key is not None:
             properties["_gufe_key"] = str(key)
@@ -566,7 +541,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             prop_string = ""
         else:
             prop_string = ", ".join(
-                "{}: '{}'".format(key, value) for key, value in properties.items()
+                "{}: ${}".format(key, key) for key in properties.keys()
             )
 
             prop_string = f" {{{prop_string}}}"
@@ -587,7 +562,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
 
         with self.transaction() as tx:
-            res = tx.run(q).to_eager_result()
+            res = tx.run(q, **properties).to_eager_result()
 
         nodes = list()
         subgraph = Subgraph()
@@ -726,8 +701,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         self.delete_taskhub(network)
 
         # then delete the network
-        q = f"""
-        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})
+        q = """
+        MATCH (an:AlchemicalNetwork {_scoped_key: $network})
         DETACH DELETE an
         """
         raise NotImplementedError
@@ -867,10 +842,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         *,
         name=None,
         key=None,
-        scope: Optional[Scope] = Scope(),
+        scope: Optional[Scope] = None,
         state: Optional[str] = None,
     ) -> List[ScopedKey]:
         """Query for `AlchemicalNetwork`\s matching given attributes."""
+
+        if scope is None:
+            scope = Scope()
 
         query_params = dict(
             name_pattern=name,
@@ -935,14 +913,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_network_transformations(self, network: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
-        q = f"""
-        MATCH (:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(t:Transformation|NonTransformation)
+        q = """
+        MATCH (:AlchemicalNetwork {_scoped_key: $network})-[:DEPENDS_ON]->(t:Transformation|NonTransformation)
         WITH t._scoped_key as sk
         RETURN sk
         """
         sks = []
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, network=str(network))
             for rec in res:
                 sks.append(rec["sk"])
 
@@ -950,14 +928,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
-        q = f"""
-        MATCH (:Transformation|NonTransformation {{_scoped_key: '{transformation}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        q = """
+        MATCH (:Transformation|NonTransformation {_scoped_key: $transformation})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
         WITH an._scoped_key as sk
         RETURN sk
         """
         sks = []
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, transformation=str(transformation))
             for rec in res:
                 sks.append(rec["sk"])
 
@@ -965,14 +943,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_network_chemicalsystems(self, network: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for ChemicalSystems associated with the given AlchemicalNetwork."""
-        q = f"""
-        MATCH (:AlchemicalNetwork {{_scoped_key: '{network}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        q = """
+        MATCH (:AlchemicalNetwork {_scoped_key: $network})-[:DEPENDS_ON]->(cs:ChemicalSystem)
         WITH cs._scoped_key as sk
         RETURN sk
         """
         sks = []
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, network=str(network))
             for rec in res:
                 sks.append(rec["sk"])
 
@@ -980,14 +958,14 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_chemicalsystem_networks(self, chemicalsystem: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given ChemicalSystem."""
-        q = f"""
-        MATCH (:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
+        q = """
+        MATCH (:ChemicalSystem {_scoped_key: $chemicalsystem})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
         WITH an._scoped_key as sk
         RETURN sk
         """
         sks = []
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, chemicalsystem=str(chemicalsystem))
             for rec in res:
                 sks.append(rec["sk"])
 
@@ -997,14 +975,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         self, transformation: ScopedKey
     ) -> List[ScopedKey]:
         """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
-        q = f"""
-        MATCH (:Transformation|NonTransformation {{_scoped_key: '{transformation}'}})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        q = """
+        MATCH (:Transformation|NonTransformation {_scoped_key: $transformation})-[:DEPENDS_ON]->(cs:ChemicalSystem)
         WITH cs._scoped_key as sk
         RETURN sk
         """
         sks = []
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, transformation=str(transformation))
             for rec in res:
                 sks.append(rec["sk"])
 
@@ -1014,14 +992,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         self, chemicalsystem: ScopedKey
     ) -> List[ScopedKey]:
         """List ScopedKeys for the Transformations associated with the given ChemicalSystem."""
-        q = f"""
-        MATCH (:ChemicalSystem {{_scoped_key: '{chemicalsystem}'}})<-[:DEPENDS_ON]-(t:Transformation|NonTransformation)
+        q = """
+        MATCH (:ChemicalSystem {_scoped_key: $chemicalsystem})<-[:DEPENDS_ON]-(t:Transformation|NonTransformation)
         WITH t._scoped_key as sk
         RETURN sk
         """
         sks = []
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, chemicalsystem=str(chemicalsystem))
             for rec in res:
                 sks.append(rec["sk"])
 
@@ -1112,10 +1090,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         q = f"""
-        MATCH (n:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+        MATCH (n:ComputeServiceRegistration {{identifier: $compute_service_id}})
 
-        OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: 'running'}})
-        SET t.status = 'waiting'
+        OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: '{TaskStatusEnum.running.value}'}})
+        SET t.status = '{TaskStatusEnum.waiting.value}'
 
         WITH n, n.identifier as identifier
 
@@ -1125,7 +1103,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, compute_service_id=str(compute_service_id))
             identifier = next(res)["identifier"]
 
         return ComputeServiceID(identifier)
@@ -1136,12 +1114,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Update the heartbeat for the given ComputeServiceID."""
 
         q = f"""
-        MATCH (n:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
+        MATCH (n:ComputeServiceRegistration {{identifier: $compute_service_id}})
         SET n.heartbeat = localdatetime('{heartbeat.isoformat()}')
 
         """
         with self.transaction() as tx:
-            tx.run(q)
+            tx.run(q, compute_service_id=str(compute_service_id))
 
         return compute_service_id
 
@@ -1153,8 +1131,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         WITH n
 
-        OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: 'running'}})
-        SET t.status = 'waiting'
+        OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: '{TaskStatusEnum.running.value}'}})
+        SET t.status = '{TaskStatusEnum.waiting.value}'
 
         WITH n, n.identifier as ident
 
@@ -1299,11 +1277,11 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         taskhub = self.get_taskhub(network)
 
-        q = f"""
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}}),
+        q = """
+        MATCH (th:TaskHub {_scoped_key: $taskhub})
         DETACH DELETE th
         """
-        self.execute_query(q)
+        self.execute_query(q, taskhub=str(taskhub))
 
         return taskhub
 
@@ -1364,14 +1342,14 @@ class Neo4jStore(AlchemiscaleStateStore):
             A list of dicts, one per TaskHub, which contains the Task ScopedKeys that are
             actioned on the given TaskHub as keys, with their weights as values.
         """
-
-        q = f"""
-           UNWIND {cypher_list_from_scoped_keys(taskhubs)} as th_sk
-           MATCH (th: TaskHub {{_scoped_key: th_sk}})-[a:ACTIONS]->(t:Task)
+        th_scoped_keys = [str(taskhub) for taskhub in taskhubs if taskhub is not None]
+        q = """
+           UNWIND $taskhubs as th_sk
+           MATCH (th: TaskHub {_scoped_key: th_sk})-[a:ACTIONS]->(t:Task)
            RETURN t._scoped_key, a.weight, th._scoped_key
         """
 
-        results = self.execute_query(q)
+        results = self.execute_query(q, taskhubs=th_scoped_keys)
 
         data = {taskhub: {} for taskhub in taskhubs}
         for record in results.records:
@@ -1424,13 +1402,17 @@ class Neo4jStore(AlchemiscaleStateStore):
                     "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
                 )
 
-        q = f"""
-        UNWIND {cypher_list_from_scoped_keys(networks)} as network
-        MATCH (th:TaskHub {{network: network}})
+        networks_scoped_keys = [
+            str(network) for network in networks if network is not None
+        ]
+
+        q = """
+        UNWIND $networks as network
+        MATCH (th:TaskHub {network: network})
         RETURN network, th.weight
         """
 
-        results = self.execute_query(q)
+        results = self.execute_query(q, networks=networks_scoped_keys)
 
         network_weights = {str(network): None for network in networks}
         for record in results.records:
@@ -1461,12 +1443,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         # so we can properly return `None` if needed
         task_map = {str(task): None for task in tasks}
 
-        query_safe_task_list = [str(task) for task in tasks if task]
-
+        tasks_scoped_keys = [str(task) for task in tasks if task is not None]
         q = """
         // get our TaskHub
-        UNWIND $query_safe_task_list AS task_sk
-        MATCH (th:TaskHub {_scoped_key: $taskhub_scoped_key})-[:PERFORMS]->(an:AlchemicalNetwork)
+        UNWIND $tasks as task_sk
+        MATCH (th:TaskHub {{_scoped_key: $taskhub}})-[:PERFORMS]->(an:AlchemicalNetwork)
 
         // get the task we want to add to the hub; check that it connects to same network
         MATCH (task:Task {_scoped_key: task_sk})-[:PERFORMS]->(:Transformation|NonTransformation)<-[:DEPENDS_ON]-(an)
@@ -1500,11 +1481,11 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         results = self.execute_query(
             q,
-            query_safe_task_list=query_safe_task_list,
+            tasks=tasks_scoped_keys,
+            taskhub=str(taskhub),
             waiting=TaskStatusEnum.waiting.value,
             running=TaskStatusEnum.running.value,
             error=TaskStatusEnum.error.value,
-            taskhub_scoped_key=str(taskhub),
         )
 
         # update our map with the results, leaving None for tasks that aren't found
@@ -1567,13 +1548,19 @@ class Neo4jStore(AlchemiscaleStateStore):
                 if not all([0 <= weight <= 1 for weight in tasks.values()]):
                     raise ValueError("weights must be between 0 and 1 (inclusive)")
 
-                for t, w in tasks.items():
-                    q = f"""
-                    MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
-                    SET ar.weight = {w}
-                    RETURN task, ar
-                    """
-                    results.append(tx.run(q).to_eager_result())
+                tasks_list = [{"task": str(t), "weight": w} for t, w in tasks.items()]
+
+                q = """
+                UNWIND $tasks_list AS item
+                MATCH (th:TaskHub {_scoped_key: $taskhub})-[ar:ACTIONS]->(task:Task {_scoped_key: item.task})
+                SET ar.weight = item.weight
+                RETURN task, ar
+                """
+                results.append(
+                    tx.run(
+                        q, taskhub=str(taskhub), tasks_list=tasks_list
+                    ).to_eager_result()
+                )
 
             elif isinstance(tasks, list):
                 if weight is None:
@@ -1584,14 +1571,19 @@ class Neo4jStore(AlchemiscaleStateStore):
                 if not 0 <= weight <= 1:
                     raise ValueError("weight must be between 0 and 1 (inclusive)")
 
-                # TODO: remove for loop with an unwind clause
-                for t in tasks:
-                    q = f"""
-                    MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
-                    SET ar.weight = {weight}
-                    RETURN task, ar
-                    """
-                    results.append(tx.run(q).to_eager_result())
+                tasks_list = [str(t) for t in tasks]
+
+                q = """
+                UNWIND $tasks_list AS task_sk
+                MATCH (th:TaskHub {_scoped_key: $taskhub})-[ar:ACTIONS]->(task:Task {_scoped_key: task_sk})
+                SET ar.weight = $weight
+                RETURN task, ar
+                """
+                results.append(
+                    tx.run(
+                        q, taskhub=str(taskhub), tasks_list=tasks_list, weight=weight
+                    ).to_eager_result()
+                )
 
         # return ScopedKeys for Tasks we changed; `None` for tasks we didn't
         for res in results:
@@ -1624,22 +1616,18 @@ class Neo4jStore(AlchemiscaleStateStore):
         weights
             Weights for the list of Tasks, in the same order.
         """
-        weights = []
+
         with self.transaction() as tx:
-            for t in tasks:
-                q = f"""
-                MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[ar:ACTIONS]->(task:Task {{_scoped_key: '{t}'}})
-                RETURN ar.weight
-                """
-                result = tx.run(q)
+            q = """
+            UNWIND $tasks_list AS task_scoped_key
+            OPTIONAL MATCH (th:TaskHub {_scoped_key: $taskhub})-[ar:ACTIONS]->(task:Task {_scoped_key: task_scoped_key})
+            RETURN task_scoped_key, ar.weight AS weight
+            """
 
-                weight = [record.get("ar.weight") for record in result]
+            result = tx.run(q, taskhub=str(taskhub), tasks_list=list(map(str, tasks)))
+            results = result.data()
 
-                # if no match for the given Task, we put a `None` as result
-                if len(weight) == 0:
-                    weights.append(None)
-                else:
-                    weights.extend(weight)
+        weights = [record["weight"] for record in results]
 
         return weights
 
@@ -1690,13 +1678,13 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
         """Get a list of Tasks on the TaskHub."""
 
-        q = f"""
+        q = """
         // get list of all tasks associated with the taskhub
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task)
+        MATCH (th:TaskHub {_scoped_key: $taskhub})-[:ACTIONS]->(task:Task)
         RETURN task
         """
         with self.transaction() as tx:
-            res = tx.run(q).to_eager_result()
+            res = tx.run(q, taskhub=str(taskhub)).to_eager_result()
 
         tasks = []
         subgraph = Subgraph()
@@ -1717,14 +1705,14 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
         """Get a list of unclaimed Tasks in the TaskHub."""
 
-        q = f"""
+        q = """
         // get list of all unclaimed tasks in the hub
-        MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})-[:ACTIONS]->(task:Task)
+        MATCH (th:TaskHub {_scoped_key: $taskhub})-[:ACTIONS]->(task:Task)
         WHERE NOT (task)<-[:CLAIMS]-(:ComputeServiceRegistration)
         RETURN task
         """
         with self.transaction() as tx:
-            res = tx.run(q).to_eager_result()
+            res = tx.run(q, taskhub=str(taskhub)).to_eager_result()
 
         tasks = []
         subgraph = Subgraph()
@@ -1776,7 +1764,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             raise ValueError("`protocols` must be either `None` or not empty")
 
         q = f"""
-            MATCH (th:TaskHub {{`_scoped_key`: '{taskhub}'}})-[actions:ACTIONS]-(task:Task)
+            MATCH (th:TaskHub {{_scoped_key: $taskhub}})-[actions:ACTIONS]-(task:Task)
             WHERE task.status = '{TaskStatusEnum.waiting.value}'
             AND actions.weight > 0
             OPTIONAL MATCH (task)-[:EXTENDS]->(other_task:Task)
@@ -1806,14 +1794,15 @@ class Neo4jStore(AlchemiscaleStateStore):
         _tasks = {}
         with self.transaction() as tx:
             tx.run(
-                f"""
-            MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})
+                """
+                MATCH (th:TaskHub {_scoped_key: $taskhub})
 
-            // lock the TaskHub to avoid other queries from changing its state while we claim
-            SET th._lock = True
-            """
+                // lock the TaskHub to avoid other queries from changing its state while we claim
+                SET th._lock = True
+                """,
+                taskhub=str(taskhub),
             )
-            _taskpool = tx.run(q)
+            _taskpool = tx.run(q, taskhub=str(taskhub))
 
             def task_count(task_dict: dict):
                 return sum(map(len, task_dict.values()))
@@ -1878,16 +1867,21 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             # if tasks is not empty, proceed with claiming
             if tasks:
-                q = _generate_claim_query(tasks, compute_service_id)
-                tx.run(q)
+                tx.run(
+                    CLAIM_QUERY,
+                    tasks_list=[str(task) for task in tasks if task is not None],
+                    datetimestr=str(datetime.utcnow().isoformat()),
+                    compute_service_id=str(compute_service_id),
+                )
 
             tx.run(
-                f"""
-            MATCH (th:TaskHub {{_scoped_key: '{taskhub}'}})
+                """
+                MATCH (th:TaskHub {_scoped_key: $taskhub})
 
-            // remove lock on the TaskHub now that we're done with it
-            SET th._lock = null
-            """
+                // remove lock on the TaskHub now that we're done with it
+                SET th._lock = null
+                """,
+                taskhub=str(taskhub),
             )
 
         return tasks + [None] * (count - len(tasks))
@@ -1899,13 +1893,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         if not task_list:
             return {}
 
-        q = f"""
-            UNWIND {cypher_list_from_scoped_keys(task_list)} as task
-            MATCH (t:Task {{`_scoped_key`: task}})-[PERFORMS]->(tf:Transformation|NonTransformation)
+        q = """
+            UNWIND $task_list AS task
+            MATCH (t:Task {_scoped_key: task})-[PERFORMS]->(tf:Transformation|NonTransformation)
             return t, tf._scoped_key as tf_sk
         """
 
-        results = self.execute_query(q)
+        results = self.execute_query(q, task_list=list(map(str, task_list)))
 
         nodes = {}
 
@@ -2000,12 +1994,14 @@ class Neo4jStore(AlchemiscaleStateStore):
                 continue
 
             q = f"""
-            UNWIND {cypher_list_from_scoped_keys(transformation_subset)} as sk
+            UNWIND $transformation_subset AS sk
             MATCH (n:{node_type} {{`_scoped_key`: sk}})
             RETURN n
             """
 
-            results = self.execute_query(q)
+            results = self.execute_query(
+                q, transformation_subset=list(map(str, transformation_subset))
+            )
 
             transformation_nodes = {}
             for record in results.records:
@@ -2088,14 +2084,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         self, network: ScopedKey, status: Optional[TaskStatusEnum] = None
     ) -> List[ScopedKey]:
         """List ScopedKeys for all Tasks associated with the given AlchemicalNetwork."""
-        q = f"""
-        MATCH (an:AlchemicalNetwork {{_scoped_key: "{network}"}})-[:DEPENDS_ON]->(tf:Transformation|NonTransformation),
+        q = """
+        MATCH (an:AlchemicalNetwork {_scoped_key: $network})-[:DEPENDS_ON]->(tf:Transformation|NonTransformation),
               (tf)<-[:PERFORMS]-(t:Task)
         """
 
         if status is not None:
-            q += f"""
-            WHERE t.status = '{status.value}'
+            q += """
+            WHERE t.status = $status
             """
 
         q += """
@@ -2104,7 +2100,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         sks = []
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(
+                q, network=str(network), status=status.value if status else None
+            )
             for rec in res:
                 sks.append(rec["sk"])
 
@@ -2112,15 +2110,15 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_task_networks(self, task: ScopedKey) -> List[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Task."""
-        q = f"""
-        MATCH (t:Task {{_scoped_key: '{task}'}})-[:PERFORMS]->(tf:Transformation|NonTransformation),
+        q = """
+        MATCH (t:Task {_scoped_key: $task})-[:PERFORMS]->(tf:Transformation|NonTransformation),
               (tf)<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
         WITH an._scoped_key as sk
         RETURN sk
         """
         sks = []
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, task=str(task))
             for rec in res:
                 sks.append(rec["sk"])
 
@@ -2149,18 +2147,18 @@ class Neo4jStore(AlchemiscaleStateStore):
         extends
 
         """
-        q = f"""
-        MATCH (trans:Transformation|NonTransformation {{_scoped_key: '{transformation}'}})<-[:PERFORMS]-(task:Task)
+        q = """
+        MATCH (trans:Transformation|NonTransformation {_scoped_key: $transformation})<-[:PERFORMS]-(task:Task)
         """
 
         if status is not None:
-            q += f"""
-            WHERE task.status = '{status.value}'
+            q += """
+            WHERE task.status = $status
             """
 
         if extends:
-            q += f"""
-            MATCH (trans)<-[:PERFORMS]-(extends:Task {{_scoped_key: '{extends}'}})
+            q += """
+            MATCH (trans)<-[:PERFORMS]-(extends:Task {_scoped_key: $extends})
             WHERE (task)-[:EXTENDS*]->(extends)
             RETURN task
             """
@@ -2170,7 +2168,12 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
 
         with self.transaction() as tx:
-            res = tx.run(q).to_eager_result()
+            res = tx.run(
+                q,
+                transformation=str(transformation),
+                status=status.value if status else None,
+                extends=str(extends) if extends else None,
+            ).to_eager_result()
 
         tasks = []
         for record in res.records:
@@ -2204,14 +2207,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         `ScopedKey`\s for these instead.
 
         """
-        q = f"""
-        MATCH (task:Task {{_scoped_key: "{task}"}})-[:PERFORMS]->(trans:Transformation|NonTransformation)
+        q = """
+        MATCH (task:Task {_scoped_key: $task})-[:PERFORMS]->(trans:Transformation|NonTransformation)
         OPTIONAL MATCH (task)-[:EXTENDS]->(prev:Task)-[:RESULTS_IN]->(result:ProtocolDAGResultRef)
         RETURN trans, result
         """
 
         with self.transaction() as tx:
-            res = tx.run(q).to_eager_result()
+            res = tx.run(q, task=str(task)).to_eager_result()
 
         transformations = []
         results = []
@@ -2310,7 +2313,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             RETURN scoped_key, t
             """
             res = tx.run(
-                q, scoped_keys=[str(t) for t in tasks], priority=priority
+                q,
+                scoped_keys=list(map(str, tasks)),
+                priority=priority,
             ).to_eager_result()
 
         task_results = []
@@ -2347,7 +2352,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             WHERE t._scoped_key = scoped_key
             RETURN t.priority as priority
             """
-            res = tx.run(q, scoped_keys=[str(t) for t in tasks])
+            res = tx.run(q, scoped_keys=list(map(str, tasks)))
             priorities = [rec["priority"] for rec in res]
 
         return priorities
@@ -2389,7 +2394,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         }
 
         prop_string = ", ".join(
-            "{}: '{}'".format(key, value)
+            "{}: ${}".format(key, key)
             for key, value in properties.items()
             if value is not None
         )
@@ -2406,22 +2411,22 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN n.status AS status, count(DISTINCT n) as counts
         """
         with self.transaction() as tx:
-            res = tx.run(q, state_pattern=network_state)
+            res = tx.run(q, state_pattern=network_state, **properties)
             counts = {rec["status"]: rec["counts"] for rec in res}
 
         return counts
 
     def get_network_status(self, networks: List[ScopedKey]) -> List[Dict[str, int]]:
         """Return status counts for all Tasks associated with the given AlchemicalNetworks."""
-        q = f"""
-        UNWIND {cypher_list_from_scoped_keys(networks)} as network
-        MATCH (an:AlchemicalNetwork {{_scoped_key: network}})-[:DEPENDS_ON]->(tf:Transformation|NonTransformation),
+        q = """
+        UNWIND $networks AS network
+        MATCH (an:AlchemicalNetwork {_scoped_key: network})-[:DEPENDS_ON]->(tf:Transformation|NonTransformation),
               (tf)<-[:PERFORMS]-(t:Task)
         RETURN an._scoped_key AS sk, t.status AS status, count(t) as counts
         """
 
         network_data = {str(network_sk): {} for network_sk in networks}
-        for rec in self.execute_query(q).records:
+        for rec in self.execute_query(q, networks=list(map(str, networks))).records:
             sk = rec["sk"]
             status = rec["status"]
             counts = rec["counts"]
@@ -2431,12 +2436,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_transformation_status(self, transformation: ScopedKey) -> Dict[str, int]:
         """Return status counts for all Tasks associated with the given Transformation."""
-        q = f"""
-        MATCH (:Transformation|NonTransformation {{_scoped_key: "{transformation}"}})<-[:PERFORMS]-(t:Task)
+        q = """
+        MATCH (:Transformation|NonTransformation {_scoped_key: $transformation})<-[:PERFORMS]-(t:Task)
         RETURN t.status AS status, count(t) as counts
         """
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, transformation=str(transformation))
             counts = {rec["status"]: rec["counts"] for rec in res}
 
         return counts
@@ -2641,15 +2646,15 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        q = """
+        q = f"""
         WITH $scoped_keys AS batch
         UNWIND batch AS scoped_key
 
-        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
+        OPTIONAL MATCH (t:Task {{_scoped_key: scoped_key}})
 
-        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
-        WHERE t_.status IN ['waiting', 'running', 'error']
-        SET t_.status = 'waiting'
+        OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
+        WHERE t_.status IN ['{TaskStatusEnum.waiting.value}', '{TaskStatusEnum.running.value}', '{TaskStatusEnum.error.value}']
+        SET t_.status = '{TaskStatusEnum.waiting.value}'
 
         WITH scoped_key, t, t_
 
@@ -2675,15 +2680,15 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        q = """
+        q = f"""
         WITH $scoped_keys AS batch
         UNWIND batch AS scoped_key
 
-        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
+        OPTIONAL MATCH (t:Task {{_scoped_key: scoped_key}})
 
-        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
-        WHERE t_.status IN ['running', 'waiting']
-        SET t_.status = 'running'
+        OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
+        WHERE t_.status IN ['{TaskStatusEnum.running.value}', '{TaskStatusEnum.waiting.value}']
+        SET t_.status = '{TaskStatusEnum.running.value}'
 
         RETURN scoped_key, t, t_
         """
@@ -2702,15 +2707,15 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        q = """
+        q = f"""
         WITH $scoped_keys AS batch
         UNWIND batch AS scoped_key
 
-        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
+        OPTIONAL MATCH (t:Task {{_scoped_key: scoped_key}})
 
-        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
-        WHERE t_.status IN ['complete', 'running']
-        SET t_.status = 'complete'
+        OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
+        WHERE t_.status IN ['{TaskStatusEnum.complete.value}', '{TaskStatusEnum.running.value}']
+        SET t_.status = '{TaskStatusEnum.complete.value}'
 
         WITH scoped_key, t, t_
 
@@ -2745,15 +2750,15 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        q = """
+        q = f"""
         WITH $scoped_keys AS batch
         UNWIND batch AS scoped_key
 
-        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
+        OPTIONAL MATCH (t:Task {{_scoped_key: scoped_key}})
 
-        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
-        WHERE t_.status IN ['error', 'running']
-        SET t_.status = 'error'
+        OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
+        WHERE t_.status IN ['{TaskStatusEnum.error.value}', '{TaskStatusEnum.running.value}']
+        SET t_.status = '{TaskStatusEnum.error.value}'
 
         WITH scoped_key, t, t_
 
@@ -2783,20 +2788,20 @@ class Neo4jStore(AlchemiscaleStateStore):
         # set the status and delete the ACTIONS relationship
         # make sure we follow the extends chain and set all tasks to invalid
         # and remove actions relationships
-        q = """
+        q = f"""
         WITH $scoped_keys AS batch
         UNWIND batch AS scoped_key
 
-        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
+        OPTIONAL MATCH (t:Task {{_scoped_key: scoped_key}})
 
-        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
-        WHERE NOT t_.status IN ['deleted']
-        SET t_.status = 'invalid'
+        OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
+        WHERE NOT t_.status IN ['{TaskStatusEnum.deleted.value}']
+        SET t_.status = '{TaskStatusEnum.invalid.value}'
 
         WITH scoped_key, t, t_
 
         OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
-        SET extends_task.status = 'invalid'
+        SET extends_task.status = '{TaskStatusEnum.invalid.value}'
 
         WITH scoped_key, t, t_, extends_task
 
@@ -2835,20 +2840,20 @@ class Neo4jStore(AlchemiscaleStateStore):
         # set the status and delete the ACTIONS relationship
         # make sure we follow the extends chain and set all tasks to deleted
         # and remove actions relationships
-        q = """
+        q = f"""
         WITH $scoped_keys AS batch
         UNWIND batch AS scoped_key
 
-        OPTIONAL MATCH (t:Task {_scoped_key: scoped_key})
+        OPTIONAL MATCH (t:Task {{_scoped_key: scoped_key}})
 
-        OPTIONAL MATCH (t_:Task {_scoped_key: scoped_key})
-        WHERE NOT t_.status IN ['invalid']
-        SET t_.status = 'deleted'
+        OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
+        WHERE NOT t_.status IN ['{TaskStatusEnum.invalid.value}']
+        SET t_.status = '{TaskStatusEnum.deleted.value}'
 
         WITH scoped_key, t, t_
 
         OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
-        SET extends_task.status = 'deleted'
+        SET extends_task.status = '{TaskStatusEnum.deleted.value}'
 
         WITH scoped_key, t, t_, extends_task
 
