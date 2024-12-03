@@ -157,6 +157,19 @@ class SynchronousComputeService:
             self.beat()
             time.sleep(self.heartbeat_interval)
 
+    def claim_tasks(self) -> List[Optional[ScopedKey]]:
+        """Get a Task to execute from compute API.
+
+        Returns `None` if no Task was available matching service configuration.
+
+        """
+        return self.client.claim_tasks(
+            scopes=self.scopes,
+            compute_service_id=self.compute_service_id,
+            count=self.claim_limit,
+            protocols=self.settings.protocols,
+        )
+
     def task_to_protocoldag(
         self, task: ScopedKey
     ) -> Tuple[ProtocolDAG, Transformation, Optional[ProtocolDAGResult]]:
@@ -280,12 +293,7 @@ class SynchronousComputeService:
 
         # claim tasks from the compute API
         self.logger.info("Claiming tasks")
-        tasks: List[ScopedKey] = self.client.claim_tasks(
-            scopes=self.scopes,
-            compute_service_id=self.compute_service_id,
-            count=self.claim_limit,
-            protocols=self.settings.protocols,
-        )
+        tasks: List[ScopedKey] = self.claim_tasks()
         self.logger.info("Claimed %d tasks", len([t for t in tasks if t is not None]))
 
         # if no tasks claimed, sleep
