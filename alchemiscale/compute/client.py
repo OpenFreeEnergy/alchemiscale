@@ -9,11 +9,14 @@ from typing import List, Tuple, Optional, Dict, Union
 import json
 from urllib.parse import urljoin
 from functools import wraps
+import base64
 
 import requests
 from requests.auth import HTTPBasicAuth
 
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
+import zstandard as zstd
+
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER, KeyedChain
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 
@@ -128,10 +131,18 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         protocoldagresult: ProtocolDAGResult,
         compute_service_id=Optional[ComputeServiceID],
     ) -> ScopedKey:
+
+        keyed_chain_rep = KeyedChain.from_gufe(protocoldagresult).to_keyed_chain_rep()
+        json_rep = json.dumps(keyed_chain_rep, cls=JSON_HANDLER.encoder)
+        json_bytes = json_rep.encode("utf-8")
+
+        compressor = zstd.ZstdCompressor()
+        compressed = compressor.compress(json_bytes)
+
+        base64_encoded = base64.b64encode(compressed).decode("utf-8")
+
         data = dict(
-            protocoldagresult=json.dumps(
-                protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
-            ),
+            protocoldagresult=base64_encoded,
             compute_service_id=str(compute_service_id),
         )
 

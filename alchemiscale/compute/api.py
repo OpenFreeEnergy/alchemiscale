@@ -9,10 +9,12 @@ import os
 import json
 from datetime import datetime, timedelta
 import random
+import base64
 
 from fastapi import FastAPI, APIRouter, Body, Depends
 from fastapi.middleware.gzip import GZipMiddleware
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER, KeyedChain
+import zstandard as zstd
 
 from ..base.api import (
     QueryGUFEHandler,
@@ -328,8 +330,14 @@ def set_task_result(
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
 
-    pdr = json.loads(protocoldagresult, cls=JSON_HANDLER.decoder)
-    pdr = GufeTokenizable.from_dict(pdr)
+    # decode b64 and decompress the zstd bytes back into json
+    protocoldagresult = base64.b64decode(protocoldagresult)
+    decompressor = zstd.ZstdDecompressor()
+    protocoldagresult = decompressor.decompress(protocoldagresult)
+
+    pdr_keyed_chain_rep = json.loads(protocoldagresult, cls=JSON_HANDLER.decoder)
+    pdr_keyed_chain = KeyedChain.from_keyed_chain_rep(pdr_keyed_chain_rep)
+    pdr = pdr_keyed_chain.to_gufe()
 
     tf_sk, _ = n4js.get_task_transformation(
         task=task_scoped_key,
