@@ -15,6 +15,7 @@ dependencies:
   - httpx
   - pydantic<2.0
   - async-lru
+  - zstandard
 
   ## user client
   - rich

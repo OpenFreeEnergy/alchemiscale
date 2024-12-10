@@ -13,7 +13,9 @@ from functools import wraps
 import requests
 from requests.auth import HTTPBasicAuth
 
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
+import zstandard as zstd
+
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER, KeyedChain
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 
@@ -22,6 +24,7 @@ from ..base.client import (
     AlchemiscaleBaseClientError,
     json_to_gufe,
 )
+from ..compression import compress_gufe_zstd, decompress_gufe_zstd
 from ..models import Scope, ScopedKey
 from ..storage.models import TaskHub, Task, ComputeServiceID, TaskStatusEnum
 
@@ -117,21 +120,25 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
             f"/tasks/{task}/transformation/gufe"
         )
 
+        if protocoldagresult is not None:
+            protocoldagresult = decompress_gufe_zstd(
+                protocoldagresult.encode("latin-1")
+            )
+
         return (
             json_to_gufe(transformation),
-            json_to_gufe(protocoldagresult) if protocoldagresult is not None else None,
+            protocoldagresult,
         )
 
     def set_task_result(
         self,
         task: ScopedKey,
         protocoldagresult: ProtocolDAGResult,
-        compute_service_id=Optional[ComputeServiceID],
+        compute_service_id: Optional[ComputeServiceID] = None,
     ) -> ScopedKey:
+
         data = dict(
-            protocoldagresult=json.dumps(
-                protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
-            ),
+            protocoldagresult=compress_gufe_zstd(protocoldagresult),
             compute_service_id=str(compute_service_id),
         )
 

@@ -12,8 +12,10 @@ from typing import Union, Optional
 from boto3.session import Session
 from functools import lru_cache
 
+import zstandard as zstd
+
 from gufe.protocols import ProtocolDAGResult
-from gufe.tokenization import JSON_HANDLER, GufeTokenizable
+from gufe.tokenization import JSON_HANDLER, GufeTokenizable, KeyedChain
 
 from ..models import ScopedKey, Scope
 from .models import ProtocolDAGResultRef
@@ -193,7 +195,7 @@ class S3ObjectStore:
 
     def push_protocoldagresult(
         self,
-        protocoldagresult: ProtocolDAGResult,
+        protocoldagresult: bytes,
         transformation: ScopedKey,
         creator: Optional[str] = None,
     ) -> ProtocolDAGResultRef:
@@ -213,7 +215,16 @@ class S3ObjectStore:
             Reference to the serialized `ProtocolDAGResult` in the object store.
 
         """
-        ok = protocoldagresult.ok()
+
+        decompressor = zstd.ZstdDecompressor()
+        decompressed_pdr = decompressor.decompress(protocoldagresult)
+
+        pdr_keyed_chain_rep = json.loads(
+            decompressed_pdr.decode("utf-8"), cls=JSON_HANDLER.decoder
+        )
+        pdr_keyed_chain = KeyedChain.from_keyed_chain_rep(pdr_keyed_chain_rep)
+        pdr = pdr_keyed_chain.to_gufe()
+        ok = pdr.ok()
         route = "results" if ok else "failures"
 
         # build `location` based on gufe key
@@ -222,19 +233,15 @@ class S3ObjectStore:
             *transformation.scope.to_tuple(),
             transformation.gufe_key,
             route,
-            protocoldagresult.key,
+            pdr.key,
             "obj.json",
         )
 
-        # TODO: add support for compute client-side compressed protocoldagresults
-        pdr_jb = json.dumps(
-            protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
-        ).encode("utf-8")
-        response = self._store_bytes(location, pdr_jb)
+        response = self._store_bytes(location, protocoldagresult)
 
         return ProtocolDAGResultRef(
             location=location,
-            obj_key=protocoldagresult.key,
+            obj_key=pdr.key,
             scope=transformation.scope,
             ok=ok,
             datetime_created=datetime.utcnow(),
@@ -246,9 +253,8 @@ class S3ObjectStore:
         protocoldagresult: Optional[ScopedKey] = None,
         transformation: Optional[ScopedKey] = None,
         location: Optional[str] = None,
-        return_as="gufe",
         ok=True,
-    ) -> Union[ProtocolDAGResult, dict, str]:
+    ) -> bytes:
         """Pull the `ProtocolDAGResult` corresponding to the given `ProtocolDAGResultRef`.
 
         Parameters
@@ -263,9 +269,6 @@ class S3ObjectStore:
         location
             The full path in the object store to the ProtocolDAGResult. If
             provided, this will be used to retrieve it.
-        return_as : ['gufe', 'dict', 'json']
-            Form in which to return result; this is provided to avoid
-            unnecessary deserializations where desired.
 
         Returns
         -------
@@ -297,15 +300,6 @@ class S3ObjectStore:
 
         ## TODO: want organization alongside `obj.json` of `ProtocolUnit` gufe_keys
         ## for any file objects stored in the same space
+        pdr_bytes = self._get_bytes(location)
 
-        pdr_j = self._get_bytes(location).decode("utf-8")
-
-        # TODO: add support for interface client-side decompression
-        if return_as == "gufe":
-            pdr = GufeTokenizable.from_dict(json.loads(pdr_j, cls=JSON_HANDLER.decoder))
-        elif return_as == "dict":
-            pdr = json.loads(pdr_j, cls=JSON_HANDLER.decoder)
-        elif return_as == "json":
-            pdr = pdr_j
-
-        return pdr
+        return pdr_bytes
