@@ -15,8 +15,9 @@ from functools import lru_cache
 import zstandard as zstd
 
 from gufe.protocols import ProtocolDAGResult
-from gufe.tokenization import JSON_HANDLER, GufeTokenizable, KeyedChain
+from gufe.tokenization import JSON_HANDLER, GufeTokenizable
 
+from ..compression import decompress_gufe_zstd
 from ..models import ScopedKey, Scope
 from .models import ProtocolDAGResultRef
 from ..settings import S3ObjectStoreSettings, get_s3objectstore_settings
@@ -216,14 +217,7 @@ class S3ObjectStore:
 
         """
 
-        decompressor = zstd.ZstdDecompressor()
-        decompressed_pdr = decompressor.decompress(protocoldagresult)
-
-        pdr_keyed_chain_rep = json.loads(
-            decompressed_pdr.decode("utf-8"), cls=JSON_HANDLER.decoder
-        )
-        pdr_keyed_chain = KeyedChain.from_keyed_chain_rep(pdr_keyed_chain_rep)
-        pdr = pdr_keyed_chain.to_gufe()
+        pdr = decompress_gufe_zstd(protocoldagresult)
         ok = pdr.ok()
         route = "results" if ok else "failures"
 

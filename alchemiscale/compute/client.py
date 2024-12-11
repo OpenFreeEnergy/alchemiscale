@@ -15,7 +15,7 @@ from requests.auth import HTTPBasicAuth
 
 import zstandard as zstd
 
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER, KeyedChain
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 

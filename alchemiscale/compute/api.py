@@ -12,7 +12,7 @@ import random
 
 from fastapi import FastAPI, APIRouter, Body, Depends, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER, KeyedChain
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 import zstandard as zstd
 
 from ..base.api import (
