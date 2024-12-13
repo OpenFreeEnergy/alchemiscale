@@ -15,11 +15,13 @@ import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER, KeyedChain
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
+import zstandard as zstd
 
 
 from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
+    json_to_gufe,
     use_session,
 )
 from ..compression import decompress_gufe_zstd
@@ -1353,11 +1355,18 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     async def _async_get_protocoldagresult(
         self, protocoldagresultref, transformation, route, compress
     ):
-        pdr_compressed_latin1 = await self._get_resource_async(
+        pdr_latin1_decoded = await self._get_resource_async(
             f"/transformations/{transformation}/{route}/{protocoldagresultref}",
             compress=compress,
         )
-        pdr = decompress_gufe_zstd(pdr_compressed_latin1[0].encode("latin-1"))
+
+        try:
+            # Attempt to decompress the ProtocolDAGResult object
+            pdr_bytes = pdr_latin1_decoded[0].encode("latin-1")
+            pdr = decompress_gufe_zstd(pdr_bytes)
+        except zstd.ZstdError:
+            # If decompress fails, assume it's a UTF-8 encoded JSON string
+            pdr = json_to_gufe(pdr_bytes.decode('utf-8'))
 
         return pdr
 

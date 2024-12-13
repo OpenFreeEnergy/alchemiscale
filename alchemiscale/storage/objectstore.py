@@ -228,7 +228,7 @@ class S3ObjectStore:
             transformation.gufe_key,
             route,
             pdr.key,
-            "obj.json",
+            "obj",
         )
 
         response = self._store_bytes(location, protocoldagresult)
@@ -289,7 +289,7 @@ class S3ObjectStore:
                 transformation.gufe_key,
                 route,
                 protocoldagresult.gufe_key,
-                "obj.json",
+                "obj",
             )
 
         ## TODO: want organization alongside `obj.json` of `ProtocolUnit` gufe_keys

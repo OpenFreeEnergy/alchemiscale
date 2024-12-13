@@ -115,20 +115,25 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     def retrieve_task_transformation(
         self, task: ScopedKey
-    ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
+    ) -> tuple[Transformation, ProtocolDAGResult | None]:
         transformation, protocoldagresult = self._get_resource(
             f"/tasks/{task}/transformation/gufe"
         )
 
         if protocoldagresult is not None:
-            protocoldagresult = decompress_gufe_zstd(
-                protocoldagresult.encode("latin-1")
-            )
 
-        return (
-            json_to_gufe(transformation),
-            protocoldagresult,
-        )
+            protocoldagresult_bytes = protocoldagresult.encode("latin-1")
+
+            try:
+                # Attempt to decompress the ProtocolDAGResult object
+                protocoldagresult = decompress_gufe_zstd(
+                    protocoldagresult_bytes
+                )
+            except zstd.ZstdError:
+                # If decompression fails, assume it's a UTF-8 encoded JSON string
+                protocoldagresult = json_to_gufe(protocoldagresult_bytes.decode('utf-8'))
+
+        return json_to_gufe(transformation), protocoldagresult
 
     def set_task_result(
         self,
