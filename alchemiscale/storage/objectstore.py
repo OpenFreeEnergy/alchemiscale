@@ -22,6 +22,9 @@ from ..models import ScopedKey, Scope
 from .models import ProtocolDAGResultRef
 from ..settings import S3ObjectStoreSettings, get_s3objectstore_settings
 
+# default filename for object store files
+OBJECT_FILENAME = "obj.json.zst"
+
 
 @lru_cache()
 def get_s3os(settings: S3ObjectStoreSettings, endpoint_url=None) -> "S3ObjectStore":
@@ -228,7 +231,7 @@ class S3ObjectStore:
             transformation.gufe_key,
             route,
             pdr.key,
-            "obj",
+            OBJECT_FILENAME,
         )
 
         response = self._store_bytes(location, protocoldagresult)
@@ -289,7 +292,7 @@ class S3ObjectStore:
                 transformation.gufe_key,
                 route,
                 protocoldagresult.gufe_key,
-                "obj",
+                OBJECT_FILENAME,
             )
 
         ## TODO: want organization alongside `obj.json` of `ProtocolUnit` gufe_keys

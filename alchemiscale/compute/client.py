@@ -126,12 +126,12 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
             try:
                 # Attempt to decompress the ProtocolDAGResult object
-                protocoldagresult = decompress_gufe_zstd(
-                    protocoldagresult_bytes
-                )
+                protocoldagresult = decompress_gufe_zstd(protocoldagresult_bytes)
             except zstd.ZstdError:
                 # If decompression fails, assume it's a UTF-8 encoded JSON string
-                protocoldagresult = json_to_gufe(protocoldagresult_bytes.decode('utf-8'))
+                protocoldagresult = json_to_gufe(
+                    protocoldagresult_bytes.decode("utf-8")
+                )
 
         return json_to_gufe(transformation), protocoldagresult
 

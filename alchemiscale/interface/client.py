@@ -1366,7 +1366,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             pdr = decompress_gufe_zstd(pdr_bytes)
         except zstd.ZstdError:
             # If decompress fails, assume it's a UTF-8 encoded JSON string
-            pdr = json_to_gufe(pdr_bytes.decode('utf-8'))
+            pdr = json_to_gufe(pdr_bytes.decode("utf-8"))
 
         return pdr
 

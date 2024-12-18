@@ -1863,13 +1863,13 @@ class TestClient:
         return protocoldagresults
 
     def test_get_transformation_and_network_results_json(
-            self,
-            scope_test,
-            n4js_preloaded,
-            s3os_server,
-            user_client: client.AlchemiscaleClient,
-            network_tyk2,
-            tmpdir,
+        self,
+        scope_test,
+        n4js_preloaded,
+        s3os_server,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+        tmpdir,
     ):
         n4js = n4js_preloaded
 
