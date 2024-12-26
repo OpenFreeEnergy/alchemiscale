@@ -1902,7 +1902,7 @@ class TestClient:
                     transformation_sk.gufe_key,
                     "results",
                     protocoldagresult.key,
-                    "obj",
+                    "obj.json",
                 )
 
                 s3os_server._store_bytes(location, pdr_jb)

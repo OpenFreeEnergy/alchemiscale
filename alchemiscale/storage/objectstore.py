@@ -234,7 +234,7 @@ class S3ObjectStore:
             OBJECT_FILENAME,
         )
 
-        response = self._store_bytes(location, protocoldagresult)
+        self._store_bytes(location, protocoldagresult)
 
         return ProtocolDAGResultRef(
             location=location,
