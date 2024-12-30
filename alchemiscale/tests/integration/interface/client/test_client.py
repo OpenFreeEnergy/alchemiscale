@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime
 from time import sleep
 import os
 from pathlib import Path
@@ -12,7 +13,11 @@ import networkx as nx
 
 from alchemiscale.compression import compress_gufe_zstd
 from alchemiscale.models import ScopedKey, Scope
-from alchemiscale.storage.models import TaskStatusEnum, NetworkStateEnum
+from alchemiscale.storage.models import (
+    ProtocolDAGResultRef,
+    NetworkStateEnum,
+    TaskStatusEnum,
+)
 from alchemiscale.storage.cypher import cypher_list_from_scoped_keys
 from alchemiscale.interface import client
 from alchemiscale.tests.integration.interface.utils import (
@@ -1799,6 +1804,56 @@ class TestClient:
     ### results
 
     @staticmethod
+    def _execute_task(task_scoped_key, n4js, shared_basedir=None, scratch_basedir=None):
+
+        shared_basedir = shared_basedir or Path("shared").absolute()
+        shared_basedir.mkdir(exist_ok=True)
+
+        scratch_basedir = scratch_basedir or Path("scratch").absolute()
+        scratch_basedir.mkdir(exist_ok=True)
+
+        (
+            transformation_sk,
+            extends_protocoldagresultref_sk,
+        ) = n4js.get_task_transformation(task=task_scoped_key, return_gufe=False)
+
+        transformation = n4js.get_gufe(transformation_sk)
+        if extends_protocoldagresultref_sk:
+            extends_protocoldagresultref = n4js.get_gufe(
+                extends_protocoldagresultref_sk
+            )
+            extends_protocoldagresult = s3os_server.pull_protocoldagresult(
+                extends_protocoldagresultref, transformation_sk
+            )
+        else:
+            extends_protocoldagresult = None
+
+        protocoldag = transformation.create(
+            extends=extends_protocoldagresult,
+            name=str(task_scoped_key),
+        )
+
+        shared = shared_basedir / str(protocoldag.key)
+        shared.mkdir()
+
+        scratch = scratch_basedir / str(protocoldag.key)
+        scratch.mkdir()
+
+        protocoldagresult = execute_DAG(
+            protocoldag,
+            shared_basedir=shared,
+            scratch_basedir=scratch,
+            raise_error=False,
+        )
+
+        assert protocoldagresult.transformation_key == transformation.key
+
+        if extends_protocoldagresult:
+            assert protocoldagresult.extends_key == extends_protocoldagresult.key
+
+        return protocoldagresult
+
+    @staticmethod
     def _execute_tasks(tasks, n4js, s3os_server):
         shared_basedir = Path("shared").absolute()
         shared_basedir.mkdir()
@@ -1807,60 +1862,85 @@ class TestClient:
 
         protocoldagresults = []
         for task_sk in tasks:
-            if task_sk is None:
-                continue
-
             # get the transformation and extending protocoldagresult as if we
             # were a compute service
-            (
-                transformation_sk,
-                extends_protocoldagresultref_sk,
-            ) = n4js.get_task_transformation(task=task_sk, return_gufe=False)
-
-            transformation = n4js.get_gufe(transformation_sk)
-            if extends_protocoldagresultref_sk:
-                extends_protocoldagresultref = n4js.get_gufe(
-                    extends_protocoldagresultref_sk
-                )
-                extends_protocoldagresult = s3os_server.pull_protocoldagresult(
-                    extends_protocoldagresultref, transformation_sk
-                )
-            else:
-                extends_protocoldagresult = None
-
-            protocoldag = transformation.create(
-                extends=extends_protocoldagresult,
-                name=str(task_sk),
+            protocoldagresult = TestClient._execute_task(
+                task_sk,
+                n4js,
+                shared_basedir=shared_basedir,
+                scratch_basedir=scratch_basedir,
             )
-
-            shared = shared_basedir / str(protocoldag.key)
-            shared.mkdir()
-
-            scratch = scratch_basedir / str(protocoldag.key)
-            scratch.mkdir()
-
-            protocoldagresult = execute_DAG(
-                protocoldag,
-                shared_basedir=shared,
-                scratch_basedir=scratch,
-                raise_error=False,
-            )
-
-            assert protocoldagresult.transformation_key == transformation.key
-            if extends_protocoldagresult:
-                assert protocoldagresult.extends_key == extends_protocoldagresult.key
-
             protocoldagresults.append(protocoldagresult)
 
-            protocoldagresultref = s3os_server.push_protocoldagresult(
-                compress_gufe_zstd(protocoldagresult), transformation=transformation_sk
-            )
-
-            n4js.set_task_result(
-                task=task_sk, protocoldagresultref=protocoldagresultref
-            )
-
         return protocoldagresults
+
+    @staticmethod
+    def _push_result(task_scoped_key, protocoldagresult, n4js, s3os_server):
+        transformation_sk, _ = n4js.get_task_transformation(
+            task_scoped_key, return_gufe=False
+        )
+        protocoldagresultref = s3os_server.push_protocoldagresult(
+            compress_gufe_zstd(protocoldagresult), transformation=transformation_sk
+        )
+        n4js.set_task_result(
+            task=task_scoped_key, protocoldagresultref=protocoldagresultref
+        )
+        return protocoldagresultref
+
+    # TODO: remove in next major version when to_dict json is no longer supported
+    @staticmethod
+    def _push_result_legacy(task_scoped_key, protocoldagresult, n4js, s3os_server):
+        transformation_scoped_key, _ = n4js.get_task_transformation(
+            task_scoped_key, return_gufe=False
+        )
+        pdr_jb = json.dumps(
+            protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
+        ).encode("utf-8")
+
+        ok = protocoldagresult.ok()
+        route = "results" if ok else "failures"
+
+        location = os.path.join(
+            "protocoldagresult",
+            *transformation_scoped_key.scope.to_tuple(),
+            transformation_scoped_key.gufe_key,
+            route,
+            protocoldagresult.key,
+            "obj.json",
+        )
+
+        s3os_server._store_bytes(location, pdr_jb)
+
+        protocoldagresultref = ProtocolDAGResultRef(
+            location=location,
+            obj_key=protocoldagresult.key,
+            scope=transformation_scoped_key.scope,
+            ok=ok,
+            datetime_created=datetime.utcnow(),
+            creator=None,
+        )
+        n4js.set_task_result(
+            task=task_scoped_key, protocoldagresultref=protocoldagresultref
+        )
+
+        return protocoldagresultref
+
+    @staticmethod
+    def _push_results(
+        task_scoped_keys, protocoldagresults, n4js, s3os_server, legacy=True
+    ):
+        push_function = (
+            TestClient._push_result_legacy if legacy else TestClient._push_result
+        )
+        protocoldagresultrefs = []
+        for task_scoped_key, protocoldagresult in zip(
+            task_scoped_keys, protocoldagresults
+        ):
+            protocoldagresultref = push_function(
+                task_scoped_key, protocoldagresult, n4js, s3os_server
+            )
+            protocoldagresultrefs.append(protocoldagresultref)
+        return protocoldagresultrefs
 
     def test_get_transformation_and_network_results_json(
         self,
@@ -1890,22 +1970,10 @@ class TestClient:
         # execute the actioned tasks and push results directly using statestore and object store
         with tmpdir.as_cwd():
             protocoldagresults = self._execute_tasks(actioned_tasks, n4js, s3os_server)
-            # overwrite what's in the object store
-            for protocoldagresult in protocoldagresults:
-                pdr_jb = json.dumps(
-                    protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
-                ).encode("utf-8")
-
-                location = os.path.join(
-                    "protocoldagresult",
-                    *transformation_sk.scope.to_tuple(),
-                    transformation_sk.gufe_key,
-                    "results",
-                    protocoldagresult.key,
-                    "obj.json",
-                )
-
-                s3os_server._store_bytes(location, pdr_jb)
+            protocoldagresultrefs = self._push_results(
+                actioned_tasks, protocoldagresults, n4js, s3os_server, legacy=True
+            )
+            assert len(protocoldagresultrefs) == len(protocoldagresults) == 3
 
         # clear local gufe registry of pdr objects
         # not critical, but ensures we see the objects that are deserialized
@@ -1919,8 +1987,6 @@ class TestClient:
         )
 
         assert set(protocoldagresults_r) == set(protocoldagresults)
-
-        pass
 
     def test_get_transformation_and_network_results(
         self,
@@ -1950,6 +2016,9 @@ class TestClient:
         # execute the actioned tasks and push results directly using statestore and object store
         with tmpdir.as_cwd():
             protocoldagresults = self._execute_tasks(actioned_tasks, n4js, s3os_server)
+            self._push_results(
+                actioned_tasks, protocoldagresults, n4js, s3os_server, legacy=True
+            )
 
         # clear local gufe registry of pdr objects
         # not critical, but ensures we see the objects that are deserialized
@@ -2049,6 +2118,7 @@ class TestClient:
         # execute the actioned tasks and push results directly using statestore and object store
         with tmpdir.as_cwd():
             protocoldagresults = self._execute_tasks(actioned_tasks, n4js, s3os_server)
+            self._push_results(actioned_tasks, protocoldagresults, n4js, s3os_server)
 
         # clear local gufe registry of pdr objects
         # not critical, but ensures we see the objects that are deserialized
@@ -2122,6 +2192,7 @@ class TestClient:
         # execute the actioned tasks and push results directly using statestore and object store
         with tmpdir.as_cwd():
             protocoldagresults = self._execute_tasks(actioned_tasks, n4js, s3os_server)
+            self._push_results(actioned_tasks, protocoldagresults, n4js, s3os_server)
 
         # clear local gufe registry of pdr objects
         # not critical, but ensures we see the objects that are deserialized
@@ -2188,6 +2259,7 @@ class TestClient:
         # execute the actioned tasks and push results directly using statestore and object store
         with tmpdir.as_cwd():
             protocoldagresults = self._execute_tasks(actioned_tasks, n4js, s3os_server)
+            self._push_results(actioned_tasks, protocoldagresults, n4js, s3os_server)
 
         # clear local gufe registry of pdr objects
         # not critical, but ensures we see the objects that are deserialized
