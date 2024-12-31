@@ -1887,7 +1887,7 @@ class TestClient:
         )
         return protocoldagresultref
 
-    # TODO: remove in next major version when to_dict json is no longer supported
+    # TODO: remove in next major version when to_dict json storage is no longer supported
     @staticmethod
     def _push_result_legacy(task_scoped_key, protocoldagresult, n4js, s3os_server):
         transformation_scoped_key, _ = n4js.get_task_transformation(
@@ -1925,9 +1925,10 @@ class TestClient:
 
         return protocoldagresultref
 
+    # TODO: remove legacy kwarg when to_dict json storage is no longer supported
     @staticmethod
     def _push_results(
-        task_scoped_keys, protocoldagresults, n4js, s3os_server, legacy=True
+        task_scoped_keys, protocoldagresults, n4js, s3os_server, legacy=False
     ):
         push_function = (
             TestClient._push_result_legacy if legacy else TestClient._push_result
@@ -1942,62 +1943,20 @@ class TestClient:
             protocoldagresultrefs.append(protocoldagresultref)
         return protocoldagresultrefs
 
-    def test_get_transformation_and_network_results_json(
-        self,
-        scope_test,
-        n4js_preloaded,
-        s3os_server,
-        user_client: client.AlchemiscaleClient,
-        network_tyk2,
-        tmpdir,
-    ):
-        n4js = n4js_preloaded
-
-        # select the transformation we want to compute
-        an = network_tyk2
-        transformation = list(t for t in an.edges if "_solvent" in t.name)[0]
-
-        network_sk = user_client.get_scoped_key(an, scope_test)
-        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
-
-        # user client : create three independent tasks for the transformation
-        user_client.create_tasks(transformation_sk, count=3)
-
-        # user client : action the tasks for execution
-        all_tasks = user_client.get_transformation_tasks(transformation_sk)
-        actioned_tasks = user_client.action_tasks(all_tasks, network_sk)
-
-        # execute the actioned tasks and push results directly using statestore and object store
-        with tmpdir.as_cwd():
-            protocoldagresults = self._execute_tasks(actioned_tasks, n4js, s3os_server)
-            protocoldagresultrefs = self._push_results(
-                actioned_tasks, protocoldagresults, n4js, s3os_server, legacy=True
-            )
-            assert len(protocoldagresultrefs) == len(protocoldagresults) == 3
-
-        # clear local gufe registry of pdr objects
-        # not critical, but ensures we see the objects that are deserialized
-        # instead of our instances already in memory post-pull
-        for pdr in protocoldagresults:
-            TOKENIZABLE_REGISTRY.pop(pdr.key, None)
-
-        # get back protocoldagresults instead
-        protocoldagresults_r = user_client.get_transformation_results(
-            transformation_sk, return_protocoldagresults=True
-        )
-
-        assert set(protocoldagresults_r) == set(protocoldagresults)
-
+    # TODO: remove mark and legacy parameter when to_dict json storage is no longer supported
+    @pytest.mark.parametrize("legacy", [True, False])
     def test_get_transformation_and_network_results(
         self,
         scope_test,
         n4js_preloaded,
-        s3os_server,
+        s3os_server_fresh,
         user_client: client.AlchemiscaleClient,
         network_tyk2,
         tmpdir,
+        legacy,
     ):
         n4js = n4js_preloaded
+        s3os_server = s3os_server_fresh
 
         # select the transformation we want to compute
         an = network_tyk2
@@ -2017,7 +1976,7 @@ class TestClient:
         with tmpdir.as_cwd():
             protocoldagresults = self._execute_tasks(actioned_tasks, n4js, s3os_server)
             self._push_results(
-                actioned_tasks, protocoldagresults, n4js, s3os_server, legacy=True
+                actioned_tasks, protocoldagresults, n4js, s3os_server, legacy=legacy
             )
 
         # clear local gufe registry of pdr objects
