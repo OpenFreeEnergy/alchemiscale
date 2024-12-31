@@ -306,6 +306,7 @@ class TestComputeClient:
         assert transformation2 == transformation_
         assert extends_protocoldagresult2 == protocoldagresults[0]
 
+    # TODO: Remove in next major release where old to_dict protocoldagresults storage is removed
     def test_set_task_result_legacy(
         self,
         scope_test,
@@ -316,8 +317,9 @@ class TestComputeClient:
         transformation,
         protocoldagresults,
         uvicorn_server,
-        s3os_server,
+        s3os_server_fresh,
     ):
+        s3os_server = s3os_server_fresh
         # register compute service id
         compute_client.register(compute_service_id)
 
