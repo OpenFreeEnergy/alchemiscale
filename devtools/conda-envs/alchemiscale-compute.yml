@@ -18,7 +18,7 @@ dependencies:
   - zstandard
 
   # openmm protocols
-  - feflow=0.1.0
+  - feflow=0.1.1
 
   # additional pins
   - openmm=8.1.2
@@ -26,4 +26,4 @@ dependencies:
   - openff-units=0.2.2
 
   - pip:
-    - git+https://github.com/OpenFreeEnergy/alchemiscale.git@v0.5.2
+    - git+https://github.com/OpenFreeEnergy/alchemiscale.git@v0.5.3
