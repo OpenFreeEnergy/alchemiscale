@@ -2884,7 +2884,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
-    ## task restart policy
+    ## task restart policies
 
     def add_task_restart_patterns(
         self, taskhub: ScopedKey, patterns: list[str], number_of_retries: int
