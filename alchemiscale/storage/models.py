@@ -181,7 +181,7 @@ class TaskRestartPattern(GufeTokenizable):
 
     @classmethod
     def _defaults(cls):
-        raise NotImplementedError
+        return super()._defaults()
 
     @classmethod
     def _from_dict(cls, dct):
