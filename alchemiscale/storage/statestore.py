@@ -3050,7 +3050,8 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_task_restart_patterns(
         self, taskhubs: list[ScopedKey]
     ) -> dict[ScopedKey, set[tuple[str, int]]]:
-        """For a list of TaskHub ScopedKeys, get the associated restart patterns along with the maximum number of retries for each pattern.
+        """For a list of TaskHub ScopedKeys, get the associated restart
+        patterns along with the maximum number of retries for each pattern.
 
         Parameters
         ----------

@@ -136,6 +136,8 @@ class TestTaskRestartPattern(object):
         assert trp_reconstructed.max_retries == original_max_retries
         assert trp_reconstructed.taskhub_scoped_key == original_taskhub_scoped_key
 
+        assert trp_orig is trp_reconstructed
+
 
 class TestTracebacks(object):
 
@@ -146,7 +148,7 @@ class TestTracebacks(object):
         "ProtocolUnitFailure-DEF456",
         "ProtocolUnitFailure-GHI789",
     ]
-    tracebacks_value_error = "`tracebacks` must be a non-empty list of string values"
+    tracebacks_value_error = "`tracebacks` must be a non-empty list of non-empty string values"
 
     def test_empty_string_element(self):
         with pytest.raises(ValueError, match=self.tracebacks_value_error):
@@ -203,3 +205,4 @@ class TestTracebacks(object):
         tb_reconstructed: TaskRestartPattern = TaskRestartPattern.from_dict(tb_dict)
 
         assert tb_reconstructed.tracebacks == self.valid_entry
+        tb_orig is tb_reconstructed

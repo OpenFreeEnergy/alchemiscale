@@ -217,15 +217,14 @@ class Tracebacks(GufeTokenizable):
         self, tracebacks: List[str], source_keys: List[GufeKey], failure_keys: List[GufeKey]
     ):
         value_error = ValueError(
-            "`tracebacks` must be a non-empty list of string values"
+            "`tracebacks` must be a non-empty list of non-empty string values"
         )
         if not isinstance(tracebacks, list) or tracebacks == []:
             raise value_error
-        else:
-            # in the case where tracebacks is not an iterable, this will raise a TypeError
-            all_string_values = all([isinstance(value, str) for value in tracebacks])
-            if not all_string_values or "" in tracebacks:
-                raise value_error
+
+        all_string_values = all([isinstance(value, str) for value in tracebacks])
+        if not all_string_values or "" in tracebacks:
+            raise value_error
 
         # TODO: validate
         self.tracebacks = tracebacks

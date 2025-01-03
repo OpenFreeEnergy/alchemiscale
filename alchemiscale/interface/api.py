@@ -1045,12 +1045,10 @@ def get_task_restart_patterns(
 
     restart_patterns = n4js.get_task_restart_patterns(taskhub_scoped_keys)
 
-    as_str = {}
-    for key, value in restart_patterns.items():
-        network_scoped_key = taskhub_network_map[key]
-        as_str[str(network_scoped_key)] = value
+    network_patterns = {str(taskhub_network_map[key]): value 
+                        for key, value in restart_patterns.items()}
 
-    return as_str
+    return network_patterns
 
 
 @router.post("/networks/{network_scoped_key}/restartpatterns/maxretries")
