@@ -207,14 +207,14 @@ class Tracebacks(GufeTokenizable):
     ----------
     tracebacks: list[str]
         The tracebacks returned with the ProtocolUnitFailures.
-    source_keys:list[ScopedKey]
-        The ScopedKeys of the Protocols that failed.
-    failure_keys: list[ScopedKey]
-        The ScopedKeys of the ProtocolUnitFailures.
+    source_keys: list[GufeKey]
+        The GufeKeys of the ProtocolUnits that failed.
+    failure_keys: list[GufeKey]
+        The GufeKeys of the ProtocolUnitFailures.
     """
 
     def __init__(
-        self, tracebacks: List[str], source_keys: List[str], failure_keys: List[str]
+        self, tracebacks: List[str], source_keys: List[GufeKey], failure_keys: List[GufeKey]
     ):
         value_error = ValueError(
             "`tracebacks` must be a non-empty list of string values"
