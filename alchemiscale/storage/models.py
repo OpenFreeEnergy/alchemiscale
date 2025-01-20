@@ -214,7 +214,10 @@ class Tracebacks(GufeTokenizable):
     """
 
     def __init__(
-        self, tracebacks: List[str], source_keys: List[GufeKey], failure_keys: List[GufeKey]
+        self,
+        tracebacks: List[str],
+        source_keys: List[GufeKey],
+        failure_keys: List[GufeKey],
     ):
         value_error = ValueError(
             "`tracebacks` must be a non-empty list of non-empty string values"

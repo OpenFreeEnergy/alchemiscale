@@ -148,7 +148,9 @@ class TestTracebacks(object):
         "ProtocolUnitFailure-DEF456",
         "ProtocolUnitFailure-GHI789",
     ]
-    tracebacks_value_error = "`tracebacks` must be a non-empty list of non-empty string values"
+    tracebacks_value_error = (
+        "`tracebacks` must be a non-empty list of non-empty string values"
+    )
 
     def test_empty_string_element(self):
         with pytest.raises(ValueError, match=self.tracebacks_value_error):

@@ -1045,8 +1045,9 @@ def get_task_restart_patterns(
 
     restart_patterns = n4js.get_task_restart_patterns(taskhub_scoped_keys)
 
-    network_patterns = {str(taskhub_network_map[key]): value 
-                        for key, value in restart_patterns.items()}
+    network_patterns = {
+        str(taskhub_network_map[key]): value for key, value in restart_patterns.items()
+    }
 
     return network_patterns
 
