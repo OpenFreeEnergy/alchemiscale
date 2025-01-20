@@ -1448,7 +1448,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         q = """
         // get our TaskHub
         UNWIND $task_scoped_keys as task_sk
-        MATCH (th:TaskHub {{_scoped_key: $taskhub_scoped_key}})-[:PERFORMS]->(an:AlchemicalNetwork)
+        MATCH (th:TaskHub {_scoped_key: $taskhub_scoped_key})-[:PERFORMS]->(an:AlchemicalNetwork)
 
         // get the task we want to add to the hub; check that it connects to same network
         MATCH (task:Task {_scoped_key: task_sk})-[:PERFORMS]->(:Transformation|NonTransformation)<-[:DEPENDS_ON]-(an)
