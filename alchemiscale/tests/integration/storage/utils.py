@@ -15,10 +15,7 @@ def tasks_are_not_actioned_on_taskhub(
 
     actioned_tasks = n4js.get_taskhub_actioned_tasks([taskhub_scoped_key])
 
-    for task in task_scoped_keys:
-        if task in actioned_tasks[0].keys():
-            return False
-    return True
+    return set(actioned_tasks[0].keys()).isdisjoint(set(task_scoped_keys))
 
 
 def tasks_are_errored(n4js: Neo4jStore, task_scoped_keys: list[ScopedKey]) -> bool:

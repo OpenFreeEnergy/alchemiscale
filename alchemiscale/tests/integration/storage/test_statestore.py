@@ -2145,16 +2145,10 @@ class TestNeo4jStore(TestStateStore):
 
             assert len(results.records) == 1
 
-            target_method = {
-                "complete": n4js.set_task_complete,
-                "invalid": n4js.set_task_invalid,
-                "deleted": n4js.set_task_deleted,
-            }
-
             if status == "complete":
                 n4js.set_task_running(task_scoped_keys)
 
-            assert target_method[status](task_scoped_keys)[0] is not None
+            assert n4js.set_task_status(task_scoped_keys)[0] is not None
 
             query = """
             MATCH (:TaskRestartPattern)-[:APPLIES]->(task:Task)
@@ -2187,6 +2181,7 @@ class TestNeo4jStore(TestStateStore):
                     n4js.action_tasks(task_sks, taskhub_scoped_key)
 
                 taskhub_sks.append(taskhub_scoped_key)
+
             # test a shared pattern with and without shared number of restarts
             # this will create 6 unique patterns
             for network_index in range(3):
@@ -2235,7 +2230,7 @@ class TestNeo4jStore(TestStateStore):
 
             records = n4js.execute_query(applies_query).records
 
-            ### one record per taskhub, each with six num_applied
+            ### one record per taskhub with tasks actioned, each with six num_applied
             assert len(records) == 2
             assert records[0]["num_applied"] == records[1]["num_applied"] == 6
 
@@ -2398,7 +2393,6 @@ class TestNeo4jStore(TestStateStore):
 
         def test_resolve_task_restarts(
             self,
-            scope_test: Scope,
             n4js_task_restart_policy: Neo4jStore,
         ):
             n4js = n4js_task_restart_policy

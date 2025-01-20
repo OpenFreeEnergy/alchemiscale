@@ -2184,11 +2184,13 @@ class TestTaskRestartPolicy:
 
         assert len(results.records) == 3
 
-        patterns_list = self.default_patterns[:]
+        patterns_list = list(self.default_patterns)
         for record in results.records:
             trp = record["trp"]
             assert trp["pattern"] in patterns_list
             patterns_list.remove(trp["pattern"])
+
+        assert len(patterns_list) == 0
 
     def test_get_task_restart_patterns(
         self,
@@ -2223,7 +2225,7 @@ class TestTaskRestartPolicy:
         # check that we have the expected 3 restart patterns
         assert user_client.get_task_restart_patterns(network_scoped_key) == expected
 
-        pattern_to_remove = next(expected.__iter__())
+        pattern_to_remove = next(iter(expected))
         user_client.remove_task_restart_patterns(
             network_scoped_key, [pattern_to_remove]
         )
