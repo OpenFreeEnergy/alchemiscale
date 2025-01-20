@@ -514,42 +514,42 @@ If you’re feeling confident, you could set all errored :py:class:`~alchemiscal
 Re-running Errored Tasks with Task Restart Patterns
 ***************************************************
 
-Re-running errored :py:class`~alchemiscale.storage.models.Task`\s manually for known failure modes (such as those described in the previous section) quickly becomes tedious, especially for large networks.
-Alternatively, you can add `regular expression <https://en.wikipedia.org/wiki/Regular_expression>`_ strings as Task restart patterns to an :external+gufe:py:class`~gufe.network.AlchemicalNetwork`.
-These patterns _enforce_ the :external+gufe:py:class`~gufe.network.AlchemicalNetwork` and there is no limit to the number of patterns that can enforce an :external+gufe:py:class`~gufe.network.AlchemicalNetwork`.
-As a result, :py:class`~alchemiscale.storage.models.Task`\s actioned on that :external+gufe:py:class`~gufe.network.AlchemicalNetwork` now support automatic restarts if the :py:class`~alchemiscale.storage.models.Task` fails during any part of its execution, provided that an enforcing pattern matches a traceback returned by any of the :py:class`~alchemiscale.storage.models.Task`\'s returned :external+gufe:py:class`~gufe.protocols.ProtocolUnitFailure`\s.
+Re-running errored :py:class:`~alchemiscale.storage.models.Task`\s manually for known failure modes (such as those described in the previous section) quickly becomes tedious, especially for large networks.
+Alternatively, you can add `regular expression <https://en.wikipedia.org/wiki/Regular_expression>`_ strings as :py:class:`~alchemiscale.storage.models.Task` restart patterns to an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
+:py:class:`~alchemiscale.storage.models.Task`\s actioned on that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` will be automatically restarted if the :py:class:`~alchemiscale.storage.models.Task` fails during any part of its execution, provided that an enforcing pattern matches a traceback within the :py:class:`~alchemiscale.storage.models.Task`\'s failed :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`.
 The number of restarts is controlled by the ``num_allowed_restarts`` parameter of the :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.add_task_restart_patterns` method.
-If a :py:class`~alchemiscale.storage.models.Task` is restarted more than ``num_allowed_restarts`` times, the :py:class`~alchemiscale.storage.models.Task` is canceled and left with an ``error`` status.
-As an example, if you wanted to rerun any :py:class`~alchemiscale.storage.models.Task` that failed with a ``RuntimeError`` _or_ a ``MemoryError`` and attempt it at least 5 times, you could add the following patterns:::
+If a :py:class:`~alchemiscale.storage.models.Task` is restarted more than ``num_allowed_restarts`` times, the :py:class:`~alchemiscale.storage.models.Task` is canceled on that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` and left in an ``error`` status.
 
-  >>> asc.add_task_restart_patterns(network_scoped_key, [r"RuntimeError: .+", r"MemoryError: Unable to allocate \d+ GiB"], 5)
+As an example, if you wanted to rerun any :py:class:`~alchemiscale.storage.models.Task` that failed with a ``RuntimeError`` or a ``MemoryError`` and attempt it at least 5 times, you could add the following patterns::
+
+  >>> asc.add_task_restart_patterns(an_sk, [r"RuntimeError: .+", r"MemoryError: Unable to allocate \d+ GiB"], 5)
 
 Providing too general a pattern, such as the example above, you may consume compute resources on failures that are unavoidable.
-On the other hand, an overly strict pattern (such as specifying explicit Gufe keys) will likely do nothing.
-Therefore, it is best to find a balance in your patterns that matches your use-case.
+On the other hand, an overly strict pattern (such as specifying explicit ``gufe`` keys) will likely do nothing.
+Therefore, it is best to find a balance in your patterns that matches your use case.
 
-Restart patterns enforcing an :external+gufe:py:class`~gufe.network.AlchemicalNetwork` can be retrieved with::
+Restart patterns enforcing an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` can be retrieved with::
 
-  >>> asc.get_task_restart_patterns(network_scoped_key)
+  >>> asc.get_task_restart_patterns(an_sk)
   {"RuntimeError: .+": 5, "MemoryError: Unable to allocate \d+ GiB": 5}
 
-The number of allowed restarts can be modified::
+The number of allowed restarts can also be modified::
 
-  >>> asc.set_task_restart_patterns_allowed_restarts(network_scoped_key, ["RuntimeError: .+"], 3)
-  >>> asc.set_task_restart_patterns_allowed_restarts(network_scoped_key, ["MemoryError: Unable to allocate \d+ GiB"], 2)
-  >>> asc.get_task_restart_patterns(network_scoped_key)
+  >>> asc.set_task_restart_patterns_allowed_restarts(an_sk, ["RuntimeError: .+"], 3)
+  >>> asc.set_task_restart_patterns_allowed_restarts(an_sk, ["MemoryError: Unable to allocate \d+ GiB"], 2)
+  >>> asc.get_task_restart_patterns(an_sk)
   {"RuntimeError: .+": 3, "MemoryError: Unable to allocate \d+ GiB": 2}
 
 Patterns can be removed by specifying the patterns in a list::
 
-  >>> asc.remove_task_restart_patterns(network_scoped_key, ["MemoryError: Unable to allocate \d+ GiB"])
-  >>> asc.get_task_restart_patterns(network_scoped_key)
+  >>> asc.remove_task_restart_patterns(an_sk, ["MemoryError: Unable to allocate \d+ GiB"])
+  >>> asc.get_task_restart_patterns(an_sk)
   {"RuntimeError: .+": 3}
 
 Or by clearing all enforcing patterns::
 
-  >>> asc.clear_task_restart_patterns(network_scoped_key)
-  >>> asc.get_task_restart_patterns(network_scoped_key)
+  >>> asc.clear_task_restart_patterns(an_sk)
+  >>> asc.get_task_restart_patterns(an_sk)
   {}
 
 
