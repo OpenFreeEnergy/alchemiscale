@@ -3046,7 +3046,6 @@ class Neo4jStore(AlchemiscaleStateStore):
             max_retries=max_retries,
         )
 
-    # TODO: validation of taskhubs variable, will fail in weird ways if not enforced
     def get_task_restart_patterns(
         self, taskhubs: list[ScopedKey]
     ) -> dict[ScopedKey, set[tuple[str, int]]]:
