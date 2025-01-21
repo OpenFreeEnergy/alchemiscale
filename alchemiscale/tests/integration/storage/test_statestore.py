@@ -2579,14 +2579,6 @@ class TestNeo4jStore(TestStateStore):
             # it should be waiting
             assert tasks_are_waiting(n4js, [task_to_wait])
 
-        @pytest.mark.xfail(raises=NotImplementedError)
-        def test_task_actioning_applies_relationship(self):
-            raise NotImplementedError
-
-        @pytest.mark.xfail(raises=NotImplementedError)
-        def test_task_deaction_applies_relationship(self):
-            raise NotImplementedError
-
     ### authentication
 
     @pytest.mark.parametrize(
