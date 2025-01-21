@@ -1197,6 +1197,8 @@ class TestNeo4jStore(TestStateStore):
             query, taskhub_scoped_key=str(taskhub_sk)
         ).records[0]["applies_count"]
 
+        assert applies_count == 20
+
         query = """
         MATCH (:TaskRestartPattern)-[applies:APPLIES]->(:Task)
         RETURN applies
