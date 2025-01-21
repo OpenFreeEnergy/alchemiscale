@@ -194,12 +194,6 @@ class TaskRestartPattern(GufeTokenizable):
             "taskhub_scoped_key": self.taskhub_scoped_key,
         }
 
-    # TODO: should this also compare taskhub scoped keys?
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        return self.pattern == other.pattern
-
 
 class Tracebacks(GufeTokenizable):
     """
