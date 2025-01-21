@@ -2148,7 +2148,10 @@ class TestNeo4jStore(TestStateStore):
             if status == "complete":
                 n4js.set_task_running(task_scoped_keys)
 
-            assert n4js.set_task_status(task_scoped_keys, status)[0] is not None
+            assert (
+                n4js.set_task_status(task_scoped_keys, TaskStatusEnum[status])[0]
+                is not None
+            )
 
             query = """
             MATCH (:TaskRestartPattern)-[:APPLIES]->(task:Task)
