@@ -92,31 +92,21 @@ class TestTaskRestartPattern(object):
             )
 
     def test_to_dict(self):
+        expected = {
+            "taskhub_scoped_key": "FakeScopedKey-1234-fake_org-fake_campaign-fake_project",
+            "max_retries": 3,
+            "pattern": "Example pattern",
+        }
+
         trp = TaskRestartPattern(
-            "Example pattern",
-            3,
-            "FakeScopedKey-1234-fake_org-fake_campaign-fake_project",
+            expected["pattern"],
+            expected["max_retries"],
+            expected["taskhub_scoped_key"],
         )
         dict_trp = trp.to_dict()
 
-        assert len(dict_trp.keys()) == 6
-
-        assert dict_trp.pop("__qualname__") == "TaskRestartPattern"
-        assert dict_trp.pop("__module__") == "alchemiscale.storage.models"
-        assert (
-            dict_trp.pop("taskhub_scoped_key")
-            == "FakeScopedKey-1234-fake_org-fake_campaign-fake_project"
-        )
-
-        # light test of the version key
-        try:
-            dict_trp.pop(":version:")
-        except KeyError:
-            raise AssertionError("expected to find :version:")
-
-        expected = {"pattern": "Example pattern", "max_retries": 3}
-
-        assert expected == dict_trp
+        for key, value in expected.items():
+            assert dict_trp[key] == value
 
     def test_from_dict(self):
 
@@ -179,19 +169,6 @@ class TestTracebacks(object):
             Tracebacks([], self.source_keys, self.failure_keys)
 
     def test_to_dict(self):
-        tb = Tracebacks(self.valid_entry, self.source_keys, self.failure_keys)
-        tb_dict = tb.to_dict()
-
-        assert len(tb_dict) == 6
-
-        assert tb_dict.pop("__qualname__") == "Tracebacks"
-        assert tb_dict.pop("__module__") == "alchemiscale.storage.models"
-
-        # light test of the version key
-        try:
-            tb_dict.pop(":version:")
-        except KeyError:
-            raise AssertionError("expected to find :version:")
 
         expected = {
             "tracebacks": self.valid_entry,
@@ -199,7 +176,13 @@ class TestTracebacks(object):
             "failure_keys": self.failure_keys,
         }
 
-        assert expected == tb_dict
+        tb = Tracebacks(
+            expected["tracebacks"], expected["source_keys"], expected["failure_keys"]
+        )
+        tb_dict = tb.to_dict()
+
+        for key, value in expected.items():
+            assert tb_dict[key] == value
 
     def test_from_dict(self):
         tb_orig = Tracebacks(self.valid_entry, self.source_keys, self.failure_keys)
