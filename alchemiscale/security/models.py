@@ -30,9 +30,10 @@ class CredentialedEntity(BaseModel):
 class ScopedIdentity(BaseModel):
     identifier: str
     disabled: bool = False
-    scopes: List[Union[Scope, str]] = []
+    scopes: List[str] = []
 
-    @field_validator("scopes")
+    @field_validator("scopes", mode="before")
+    @classmethod
     def cast_scopes_to_str(cls, scopes):
         """Ensure that each scope object is correctly cast to its str representation"""
         scopes_ = []

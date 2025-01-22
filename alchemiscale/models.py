@@ -4,7 +4,7 @@
 
 """
 
-from typing import Optional, Union
+from typing import Optional, Union, Any
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from gufe.tokenization import GufeKey
 from re import fullmatch
@@ -65,19 +65,23 @@ class Scope(BaseModel):
         return v
 
     @field_validator("org")
+    @classmethod
     def valid_org(cls, v):
         return cls._validate_component(v, "org")
 
     @field_validator("campaign")
+    @classmethod
     def valid_campaign(cls, v):
         return cls._validate_component(v, "campaign")
 
     @field_validator("project")
+    @classmethod
     def valid_project(cls, v):
         return cls._validate_component(v, "project")
 
     @model_validator(mode="before")
-    def check_scope_hierarchy(cls, values):
+    @classmethod
+    def check_scope_hierarchy(cls, values: Any) -> Any:
         if not _hierarchy_valid(values):
             raise InvalidScopeError(
                 f"Invalid scope hierarchy: {values}, cannot specify wildcard ('*')"
@@ -136,6 +140,7 @@ class ScopedKey(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     @field_validator("gufe_key")
+    @classmethod
     def gufe_key_validator(cls, v):
         v = str(v)
 
