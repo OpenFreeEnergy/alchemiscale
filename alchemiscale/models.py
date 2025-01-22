@@ -8,6 +8,8 @@ from typing import Optional, Union
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from gufe.tokenization import GufeKey
 from re import fullmatch
+import unicodedata
+import string
 
 
 class Scope(BaseModel):
@@ -115,6 +117,9 @@ class Scope(BaseModel):
         return all(self.to_tuple())
 
 
+class InvalidGufeKeyError(ValueError): ...
+
+
 class ScopedKey(BaseModel):
     """Unique identifier for GufeTokenizables in state store.
 
@@ -131,8 +136,26 @@ class ScopedKey(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     @field_validator("gufe_key")
-    def cast_gufe_key(cls, v):
-        return GufeKey(v)
+    def gufe_key_validator(cls, v):
+        v = str(v)
+
+        # GufeKey is of form <prefix>-<hex>
+        try:
+            _prefix, _token = v.split("-")
+        except ValueError:
+            raise InvalidGufeKeyError("gufe_key must be of the form '<prefix>-<hex>'")
+
+        # Normalize the input to NFC form
+        v_normalized = unicodedata.normalize("NFC", v)
+
+        # Allowed characters: letters, numbers, underscores, hyphens
+        allowed_chars = set(string.ascii_letters + string.digits + "_-")
+
+        if not set(v_normalized).issubset(allowed_chars):
+            raise InvalidGufeKeyError("gufe_key contains invalid characters")
+
+        # Cast to GufeKey
+        return GufeKey(v_normalized)
 
     def __repr__(self):  # pragma: no cover
         return f"<ScopedKey('{str(self)}')>"
@@ -151,7 +174,11 @@ class ScopedKey(BaseModel):
 
     @classmethod
     def from_str(cls, string):
-        prefix, token, org, campaign, project = string.split("-")
+        try:
+            prefix, token, org, campaign, project = string.split("-")
+        except ValueError:
+            raise ValueError("input does not appear to be a `ScopedKey`")
+
         gufe_key = GufeKey(f"{prefix}-{token}")
 
         return cls(gufe_key=gufe_key, org=org, campaign=campaign, project=project)

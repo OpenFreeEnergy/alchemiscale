@@ -13,7 +13,7 @@ from functools import lru_cache
 from async_lru import alru_cache
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER, KeyedChain
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 
 
@@ -29,7 +29,6 @@ from ..storage.models import (
 )
 from ..strategies import Strategy
 from ..validators import validate_network_nonself
-from ..keyedchain import KeyedChain
 
 from warnings import warn
 
@@ -88,7 +87,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 "Scope for a ScopedKey must be specific; it cannot contain wildcards."
             )
 
-    def check_exists(self, scoped_key: ScopedKey) -> bool:
+    def check_exists(self, scoped_key: ScopedKey | str) -> bool:
         """Returns ``True`` if the given ScopedKey represents an object in the database."""
         return self._get_resource(f"/exists/{scoped_key}")
 

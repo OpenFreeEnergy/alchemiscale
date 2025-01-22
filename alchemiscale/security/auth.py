@@ -4,21 +4,68 @@
 
 """
 
-from datetime import datetime, timedelta
-from typing import Union, Optional
 import secrets
+import base64
+import hashlib
+from datetime import datetime, timedelta
+from typing import Optional, Union
 
+import bcrypt
 from fastapi import HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel
 
-from .models import Token, TokenData, CredentialedEntity
+from .models import CredentialedEntity, Token, TokenData
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# we set a max size to avoid denial-of-service attacks
+# since an extremely large secret attempted by an attacker can take
+# increasing amounts of time or memory to validate;
+# this is deliberately higher than any reasonable key length
+# this is the same max size that `passlib` defaults to
+MAX_SECRET_SIZE = 4096
+# Bcrypt truncates the secret at first NULL it encounters. For this reason,
+# passlib forbids NULL bytes in the secret. This is not necessary for backwards
+# compatibility, but we follow passlib's lead.
+_BNULL = b"\x00"
+
+
+class BcryptPasswordHandler(object):
+
+    def __init__(self, rounds: int = 12, ident: str = "2b"):
+        self.rounds = rounds
+        self.ident = ident
+
+    def hash(self, key: str) -> str:
+        validate_secret(key)
+
+        # generate a salt unique to this key
+        salt = bcrypt.gensalt(rounds=self.rounds, prefix=self.ident.encode("ascii"))
+        hashed_salted = bcrypt.hashpw(key.encode("utf-8"), salt)
+
+        return hashed_salted.decode("utf-8")
+
+    def verify(self, key: str, hashed_salted: str) -> bool:
+        validate_secret(key)
+
+        return bcrypt.checkpw(key.encode("utf-8"), hashed_salted.encode("utf-8"))
+
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+pwd_context = BcryptPasswordHandler()
+
+
+def validate_secret(secret: str):
+    """ensure secret has correct type & size"""
+    if not isinstance(secret, str):
+        raise TypeError("secret must be a string")
+    if len(secret) > MAX_SECRET_SIZE:
+        raise ValueError(
+            f"secret is too long, maximum length is {MAX_SECRET_SIZE} characters"
+        )
+    if _BNULL in secret.encode("utf-8"):
+        raise ValueError("secret contains NULL byte")
 
 
 def generate_secret_key():

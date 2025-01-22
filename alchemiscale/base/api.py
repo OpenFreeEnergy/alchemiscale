@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi import status as http_status
 from fastapi.routing import APIRoute
 from fastapi.security import OAuth2PasswordRequestForm
-from gufe.tokenization import JSON_HANDLER, GufeTokenizable
+from gufe.tokenization import JSON_HANDLER, GufeTokenizable, KeyedChain
 
 from ..settings import (
     JWTSettings,
@@ -32,7 +32,6 @@ from ..security.auth import (
     oauth2_scheme,
 )
 from ..security.models import Token, TokenData, CredentialedEntity
-from ..keyedchain import KeyedChain
 
 
 def validate_scopes(scope: Scope, token: TokenData) -> None:

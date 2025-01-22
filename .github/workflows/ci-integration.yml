@@ -27,11 +27,12 @@ jobs:
       matrix:
         os: ['ubuntu']
         python-version:
-          - "3.9"
           - "3.10"
+          - "3.11"
+          - "3.12"
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Install environment
         uses: mamba-org/setup-micromamba@v1
@@ -53,10 +54,11 @@ jobs:
           pytest -v --cov=alchemiscale --cov-report=xml alchemiscale/tests
 
       - name: codecov
-        if: ${{ github.repository == 'openforcefield/alchemiscale'
+        if: ${{ github.repository == 'OpenFreeEnergy/alchemiscale'
                 && github.event != 'schedule' }}
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v4
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           file: coverage.xml
           fail_ci_if_error: False
           verbose: True

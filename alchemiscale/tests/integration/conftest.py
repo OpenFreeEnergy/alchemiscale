@@ -103,7 +103,7 @@ class TestProfile:
 
 # TODO: test with full certificates
 neo4j_deployment_profiles = [
-    DeploymentProfile(release=(5, 16), topology="CE", schemes=["bolt"]),
+    DeploymentProfile(release=(5, 25), topology="CE", schemes=["bolt"]),
 ]
 
 if NEO4J_VERSION == "LATEST":
@@ -221,6 +221,20 @@ def s3os(s3objectstore_settings):
 
 # test alchemical networks
 
+
+## define varying protocols to simulate protocol variety
+class DummyProtocolA(DummyProtocol):
+    pass
+
+
+class DummyProtocolB(DummyProtocol):
+    pass
+
+
+class DummyProtocolC(DummyProtocol):
+    pass
+
+
 # TODO: add in atom mapping once `gufe`#35 is settled
 
 
@@ -251,7 +265,7 @@ def network_tyk2():
         Transformation(
             stateA=complexes[edge[0]],
             stateB=complexes[edge[1]],
-            protocol=DummyProtocol(settings=DummyProtocol.default_settings()),
+            protocol=DummyProtocolA(settings=DummyProtocolA.default_settings()),
             name=f"{edge[0]}_to_{edge[1]}_complex",
         )
         for edge in tyk2s.connections
@@ -260,7 +274,7 @@ def network_tyk2():
         Transformation(
             stateA=solvated[edge[0]],
             stateB=solvated[edge[1]],
-            protocol=DummyProtocol(settings=DummyProtocol.default_settings()),
+            protocol=DummyProtocolB(settings=DummyProtocolB.default_settings()),
             name=f"{edge[0]}_to_{edge[1]}_solvent",
         )
         for edge in tyk2s.connections
@@ -270,7 +284,7 @@ def network_tyk2():
     for cs in list(solvated.values()) + list(complexes.values()):
         nt = NonTransformation(
             system=cs,
-            protocol=DummyProtocol(DummyProtocol.default_settings()),
+            protocol=DummyProtocolC(DummyProtocolC.default_settings()),
             name=f"f{cs.name}_nt",
         )
         nontransformations.append(nt)

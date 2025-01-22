@@ -180,7 +180,7 @@ This is directly analogous to the way users interact with ``alchemiscale`` via t
 Like the ``AlchemiscaleClient``, the ``AlchemiscaleComputeClient`` automatically handles authentication and JWT refreshes, retries, etc.
 
 
-.. _this template configuration: https://github.com/openforcefield/alchemiscale/blob/main/devtools/configs/synchronous-compute-settings.yaml
+.. _this template configuration: https://github.com/OpenFreeEnergy/alchemiscale/blob/main/devtools/configs/synchronous-compute-settings.yaml
 
 
 .. _library-layout:
@@ -248,10 +248,10 @@ The issue also functions as a convenient *anchor point* for maintainers to triag
 
 If the feature is of broad interest, or of interest to the maintainers themselves, you may find you don't have to implement it at all!
 
-.. _developed openly on GitHub: https://github.com/openforcefield/alchemiscale
-.. _New Contributors: https://github.com/openforcefield/alchemiscale/discussions/categories/new-contributors
-.. _open an issue: https://github.com/openforcefield/alchemiscale/issues
-.. _upcoming milestone: https://github.com/openforcefield/alchemiscale/milestones
+.. _developed openly on GitHub: https://github.com/OpenFreeEnergy/alchemiscale
+.. _New Contributors: https://github.com/OpenFreeEnergy/alchemiscale/discussions/categories/new-contributors
+.. _open an issue: https://github.com/OpenFreeEnergy/alchemiscale/issues
+.. _upcoming milestone: https://github.com/OpenFreeEnergy/alchemiscale/milestones
 
 Setting up your development environment
 =======================================
@@ -263,7 +263,7 @@ To develop new features, fix bugs, and advance the ``alchemiscale`` codebase, yo
 
 1. Clone the repository to your local machine::
 
-    $ git clone git@github.com:openforcefield/alchemiscale.git
+    $ git clone git@github.com:OpenFreeEnergy/alchemiscale.git
     $ cd alchemiscale
 
 2. Create a conda environment for running the test suite, preferrably with `mamba`_, and activate it::
@@ -294,5 +294,5 @@ Please be patient, and understand that it may take some time (weeks, even months
 
 
 .. _mamba: https://github.com/conda-forge/miniforge#mambaforge
-.. _known issues with developing on Mac: https://github.com/openforcefield/alchemiscale/issues/92
+.. _known issues with developing on Mac: https://github.com/OpenFreeEnergy/alchemiscale/issues/92
 .. _GitHub CLI: https://cli.github.com/

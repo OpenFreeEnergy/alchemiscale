@@ -2,7 +2,7 @@ import pytest
 
 from pydantic import ValidationError
 
-from alchemiscale.models import Scope
+from alchemiscale.models import Scope, ScopedKey
 
 
 @pytest.mark.parametrize(
@@ -101,3 +101,35 @@ def test_scope_non_alphanumeric_invalid(scope_string):
 )
 def test_underscore_scopes_valid(scope_string):
     scope = Scope.from_str(scope_string)
+
+
+@pytest.mark.parametrize(
+    "gufe_key",
+    [
+        "White Space-token",
+        "WhiteSpace-tok en",
+        "NoToken",
+        "Unicode-\u0027MATCH",
+        "CredentialedEntity) DETACH DELETE n //",
+        "BadPrefix-token`backtick",
+    ],
+)
+def test_gufe_key_invalid(gufe_key):
+    with pytest.raises(ValidationError):
+        ScopedKey(
+            gufe_key=gufe_key, org="org1", campaign="campaignA", project="projectI"
+        )
+
+
+@pytest.mark.parametrize(
+    "gufe_key",
+    [
+        "ClassName-uuid4hex",
+        "DummyProtocol-1234567890abcdef",
+        "DummyProtocol-1234567890abcdef41234567890abcdef",
+    ],
+)
+def test_gufe_key_valid(gufe_key):
+    scoped_key = ScopedKey(
+        gufe_key=gufe_key, org="org1", campaign="campaignA", project="projectI"
+    )

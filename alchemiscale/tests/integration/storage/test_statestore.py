@@ -3,6 +3,7 @@ import random
 from typing import List, Dict
 from pathlib import Path
 from itertools import chain
+from functools import reduce
 
 import pytest
 from gufe import AlchemicalNetwork
@@ -26,6 +27,8 @@ from alchemiscale.security.models import (
     CredentialedComputeIdentity,
 )
 from alchemiscale.security.auth import hash_key
+
+from ..conftest import DummyProtocolA, DummyProtocolB, DummyProtocolC
 
 
 class TestStateStore: ...
@@ -255,6 +258,59 @@ class TestNeo4jStore(TestStateStore):
         assert len(n4js.query_transformations(scope=multiple_scopes[0])) == len(
             network_tyk2.edges
         )
+        assert (
+            len(n4js.query_transformations(name="lig_ejm_31_to_lig_ejm_50_complex"))
+            == 2
+        )
+        assert (
+            len(
+                n4js.query_transformations(
+                    scope=multiple_scopes[0], name="lig_ejm_31_to_lig_ejm_50_complex"
+                )
+            )
+            == 1
+        )
+
+    def test_query_transformations_exploit(self, n4js, multiple_scopes, network_tyk2):
+        # This test is to show that common cypher exploits are mitigated by using parameters
+
+        an = network_tyk2
+
+        n4js.assemble_network(an, multiple_scopes[0])
+        n4js.assemble_network(an, multiple_scopes[1])
+
+        malicious_name = """'})
+        WITH {_org: '', _campaign: '', _project: '', _gufe_key: ''} AS n
+        RETURN n
+        UNION
+        MATCH (m) DETACH DELETE m
+        WITH {_org: '', _campaign: '', _project: '', _gufe_key: ''} AS n
+        RETURN n
+        UNION
+        CREATE (mark:InjectionMark {_scoped_key: 'InjectionMark-12345-test-testcamp-testproj'})
+        WITH {_org: '', _campaign: '', _project: '', _gufe_key: ''} AS n // """
+        try:
+            n4js.query_transformations(name=malicious_name)
+        except AttributeError as e:
+            # With old _query, AttributeError would be thrown AFTER the transaction has finished, and the database is already corrupted
+            assert "'dict' object has no attribute 'labels'" in str(e)
+            assert len(n4js.query_transformations(scope=multiple_scopes[0])) == 0
+
+        mark_from__query = n4js._query(qualname="InjectionMark")
+        # Just to be double sure, check explicitly
+        q = """
+            match (m:InjectionMark)
+            return m
+            """
+        mark_explicit = n4js.execute_query(q).records
+
+        assert len(mark_from__query) == len(mark_explicit) == 0
+
+        assert len(n4js.query_transformations()) == len(network_tyk2.edges) * 2
+        assert len(n4js.query_transformations(scope=multiple_scopes[0])) == len(
+            network_tyk2.edges
+        )
+
         assert (
             len(n4js.query_transformations(name="lig_ejm_31_to_lig_ejm_50_complex"))
             == 2
@@ -1211,17 +1267,22 @@ class TestNeo4jStore(TestStateStore):
         canceled = n4js.cancel_tasks(task_sks[1:3], taskhub_sk)
 
         # check that the hub has the contents we expect
-        q = f"""MATCH (tq:TaskHub {{_scoped_key: '{taskhub_sk}'}})-[:ACTIONS]->(task:Task)
-                return task
-                """
+        q = """
+        MATCH (:TaskHub {_scoped_key: $taskhub_scoped_key})-[:ACTIONS]->(task:Task)
+        RETURN task._scoped_key AS task_scoped_key
+        """
 
-        tasks = n4js.execute_query(q)
-        tasks = [record["task"] for record in tasks.records]
+        tasks = n4js.execute_query(q, taskhub_scoped_key=str(taskhub_sk))
+        tasks = [
+            ScopedKey.from_str(record["task_scoped_key"]) for record in tasks.records
+        ]
 
         assert len(tasks) == 8
-        assert set([ScopedKey.from_str(t["_scoped_key"]) for t in tasks]) == set(
-            actioned
-        ) - set(canceled)
+        assert set(tasks) == set(actioned) - set(canceled)
+
+        # cancel the remaining tasks and check for Nones
+        canceled = n4js.cancel_tasks(task_sks, taskhub_sk)
+        assert canceled == [task_sks[0]] + [None, None] + task_sks[3:]
 
     def test_get_taskhub_tasks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -1323,6 +1384,52 @@ class TestNeo4jStore(TestStateStore):
         # try to claim from a hub with no tasks available
         claimed6 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=2)
         assert claimed6 == [None] * 2
+
+    def test_claim_taskhub_tasks_protocol_split(
+        self, n4js: Neo4jStore, network_tyk2, scope_test
+    ):
+        an = network_tyk2
+        network_sk, taskhub_sk, _ = n4js.assemble_network(an, scope_test)
+
+        def reducer(collection, transformation):
+            protocol = transformation.protocol.__class__
+            if len(collection[protocol]) >= 3:
+                return collection
+            sk = n4js.get_scoped_key(transformation, scope_test)
+            collection[transformation.protocol.__class__].append(sk)
+            return collection
+
+        transformations = reduce(
+            reducer,
+            an.edges,
+            {DummyProtocolA: [], DummyProtocolB: [], DummyProtocolC: []},
+        )
+
+        transformation_sks = [
+            value for _, values in transformations.items() for value in values
+        ]
+
+        task_sks = n4js.create_tasks(transformation_sks)
+        assert len(task_sks) == 9
+
+        # action the tasks
+        n4js.action_tasks(task_sks, taskhub_sk)
+        assert len(n4js.get_taskhub_unclaimed_tasks(taskhub_sk)) == 9
+
+        csid = ComputeServiceID("another task handler")
+        n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
+
+        claimedA = n4js.claim_taskhub_tasks(
+            taskhub_sk, csid, protocols=["DummyProtocolA"], count=9
+        )
+
+        assert len([sk for sk in claimedA if sk]) == 3
+
+        claimedBC = n4js.claim_taskhub_tasks(
+            taskhub_sk, csid, protocols=["DummyProtocolB", "DummyProtocolC"], count=9
+        )
+
+        assert len([sk for sk in claimedBC if sk]) == 6
 
     def test_claim_taskhub_tasks_deregister(
         self, n4js: Neo4jStore, network_tyk2, scope_test
