@@ -1238,14 +1238,14 @@ class Neo4jStore(AlchemiscaleStateStore):
             return ScopedKey.from_str(node["_scoped_key"])
 
         transform_function = _node_to_gufe if return_gufe else _node_to_scoped_key
-        transform_results = defaultdict(None)
+        transform_results = {}
         for record in query_results.records:
             node = record_data_to_node(record["th"])
             network_scoped_key = record["an"]["_scoped_key"]
             transform_results[network_scoped_key] = transform_function(node)
 
         return [
-            transform_results[str(network_scoped_key)]
+            transform_results.get(str(network_scoped_key))
             for network_scoped_key in network_scoped_keys
         ]
 
