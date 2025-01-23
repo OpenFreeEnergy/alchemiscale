@@ -20,7 +20,7 @@ def compress_gufe_zstd(gufe_object: GufeTokenizable) -> bytes:
     Returns
     -------
     bytes
-        Compressed byte form of the the GufeTokenizable.
+        Compressed byte form of the GufeTokenizable.
     """
     keyed_chain_rep = gufe_object.to_keyed_chain()
     json_rep = json.dumps(keyed_chain_rep, cls=JSON_HANDLER.encoder)
@@ -39,6 +39,8 @@ def decompress_gufe_zstd(compressed_bytes: bytes) -> GufeTokenizable:
     decompressed and decoded using the gufe provided
     JSON_HANDLER.decoder. It is assumed that the decompressed bytes
     are utf-8 encoded.
+
+    This is the inverse operation of `compress_gufe_zstd`.
 
     Parameters
     ----------
