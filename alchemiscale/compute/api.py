@@ -13,11 +13,8 @@ import random
 from fastapi import FastAPI, APIRouter, Body, Depends, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
-<<<<<<< HEAD
 import zstandard as zstd
-=======
 from gufe.protocols import ProtocolDAGResult
->>>>>>> main
 
 from ..base.api import (
     QueryGUFEHandler,
@@ -338,7 +335,7 @@ async def set_task_result(
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
 
-    pdr = decompress_gufe_zstd(protocoldagresult_)
+    pdr: ProtocolDAGResult = decompress_gufe_zstd(protocoldagresult_)
 
     tf_sk, _ = n4js.get_task_transformation(
         task=task_scoped_key,
