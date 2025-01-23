@@ -132,14 +132,14 @@ class ScopedKey(BaseModel):
 
     """
 
-    gufe_key: Union[GufeKey, str]
+    gufe_key: GufeKey
     org: str
     campaign: str
     project: str
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    @field_validator("gufe_key")
+    @field_validator("gufe_key", mode='before')
     @classmethod
     def gufe_key_validator(cls, v):
         v = str(v)
@@ -161,6 +161,17 @@ class ScopedKey(BaseModel):
 
         # Cast to GufeKey
         return GufeKey(v_normalized)
+
+    @model_validator(mode="before")
+    @classmethod
+    def check_scope_hierarchy(cls, values: Any) -> Any:
+        if not _hierarchy_valid(values):
+            raise InvalidScopeError(
+                f"Invalid scope hierarchy: {values}, cannot specify wildcard ('*')"
+                " in a scope component if a less specific scope component is not"
+                " given, unless all components are wildcards (*-*-*)."
+            )
+        return values
 
     def __repr__(self):  # pragma: no cover
         return f"<ScopedKey('{str(self)}')>"

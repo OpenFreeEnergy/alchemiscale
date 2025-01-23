@@ -13,7 +13,7 @@ dependencies:
   - requests
   - click
   - httpx
-  - pydantic >1
+  - pydantic >2
   - pydantic-settings
   - async-lru
 
