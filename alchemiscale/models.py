@@ -139,7 +139,7 @@ class ScopedKey(BaseModel):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    @field_validator("gufe_key", mode='before')
+    @field_validator("gufe_key", mode="before")
     @classmethod
     def gufe_key_validator(cls, v):
         v = str(v)
