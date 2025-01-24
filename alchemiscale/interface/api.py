@@ -976,6 +976,100 @@ def get_task_transformation(
     return str(transformation)
 
 
+@router.post("/networks/{network_scoped_key}/restartpatterns/add")
+def add_task_restart_patterns(
+    network_scoped_key: str,
+    *,
+    patterns: list[str] = Body(embed=True),
+    num_allowed_restarts: int = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    taskhub_scoped_key = n4js.get_taskhub(sk)
+    n4js.add_task_restart_patterns(taskhub_scoped_key, patterns, num_allowed_restarts)
+
+
+@router.post("/networks/{network_scoped_key}/restartpatterns/remove")
+def remove_task_restart_patterns(
+    network_scoped_key: str,
+    *,
+    patterns: list[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    taskhub_scoped_key = n4js.get_taskhub(sk)
+    n4js.remove_task_restart_patterns(taskhub_scoped_key, patterns)
+
+
+@router.get("/networks/{network_scoped_key}/restartpatterns/clear")
+def clear_task_restart_patterns(
+    network_scoped_key: str,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    taskhub_scoped_key = n4js.get_taskhub(sk)
+    n4js.clear_task_restart_patterns(taskhub_scoped_key)
+    return [network_scoped_key]
+
+
+@router.post("/bulk/networks/restartpatterns/get")
+def get_task_restart_patterns(
+    *,
+    networks: list[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> dict[str, set[tuple[str, int]]]:
+
+    network_scoped_keys = [ScopedKey.from_str(network) for network in networks]
+    for sk in network_scoped_keys:
+        validate_scopes(sk.scope, token)
+
+    taskhub_scoped_keys = n4js.get_taskhubs(network_scoped_keys)
+
+    taskhub_network_map = {
+        taskhub_scoped_key: network_scoped_key
+        for taskhub_scoped_key, network_scoped_key in zip(
+            taskhub_scoped_keys, network_scoped_keys
+        )
+    }
+
+    restart_patterns = n4js.get_task_restart_patterns(taskhub_scoped_keys)
+
+    network_patterns = {
+        str(taskhub_network_map[key]): value for key, value in restart_patterns.items()
+    }
+
+    return network_patterns
+
+
+@router.post("/networks/{network_scoped_key}/restartpatterns/maxretries")
+def set_task_restart_patterns_max_retries(
+    network_scoped_key: str,
+    *,
+    patterns: list[str] = Body(embed=True),
+    max_retries: int = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    taskhub_scoped_key = n4js.get_taskhub(sk)
+    n4js.set_task_restart_patterns_max_retries(
+        taskhub_scoped_key, patterns, max_retries
+    )
+
+
 ### results
 
 
