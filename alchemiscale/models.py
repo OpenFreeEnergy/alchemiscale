@@ -4,8 +4,8 @@
 
 """
 
-from typing import Optional, Union
-from pydantic import BaseModel, Field, validator, root_validator
+from typing import Optional, Union, Any
+from pydantic import BaseModel, field_validator, model_validator, ConfigDict
 from gufe.tokenization import GufeKey
 from re import fullmatch
 import unicodedata
@@ -16,6 +16,10 @@ class Scope(BaseModel):
     org: Optional[str] = None
     campaign: Optional[str] = None
     project: Optional[str] = None
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
 
     def __init__(self, org=None, campaign=None, project=None):
         # we add this to allow for arg-based creation, not just keyword-based
@@ -35,9 +39,6 @@ class Scope(BaseModel):
             return False
 
         return str(self) == str(other)
-
-    class Config:
-        frozen = True
 
     @staticmethod
     def _validate_component(v, component):
@@ -63,20 +64,24 @@ class Scope(BaseModel):
 
         return v
 
-    @validator("org")
+    @field_validator("org")
+    @classmethod
     def valid_org(cls, v):
         return cls._validate_component(v, "org")
 
-    @validator("campaign")
+    @field_validator("campaign")
+    @classmethod
     def valid_campaign(cls, v):
         return cls._validate_component(v, "campaign")
 
-    @validator("project")
+    @field_validator("project")
+    @classmethod
     def valid_project(cls, v):
         return cls._validate_component(v, "project")
 
-    @root_validator
-    def check_scope_hierarchy(cls, values):
+    @model_validator(mode="before")
+    @classmethod
+    def check_scope_hierarchy(cls, values: Any) -> Any:
         if not _hierarchy_valid(values):
             raise InvalidScopeError(
                 f"Invalid scope hierarchy: {values}, cannot specify wildcard ('*')"
@@ -132,10 +137,10 @@ class ScopedKey(BaseModel):
     campaign: str
     project: str
 
-    class Config:
-        frozen = True
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    @validator("gufe_key")
+    @field_validator("gufe_key", mode="before")
+    @classmethod
     def gufe_key_validator(cls, v):
         v = str(v)
 
@@ -156,6 +161,17 @@ class ScopedKey(BaseModel):
 
         # Cast to GufeKey
         return GufeKey(v_normalized)
+
+    @model_validator(mode="before")
+    @classmethod
+    def check_scope_hierarchy(cls, values: Any) -> Any:
+        if not _hierarchy_valid(values):
+            raise InvalidScopeError(
+                f"Invalid scope hierarchy: {values}, cannot specify wildcard ('*')"
+                " in a scope component if a less specific scope component is not"
+                " given, unless all components are wildcards (*-*-*)."
+            )
+        return values
 
     def __repr__(self):  # pragma: no cover
         return f"<ScopedKey('{str(self)}')>"

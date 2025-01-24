@@ -14,7 +14,8 @@ dependencies:
 
   - requests
   - click
-  - pydantic<2.0
+  - pydantic >2
+  - pydantic-settings
   - async-lru
 
   ## state store
