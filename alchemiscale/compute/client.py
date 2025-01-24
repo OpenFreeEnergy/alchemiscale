@@ -116,13 +116,13 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
     def retrieve_task_transformation(
         self, task: ScopedKey
     ) -> tuple[Transformation, ProtocolDAGResult | None]:
-        transformation, protocoldagresult = self._get_resource(
+        transformation_json, protocoldagresult_latin1 = self._get_resource(
             f"/tasks/{task}/transformation/gufe"
         )
 
         if protocoldagresult is not None:
 
-            protocoldagresult_bytes = protocoldagresult.encode("latin-1")
+            protocoldagresult_bytes = protocoldagresult_latin1.encode("latin-1")
 
             try:
                 # Attempt to decompress the ProtocolDAGResult object
@@ -133,7 +133,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
                     protocoldagresult_bytes.decode("utf-8")
                 )
 
-        return json_to_gufe(transformation), protocoldagresult
+        return json_to_gufe(transformation_json), protocoldagresult
 
     def set_task_result(
         self,

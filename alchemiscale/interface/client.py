@@ -1360,9 +1360,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             compress=compress,
         )
 
+        pdr_bytes = pdr_latin1_decoded[0].encode("latin-1")
+
         try:
             # Attempt to decompress the ProtocolDAGResult object
-            pdr_bytes = pdr_latin1_decoded[0].encode("latin-1")
             pdr = decompress_gufe_zstd(pdr_bytes)
         except zstd.ZstdError:
             # If decompress fails, assume it's a UTF-8 encoded JSON string
