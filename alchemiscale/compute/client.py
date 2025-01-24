@@ -120,7 +120,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
             f"/tasks/{task}/transformation/gufe"
         )
 
-        if (protocoldagresult := protocoldagresult_latin1) is not None:
+        if protocoldagresult_latin1 is not None:
 
             protocoldagresult_bytes = protocoldagresult_latin1.encode("latin-1")
 
