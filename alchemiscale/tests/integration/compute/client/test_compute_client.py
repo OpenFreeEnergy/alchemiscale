@@ -342,8 +342,6 @@ class TestComputeClient:
         assert extends_protocoldagresult is None
 
         # push a result for the task
-        # pdr_sk = compute_client.set_task_result(task_sks[0], protocoldagresults[0])
-
         protocoldagresult = protocoldagresults[0]
         task_sk = task_sks[0]
 
@@ -352,7 +350,7 @@ class TestComputeClient:
         #     pdr_sk = compute_client.set_task_result(task_sks[0], protocoldagresults[0])
         #
         # This involves pushing the protocoldagresult in the legacy
-        # to_dict() -> json -> utf-8 encode form, set the task result
+        # to_dict() -> json -> utf-8 encoded form, set the task result
         # in the statestore, set the task to complete in the
         # statestore
         #

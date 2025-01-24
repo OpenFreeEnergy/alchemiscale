@@ -210,7 +210,7 @@ class S3ObjectStore:
         Parameters
         ----------
         protocoldagresult
-            ProtocolDAGResult to store.
+            ProtocolDAGResult to store, in some bytes representation.
         protocoldagresult_ok
             ``True`` if ProtocolDAGResult completed successfully; ``False`` if failed.
         protocoldagresult_gufekey
@@ -275,7 +275,7 @@ class S3ObjectStore:
         Returns
         -------
         ProtocolDAGResult
-            The ProtocolDAGResult corresponding to the given `ProtocolDAGResultRef`.
+            The ProtocolDAGResult corresponding to the given `ProtocolDAGResultRef`, in a bytes representation.
 
         """
         route = "results" if ok else "failures"

@@ -1804,7 +1804,13 @@ class TestClient:
     ### results
 
     @staticmethod
-    def _execute_task(task_scoped_key, n4js, shared_basedir=None, scratch_basedir=None):
+    def _execute_task(
+            task_scoped_key,
+            n4js,
+            s3os_server,
+            shared_basedir=None,
+            scratch_basedir=None
+        ):
 
         shared_basedir = shared_basedir or Path("shared").absolute()
         shared_basedir.mkdir(exist_ok=True)
@@ -1867,6 +1873,7 @@ class TestClient:
             protocoldagresult = TestClient._execute_task(
                 task_sk,
                 n4js,
+                s3os_server,
                 shared_basedir=shared_basedir,
                 scratch_basedir=scratch_basedir,
             )
@@ -1880,7 +1887,10 @@ class TestClient:
             task_scoped_key, return_gufe=False
         )
         protocoldagresultref = s3os_server.push_protocoldagresult(
-            compress_gufe_zstd(protocoldagresult), transformation=transformation_sk
+            compress_gufe_zstd(protocoldagresult),
+            protocoldagresult.ok(),
+            protocoldagresult.key,
+            transformation=transformation_sk
         )
         n4js.set_task_result(
             task=task_scoped_key, protocoldagresultref=protocoldagresultref
@@ -1890,7 +1900,7 @@ class TestClient:
     # TODO: remove in next major version when to_dict json storage is no longer supported
     @staticmethod
     def _push_result_legacy(task_scoped_key, protocoldagresult, n4js, s3os_server):
-        transformation_scoped_key, _ = n4js.get_task_transformation(
+        transformation_sk, _ = n4js.get_task_transformation(
             task_scoped_key, return_gufe=False
         )
         pdr_jb = json.dumps(
@@ -1902,8 +1912,8 @@ class TestClient:
 
         location = os.path.join(
             "protocoldagresult",
-            *transformation_scoped_key.scope.to_tuple(),
-            transformation_scoped_key.gufe_key,
+            *transformation_sk.scope.to_tuple(),
+            transformation_sk.gufe_key,
             route,
             protocoldagresult.key,
             "obj.json",
@@ -1914,7 +1924,7 @@ class TestClient:
         protocoldagresultref = ProtocolDAGResultRef(
             location=location,
             obj_key=protocoldagresult.key,
-            scope=transformation_scoped_key.scope,
+            scope=transformation_sk.scope,
             ok=ok,
             datetime_created=datetime.utcnow(),
             creator=None,
