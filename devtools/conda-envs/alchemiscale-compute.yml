@@ -16,6 +16,7 @@ dependencies:
   - pydantic >2
   - pydantic-settings
   - async-lru
+  - zstandard
 
   # openmm protocols
   - feflow=0.1.1

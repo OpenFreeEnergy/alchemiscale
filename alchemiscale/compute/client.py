@@ -13,6 +13,8 @@ from functools import wraps
 import requests
 from requests.auth import HTTPBasicAuth
 
+import zstandard as zstd
+
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
@@ -22,6 +24,7 @@ from ..base.client import (
     AlchemiscaleBaseClientError,
     json_to_gufe,
 )
+from ..compression import compress_gufe_zstd, decompress_gufe_zstd
 from ..models import Scope, ScopedKey
 from ..storage.models import TaskHub, Task, ComputeServiceID, TaskStatusEnum
 
@@ -112,26 +115,35 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     def retrieve_task_transformation(
         self, task: ScopedKey
-    ) -> Tuple[Transformation, Optional[ProtocolDAGResult]]:
-        transformation, protocoldagresult = self._get_resource(
+    ) -> tuple[Transformation, ProtocolDAGResult | None]:
+        transformation_json, protocoldagresult_latin1 = self._get_resource(
             f"/tasks/{task}/transformation/gufe"
         )
 
-        return (
-            json_to_gufe(transformation),
-            json_to_gufe(protocoldagresult) if protocoldagresult is not None else None,
-        )
+        if (protocoldagresult := protocoldagresult_latin1) is not None:
+
+            protocoldagresult_bytes = protocoldagresult_latin1.encode("latin-1")
+
+            try:
+                # Attempt to decompress the ProtocolDAGResult object
+                protocoldagresult = decompress_gufe_zstd(protocoldagresult_bytes)
+            except zstd.ZstdError:
+                # If decompression fails, assume it's a UTF-8 encoded JSON string
+                protocoldagresult = json_to_gufe(
+                    protocoldagresult_bytes.decode("utf-8")
+                )
+
+        return json_to_gufe(transformation_json), protocoldagresult
 
     def set_task_result(
         self,
         task: ScopedKey,
         protocoldagresult: ProtocolDAGResult,
-        compute_service_id=Optional[ComputeServiceID],
+        compute_service_id: Optional[ComputeServiceID] = None,
     ) -> ScopedKey:
+
         data = dict(
-            protocoldagresult=json.dumps(
-                protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
-            ),
+            protocoldagresult=compress_gufe_zstd(protocoldagresult),
             compute_service_id=str(compute_service_id),
         )
 
