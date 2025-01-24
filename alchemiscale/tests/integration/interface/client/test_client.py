@@ -1805,12 +1805,8 @@ class TestClient:
 
     @staticmethod
     def _execute_task(
-            task_scoped_key,
-            n4js,
-            s3os_server,
-            shared_basedir=None,
-            scratch_basedir=None
-        ):
+        task_scoped_key, n4js, s3os_server, shared_basedir=None, scratch_basedir=None
+    ):
 
         shared_basedir = shared_basedir or Path("shared").absolute()
         shared_basedir.mkdir(exist_ok=True)
@@ -1890,7 +1886,7 @@ class TestClient:
             compress_gufe_zstd(protocoldagresult),
             protocoldagresult.ok(),
             protocoldagresult.key,
-            transformation=transformation_sk
+            transformation=transformation_sk,
         )
         n4js.set_task_result(
             task=task_scoped_key, protocoldagresultref=protocoldagresultref

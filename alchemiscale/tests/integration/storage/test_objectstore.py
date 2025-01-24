@@ -23,10 +23,10 @@ class TestS3ObjectStore:
 
         # try to push the result
         objstoreref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
-            compress_gufe_zstd(protocoldagresult), 
+            compress_gufe_zstd(protocoldagresult),
             protocoldagresult.ok(),
             protocoldagresult.key,
-            transformation=transformation_sk
+            transformation=transformation_sk,
         )
 
         assert objstoreref.obj_key == protocoldagresult.key
@@ -47,7 +47,7 @@ class TestS3ObjectStore:
             compress_gufe_zstd(protocoldagresult),
             protocoldagresult.ok(),
             protocoldagresult.key,
-            transformation=transformation_sk
+            transformation=transformation_sk,
         )
 
         # round trip it
