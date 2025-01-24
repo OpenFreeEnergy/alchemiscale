@@ -348,7 +348,7 @@ async def set_task_result(
         protocoldagresult_ok=pdr.ok(),
         protocoldagresult_gufekey=pdr.key,
         transformation=tf_sk,
-        creator=compute_service_id
+        creator=compute_service_id,
     )
 
     # push the reference to the state store
