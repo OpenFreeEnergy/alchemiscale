@@ -5,7 +5,7 @@
 """
 
 from typing import Optional, Union, Any
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
+from pydantic import BaseModel, field_validator, model_validator, ConfigDict
 from gufe.tokenization import GufeKey
 from re import fullmatch
 import unicodedata
@@ -16,6 +16,10 @@ class Scope(BaseModel):
     org: Optional[str] = None
     campaign: Optional[str] = None
     project: Optional[str] = None
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
 
     def __init__(self, org=None, campaign=None, project=None):
         # we add this to allow for arg-based creation, not just keyword-based
@@ -35,10 +39,6 @@ class Scope(BaseModel):
             return False
 
         return str(self) == str(other)
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
 
     @staticmethod
     def _validate_component(v, component):
