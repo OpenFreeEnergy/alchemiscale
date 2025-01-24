@@ -344,7 +344,11 @@ async def set_task_result(
 
     # push the ProtocolDAGResult to the object store
     protocoldagresultref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
-        protocoldagresult_, transformation=tf_sk, creator=compute_service_id
+        protocoldagresult=protocoldagresult_,
+        protocoldagresult_ok=pdr.ok(),
+        protocoldagresult_gufekey=pdr.key,
+        transformation=tf_sk,
+        creator=compute_service_id
     )
 
     # push the reference to the state store

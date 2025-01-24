@@ -15,7 +15,7 @@ from functools import lru_cache
 import zstandard as zstd
 
 from gufe.protocols import ProtocolDAGResult
-from gufe.tokenization import JSON_HANDLER, GufeTokenizable
+from gufe.tokenization import JSON_HANDLER, GufeTokenizable, GufeKey
 
 from ..compression import decompress_gufe_zstd
 from ..models import ScopedKey, Scope
@@ -200,6 +200,8 @@ class S3ObjectStore:
     def push_protocoldagresult(
         self,
         protocoldagresult: bytes,
+        protocoldagresult_ok: bool,
+        protocoldagresult_gufekey: GufeKey,
         transformation: ScopedKey,
         creator: Optional[str] = None,
     ) -> ProtocolDAGResultRef:
@@ -209,6 +211,10 @@ class S3ObjectStore:
         ----------
         protocoldagresult
             ProtocolDAGResult to store.
+        protocoldagresult_ok
+            ``True`` if ProtocolDAGResult completed successfully; ``False`` if failed.
+        protocoldagresult_gufekey
+            The GufeKey of the ProtocolDAGResult.
         transformation
             The ScopedKey of the Transformation this ProtocolDAGResult
             corresponds to.
@@ -220,8 +226,7 @@ class S3ObjectStore:
 
         """
 
-        pdr = decompress_gufe_zstd(protocoldagresult)
-        ok = pdr.ok()
+        ok = protocoldagresult_ok
         route = "results" if ok else "failures"
 
         # build `location` based on gufe key
@@ -230,7 +235,7 @@ class S3ObjectStore:
             *transformation.scope.to_tuple(),
             transformation.gufe_key,
             route,
-            pdr.key,
+            protocoldagresult_gufekey,
             OBJECT_FILENAME,
         )
 
@@ -238,7 +243,7 @@ class S3ObjectStore:
 
         return ProtocolDAGResultRef(
             location=location,
-            obj_key=pdr.key,
+            obj_key=protocoldagresult_gufekey,
             scope=transformation.scope,
             ok=ok,
             datetime_created=datetime.utcnow(),
