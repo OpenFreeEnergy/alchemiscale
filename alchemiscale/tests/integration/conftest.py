@@ -103,7 +103,7 @@ class TestProfile:
 
 # TODO: test with full certificates
 neo4j_deployment_profiles = [
-    DeploymentProfile(release=(5, 16), topology="CE", schemes=["bolt"]),
+    DeploymentProfile(release=(5, 25), topology="CE", schemes=["bolt"]),
 ]
 
 if NEO4J_VERSION == "LATEST":
@@ -173,6 +173,49 @@ def n4js_fresh(graph):
 
     n4js.reset()
     n4js.initialize()
+
+    return n4js
+
+
+@fixture
+def n4js_task_restart_policy(
+    n4js_fresh: Neo4jStore, network_tyk2: AlchemicalNetwork, scope_test
+):
+
+    n4js = n4js_fresh
+
+    _, taskhub_scoped_key_with_policy, _ = n4js.assemble_network(
+        network_tyk2, scope_test
+    )
+
+    _, taskhub_scoped_key_no_policy, _ = n4js.assemble_network(
+        network_tyk2.copy_with_replacements(name=network_tyk2.name + "_no_policy"),
+        scope_test,
+    )
+
+    transformation_1_scoped_key, transformation_2_scoped_key = map(
+        lambda transformation: n4js.get_scoped_key(transformation, scope_test),
+        list(network_tyk2.edges)[:2],
+    )
+
+    # create 4 tasks for each of the 2 selected transformations
+    task_scoped_keys = n4js.create_tasks(
+        [transformation_1_scoped_key] * 4 + [transformation_2_scoped_key] * 4
+    )
+
+    # action the tasks for transformation 1 on the taskhub with no policy
+    # action the tasks for both transformations on the taskhub with a policy
+    assert all(n4js.action_tasks(task_scoped_keys[:4], taskhub_scoped_key_no_policy))
+    assert all(n4js.action_tasks(task_scoped_keys, taskhub_scoped_key_with_policy))
+
+    patterns = [
+        r"Error message \d, round \d",
+        "This is an example pattern that will be used as a restart string.",
+    ]
+
+    n4js.add_task_restart_patterns(
+        taskhub_scoped_key_with_policy, patterns=patterns, number_of_retries=2
+    )
 
     return n4js
 

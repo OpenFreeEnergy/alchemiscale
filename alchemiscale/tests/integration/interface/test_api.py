@@ -2,10 +2,9 @@ import pytest
 import json
 
 from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
-from gufe.tokenization import JSON_HANDLER, GufeTokenizable
+from gufe.tokenization import JSON_HANDLER, GufeTokenizable, KeyedChain
 
 from alchemiscale.models import ScopedKey
-from alchemiscale.keyedchain import KeyedChain
 
 
 def pre_load_payload(network, scope, name="incomplete 2"):

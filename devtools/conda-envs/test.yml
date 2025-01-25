@@ -7,10 +7,13 @@ dependencies:
   - pip
 
   # alchemiscale dependencies
-  - gufe>=1.0.0
-  - openfe>=1.0.1
-  - pydantic<2.0
+  - gufe>=1.1.0
+  - openfe>=1.2.0
+  - pydantic >2
+  - pydantic-settings
+  - async-lru
   - diskcache
+  - zstandard
 
   ## state store
   - neo4j-python-driver
@@ -18,7 +21,7 @@ dependencies:
   - monotonic
   - docker-py    # for grolt
 
-  # user client printing 
+  # user client printing
   - rich
 
   ## object store
@@ -29,15 +32,13 @@ dependencies:
   - uvicorn
   - gunicorn
   - python-jose
-  - passlib
   - bcrypt
-  - python-multipart
   - starlette
   - httpx
   - cryptography
 
   # openmm protocols
-  - feflow>=0.1.0
+  - feflow>=0.1.1
 
   ## cli
   - click
@@ -52,8 +53,8 @@ dependencies:
   # additional pins
   - openmm=8.1.2
   - openmmforcefields>=0.14.1
+  - openff-units=0.2.2
 
   - pip:
-    - async_lru
-    - git+https://github.com/datryllic/grolt@neo4j-5.x # neo4j test server deployment
+    - git+https://github.com/datryllic/grolt # neo4j test server deployment
     - git+https://github.com/OpenFreeEnergy/openfe-benchmarks

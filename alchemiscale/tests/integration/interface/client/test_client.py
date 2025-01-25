@@ -1,16 +1,23 @@
 import pytest
+from datetime import datetime
 from time import sleep
 import os
 from pathlib import Path
 from itertools import chain
+import json
 
 from gufe import AlchemicalNetwork
-from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey
+from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey, JSON_HANDLER
 from gufe.protocols.protocoldag import execute_DAG
 import networkx as nx
 
+from alchemiscale.compression import compress_gufe_zstd
 from alchemiscale.models import ScopedKey, Scope
-from alchemiscale.storage.models import TaskStatusEnum, NetworkStateEnum
+from alchemiscale.storage.models import (
+    ProtocolDAGResultRef,
+    NetworkStateEnum,
+    TaskStatusEnum,
+)
 from alchemiscale.storage.cypher import cypher_list_from_scoped_keys
 from alchemiscale.interface import client
 from alchemiscale.tests.integration.interface.utils import (
@@ -121,9 +128,37 @@ class TestClient:
         network_sks = user_client.query_networks()
         assert an_sk in network_sks
 
+        assert user_client.check_exists(an_sk)
+
         # TODO: make a network in a scope that doesn't have any components in
         # common with an existing network
         # user_client.create_network(
+
+    def test_check_exists(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        an_sks = user_client.query_networks()
+
+        # check that a known existing AlchemicalNetwork exists
+        assert user_client.check_exists(an_sks[0])
+
+        # check that an AlchemicalNetwork that doesn't exist shows as not existing
+        an_sk = an_sks[0]
+        an_sk_nonexistent = ScopedKey(
+            gufe_key=GufeKey("AlchemicalNetwork-lol"), **scope_test.dict()
+        )
+        assert not user_client.check_exists(an_sk_nonexistent)
+
+        # check that we get an exception when we try a malformed key
+        with pytest.raises(
+            AlchemiscaleClientError,
+            match="Status Code 422 : Unprocessable Entity : input does not appear to be a `ScopedKey`",
+        ):
+            user_client.check_exists("lol")
 
     @pytest.mark.parametrize(("state",), [[state.value] for state in NetworkStateEnum])
     def test_set_network_state(
@@ -1932,6 +1967,58 @@ class TestClient:
     ### results
 
     @staticmethod
+    def _execute_task(
+        task_scoped_key, n4js, s3os_server, shared_basedir=None, scratch_basedir=None
+    ):
+
+        shared_basedir = shared_basedir or Path("shared").absolute()
+        shared_basedir.mkdir(exist_ok=True)
+
+        scratch_basedir = scratch_basedir or Path("scratch").absolute()
+        scratch_basedir.mkdir(exist_ok=True)
+
+        (
+            transformation_sk,
+            extends_protocoldagresultref_sk,
+        ) = n4js.get_task_transformation(task=task_scoped_key, return_gufe=False)
+
+        transformation = n4js.get_gufe(transformation_sk)
+        if extends_protocoldagresultref_sk:
+            extends_protocoldagresultref = n4js.get_gufe(
+                extends_protocoldagresultref_sk
+            )
+            extends_protocoldagresult = s3os_server.pull_protocoldagresult(
+                extends_protocoldagresultref, transformation_sk
+            )
+        else:
+            extends_protocoldagresult = None
+
+        protocoldag = transformation.create(
+            extends=extends_protocoldagresult,
+            name=str(task_scoped_key),
+        )
+
+        shared = shared_basedir / str(protocoldag.key)
+        shared.mkdir()
+
+        scratch = scratch_basedir / str(protocoldag.key)
+        scratch.mkdir()
+
+        protocoldagresult = execute_DAG(
+            protocoldag,
+            shared_basedir=shared,
+            scratch_basedir=scratch,
+            raise_error=False,
+        )
+
+        assert protocoldagresult.transformation_key == transformation.key
+
+        if extends_protocoldagresult:
+            assert protocoldagresult.extends_key == extends_protocoldagresult.key
+
+        return protocoldagresult
+
+    @staticmethod
     def _execute_tasks(tasks, n4js, s3os_server):
         shared_basedir = Path("shared").absolute()
         shared_basedir.mkdir()
@@ -1940,58 +2027,16 @@ class TestClient:
 
         protocoldagresults = []
         for task_sk in tasks:
-            if task_sk is None:
-                continue
-
             # get the transformation and extending protocoldagresult as if we
             # were a compute service
-            (
-                transformation_sk,
-                extends_protocoldagresultref_sk,
-            ) = n4js.get_task_transformation(task=task_sk, return_gufe=False)
-
-            transformation = n4js.get_gufe(transformation_sk)
-            if extends_protocoldagresultref_sk:
-                extends_protocoldagresultref = n4js.get_gufe(
-                    extends_protocoldagresultref_sk
-                )
-                extends_protocoldagresult = s3os_server.pull_protocoldagresult(
-                    extends_protocoldagresultref, transformation_sk
-                )
-            else:
-                extends_protocoldagresult = None
-
-            protocoldag = transformation.create(
-                extends=extends_protocoldagresult,
-                name=str(task_sk),
+            protocoldagresult = TestClient._execute_task(
+                task_sk,
+                n4js,
+                s3os_server,
+                shared_basedir=shared_basedir,
+                scratch_basedir=scratch_basedir,
             )
-
-            shared = shared_basedir / str(protocoldag.key)
-            shared.mkdir()
-
-            scratch = scratch_basedir / str(protocoldag.key)
-            scratch.mkdir()
-
-            protocoldagresult = execute_DAG(
-                protocoldag,
-                shared_basedir=shared,
-                scratch_basedir=scratch,
-                raise_error=False,
-            )
-
-            assert protocoldagresult.transformation_key == transformation.key
-            if extends_protocoldagresult:
-                assert protocoldagresult.extends_key == extends_protocoldagresult.key
-
             protocoldagresults.append(protocoldagresult)
-
-            protocoldagresultref = s3os_server.push_protocoldagresult(
-                protocoldagresult, transformation=transformation_sk
-            )
-
-            n4js.set_task_result(
-                task=task_sk, protocoldagresultref=protocoldagresultref
-            )
 
         return protocoldagresults
 
@@ -2041,16 +2086,92 @@ class TestClient:
 
         assert user_client._cache.stats() == (4, 4) and len(user_client._cache) == 4
 
+    @staticmethod
+    def _push_result(task_scoped_key, protocoldagresult, n4js, s3os_server):
+        transformation_sk, _ = n4js.get_task_transformation(
+            task_scoped_key, return_gufe=False
+        )
+        protocoldagresultref = s3os_server.push_protocoldagresult(
+            compress_gufe_zstd(protocoldagresult),
+            protocoldagresult.ok(),
+            protocoldagresult.key,
+            transformation=transformation_sk,
+        )
+        n4js.set_task_result(
+            task=task_scoped_key, protocoldagresultref=protocoldagresultref
+        )
+        return protocoldagresultref
+
+    # TODO: remove in next major version when to_dict json storage is no longer supported
+    @staticmethod
+    def _push_result_legacy(task_scoped_key, protocoldagresult, n4js, s3os_server):
+        transformation_sk, _ = n4js.get_task_transformation(
+            task_scoped_key, return_gufe=False
+        )
+        pdr_jb = json.dumps(
+            protocoldagresult.to_dict(), cls=JSON_HANDLER.encoder
+        ).encode("utf-8")
+
+        ok = protocoldagresult.ok()
+        route = "results" if ok else "failures"
+
+        location = os.path.join(
+            "protocoldagresult",
+            *transformation_sk.scope.to_tuple(),
+            transformation_sk.gufe_key,
+            route,
+            protocoldagresult.key,
+            "obj.json",
+        )
+
+        s3os_server._store_bytes(location, pdr_jb)
+
+        protocoldagresultref = ProtocolDAGResultRef(
+            location=location,
+            obj_key=protocoldagresult.key,
+            scope=transformation_sk.scope,
+            ok=ok,
+            datetime_created=datetime.utcnow(),
+            creator=None,
+        )
+        n4js.set_task_result(
+            task=task_scoped_key, protocoldagresultref=protocoldagresultref
+        )
+
+        return protocoldagresultref
+
+    # TODO: remove legacy kwarg when to_dict json storage is no longer supported
+    @staticmethod
+    def _push_results(
+        task_scoped_keys, protocoldagresults, n4js, s3os_server, legacy=False
+    ):
+        push_function = (
+            TestClient._push_result_legacy if legacy else TestClient._push_result
+        )
+        protocoldagresultrefs = []
+        for task_scoped_key, protocoldagresult in zip(
+            task_scoped_keys, protocoldagresults
+        ):
+            protocoldagresultref = push_function(
+                task_scoped_key, protocoldagresult, n4js, s3os_server
+            )
+            protocoldagresultrefs.append(protocoldagresultref)
+        return protocoldagresultrefs
+
+    # TODO: remove mark and legacy parameter when to_dict json storage is no longer supported
+    @pytest.mark.parametrize("legacy", [True, False])
     def test_get_transformation_and_network_results(
         self,
         scope_test,
         n4js_preloaded,
-        s3os_server,
+        s3os_server_fresh,
         user_client: client.AlchemiscaleClient,
         network_tyk2,
         tmpdir,
+        legacy,
     ):
         n4js = n4js_preloaded
+        s3os_server = s3os_server_fresh
 
         # select the transformation we want to compute
         an = network_tyk2
@@ -2069,6 +2190,9 @@ class TestClient:
         # execute the actioned tasks and push results directly using statestore and object store
         with tmpdir.as_cwd():
             protocoldagresults = self._execute_tasks(actioned_tasks, n4js, s3os_server)
+            self._push_results(
+                actioned_tasks, protocoldagresults, n4js, s3os_server, legacy=legacy
+            )
 
         # clear local gufe registry of pdr objects
         # not critical, but ensures we see the objects that are deserialized
@@ -2168,6 +2292,7 @@ class TestClient:
         # execute the actioned tasks and push results directly using statestore and object store
         with tmpdir.as_cwd():
             protocoldagresults = self._execute_tasks(actioned_tasks, n4js, s3os_server)
+            self._push_results(actioned_tasks, protocoldagresults, n4js, s3os_server)
 
         # clear local gufe registry of pdr objects
         # not critical, but ensures we see the objects that are deserialized
@@ -2241,6 +2366,7 @@ class TestClient:
         # execute the actioned tasks and push results directly using statestore and object store
         with tmpdir.as_cwd():
             protocoldagresults = self._execute_tasks(actioned_tasks, n4js, s3os_server)
+            self._push_results(actioned_tasks, protocoldagresults, n4js, s3os_server)
 
         # clear local gufe registry of pdr objects
         # not critical, but ensures we see the objects that are deserialized
@@ -2307,6 +2433,7 @@ class TestClient:
         # execute the actioned tasks and push results directly using statestore and object store
         with tmpdir.as_cwd():
             protocoldagresults = self._execute_tasks(actioned_tasks, n4js, s3os_server)
+            self._push_results(actioned_tasks, protocoldagresults, n4js, s3os_server)
 
         # clear local gufe registry of pdr objects
         # not critical, but ensures we see the objects that are deserialized
@@ -2333,3 +2460,143 @@ class TestClient:
 
         # TODO: can we mix in a success in here somewhere?
         # not possible with current BrokenProtocol, unfortunately
+
+
+class TestTaskRestartPolicy:
+
+    default_max_retries = 3
+    default_patterns = ["Pattern 1", "Pattern 2", "Pattern 3"]
+
+    def create_default_network(self, network, client, scope):
+        network_scoped_key = client.create_network(network, scope)
+        client.add_task_restart_patterns(
+            network_scoped_key, self.default_patterns, self.default_max_retries
+        )
+        return network_scoped_key
+
+    def test_add_task_restart_patterns(
+        self, user_client, network_tyk2, scope_test, n4js_preloaded
+    ):
+
+        network_scoped_key = self.create_default_network(
+            network_tyk2, user_client, scope_test
+        )
+
+        query = """
+        MATCH (trp: TaskRestartPattern)-[:ENFORCES]->(:TaskHub)-[:PERFORMS]->(:AlchemicalNetwork {`_scoped_key`: $network_scoped_key})
+        RETURN trp
+        """
+
+        results = n4js_preloaded.execute_query(
+            query, network_scoped_key=str(network_scoped_key)
+        )
+
+        assert len(results.records) == 3
+
+        patterns_list = list(self.default_patterns)
+        for record in results.records:
+            trp = record["trp"]
+            assert trp["pattern"] in patterns_list
+            patterns_list.remove(trp["pattern"])
+
+        assert len(patterns_list) == 0
+
+    def test_get_task_restart_patterns(
+        self,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+        scope_test,
+        n4js_preloaded,
+    ):
+        network_scoped_key = self.create_default_network(
+            network_tyk2, user_client, scope_test
+        )
+        taskrestartpatterns = user_client.get_task_restart_patterns(network_scoped_key)
+        expected = {
+            pattern: self.default_max_retries for pattern in self.default_patterns
+        }
+        assert taskrestartpatterns == expected
+
+    def test_remove_task_restart_patterns(
+        self,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+        scope_test,
+        n4js_preloaded,
+    ):
+        network_scoped_key = self.create_default_network(
+            network_tyk2, user_client, scope_test
+        )
+        expected = {
+            pattern: self.default_max_retries for pattern in self.default_patterns
+        }
+
+        # check that we have the expected 3 restart patterns
+        assert user_client.get_task_restart_patterns(network_scoped_key) == expected
+
+        pattern_to_remove = next(iter(expected))
+        user_client.remove_task_restart_patterns(
+            network_scoped_key, [pattern_to_remove]
+        )
+        del expected[pattern_to_remove]
+
+        # check that one was removed
+        assert user_client.get_task_restart_patterns(network_scoped_key) == expected
+
+        patterns_to_remove = [pattern for pattern in expected]
+        user_client.remove_task_restart_patterns(network_scoped_key, patterns_to_remove)
+
+        # check the remaining patterns are removed
+        assert user_client.get_task_restart_patterns(network_scoped_key) == {}
+
+    def test_clear_task_restart_patterns(
+        self,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+        scope_test,
+        n4js_preloaded,
+    ):
+        network_scoped_key = self.create_default_network(
+            network_tyk2, user_client, scope_test
+        )
+
+        query = """
+        MATCH (trp:TaskRestartPattern)-[:ENFORCES]->(:TaskHub)-[:PERFORMS]->(:AlchemicalNetwork {`_scoped_key`: $network_scoped_key})
+        RETURN trp
+        """
+
+        assert (
+            len(
+                n4js_preloaded.execute_query(
+                    query, network_scoped_key=str(network_scoped_key)
+                ).records
+            )
+            == 3
+        )
+        user_client.clear_task_restart_patterns(network_scoped_key)
+        assert (
+            len(
+                n4js_preloaded.execute_query(
+                    query, network_scoped_key=str(network_scoped_key)
+                ).records
+            )
+            == 0
+        )
+
+    def test_set_task_restart_patterns_allowed_restarts(
+        self,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+        scope_test,
+        n4js_preloaded,
+    ):
+        network_scoped_key = self.create_default_network(
+            network_tyk2, user_client, scope_test
+        )
+        user_client.set_task_restart_patterns_allowed_restarts(
+            network_scoped_key, self.default_patterns[:2], 1
+        )
+
+        expected = {pattern: 1 for pattern in self.default_patterns[:2]}
+        expected[self.default_patterns[-1]] = self.default_max_retries
+        assert user_client.get_task_restart_patterns(network_scoped_key) == expected

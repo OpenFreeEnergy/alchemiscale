@@ -1,6 +1,6 @@
-FROM mambaorg/micromamba:1.4.1
+FROM mambaorg/micromamba:1.5.10
 
-LABEL org.opencontainers.image.source=https://github.com/openforcefield/alchemiscale
+LABEL org.opencontainers.image.source=https://github.com/OpenFreeEnergy/alchemiscale
 LABEL org.opencontainers.image.description="a high-throughput alchemical free energy execution system for use with HPC, cloud, bare metal, and Folding@Home"
 LABEL org.opencontainers.image.licenses=MIT
 

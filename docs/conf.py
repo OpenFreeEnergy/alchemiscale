@@ -43,9 +43,9 @@ autodoc_mock_imports = [
     "jose",
     "networkx",
     "numpy",
-    "passlib",
     "py2neo",
     "pydantic",
+    "pydantic_settings",
     "starlette",
     "yaml",
 ]

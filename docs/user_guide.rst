@@ -14,9 +14,9 @@ Installation
 
 Clone alchemiscale from Github, and switch to the latest release tag::
 
-    $ git clone https://github.com/openforcefield/alchemiscale.git
+    $ git clone https://github.com/OpenFreeEnergy/alchemiscale.git
     $ cd alchemiscale
-    $ git checkout v0.5.0
+    $ git checkout v0.5.3
 
 Create a conda environment using, e.g. `micromamba`_::
 
@@ -509,6 +509,48 @@ If you’re feeling confident, you could set all errored :py:class:`~alchemiscal
      <ScopedKey('Task-129a9e1a893f4c24a6dd3bdcc25957d6-my_org-my_campaign-my_project')>,
      <ScopedKey('Task-157232d7ff794a0985ebce5055e0f336-my_org-my_campaign-my_project')>,
      ...]
+
+***************************************************
+Re-running Errored Tasks with Task Restart Patterns
+***************************************************
+
+Re-running errored :py:class:`~alchemiscale.storage.models.Task`\s manually for known failure modes (such as those described in the previous section) quickly becomes tedious, especially for large networks.
+Alternatively, you can add `regular expression <https://en.wikipedia.org/wiki/Regular_expression>`_ strings as :py:class:`~alchemiscale.storage.models.Task` restart patterns to an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
+:py:class:`~alchemiscale.storage.models.Task`\s actioned on that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` will be automatically restarted if the :py:class:`~alchemiscale.storage.models.Task` fails during any part of its execution, provided that an enforcing pattern matches a traceback within the :py:class:`~alchemiscale.storage.models.Task`\'s failed :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`.
+The number of restarts is controlled by the ``num_allowed_restarts`` parameter of the :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.add_task_restart_patterns` method.
+If a :py:class:`~alchemiscale.storage.models.Task` is restarted more than ``num_allowed_restarts`` times, the :py:class:`~alchemiscale.storage.models.Task` is canceled on that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` and left in an ``error`` status.
+
+As an example, if you wanted to rerun any :py:class:`~alchemiscale.storage.models.Task` that failed with a ``RuntimeError`` or a ``MemoryError`` and attempt it at least 5 times, you could add the following patterns::
+
+  >>> asc.add_task_restart_patterns(an_sk, [r"RuntimeError: .+", r"MemoryError: Unable to allocate \d+ GiB"], 5)
+
+Providing too general a pattern, such as the example above, you may consume compute resources on failures that are unavoidable.
+On the other hand, an overly strict pattern (such as specifying explicit ``gufe`` keys) will likely do nothing.
+Therefore, it is best to find a balance in your patterns that matches your use case.
+
+Restart patterns enforcing an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` can be retrieved with::
+
+  >>> asc.get_task_restart_patterns(an_sk)
+  {"RuntimeError: .+": 5, "MemoryError: Unable to allocate \d+ GiB": 5}
+
+The number of allowed restarts can also be modified::
+
+  >>> asc.set_task_restart_patterns_allowed_restarts(an_sk, ["RuntimeError: .+"], 3)
+  >>> asc.set_task_restart_patterns_allowed_restarts(an_sk, ["MemoryError: Unable to allocate \d+ GiB"], 2)
+  >>> asc.get_task_restart_patterns(an_sk)
+  {"RuntimeError: .+": 3, "MemoryError: Unable to allocate \d+ GiB": 2}
+
+Patterns can be removed by specifying the patterns in a list::
+
+  >>> asc.remove_task_restart_patterns(an_sk, ["MemoryError: Unable to allocate \d+ GiB"])
+  >>> asc.get_task_restart_patterns(an_sk)
+  {"RuntimeError: .+": 3}
+
+Or by clearing all enforcing patterns::
+
+  >>> asc.clear_task_restart_patterns(an_sk)
+  >>> asc.get_task_restart_patterns(an_sk)
+  {}
 
 
 ***********************************

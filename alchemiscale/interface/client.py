@@ -13,15 +13,18 @@ from functools import lru_cache
 from async_lru import alru_cache
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER, KeyedChain
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
+import zstandard as zstd
 
 
 from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
+    json_to_gufe,
     use_session,
 )
+from ..compression import decompress_gufe_zstd
 from ..models import Scope, ScopedKey
 from ..storage.models import (
     TaskStatusEnum,
@@ -29,7 +32,6 @@ from ..storage.models import (
 )
 from ..strategies import Strategy
 from ..validators import validate_network_nonself
-from ..keyedchain import KeyedChain
 
 from warnings import warn
 
@@ -88,7 +90,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 "Scope for a ScopedKey must be specific; it cannot contain wildcards."
             )
 
-    def check_exists(self, scoped_key: ScopedKey) -> bool:
+    def check_exists(self, scoped_key: ScopedKey | str) -> bool:
         """Returns ``True`` if the given ScopedKey represents an object in the database."""
         return self._get_resource(f"/exists/{scoped_key}")
 
@@ -1387,24 +1389,28 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self, protocoldagresultref, transformation, route, compress
     ):
         # check the disk cache for the PDR
-        if pdr_json := self._cache.get(str(protocoldagresultref)):
-            pdr_json = pdr_json.decode("utf-8")
+        if pdr_bytes := self._cache.get(str(protocoldagresultref)):
+            pass
         else:
             # query the alchemiscale server for the PDR
-            pdr_json = await self._get_resource_async(
+            pdr_latin1_decoded = await self._get_resource_async(
                 f"/transformations/{transformation}/{route}/{protocoldagresultref}",
                 compress=compress,
             )
-
-            pdr_json = pdr_json[0]
+            pdr_bytes = pdr_latin1_decoded[0].encode("latin-1")
 
             # add the resulting PDR to the cache
             self._cache.add(
                 str(protocoldagresultref),
-                pdr_json.encode("utf-8"),
+                pdr_bytes,
             )
 
-        pdr = GufeTokenizable.from_dict(json.loads(pdr_json, cls=JSON_HANDLER.decoder))
+        try:
+            # Attempt to decompress the ProtocolDAGResult object
+            pdr = decompress_gufe_zstd(pdr_bytes)
+        except zstd.ZstdError:
+            # If decompress fails, assume it's a UTF-8 encoded JSON string
+            pdr = json_to_gufe(pdr_bytes.decode("utf-8"))
 
         return pdr
 
@@ -1647,7 +1653,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         visualize
             If ``True``, show retrieval progress indicators.
 
-
         """
 
         if not return_protocoldagresults:
@@ -1784,3 +1789,112 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         return pdrs
+
+    def add_task_restart_patterns(
+        self,
+        network_scoped_key: ScopedKey,
+        patterns: list[str],
+        num_allowed_restarts: int,
+    ) -> ScopedKey:
+        """Add a list of `Task` restart patterns to an `AlchemicalNetwork`.
+
+        Parameters
+        ----------
+        network_scoped_key
+            The `ScopedKey` for the `AlchemicalNetwork` to add the patterns to.
+        patterns
+            The regular expression strings to compare to `ProtocolUnitFailure`
+            tracebacks. Matching patterns will set the `Task` status back to
+            'waiting'.
+        num_allowed_restarts
+            The number of times each pattern will be able to restart each
+            `Task`. When this number is exceeded, the `Task` is canceled from
+            the `AlchemicalNetwork` and left with the `error` status.
+
+        Returns
+        -------
+        network_scoped_key
+            The `ScopedKey` of the `AlchemicalNetwork` the patterns were added to.
+        """
+        data = {"patterns": patterns, "num_allowed_restarts": num_allowed_restarts}
+        self._post_resource(f"/networks/{network_scoped_key}/restartpatterns/add", data)
+        return network_scoped_key
+
+    def get_task_restart_patterns(
+        self, network_scoped_key: ScopedKey
+    ) -> dict[str, int]:
+        """Get the `Task` restart patterns applied to an `AlchemicalNetwork`
+        along with the number of retries allowed for each pattern.
+
+        Parameters
+        ----------
+        network_scoped_key
+            The `ScopedKey` of the `AlchemicalNetwork` to query.
+
+        Returns
+        -------
+        patterns
+            A dictionary whose keys are all of the patterns applied to the
+            `AlchemicalNetwork` and whose values are the number of retries each
+            pattern will allow.
+        """
+        data = {"networks": [str(network_scoped_key)]}
+        mapped_patterns = self._post_resource(
+            "/bulk/networks/restartpatterns/get", data=data
+        )
+        network_patterns = mapped_patterns[str(network_scoped_key)]
+        patterns_with_retries = {pattern: retry for pattern, retry in network_patterns}
+        return patterns_with_retries
+
+    def set_task_restart_patterns_allowed_restarts(
+        self,
+        network_scoped_key: ScopedKey,
+        patterns: list[str],
+        num_allowed_restarts: int,
+    ) -> None:
+        """Set the number of `Task` restarts that patterns are allowed to
+        perform for the given `AlchemicalNetwork`.
+
+        Parameters
+        ----------
+        network_scoped_key
+            The `ScopedKey` of the `AlchemicalNetwork` the `patterns` are
+            applied to.
+        patterns
+            The patterns to set the number of allowed restarts for.
+        num_allowed_restarts
+            The new number of allowed restarts.
+        """
+        data = {"patterns": patterns, "max_retries": num_allowed_restarts}
+        self._post_resource(
+            f"/networks/{network_scoped_key}/restartpatterns/maxretries", data
+        )
+
+    def remove_task_restart_patterns(
+        self, network_scoped_key: ScopedKey, patterns: list[str]
+    ) -> None:
+        """Remove specific `Task` restart patterns from an `AlchemicalNetwork`.
+
+        Parameters
+        ----------
+        network_scoped_key
+            The `ScopedKey` of the `AlchemicalNetwork` the `patterns` are
+            applied to.
+        patterns
+            The patterns to remove from the `AlchemicalNetwork`.
+        """
+        data = {"patterns": patterns}
+        self._post_resource(
+            f"/networks/{network_scoped_key}/restartpatterns/remove", data
+        )
+
+    def clear_task_restart_patterns(self, network_scoped_key: ScopedKey) -> None:
+        """Clear all restart patterns from an `AlchemicalNetwork`.
+
+        Parameters
+        ----------
+        network_scoped_key
+            The `ScopedKey` of the `AlchemicalNetwork` to be cleared of restart
+            patterns.
+        """
+        self._query_resource(f"/networks/{network_scoped_key}/restartpatterns/clear")
