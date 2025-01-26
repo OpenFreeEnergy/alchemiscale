@@ -8,7 +8,6 @@
 import os
 from time import sleep
 from pathlib import Path
-from typing import Union
 
 from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
@@ -297,7 +296,7 @@ def network_tyk2():
 
 def get_edge_type(
     network: AlchemicalNetwork, edge_class
-) -> Union[Transformation, NonTransformation]:
+) -> Transformation | NonTransformation:
     for tf in sorted(network.edges):
         if type(tf) is edge_class:
             return tf

@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 import random
-from typing import List, Dict
 from pathlib import Path
 from itertools import chain
 from functools import reduce
@@ -216,7 +215,7 @@ class TestNeo4jStore(TestStateStore):
 
         n4js.set_network_state([sk, sk2], ["active", "inactive"])
 
-        an_sks: List[ScopedKey] = n4js.query_networks()
+        an_sks: list[ScopedKey] = n4js.query_networks()
 
         assert sk in an_sks
         assert sk2 in an_sks
@@ -820,7 +819,7 @@ class TestNeo4jStore(TestStateStore):
                     task_sks.append(task_k)
 
         # get all tasks for the transformation
-        all_task_sks: List[ScopedKey] = n4js.get_transformation_tasks(transformation_sk)
+        all_task_sks: list[ScopedKey] = n4js.get_transformation_tasks(transformation_sk)
 
         def f(x, y):
             return x**y + x ** (y - 1) + x ** (y - 2)
@@ -998,11 +997,11 @@ class TestNeo4jStore(TestStateStore):
         )
         n4js.assemble_network(an2, scope_test)
 
-        tq_sks: List[ScopedKey] = n4js.query_taskhubs()
+        tq_sks: list[ScopedKey] = n4js.query_taskhubs()
         assert len(tq_sks) == 2
         assert all([isinstance(i, ScopedKey) for i in tq_sks])
 
-        tq_dict: Dict[ScopedKey, TaskHub] = n4js.query_taskhubs(return_gufe=True)
+        tq_dict: dict[ScopedKey, TaskHub] = n4js.query_taskhubs(return_gufe=True)
         assert len(tq_dict) == 2
         assert all([isinstance(i, TaskHub) for i in tq_dict.values()])
 
@@ -2056,7 +2055,7 @@ class TestNeo4jStore(TestStateStore):
         self,
         n4js: Neo4jStore,
         credential_type: CredentialedEntity,
-        scope_strs: List[str],
+        scope_strs: list[str],
     ):
         user = credential_type(
             identifier="bill",

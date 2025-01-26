@@ -8,7 +8,6 @@ import asyncio
 import time
 import random
 from itertools import islice
-from typing import List
 import json
 from urllib.parse import urljoin
 from functools import wraps

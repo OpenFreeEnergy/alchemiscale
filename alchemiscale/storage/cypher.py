@@ -1,5 +1,4 @@
 from alchemiscale import ScopedKey
-from typing import List, Optional
 
 from py2neo.cypher.queries import (
     _create_clause,
@@ -14,7 +13,7 @@ from py2neo.cypher.queries import (
 from py2neo.cypher.queries import NodeKey
 
 
-def cypher_list_from_scoped_keys(scoped_keys: List[Optional[ScopedKey]]) -> str:
+def cypher_list_from_scoped_keys(scoped_keys: list[ScopedKey]) -> str:
     """Generate a Cypher list structure from a list of ScopedKeys, ignoring NoneType entries.
 
     Parameters

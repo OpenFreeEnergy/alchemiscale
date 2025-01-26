@@ -5,7 +5,6 @@
 """
 
 from functools import lru_cache
-from typing import Optional
 
 from pydantic import BaseSettings
 
@@ -37,9 +36,9 @@ class S3ObjectStoreSettings(FrozenSettings):
 
     """
 
-    AWS_ACCESS_KEY_ID: Optional[str] = None
-    AWS_SECRET_ACCESS_KEY: Optional[str] = None
-    AWS_SESSION_TOKEN: Optional[str] = None
+    AWS_ACCESS_KEY_ID: str | None = None
+    AWS_SECRET_ACCESS_KEY: str | None = None
+    AWS_SESSION_TOKEN: str | None = None
     AWS_S3_BUCKET: str
     AWS_S3_PREFIX: str
     AWS_DEFAULT_REGION: str

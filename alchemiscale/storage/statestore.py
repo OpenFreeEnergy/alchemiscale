@@ -10,7 +10,6 @@ from contextlib import contextmanager
 import json
 from functools import lru_cache
 from operator import ne
-from typing import Dict, List, Optional, Union, Tuple
 import weakref
 import numpy as np
 
@@ -71,7 +70,7 @@ class Neo4JStoreError(Exception): ...
 class AlchemiscaleStateStore(abc.ABC): ...
 
 
-def _select_tasks_from_taskpool(taskpool: List[Tuple[str, float]], count) -> List[str]:
+def _select_tasks_from_taskpool(taskpool: list[tuple[str, float]], count) -> list[str]:
     """Select Tasks from a pool of tasks according to the following scheme:
 
     1. Randomly select N=`count` tasks from the TaskPool based on weighting
@@ -79,13 +78,13 @@ def _select_tasks_from_taskpool(taskpool: List[Tuple[str, float]], count) -> Lis
 
     Parameters
     ----------
-    taskpool: List[Tuple[str, float]]
+    taskpool: list[tuple[str, float]]
         A list of tuples containing Tasks (string represtnation of their ScopedKeys) of
         equal priority with the weights of their ACTIONS relationships.
 
     Returns
     -------
-    sk: List[str]
+    sk: list[str]
         The string representations of the ScopedKeys of the Tasks selected from the taskpool.
     """
     weights = []
@@ -226,8 +225,8 @@ class Neo4jStore(AlchemiscaleStateStore):
     ## gufe object handling
 
     def _gufe_to_subgraph(
-        self, sdct: Dict, labels: List[str], gufe_key: GufeKey, scope: Scope
-    ) -> Tuple[Subgraph, Node, str]:
+        self, sdct: dict, labels: list[str], gufe_key: GufeKey, scope: Scope
+    ) -> tuple[Subgraph, Node, str]:
         subgraph = Subgraph()
         node = Node(*labels)
 
@@ -360,9 +359,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         return subgraph, node, scoped_key
 
     def _subgraph_to_gufe(
-        self, nodes: List[Node], subgraph: Subgraph
-    ) -> Dict[Node, GufeTokenizable]:
-        """Get a Dict `GufeTokenizable` objects within the given subgraph.
+        self, nodes: list[Node], subgraph: Subgraph
+    ) -> dict[Node, GufeTokenizable]:
+        """Get a dict `GufeTokenizable` objects within the given subgraph.
 
         Any `GufeTokenizable` that requires nodes or relationships missing from
         the subgraph will not be returned.
@@ -390,7 +389,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         return g
 
     def _node_to_gufe(
-        self, node: Node, g: nx.DiGraph, mapping: Dict[Node, GufeTokenizable]
+        self, node: Node, g: nx.DiGraph, mapping: dict[Node, GufeTokenizable]
     ):
         # shortcut if we already have this object deserialized
         if gufe_obj := mapping.get(node):
@@ -445,7 +444,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         scoped_key: ScopedKey,
         return_subgraph=False,
-    ) -> Union[Node, Tuple[Node, Subgraph]]:
+    ) -> Node | tuple[Node, Subgraph]:
         """
         If `return_subgraph = True`, also return subgraph for gufe object.
         """
@@ -498,8 +497,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         *,
         qualname: str,
-        additional: Optional[Dict] = None,
-        key: Optional[GufeKey] = None,
+        additional: dict | None = None,
+        key: GufeKey | None = None,
         scope: Scope = Scope(),
         return_gufe=False,
     ):
@@ -594,7 +593,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         network: AlchemicalNetwork,
         scope: Scope,
-        state: Union[NetworkStateEnum, str] = NetworkStateEnum.active,
+        state: NetworkStateEnum | str = NetworkStateEnum.active,
     ):
         """Create all nodes and relationships needed for an AlchemicalNetwork
         represented in an alchemiscale state store.
@@ -689,7 +688,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         raise NotImplementedError
 
-    def get_network_state(self, networks: List[ScopedKey]) -> List[Optional[str]]:
+    def get_network_state(self, networks: list[ScopedKey]) -> list[str | None]:
         """Get the states of a group of networks.
 
         Parameters
@@ -699,7 +698,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Returns
         -------
-        List[Optional[str]]
+        list[str | None]
             A list containing the states of the given networks, in the same
             order as they were provided. If a network was not found, ``None``
             is returned at the corresponding index.
@@ -765,8 +764,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         return subgraph, network_mark_node, scoped_key
 
     def set_network_state(
-        self, networks: List[ScopedKey], states: List[str]
-    ) -> List[Optional[ScopedKey]]:
+        self, networks: list[ScopedKey], states: list[str]
+    ) -> list[ScopedKey | None]:
         """Set the state of a group of AlchemicalNetworks.
 
         Parameters
@@ -778,7 +777,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Returns
         -------
-        List[Optional[ScopedKey]]
+        list[ScopedKey | None]
             The list of ScopedKeys for networks that were updated. If the
             network could not be found in the database, ``None`` is returned at
             the corresponding index.
@@ -824,9 +823,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         *,
         name=None,
         key=None,
-        scope: Optional[Scope] = None,
-        state: Optional[str] = None,
-    ) -> List[ScopedKey]:
+        scope: Scope | None = None,
+        state: str | None = None,
+    ) -> list[ScopedKey]:
         """Query for `AlchemicalNetwork`\s matching given attributes."""
 
         if scope is None:
@@ -893,7 +892,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             qualname="ChemicalSystem", additional=additional, key=key, scope=scope
         )
 
-    def get_network_transformations(self, network: ScopedKey) -> List[ScopedKey]:
+    def get_network_transformations(self, network: ScopedKey) -> list[ScopedKey]:
         """List ScopedKeys for Transformations associated with the given AlchemicalNetwork."""
         q = """
         MATCH (:AlchemicalNetwork {_scoped_key: $network})-[:DEPENDS_ON]->(t:Transformation|NonTransformation)
@@ -908,7 +907,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [ScopedKey.from_str(sk) for sk in sks]
 
-    def get_transformation_networks(self, transformation: ScopedKey) -> List[ScopedKey]:
+    def get_transformation_networks(self, transformation: ScopedKey) -> list[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Transformation."""
         q = """
         MATCH (:Transformation|NonTransformation {_scoped_key: $transformation})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
@@ -923,7 +922,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [ScopedKey.from_str(sk) for sk in sks]
 
-    def get_network_chemicalsystems(self, network: ScopedKey) -> List[ScopedKey]:
+    def get_network_chemicalsystems(self, network: ScopedKey) -> list[ScopedKey]:
         """List ScopedKeys for ChemicalSystems associated with the given AlchemicalNetwork."""
         q = """
         MATCH (:AlchemicalNetwork {_scoped_key: $network})-[:DEPENDS_ON]->(cs:ChemicalSystem)
@@ -938,7 +937,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [ScopedKey.from_str(sk) for sk in sks]
 
-    def get_chemicalsystem_networks(self, chemicalsystem: ScopedKey) -> List[ScopedKey]:
+    def get_chemicalsystem_networks(self, chemicalsystem: ScopedKey) -> list[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given ChemicalSystem."""
         q = """
         MATCH (:ChemicalSystem {_scoped_key: $chemicalsystem})<-[:DEPENDS_ON]-(an:AlchemicalNetwork)
@@ -955,7 +954,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_transformation_chemicalsystems(
         self, transformation: ScopedKey
-    ) -> List[ScopedKey]:
+    ) -> list[ScopedKey]:
         """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
         q = """
         MATCH (:Transformation|NonTransformation {_scoped_key: $transformation})-[:DEPENDS_ON]->(cs:ChemicalSystem)
@@ -972,7 +971,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_chemicalsystem_transformations(
         self, chemicalsystem: ScopedKey
-    ) -> List[ScopedKey]:
+    ) -> list[ScopedKey]:
         """List ScopedKeys for the Transformations associated with the given ChemicalSystem."""
         q = """
         MATCH (:ChemicalSystem {_scoped_key: $chemicalsystem})<-[:DEPENDS_ON]-(t:Transformation|NonTransformation)
@@ -998,7 +997,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_transformation_results(
         self, transformation: ScopedKey
-    ) -> List[ProtocolDAGResultRef]:
+    ) -> list[ProtocolDAGResultRef]:
         # get all task result protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
         q = """
@@ -1012,7 +1011,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_transformation_failures(
         self, transformation: ScopedKey
-    ) -> List[ProtocolDAGResultRef]:
+    ) -> list[ProtocolDAGResultRef]:
         # get all task failure protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
         q = """
@@ -1170,8 +1169,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         return subgraph, taskhub_node, scoped_key
 
     def query_taskhubs(
-        self, scope: Optional[Scope] = Scope(), return_gufe: bool = False
-    ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskHub]]:
+        self, scope: Scope | None = Scope(), return_gufe: bool = False
+    ) -> list[ScopedKey] | dict[ScopedKey, TaskHub]:
         """Query for `TaskHub`\s matching the given criteria.
 
         Parameters
@@ -1185,7 +1184,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_taskhub(
         self, network: ScopedKey, return_gufe: bool = False
-    ) -> Union[ScopedKey, TaskHub]:
+    ) -> ScopedKey | TaskHub:
         """Get the TaskHub for the given AlchemicalNetwork.
 
         Parameters
@@ -1239,8 +1238,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         return taskhub
 
     def set_taskhub_weight(
-        self, networks: List[ScopedKey], weights: List[float]
-    ) -> List[Optional[ScopedKey]]:
+        self, networks: list[ScopedKey], weights: list[float]
+    ) -> list[ScopedKey | None]:
         """Set the weights for the TaskHubs associated with the given
         AlchemicalNetworks.
 
@@ -1280,8 +1279,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_taskhub_actioned_tasks(
         self,
-        taskhubs: List[ScopedKey],
-    ) -> List[Dict[ScopedKey, float]]:
+        taskhubs: list[ScopedKey],
+    ) -> list[dict[ScopedKey, float]]:
         """Get the Tasks that the given TaskHubs ACTIONS.
 
         Parameters
@@ -1314,7 +1313,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [data[taskhub] for taskhub in taskhubs]
 
-    def get_task_actioned_networks(self, task: ScopedKey) -> Dict[ScopedKey, float]:
+    def get_task_actioned_networks(self, task: ScopedKey) -> dict[ScopedKey, float]:
         """Get all AlchemicalNetwork ScopedKeys whose TaskHub ACTIONS a given Task.
 
         Parameters
@@ -1343,7 +1342,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             for record in results.records
         }
 
-    def get_taskhub_weight(self, networks: List[ScopedKey]) -> List[float]:
+    def get_taskhub_weight(self, networks: list[ScopedKey]) -> list[float]:
         """Get the weight for the TaskHubs associated with the given
         AlchemicalNetworks.
 
@@ -1377,9 +1376,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def action_tasks(
         self,
-        tasks: List[ScopedKey],
+        tasks: list[ScopedKey],
         taskhub: ScopedKey,
-    ) -> List[Union[ScopedKey, None]]:
+    ) -> list[ScopedKey | None]:
         """Add Tasks to the TaskHub for a given AlchemicalNetwork.
 
         Note: the Tasks must be within the same scope as the AlchemicalNetwork,
@@ -1432,10 +1431,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def set_task_weights(
         self,
-        tasks: Union[Dict[ScopedKey, float], List[ScopedKey]],
+        tasks: dict[ScopedKey, float] | list[ScopedKey],
         taskhub: ScopedKey,
-        weight: Optional[float] = None,
-    ) -> List[Union[ScopedKey, None]]:
+        weight: float | None = None,
+    ) -> list[ScopedKey | None]:
         """Sets weights for the ACTIONS relationship between a TaskHub and a Task.
 
         This is used to set the relative probabilistic execution order of a
@@ -1452,19 +1451,19 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Parameters
         ----------
-        tasks: Union[Dict[ScopedKey, float], List[ScopedKey]]
+        tasks: dict[ScopedKey, float] | list[ScopedKey]
             If a dict, the keys are the ScopedKeys of the Tasks, and the values are the weights.
             If a list, the weights are set to the scalar value given by the `weight` argument.
 
         taskhub: ScopedKey
             The ScopedKey of the TaskHub associated with the Tasks.
 
-        weight: Optional[float]
+        weight: float | None
             If `tasks` is a list, this is the weight to set for each Task.
 
         Returns
         -------
-        List[ScopedKey, None]
+        list[ScopedKey, None]
             A list of ScopedKeys for each Task whose weight was set.
             `None` is given for Tasks that weight was not set for; this could
             be because the TaskHub doesn't have an ACTIONS relationship with the Task,
@@ -1534,9 +1533,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_task_weights(
         self,
-        tasks: List[ScopedKey],
+        tasks: list[ScopedKey],
         taskhub: ScopedKey,
-    ) -> List[Union[float, None]]:
+    ) -> list[float | None]:
         """Get weights for the ACTIONS relationship between a TaskHub and a Task.
 
         Parameters
@@ -1568,9 +1567,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def cancel_tasks(
         self,
-        tasks: List[ScopedKey],
+        tasks: list[ScopedKey],
         taskhub: ScopedKey,
-    ) -> List[Union[ScopedKey, None]]:
+    ) -> list[ScopedKey | None]:
         """Remove Tasks from the TaskHub for a given AlchemicalNetwork.
 
         Note: Tasks must be within the same scope as the AlchemicalNetwork.
@@ -1600,7 +1599,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_taskhub_tasks(
         self, taskhub: ScopedKey, return_gufe=False
-    ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
+    ) -> list[ScopedKey] | dict[ScopedKey, Task]:
         """Get a list of Tasks on the TaskHub."""
 
         q = """
@@ -1627,7 +1626,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_taskhub_unclaimed_tasks(
         self, taskhub: ScopedKey, return_gufe=False
-    ) -> Union[List[ScopedKey], Dict[ScopedKey, Task]]:
+    ) -> list[ScopedKey] | dict[ScopedKey, Task]:
         """Get a list of unclaimed Tasks in the TaskHub."""
 
         q = """
@@ -1659,8 +1658,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         taskhub: ScopedKey,
         compute_service_id: ComputeServiceID,
         count: int = 1,
-        protocols: Optional[List[Union[Protocol, str]]] = None,
-    ) -> List[Union[ScopedKey, None]]:
+        protocols: list[Protocol | str] | None = None,
+    ) -> list[ScopedKey | None]:
         """Claim a TaskHub Task.
 
         This method will claim Tasks from a TaskHub according to the following process:
@@ -1813,7 +1812,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## tasks
 
-    def _validate_extends_tasks(self, task_list) -> Dict[str, Tuple[Node, str]]:
+    def _validate_extends_tasks(self, task_list) -> dict[str, tuple[Node, str]]:
 
         if not task_list:
             return {}
@@ -1846,10 +1845,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def create_tasks(
         self,
-        transformations: List[ScopedKey],
-        extends: Optional[List[Optional[ScopedKey]]] = None,
-        creator: Optional[str] = None,
-    ) -> List[ScopedKey]:
+        transformations: list[ScopedKey],
+        extends: list[ScopedKey | None] | None = None,
+        creator: str | None = None,
+    ) -> list[ScopedKey]:
         """Create Tasks for the given Transformations.
 
         Note: this creates Tasks; it does not action them.
@@ -1985,8 +1984,8 @@ class Neo4jStore(AlchemiscaleStateStore):
     def create_task(
         self,
         transformation: ScopedKey,
-        extends: Optional[ScopedKey] = None,
-        creator: Optional[str] = None,
+        extends: ScopedKey | None = None,
+        creator: str | None = None,
     ) -> ScopedKey:
         """Create a single Task for a Transformation.
 
@@ -2006,8 +2005,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         return self._query(qualname="Task", additional=additional, key=key, scope=scope)
 
     def get_network_tasks(
-        self, network: ScopedKey, status: Optional[TaskStatusEnum] = None
-    ) -> List[ScopedKey]:
+        self, network: ScopedKey, status: TaskStatusEnum | None = None
+    ) -> list[ScopedKey]:
         """List ScopedKeys for all Tasks associated with the given AlchemicalNetwork."""
         q = """
         MATCH (an:AlchemicalNetwork {_scoped_key: $network})-[:DEPENDS_ON]->(tf:Transformation|NonTransformation),
@@ -2033,7 +2032,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [ScopedKey.from_str(sk) for sk in sks]
 
-    def get_task_networks(self, task: ScopedKey) -> List[ScopedKey]:
+    def get_task_networks(self, task: ScopedKey) -> list[ScopedKey]:
         """List ScopedKeys for AlchemicalNetworks associated with the given Task."""
         q = """
         MATCH (t:Task {_scoped_key: $task})-[:PERFORMS]->(tf:Transformation|NonTransformation),
@@ -2052,10 +2051,10 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_transformation_tasks(
         self,
         transformation: ScopedKey,
-        extends: Optional[ScopedKey] = None,
+        extends: ScopedKey | None = None,
         return_as: str = "list",
-        status: Optional[TaskStatusEnum] = None,
-    ) -> Union[List[ScopedKey], Dict[ScopedKey, Optional[ScopedKey]]]:
+        status: TaskStatusEnum | None = None,
+    ) -> list[ScopedKey] | dict[ScopedKey, ScopedKey | None]:
         """Get all Tasks that perform the given Transformation.
 
         If a Task ScopedKey is given for `extends`, then only those Tasks
@@ -2120,10 +2119,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         task: ScopedKey,
         return_gufe=True,
-    ) -> Union[
-        Tuple[Transformation, Optional[ProtocolDAGResultRef]],
-        Tuple[ScopedKey, Optional[ScopedKey]],
-    ]:
+    ) -> tuple[Transformation, ProtocolDAGResultRef | None] |
+        tuple[ScopedKey, ScopedKey | None]:
         """Get the `Transformation` and `ProtocolDAGResultRef` to extend from (if
         present) for the given `Task`.
 
@@ -2177,7 +2174,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def set_tasks(
         self,
         transformation: ScopedKey,
-        extends: Optional[Task] = None,
+        extends: Task | None = None,
         count: int = 1,
     ) -> ScopedKey:
         """Set a fixed number of Tasks against the given Transformation if not
@@ -2207,8 +2204,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
     def set_task_priority(
-        self, tasks: List[ScopedKey], priority: int
-    ) -> List[Optional[ScopedKey]]:
+        self, tasks: list[ScopedKey], priority: int
+    ) -> list[ScopedKey | None]:
         """Set the priority of a list of Tasks.
 
         Parameters
@@ -2220,7 +2217,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Returns
         -------
-        List[Optional[ScopedKey]]
+        list[ScopedKey | None]
             A list of the Task ScopedKeys for which priority was changed; `None`
             is given for any Tasks for which the priority could not be changed.
         """
@@ -2255,7 +2252,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 task_results.append(ScopedKey.from_str(scoped_key))
         return task_results
 
-    def get_task_priority(self, tasks: List[ScopedKey]) -> List[Optional[int]]:
+    def get_task_priority(self, tasks: list[ScopedKey]) -> list[int | None]:
         """Get the priority of a list of Tasks.
 
         Parameters
@@ -2265,7 +2262,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Returns
         -------
-        List[Optional[int]]
+        list[int | None]
             A list of priorities in the same order as the provided Tasks.
             If an element is ``None``, the Task could not be found.
         """
@@ -2299,8 +2296,8 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_scope_status(
         self,
         scope: Scope,
-        network_state: Optional[Union[NetworkStateEnum, str]] = NetworkStateEnum.active,
-    ) -> Dict[str, int]:
+        network_state: NetworkStateEnum | str | None = NetworkStateEnum.active,
+    ) -> dict[str, int]:
         """Return status counts for all Tasks within the given Scope.
 
         Parameters
@@ -2341,7 +2338,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return counts
 
-    def get_network_status(self, networks: List[ScopedKey]) -> List[Dict[str, int]]:
+    def get_network_status(self, networks: list[ScopedKey]) -> list[dict[str, int]]:
         """Return status counts for all Tasks associated with the given AlchemicalNetworks."""
         q = """
         UNWIND $networks AS network
@@ -2359,7 +2356,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [network_data[str(an)] for an in networks]
 
-    def get_transformation_status(self, transformation: ScopedKey) -> Dict[str, int]:
+    def get_transformation_status(self, transformation: ScopedKey) -> dict[str, int]:
         """Return status counts for all Tasks associated with the given Transformation."""
         q = """
         MATCH (:Transformation|NonTransformation {_scoped_key: $transformation})<-[:PERFORMS]-(t:Task)
@@ -2402,7 +2399,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return scoped_key
 
-    def get_task_results(self, task: ScopedKey) -> List[ProtocolDAGResultRef]:
+    def get_task_results(self, task: ScopedKey) -> list[ProtocolDAGResultRef]:
         # get all task result protocoldagresultrefs corresponding to given task
         # returned in no particular order
         q = """
@@ -2414,7 +2411,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._get_protocoldagresultrefs(q, task)
 
-    def get_task_failures(self, task: ScopedKey) -> List[ProtocolDAGResultRef]:
+    def get_task_failures(self, task: ScopedKey) -> list[ProtocolDAGResultRef]:
         # get all task failure protocoldagresultrefs corresponding to given task
         # returned in no particular order
         q = """
@@ -2427,8 +2424,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         return self._get_protocoldagresultrefs(q, task)
 
     def set_task_status(
-        self, tasks: List[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
-    ) -> List[Optional[ScopedKey]]:
+        self, tasks: list[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
+    ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks.
 
         This is a master method that calls the appropriate method for the
@@ -2445,7 +2442,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Returns
         -------
-        List[Optional[ScopedKey]]
+        list[ScopedKey | None]
             A list of the Task ScopedKeys for which status was changed; `None`
             is given for any Tasks for which the status could not be changed.
 
@@ -2453,7 +2450,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         method = getattr(self, f"set_task_{status.value}")
         return method(tasks, raise_error=raise_error)
 
-    def get_task_status(self, tasks: List[ScopedKey]) -> List[TaskStatusEnum]:
+    def get_task_status(self, tasks: list[ScopedKey]) -> list[TaskStatusEnum]:
         """Get the status of a list of Tasks.
 
         Parameters
@@ -2463,7 +2460,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Returns
         -------
-        Dict[ScopedKey,TaskStatusEnum]
+        dict[ScopedKey,TaskStatusEnum]
             A dictionary of Tasks and their statuses.
         """
         statuses = []
@@ -2485,7 +2482,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def _set_task_status(
         self, tasks, q: str, err_msg_func, raise_error
-    ) -> List[Optional[ScopedKey]]:
+    ) -> list[ScopedKey | None]:
         tasks_statused = []
         with self.transaction() as tx:
             res = tx.run(q, scoped_keys=[str(t) for t in tasks])
@@ -2510,8 +2507,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         return tasks_statused
 
     def set_task_waiting(
-        self, tasks: List[ScopedKey], raise_error: bool = False
-    ) -> List[Optional[ScopedKey]]:
+        self, tasks: list[ScopedKey], raise_error: bool = False
+    ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks to `waiting`.
 
         Only Tasks with status `error` or `running` can be set to `waiting`.
@@ -2544,8 +2541,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_running(
-        self, tasks: List[ScopedKey], raise_error: bool = False
-    ) -> List[Optional[ScopedKey]]:
+        self, tasks: list[ScopedKey], raise_error: bool = False
+    ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks to `running`.
 
         Only Tasks with status `waiting` can be set to `running`.
@@ -2571,8 +2568,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_complete(
-        self, tasks: List[ScopedKey], raise_error: bool = False
-    ) -> List[Optional[ScopedKey]]:
+        self, tasks: list[ScopedKey], raise_error: bool = False
+    ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks to `complete`.
 
         Only `running` Tasks can be set to `complete`.
@@ -2612,8 +2609,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_error(
-        self, tasks: List[ScopedKey], raise_error: bool = False
-    ) -> List[Optional[ScopedKey]]:
+        self, tasks: list[ScopedKey], raise_error: bool = False
+    ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks to `error`.
 
         Only `running` Tasks can be set to `error`.
@@ -2646,8 +2643,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_invalid(
-        self, tasks: List[ScopedKey], raise_error: bool = False
-    ) -> List[Optional[ScopedKey]]:
+        self, tasks: list[ScopedKey], raise_error: bool = False
+    ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks to `invalid`.
 
         Any Task can be set to `invalid`; an `invalid` Task cannot change to
@@ -2696,8 +2693,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_deleted(
-        self, tasks: List[ScopedKey], raise_error: bool = False
-    ) -> List[Optional[ScopedKey]]:
+        self, tasks: list[ScopedKey], raise_error: bool = False
+    ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks to `deleted`.
 
         Any Task can be set to `deleted`; a `deleted` Task cannot change to
@@ -2828,7 +2825,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def list_scopes(
         self, identifier: str, cls: type[CredentialedEntity]
-    ) -> List[Scope]:
+    ) -> list[Scope]:
         """List all scopes for which the given entity has access."""
 
         # get the scope properties for the given entity

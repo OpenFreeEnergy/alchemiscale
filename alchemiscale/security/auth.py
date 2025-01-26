@@ -8,7 +8,6 @@ import secrets
 import base64
 import hashlib
 from datetime import datetime, timedelta
-from typing import Optional, Union
 
 import bcrypt
 from fastapi import HTTPException, status
@@ -92,8 +91,8 @@ def create_access_token(
     *,
     data: dict,
     secret_key: str,
-    expires_seconds: Optional[int] = 900,
-    jwt_algorithm: Optional[str] = "HS256",
+    expires_seconds: int | None = 900,
+    jwt_algorithm: str | None = "HS256",
 ) -> str:
     to_encode = data.copy()
 
@@ -105,7 +104,7 @@ def create_access_token(
 
 
 def get_token_data(
-    *, token: str, secret_key: str, jwt_algorithm: Optional[str] = "HS256"
+    *, token: str, secret_key: str, jwt_algorithm: str | None = "HS256"
 ) -> TokenData:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
