@@ -34,7 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: mamba-org/setup-micromamba@v1
+      - name: Install environment
+        uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: devtools/conda-envs/test.yml
           create-args: >-

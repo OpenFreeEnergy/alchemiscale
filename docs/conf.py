@@ -45,6 +45,7 @@ autodoc_mock_imports = [
     "numpy",
     "py2neo",
     "pydantic",
+    "pydantic_settings",
     "starlette",
     "yaml",
 ]

@@ -131,7 +131,7 @@ class QueryGUFEHandler:
             # handle list
             self._results.extend(data)
 
-    def format_return(self) -> dict[str, str] | list[str] :
+    def format_return(self) -> dict[str, str] | list[str]:
         if self.return_gufe:
             return {str(sk): gufe_to_json(tq) for sk, tq in self._results.items()}
         else:

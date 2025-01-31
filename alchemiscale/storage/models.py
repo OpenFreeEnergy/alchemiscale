@@ -12,7 +12,7 @@ from uuid import uuid4
 import hashlib
 
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 from gufe.tokenization import GufeTokenizable, GufeKey
 
 from ..models import ScopedKey, Scope
@@ -27,6 +27,8 @@ class ComputeServiceRegistration(BaseModel):
     identifier: ComputeServiceID
     registered: datetime
     heartbeat: datetime
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __repr__(self):  # pragma: no cover
         return f"<ComputeServiceRegistration('{str(self)}')>"
@@ -57,6 +59,8 @@ class TaskProvenance(BaseModel):
     computeserviceid: ComputeServiceID
     datetime_start: datetime
     datetime_end: datetime
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     # this should include versions of various libraries
 
@@ -139,6 +143,107 @@ class Task(GufeTokenizable):
     @classmethod
     def _defaults(cls):
         return super()._defaults()
+
+
+class TaskRestartPattern(GufeTokenizable):
+    """A pattern to compare returned Task tracebacks to.
+
+    Attributes
+    ----------
+    pattern: str
+        A regular expression pattern that can match to returned tracebacks of errored Tasks.
+    max_retries: int
+        The number of times the pattern can trigger a restart for a Task.
+    taskhub_sk: str
+        The TaskHub the pattern is bound to. This is needed to properly set a unique Gufe key.
+    """
+
+    pattern: str
+    max_retries: int
+    taskhub_sk: str
+
+    def __init__(
+        self, pattern: str, max_retries: int, taskhub_scoped_key: str | ScopedKey
+    ):
+
+        if not isinstance(pattern, str) or pattern == "":
+            raise ValueError("`pattern` must be a non-empty string")
+
+        self.pattern = pattern
+
+        if not isinstance(max_retries, int) or max_retries <= 0:
+            raise ValueError("`max_retries` must have a positive integer value.")
+        self.max_retries = max_retries
+
+        self.taskhub_scoped_key = str(taskhub_scoped_key)
+
+    def _gufe_tokenize(self):
+        key_string = self.pattern + self.taskhub_scoped_key
+        return hashlib.md5(key_string.encode()).hexdigest()
+
+    @classmethod
+    def _defaults(cls):
+        return super()._defaults()
+
+    @classmethod
+    def _from_dict(cls, dct):
+        return cls(**dct)
+
+    def _to_dict(self):
+        return {
+            "pattern": self.pattern,
+            "max_retries": self.max_retries,
+            "taskhub_scoped_key": self.taskhub_scoped_key,
+        }
+
+
+class Tracebacks(GufeTokenizable):
+    """
+    Attributes
+    ----------
+    tracebacks: list[str]
+        The tracebacks returned with the ProtocolUnitFailures.
+    source_keys: list[GufeKey]
+        The GufeKeys of the ProtocolUnits that failed.
+    failure_keys: list[GufeKey]
+        The GufeKeys of the ProtocolUnitFailures.
+    """
+
+    def __init__(
+        self,
+        tracebacks: list[str],
+        source_keys: list[GufeKey],
+        failure_keys: list[GufeKey],
+    ):
+        value_error = ValueError(
+            "`tracebacks` must be a non-empty list of non-empty string values"
+        )
+        if not isinstance(tracebacks, list) or tracebacks == []:
+            raise value_error
+
+        all_string_values = all([isinstance(value, str) for value in tracebacks])
+        if not all_string_values or "" in tracebacks:
+            raise value_error
+
+        # TODO: validate
+        self.tracebacks = tracebacks
+        self.source_keys = source_keys
+        self.failure_keys = failure_keys
+
+    @classmethod
+    def _defaults(cls):
+        return super()._defaults()
+
+    @classmethod
+    def _from_dict(cls, dct):
+        return cls(**dct)
+
+    def _to_dict(self):
+        return {
+            "tracebacks": self.tracebacks,
+            "source_keys": self.source_keys,
+            "failure_keys": self.failure_keys,
+        }
 
 
 class TaskHub(GufeTokenizable):
