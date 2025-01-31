@@ -8,7 +8,6 @@ import os
 import io
 import json
 from datetime import datetime
-from typing import Union, Optional
 from boto3.session import Session
 from functools import lru_cache
 
@@ -203,7 +202,7 @@ class S3ObjectStore:
         protocoldagresult_ok: bool,
         protocoldagresult_gufekey: GufeKey,
         transformation: ScopedKey,
-        creator: Optional[str] = None,
+        creator: str | None = None,
     ) -> ProtocolDAGResultRef:
         """Push given `ProtocolDAGResult` to this `ObjectStore`.
 
@@ -252,9 +251,9 @@ class S3ObjectStore:
 
     def pull_protocoldagresult(
         self,
-        protocoldagresult: Optional[ScopedKey] = None,
-        transformation: Optional[ScopedKey] = None,
-        location: Optional[str] = None,
+        protocoldagresult: ScopedKey | None = None,
+        transformation: ScopedKey | None = None,
+        location: str | None = None,
         ok=True,
     ) -> bytes:
         """Pull the `ProtocolDAGResult` corresponding to the given `ProtocolDAGResultRef`.

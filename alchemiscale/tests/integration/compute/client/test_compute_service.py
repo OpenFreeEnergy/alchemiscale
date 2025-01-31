@@ -1,4 +1,3 @@
-from typing import List, Optional
 import threading
 import time
 import os
@@ -65,7 +64,7 @@ class TestSynchronousComputeService:
 
         service._register()
 
-        task_sks: List[Optional[ScopedKey]] = service.claim_tasks(count=2)
+        task_sks: list[ScopedKey | None] = service.claim_tasks(count=2)
 
         # should have 2 tasks
         assert len(task_sks) == 2

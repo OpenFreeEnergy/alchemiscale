@@ -6,7 +6,6 @@ from gufe.tokenization import (
     modify_dependencies,
 )
 from itertools import chain
-from typing import Union, Dict, List
 import networkx as nx
 
 
@@ -37,8 +36,8 @@ class RegistryBackup(object):
 
 
 def gufe_objects_from_shallow_dict(
-    obj: Union[List, Dict, GufeTokenizable]
-) -> List[GufeTokenizable]:
+    obj: list | dict | GufeTokenizable,
+) -> list[GufeTokenizable]:
     """Find GufeTokenizables within a shallow dict.
 
     This function recursively looks through the list/dict structures encoding
@@ -54,7 +53,7 @@ def gufe_objects_from_shallow_dict(
 
     Returns
     -------
-    List[GufeTokenizable]
+    list[GufeTokenizable]
         All GufeTokenizables found in the shallow dict representation of a
         GufeTokenizable.
 
