@@ -2060,7 +2060,9 @@ class TestClient:
 
         # execute the actioned tasks and push results directly using statestore and object store
         with tmpdir.as_cwd():
-            protocoldagresults = self._execute_tasks(actioned_tasks, n4js_preloaded, s3os_server)
+            protocoldagresults = self._execute_tasks(
+                actioned_tasks, n4js_preloaded, s3os_server
+            )
             self._push_results(
                 actioned_tasks, protocoldagresults, n4js_preloaded, s3os_server
             )
