@@ -82,11 +82,11 @@ class AlchemiscaleBaseClient:
             Credential for the identity used for authentication.
         cache_directory
             Location of the cache directory as either a `pathlib.Path` or `str`.
-            If `None` is provided then the directory will be determined via the
-            `XDG_CACHE_HOME` environment variable or default to
-            `${HOME}/.cache/alchemiscale`. Defaults to `None`.
+            If ``None`` is provided then the directory will be determined via
+            the ``XDG_CACHE_HOME`` environment variable or default to
+            ``${HOME}/.cache/alchemiscale``. Default ``None``.
         cache_size_limit
-            Maximum size of the client cache. Defaults to 1 GB.
+            Maximum size of the client cache in bytes. Default 1 GiB.
         max_retries
             Maximum number of times to retry a request. In the case the API
             service is unresponsive an exponential backoff is applied with

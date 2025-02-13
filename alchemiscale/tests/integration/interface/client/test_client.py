@@ -2060,7 +2060,10 @@ class TestClient:
 
         # execute the actioned tasks and push results directly using statestore and object store
         with tmpdir.as_cwd():
-            self._execute_tasks(actioned_tasks, n4js_preloaded, s3os_server)
+            protocoldagresults = self._execute_tasks(actioned_tasks, n4js_preloaded, s3os_server)
+            self._push_results(
+                actioned_tasks, protocoldagresults, n4js_preloaded, s3os_server
+            )
 
         # make sure that we have reset all stats tracking before the intial pull
         assert user_client._cache.stats(reset=True) == (0, 0)
@@ -2081,7 +2084,7 @@ class TestClient:
         assert user_client._cache.stats() == (4, 4) and len(user_client._cache) == 4
 
         # when the alru is not cleared, we should not see misses or hits on the disk cache
-        # since the alru should populate from the results found on disk
+        # since the alru should populate from the results found previously on disk
         user_client.get_transformation_results(transformation_sk)
 
         assert user_client._cache.stats() == (4, 4) and len(user_client._cache) == 4
