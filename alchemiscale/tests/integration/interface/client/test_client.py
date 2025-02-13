@@ -59,7 +59,7 @@ class TestClient:
         # remove the env variable to get the default directory location
         os.environ.pop("XDG_CACHE_HOME", None)
         cache_dir = client.AlchemiscaleClient._determine_cache_dir(None)
-        assert cache_dir == Path().home() / ".cache" / "alchemiscale"
+        assert cache_dir == Path.home() / ".cache" / "alchemiscale"
 
     def test_wrong_credential(
         self,
