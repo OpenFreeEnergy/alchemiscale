@@ -1,6 +1,4 @@
-"""Components for standing up services for integration tests, including databases.
-
-"""
+"""Components for standing up services for integration tests, including databases."""
 
 ## storage
 ### below from `py2neo.test.integration.conftest.py`

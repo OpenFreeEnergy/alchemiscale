@@ -51,7 +51,7 @@ class TestClient:
     # so we don't create non-temporary files on the testing platform
     def test_cache_dir_none(self):
         # set custom XDG_CACHE_HOME
-        target_dir = Path().home() / ".other_cache"
+        target_dir = Path.home() / ".other_cache"
         os.environ["XDG_CACHE_HOME"] = str(target_dir)
         cache_dir = client.AlchemiscaleClient._determine_cache_dir(None)
         assert cache_dir == target_dir.absolute() / "alchemiscale"

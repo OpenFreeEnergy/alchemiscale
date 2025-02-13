@@ -141,7 +141,7 @@ class AlchemiscaleBaseClient:
             )
 
         if cache_directory is None:
-            default_dir = Path().home() / ".cache"
+            default_dir = Path.home() / ".cache"
             cache_directory = (
                 Path(os.getenv("XDG_CACHE_HOME", default_dir)) / "alchemiscale"
             )
