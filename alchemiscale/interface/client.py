@@ -24,7 +24,7 @@ from ..base.client import (
     json_to_gufe,
     use_session,
 )
-from ..compression import decompress_gufe_zstd
+from ..compression import decompress_gufe_zstd, compress_gufe_zstd
 from ..models import Scope, ScopedKey
 from ..storage.models import (
     TaskStatusEnum,
@@ -493,29 +493,27 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/chemicalsystems/{chemicalsystem}/transformations"
         )
 
-    def _get_keyed_chain_resource(self, scopedkey: ScopedKey, get_content_function):
-
-        content = None
+    def _get_keyed_chain_resource(
+        self, scopedkey: ScopedKey, get_content_function
+    ) -> GufeTokenizable:
 
         try:
-            cached_keyed_chain = self._cache.get(str(scopedkey), None).decode("utf-8")
-            content = json.loads(cached_keyed_chain, cls=JSON_HANDLER.decoder)
-        # JSON could not decode
-        except json.JSONDecodeError:
+            # check cache for object with a matching gufe key, decompress and return
+            if content := self._cache.get(str(scopedkey), None):
+                return decompress_gufe_zstd(content)
+        # any issue with decompressing should delete the cached bytes
+        except zstd.ZstdError:
             warn(
-                f"Error decoding cached {scopedkey.qualname} ({scopedkey}), deleting entry and retrieving new content."
+                f"Error decompressing cached {scopedkey.qualname} ({scopedkey}), deleting entry and retrieving new content."
             )
             self._cache.delete(str(scopedkey))
-        # when trying to call the decode method with a None (i.e. cached entry not found)
-        except AttributeError:
-            pass
 
-        if content is None:
-            content = get_content_function()
-            keyedchain_json = json.dumps(content, cls=JSON_HANDLER.encoder)
-            self._cache.add(str(scopedkey), keyedchain_json.encode("utf-8"))
+        # get the gufe object, add it to the cache, then return
+        content = get_content_function()
+        gufe_object = KeyedChain(content).to_gufe()
+        self._cache.add(str(scopedkey), compress_gufe_zstd(gufe_object))
 
-        return KeyedChain(content).to_gufe()
+        return gufe_object
 
     @lru_cache(maxsize=100)
     def get_network(

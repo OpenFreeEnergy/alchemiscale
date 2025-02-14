@@ -588,7 +588,9 @@ class TestClient:
         cached_bytes = user_client._cache.get(str(an_sk))
         corrupted_bytes = cached_bytes.replace(b":", b";")
         user_client._cache.set(str(an_sk), corrupted_bytes)
-        with pytest.warns(UserWarning, match=f"Error decoding cached {an_sk.qualname}"):
+        with pytest.warns(
+            UserWarning, match=f"Error decompressing cached {an_sk.qualname}"
+        ):
             user_client.get_network(an_sk)
 
         new_cached_bytes = user_client._cache.get(str(an_sk))
@@ -786,7 +788,9 @@ class TestClient:
         cached_bytes = user_client._cache.get(str(tf_sk))
         corrupted_bytes = cached_bytes.replace(b":", b";")
         user_client._cache.set(str(tf_sk), corrupted_bytes)
-        with pytest.warns(UserWarning, match=f"Error decoding cached {tf_sk.qualname}"):
+        with pytest.warns(
+            UserWarning, match=f"Error decompressing cached {tf_sk.qualname}"
+        ):
             user_client.get_transformation(tf_sk)
 
         new_cached_bytes = user_client._cache.get(str(tf_sk))
@@ -855,7 +859,9 @@ class TestClient:
         cached_bytes = user_client._cache.get(str(cs_sk))
         corrupted_bytes = cached_bytes.replace(b":", b";")
         user_client._cache.set(str(cs_sk), corrupted_bytes)
-        with pytest.warns(UserWarning, match=f"Error decoding cached {cs_sk.qualname}"):
+        with pytest.warns(
+            UserWarning, match=f"Error decompressing cached {cs_sk.qualname}"
+        ):
             user_client.get_chemicalsystem(cs_sk)
 
         new_cached_bytes = user_client._cache.get(str(cs_sk))
