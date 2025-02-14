@@ -2053,9 +2053,8 @@ class TestClient:
         transformation = list(t for t in network_tyk2.edges if "_solvent" in t.name)[0]
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
-        user_client.create_tasks(transformation_sk, count=3)
+        all_tasks = user_client.create_tasks(transformation_sk, count=3)
 
-        all_tasks = user_client.get_transformation_tasks(transformation_sk)
         actioned_tasks = user_client.action_tasks(all_tasks, network_sk)
 
         # execute the actioned tasks and push results directly using statestore and object store
@@ -2186,10 +2185,9 @@ class TestClient:
         transformation_sk = user_client.get_scoped_key(transformation, scope_test)
 
         # user client : create three independent tasks for the transformation
-        user_client.create_tasks(transformation_sk, count=3)
+        all_tasks = user_client.create_tasks(transformation_sk, count=3)
 
         # user client : action the tasks for execution
-        all_tasks = user_client.get_transformation_tasks(transformation_sk)
         actioned_tasks = user_client.action_tasks(all_tasks, network_sk)
 
         # execute the actioned tasks and push results directly using statestore and object store
