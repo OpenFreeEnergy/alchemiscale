@@ -24,7 +24,7 @@ from ..base.client import (
     json_to_gufe,
     use_session,
 )
-from ..compression import decompress_gufe_zstd, compress_gufe_zstd
+from ..compression import decompress_gufe_zstd, compress_keyed_chain_zstd
 from ..models import Scope, ScopedKey
 from ..storage.models import (
     TaskStatusEnum,
@@ -508,10 +508,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             )
             self._cache.delete(str(scopedkey))
 
-        # get the gufe object, add it to the cache, then return
-        content = get_content_function()
-        gufe_object = KeyedChain(content).to_gufe()
-        self._cache.add(str(scopedkey), compress_gufe_zstd(gufe_object))
+        # get the keyed chain and convert to a GufeTokenizable
+        keyed_chain = get_content_function()
+        gufe_object = GufeTokenizable.from_keyed_chain(keyed_chain)
+
+        # add the keyed chain in compressed form to the cache
+        self._cache.add(str(scopedkey), compress_keyed_chain_zstd(keyed_chain))
 
         return gufe_object
 
