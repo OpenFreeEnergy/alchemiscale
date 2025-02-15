@@ -37,7 +37,7 @@ class RegistryBackup(object):
 
 
 def gufe_objects_from_shallow_dict(
-    obj: Union[List, Dict, GufeTokenizable]
+    obj: Union[List, Dict, GufeTokenizable],
 ) -> List[GufeTokenizable]:
     """Find GufeTokenizables within a shallow dict.
 
