@@ -14,7 +14,7 @@ def compress_keyed_chain_zstd(keyed_chain: list[tuple[str, dict]]) -> bytes:
     Returns
     -------
     bytes
-        The compressed byte form of the keyed chain
+        The compressed byte form of the keyed chain.
     """
     stringified_json = json.dumps(keyed_chain, cls=JSON_HANDLER.encoder)
     uncompressed_bytes = stringified_json.encode("utf-8")
