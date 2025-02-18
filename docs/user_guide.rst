@@ -47,6 +47,7 @@ RelativeHybridTopologyProtocol usage notes
 For production use of this protocol, we recommend the default settings, with these changes to reduce execution times per :external+gufe:py:class:`~gufe.transformations.Transformation` :py:class:`~alchemiscale.storage.models.Task`::
 
     >>> from openfe.protocols.openmm_rfe import RelativeHybridTopologyProtocol
+    >>> from openff.units import unit
 
     >>> settings = RelativeHybridTopologyProtocol.default_settings()
     >>> settings.simulation_settings.equilibration_length = 1 * unit.nanosecond
