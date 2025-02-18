@@ -20,7 +20,7 @@ Once installed, activate the environment::
 
     $ micromamba activate alchemiscale-client
 
-You may wish to install other packages into this environment, such as ``jupyterlab``.
+You may wish to install other packages into this environment, such as ``feflow`` or ``jupyterlab``.
 
 .. _micromamba: https://github.com/mamba-org/micromamba-releases
 
@@ -36,7 +36,12 @@ Note that there are several Protocols you can use, including at least:
 * :py:class:`openfe.protocols.openmm_rfe.RelativeHybridTopologyProtocol`
 * :py:class:`feflow.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`
 
-Try each one out with default options for a start. Below are notes on settings you may find more optimal for each, however.
+Try each one out with default options for a start.
+Below are notes on settings you may find more optimal for each, however.
+
+Note that for the ``feflow`` protocol, you will need to install ``feflow`` into your environment with::
+
+    $ micromamba install -n alchemiscale-client -c conda-forge feflow
 
 .. _Preparing AlchemicalNetworks.ipynb: https://github.com/OpenFreeEnergy/ExampleNotebooks/blob/main/networks/Preparing%20AlchemicalNetworks.ipynb
 
