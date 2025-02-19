@@ -55,11 +55,14 @@ For production use of this protocol, we recommend the default settings, with the
     >>> from openff.units import unit
 
     >>> settings = RelativeHybridTopologyProtocol.default_settings()
+    >>> settings.protocol_repeats = 1
+    >>> settings.engine_settings.compute_platform = "CUDA"
     >>> settings.simulation_settings.equilibration_length = 1 * unit.nanosecond
     >>> settings.simulation_settings.production_length = 5 * unit.nanosecond
     >>> settings.simulation_settings.time_per_iteration = 2.5 * unit.picosecond
     >>> settings.forcefield_settings.nonbonded_cutoff = 0.9 * unit.nanometer
     >>> settings.solvation_settings.box_shape = 'dodecahedron'
+    >>> settings.solvation_settings.solvent_padding = 1.5 * unit.nanometer
 
 
 NonEquilibriumCyclingProtocol usage notes
