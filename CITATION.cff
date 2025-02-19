@@ -37,6 +37,12 @@ authors:
 - family-names: "Chodera"
   given-names: "John D."
   orcid: "https://orcid.org/0000-0003-0542-119X"
+- family-names: "Thompson"
+  given-names: "Matthew W."
+  orcid: "https://orcid.org/0000-0002-1460-3983"
+- family-names: "Andreev"
+  given-names: "Georgy"
+  orcid: "https://orcid.org/0009-0004-8126-6085"
 
 title: "alchemiscale"
 version: 0.6.0
