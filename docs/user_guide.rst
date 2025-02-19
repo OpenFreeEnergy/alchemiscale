@@ -12,34 +12,17 @@ It assumes that you already have a user identity on the target ``alchemiscale`` 
 Installation
 ************
 
-Clone alchemiscale from Github, and switch to the latest release tag::
-
-    $ git clone https://github.com/OpenFreeEnergy/alchemiscale.git
-    $ cd alchemiscale
-    $ git checkout v0.5.3
-
 Create a conda environment using, e.g. `micromamba`_::
 
-    $ micromamba create -f devtools/conda-envs/alchemiscale-client.yml
+    $ micromamba create -n alchemiscale-client -c conda-forge alchemiscale-client
 
 Once installed, activate the environment::
 
     $ micromamba activate alchemiscale-client
 
-You may wish to install other packages into this environment, such as jupyterlab.
+You may wish to install other packages into this environment, such as ``feflow`` or ``jupyterlab``.
 
 .. _micromamba: https://github.com/mamba-org/micromamba-releases
-
-
-Installing on ARM-based Macs
-============================
-
-If installing on an ARM-based Mac (M1, M2, etc.), you may need to use `Rosetta`_. You can do this with the following steps::
-
-    $ CONDA_SUBDIR=osx-64 conda create -f devtools/conda-envs/alchemiscale-client.yml
-    $ conda activate alchemiscale-client
-
-.. _Rosetta: https://support.apple.com/en-us/HT211861
 
 
 *****************************
@@ -48,13 +31,17 @@ Creating an AlchemicalNetwork
 
 To create an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, review this notebook and apply the same approach to your systems of interest: `Preparing AlchemicalNetworks.ipynb`_
 
-Note that there are currently two Protocols you can use:
+Note that there are several Protocols you can use, including at least:
 
 * :py:class:`openfe.protocols.openmm_rfe.RelativeHybridTopologyProtocol`
-* :py:class:`perses.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`
+* :py:class:`feflow.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`
 
-Try each one out with default options for a start. Below are notes on settings you may find more optimal for each, however.
+Try each one out with default options for a start.
+Below are notes on settings you may find more optimal for each, however.
 
+Note that for the ``feflow`` protocol, you will need to install ``feflow`` into your environment with::
+
+    $ micromamba install -n alchemiscale-client -c conda-forge feflow
 
 .. _Preparing AlchemicalNetworks.ipynb: https://github.com/OpenFreeEnergy/ExampleNotebooks/blob/main/networks/Preparing%20AlchemicalNetworks.ipynb
 
@@ -65,14 +52,17 @@ RelativeHybridTopologyProtocol usage notes
 For production use of this protocol, we recommend the default settings, with these changes to reduce execution times per :external+gufe:py:class:`~gufe.transformations.Transformation` :py:class:`~alchemiscale.storage.models.Task`::
 
     >>> from openfe.protocols.openmm_rfe import RelativeHybridTopologyProtocol
+    >>> from openff.units import unit
 
     >>> settings = RelativeHybridTopologyProtocol.default_settings()
-    >>> settings.simulation_settings.equilibration_length = 1000 * unit.picosecond
-    >>> settings.simulation_settings.production_length = 5000 * unit.picosecond
-    >>> settings.alchemical_sampler_settings.n_repeats = 1
-    >>> settings.simulation_settings.output_indices = "not water"
+    >>> settings.protocol_repeats = 1
     >>> settings.engine_settings.compute_platform = "CUDA"
-    >>> settings.system_settings.nonbonded_cutoff = 0.9 * unit.nanometer
+    >>> settings.simulation_settings.equilibration_length = 1 * unit.nanosecond
+    >>> settings.simulation_settings.production_length = 5 * unit.nanosecond
+    >>> settings.simulation_settings.time_per_iteration = 2.5 * unit.picosecond
+    >>> settings.forcefield_settings.nonbonded_cutoff = 0.9 * unit.nanometer
+    >>> settings.solvation_settings.box_shape = 'dodecahedron'
+    >>> settings.solvation_settings.solvent_padding = 1.5 * unit.nanometer
 
 
 NonEquilibriumCyclingProtocol usage notes
@@ -80,7 +70,7 @@ NonEquilibriumCyclingProtocol usage notes
 
 For production use of this protocol, we recommend the default settings::
 
-    >>> from perses.protocols.nonequilibrium_cycling import NonEquilibriumCyclingProtocol
+    >>> from feflow.protocols.nonequilibrium_cycling import NonEquilibriumCyclingProtocol
 
     >>> settings = NonEquilibriumCyclingProtocol.default_settings()
 
@@ -201,7 +191,7 @@ In this way, actioning is an indicator of demand for a given :py:class:`~alchemi
 
    In the case of the :py:class:`~openfe.protocols.openmm_rfe.RelativeHybridTopologyProtocol` (i.e. for HREX, and SAMS), this effectively means that each :py:class:`~alchemiscale.storage.models.Task` carries out all the computation required to obtain a single estimate of the free energy (in practice one would want to do several repeats to get an idea of the sampling error).
 
-   In the case of the :py:class:`~perses.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`, a :py:class:`~alchemiscale.storage.models.Task` instead encompasses a non-equilibrium cycle and will return a single work estimate.
+   In the case of the :py:class:`~feflow.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`, a :py:class:`~alchemiscale.storage.models.Task` instead encompasses a non-equilibrium cycle and will return a single work estimate.
    The work values of multiple :py:class:`~alchemiscale.storage.models.Task`\s can then be gathered to obtain a free energy estimate, and more :py:class:`~alchemiscale.storage.models.Task`\s will improve the convergence of the estimate.
 
 
@@ -431,7 +421,7 @@ Any number of :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`\s can 
     >>> protocol_result
     <RelativeHybridTopologyProtocolResult-44b0f588f5f3073aa58d86e1017ef623>
 
-This can be useful for subsampling the available :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`\s and building estimates from these subsamples, such as for an analysis of convergence for the :py:class:`~perses.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`.
+This can be useful for subsampling the available :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`\s and building estimates from these subsamples, such as for an analysis of convergence for the :py:class:`~feflow.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`.
 
 If you wish to pull results for only a single :py:class:`~alchemiscale.storage.models.Task`, you can do so with::
 
@@ -483,7 +473,7 @@ For a given :external+gufe:py:class:`~gufe.transformations.Transformation`, you 
 Note that for some :external+gufe:py:class:`~gufe.protocols.Protocol`\s, your local machine may need to meet certain requirements:
 
 * :py:class:`openfe.protocols.openmm_rfe.RelativeHybridTopologyProtocol`: NVIDIA GPU if ``settings.platform == 'CUDA'``
-* :py:class:`~perses.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`: OpenEye Toolkit license, NVIDIA GPU if ``settings.platform == 'CUDA'``
+* :py:class:`~feflow.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`: OpenEye Toolkit license, NVIDIA GPU if ``settings.platform == 'CUDA'``
 
 ************************
 Re-running errored Tasks
