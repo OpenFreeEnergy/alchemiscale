@@ -47,7 +47,7 @@ dependencies:
   - pytest
   - pytest-xdist
   - pytest-cov
-kk  - coverage
+  - coverage
   - moto
 
   # additional pins
