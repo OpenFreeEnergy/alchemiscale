@@ -13,6 +13,7 @@ dependencies:
   - pydantic-settings
   - async-lru
   - diskcache
+  - libsqlite<3.49  # newer versions cause diskcache to fail
   - zstandard
 
   ## state store
