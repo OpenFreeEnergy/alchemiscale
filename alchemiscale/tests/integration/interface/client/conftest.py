@@ -65,6 +65,7 @@ def user_client(uvicorn_server, user_identity, cache_dir):
 
     return test_client
 
+
 @pytest.fixture
 def user_client_setenv(monkeypatch):
     monkeypatch.setenv("ALCHEMISCALE_URL", "http://env.example.com")
