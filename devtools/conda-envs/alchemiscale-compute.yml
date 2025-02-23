@@ -19,7 +19,7 @@ dependencies:
   - zstandard
 
   # openmm protocols
-  - feflow=0.1.1
+  - feflow=0.1.2
 
   # additional pins
   - openmm=8.1.2
