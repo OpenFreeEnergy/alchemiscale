@@ -2447,7 +2447,7 @@ class TestClient:
                 )
             # in CI workflows the above operation seems to randomly
             # fail with what we believe is a race condition due to the
-            # workers limited hardwear. We are unable to reporoduce
+            # worker's limited resources. We are unable to reproduce
             # this behavior locally. If we find the following
             # TypeError, xfail the test.
             except TypeError as e:
