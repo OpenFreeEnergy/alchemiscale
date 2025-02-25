@@ -6,7 +6,7 @@
 [![coverage](https://codecov.io/gh/OpenFreeEnergy/alchemiscale/branch/main/graph/badge.svg)](https://codecov.io/gh/OpenFreeEnergy/alchemiscale)
 [![Documentation Status](https://readthedocs.org/projects/alchemiscale/badge/?version=latest)](https://alchemiscale.readthedocs.io/en/latest/?badge=latest)
 [![SPEC 0 — Minimum Supported Dependencies](https://img.shields.io/badge/SPEC-0-green?labelColor=%23004811&color=%235CA038)](https://scientific-python.org/specs/spec-0000/)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14927365.svg)](https://doi.org/10.5281/zenodo.14927365)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14927364.svg)](https://doi.org/10.5281/zenodo.14927364)
 
 **alchemiscale**: a high-throughput alchemical free energy execution system for use with HPC, cloud, bare metal, and Folding@Home
 
