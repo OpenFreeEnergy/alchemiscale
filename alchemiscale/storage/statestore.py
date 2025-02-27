@@ -613,7 +613,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         network: AlchemicalNetwork,
         scope: Scope,
         state: Union[NetworkStateEnum, str] = NetworkStateEnum.active,
-    ):
+    ) -> Tuple[ScopedKey, ScopedKey, ScopedKey]:
         """Create all nodes and relationships needed for an AlchemicalNetwork
         represented in an alchemiscale state store.
 
