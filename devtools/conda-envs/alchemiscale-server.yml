@@ -44,6 +44,9 @@ dependencies:
   - openmmforcefields>=0.14.1
   - openff-units=0.2.2
 
+  ## pins due to breaking changes
+  - openff-interchange =0.4.1    # https://github.com/openmm/openmmforcefields/issues/365
+
   # deployment
   - curl         # used in healthchecks for API services
 
