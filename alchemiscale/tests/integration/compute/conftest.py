@@ -64,7 +64,9 @@ def fully_scoped_credentialed_compute(compute_identity_prepped, multiple_scopes)
 @pytest.fixture
 def second_network_an2(network_tyk2):
     """Create a secondary network fixture"""
-    return AlchemicalNetwork(edges=list(network_tyk2.edges)[:-2], name="incomplete")
+    return AlchemicalNetwork(
+        edges=sorted(list(network_tyk2.edges))[:-2], name="incomplete"
+    )
 
 
 @pytest.fixture
