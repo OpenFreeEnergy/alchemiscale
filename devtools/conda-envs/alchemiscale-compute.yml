@@ -17,6 +17,7 @@ dependencies:
   - pydantic-settings
   - async-lru
   - zstandard
+  - diskcache
 
   # openmm protocols
   - feflow=0.1.2

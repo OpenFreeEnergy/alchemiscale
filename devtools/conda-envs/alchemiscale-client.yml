@@ -13,11 +13,11 @@ dependencies:
   - requests
   - click
   - httpx
-  - diskcache
   - pydantic >2
   - pydantic-settings
   - async-lru
   - zstandard
+  - diskcache
 
   ## user client
   - rich
