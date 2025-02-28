@@ -27,6 +27,57 @@ from alchemiscale.interface.client import AlchemiscaleClientError
 
 
 class TestClient:
+    def test_client_params_from_env(self, user_client_setenv):
+        assert user_client_setenv.api_url == "http://env.example.com"
+        assert user_client_setenv.identifier == "env_id"
+        assert user_client_setenv.key == "env_key"
+
+    def test_client_params_precedence(self, user_client_setenv):
+        _ = user_client_setenv
+
+        from alchemiscale.interface.client import AlchemiscaleClient
+
+        client = AlchemiscaleClient(
+            api_url="http://explicit.example.com",
+            identifier="explicit_id",
+        )
+
+        assert client.api_url == "http://explicit.example.com"
+        assert client.identifier == "explicit_id"
+
+    def test_client_params_warning(self, user_client_setenv):
+        _ = user_client_setenv
+
+        from alchemiscale.interface.client import AlchemiscaleClient
+
+        with pytest.warns(UserWarning) as record:
+            _ = AlchemiscaleClient(
+                api_url="http://explicit.example.com",
+                identifier="explicit_id",
+            )
+
+        assert len(record) == 2
+        assert str(record[0].message).startswith(
+            "Environment variable ALCHEMISCALE_URL is set to"
+        )
+        assert str(record[1].message).startswith(
+            "Environment variable ALCHEMISCALE_ID is set to"
+        )
+
+    def test_client_params_hidden_key(self, user_client_setenv):
+        _ = user_client_setenv
+
+        from alchemiscale.interface.client import AlchemiscaleClient
+
+        with pytest.warns(UserWarning) as record:
+            _ = AlchemiscaleClient(
+                key="explicit_key",
+            )
+
+        assert len(record) == 1
+        assert "explicit_key" not in str(record[0].message)
+        assert "env_key" not in str(record[0].message)
+
     def test_cache_size_limit_negative(
         self, user_client: client.AlchemiscaleBaseClient
     ):
