@@ -51,4 +51,4 @@ dependencies:
   - curl         # used in healthchecks for API services
 
   - pip:
-    - git+https://github.com/OpenFreeEnergy/alchemiscale.git@v0.6.0
+    - git+https://github.com/OpenFreeEnergy/alchemiscale.git@v0.6.1
