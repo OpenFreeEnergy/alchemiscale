@@ -365,7 +365,7 @@ async def set_task_result(
             pdr.protocol_unit_failures, result_sk
         )
         n4js.set_task_error(tasks=[task_sk])
-        n4js.resolve_task_restarts(tasks=[task_sk])
+        n4js.resolve_task_restarts(task_scoped_keys=[task_sk])
 
     return result_sk
 
