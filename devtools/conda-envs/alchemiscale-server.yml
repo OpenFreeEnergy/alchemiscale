@@ -17,6 +17,7 @@ dependencies:
   - async-lru
   - zstandard
   - diskcache
+  - libsqlite<3.49  # newer versions cause diskcache to fail
 
   ## state store
   - neo4j-python-driver

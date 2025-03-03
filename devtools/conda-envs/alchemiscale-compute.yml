@@ -18,6 +18,7 @@ dependencies:
   - async-lru
   - zstandard
   - diskcache
+  - libsqlite<3.49  # newer versions cause diskcache to fail
 
   # openmm protocols
   - feflow=0.1.2
