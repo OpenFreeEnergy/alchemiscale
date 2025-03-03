@@ -35,6 +35,8 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 autodoc_mock_imports = [
     "async_lru",
+    "diskcache",
+    "zstandard",
     "boto3",
     "click",
     "fastapi",
