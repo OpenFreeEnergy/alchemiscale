@@ -15,7 +15,7 @@ import gzip
 from pathlib import Path
 import os
 import warnings
-from typing import Union, Optional, Dict, Any, NamedTuple
+from typing import Union, Optional
 from dataclasses import dataclass
 from diskcache import Cache
 
@@ -87,16 +87,15 @@ class AlchemiscaleBaseClientParam:
         """
         env_value = os.getenv(self.env_var_name)
 
-        if param_value is None:
-            param_value = env_value
-        elif env_value is not None and param_value != env_value:
-            self._warn_override(param_value, env_value)
-
-        if param_value is None:
-            raise ValueError(
-                f"No {self.human_name} provided and {self.env_var_name} environment variable not set"
-            )
-
+        match (param_value, os.getenv(self.env_var_name)):
+            case (None, None):
+                raise ValueError(
+                    f"No {self.human_name} provided and {self.env_var_name} environment variable not set"
+                )
+            case (None, env_value):
+                param_value = env_value
+            case (param_value, env_value) if param_value != env_value:
+                self._warn_override(param_value, env_value)  # type: ignore
         return param_value
 
     def _warn_override(self, param_value: str, env_value: str) -> None:
