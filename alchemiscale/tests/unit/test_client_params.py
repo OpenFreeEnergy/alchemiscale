@@ -1,6 +1,5 @@
 """Tests for AlchemiscaleBaseClientParam and environment variable handling."""
 
-import os
 import pytest
 import warnings
 
