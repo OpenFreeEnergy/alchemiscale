@@ -65,7 +65,7 @@ class AlchemiscaleBaseClientParam:
     param_name: str
     env_var_name: str
     human_name: str
-    render_value: bool = True
+    render_value: bool = False
 
     def get_value(self, param_value: Optional[str]) -> str:
         """Get the validated parameter value.
