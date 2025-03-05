@@ -86,7 +86,7 @@ This assumes the instance has been deployed and is network-accessible from your 
 See :ref:`deployment` for deployment options if you do not already have an instance available for your use.
 
 Instantiating an AlchemiscaleClient
-================
+===================================
 
 Create an :py:class:`~alchemiscale.interface.client.AlchemiscaleClient` instance with and your ``api_url``, user ``identifier``, and ``key``::
 
