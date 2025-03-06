@@ -66,7 +66,7 @@ def user_client(uvicorn_server, user_identity, cache_dir):
 
 
 @pytest.fixture
-def _client_setenv(monkeypatch):  # pyright: ignore[reportUnusedFunction]
+def _client_setenv(monkeypatch):
     monkeypatch.setenv("ALCHEMISCALE_URL", "http://env.example.com")
     monkeypatch.setenv("ALCHEMISCALE_ID", "env_id")
     monkeypatch.setenv("ALCHEMISCALE_KEY", "env_key")
