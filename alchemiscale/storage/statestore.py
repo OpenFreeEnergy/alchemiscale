@@ -10,7 +10,6 @@ from contextlib import contextmanager
 import json
 import re
 from functools import lru_cache, update_wrapper
-from typing import Dict, List, Optional, Union, Tuple, Set
 from collections import defaultdict
 from collections.abc import Iterable
 import weakref
@@ -43,7 +42,7 @@ from .models import (
 )
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
-from .cypher import cypher_list_from_scoped_keys, cypher_or
+from .cypher import cypher_or
 
 from ..security.models import CredentialedEntity
 from ..settings import Neo4jStoreSettings
@@ -155,7 +154,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             tx = session.begin_transaction()
             try:
                 yield tx
-            except:
+            except Exception:
                 tx.rollback()
                 if not ignore_exceptions:
                     raise
@@ -241,7 +240,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             """
             )
 
-    ## gufe object handling
+    # gufe object handling
 
     def _gufe_to_subgraph(
         self, sdct: dict, labels: list[str], gufe_key: GufeKey, scope: Scope
@@ -677,7 +676,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         network: ScopedKey,
     ) -> ScopedKey:
-        """Delete the given `AlchemicalNetwork` from the database.
+        r"""Delete the given `AlchemicalNetwork` from the database.
 
         This will not remove any `Transformation`\s or `ChemicalSystem`\s
         associated with the `AlchemicalNetwork`, since these may be associated
@@ -701,7 +700,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         self.delete_taskhub(network)
 
         # then delete the network
-        q = """
+        _ = """
         MATCH (an:AlchemicalNetwork {_scoped_key: $network})
         DETACH DELETE an
         """
@@ -845,7 +844,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         scope: Scope | None = None,
         state: str | None = None,
     ) -> list[ScopedKey]:
-        """Query for `AlchemicalNetwork`\s matching given attributes."""
+        r"""Query for `AlchemicalNetwork`\s matching given attributes."""
 
         if scope is None:
             scope = Scope()
@@ -895,7 +894,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         return network_sks
 
     def query_transformations(self, *, name=None, key=None, scope: Scope = Scope()):
-        """Query for `Transformation`\s matching given attributes."""
+        r"""Query for `Transformation`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="Transformation|NonTransformation",
@@ -905,7 +904,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
     def query_chemicalsystems(self, *, name=None, key=None, scope: Scope = Scope()):
-        """Query for `ChemicalSystem`\s matching given attributes."""
+        r"""Query for `ChemicalSystem`\s matching given attributes."""
         additional = {"name": name}
         return self._query(
             qualname="ChemicalSystem", additional=additional, key=key, scope=scope
@@ -1042,7 +1041,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._get_protocoldagresultrefs(q, transformation)
 
-    ## compute
+    # compute
 
     def set_strategy(
         self,
@@ -1149,7 +1148,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [ComputeServiceID(i) for i in identities]
 
-    ## task hubs
+    # task hubs
 
     def create_taskhub_subgraph(self, network_node: Node):
         """Create a Subgraph for an AlchemicalNetwork's TaskHub.
@@ -1190,7 +1189,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def query_taskhubs(
         self, scope: Scope | None = Scope(), return_gufe: bool = False
     ) -> list[ScopedKey] | dict[ScopedKey, TaskHub]:
-        """Query for `TaskHub`\s matching the given criteria.
+        r"""Query for `TaskHub`\s matching the given criteria.
 
         Parameters
         ----------
@@ -1203,7 +1202,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_taskhubs(
         self, network_scoped_keys: list[ScopedKey], return_gufe: bool = False
-    ) -> list[Union[ScopedKey, TaskHub]]:
+    ) -> list[ScopedKey | TaskHub]:
         """Get the TaskHubs for the given AlchemicalNetworks.
 
         Parameters
@@ -1887,7 +1886,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return tasks + [None] * (count - len(tasks))
 
-    ## tasks
+    # tasks
 
     def _validate_extends_tasks(self, task_list) -> dict[str, tuple[Node, str]]:
 
@@ -2077,7 +2076,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )[0]
 
     def query_tasks(self, *, status=None, key=None, scope: Scope = Scope()):
-        """Query for `Task`\s matching given attributes."""
+        r"""Query for `Task`\s matching given attributes."""
         additional = {"status": status}
         return self._query(qualname="Task", additional=additional, key=key, scope=scope)
 
@@ -2200,7 +2199,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         tuple[Transformation, ProtocolDAGResultRef | None]
         | tuple[ScopedKey, ScopedKey | None]
     ):
-        """Get the `Transformation` and `ProtocolDAGResultRef` to extend from (if
+        r"""Get the `Transformation` and `ProtocolDAGResultRef` to extend from (if
         present) for the given `Task`.
 
         If `return_gufe` is `True`, returns actual `Transformation` and
@@ -2275,12 +2274,12 @@ class Neo4jStore(AlchemiscaleStateStore):
             The total number of tasks that should exist corresponding to the
             specified `transformation`, `scope`, and `extends`.
         """
-        raise NotImplementedError
         # TODO: finish this one out when we have a reasonable approach to locking
         # too hard to perform in a single Cypher query; unclear how to create many nodes in a loop
-        transformation_node = self._get_node_from_obj_or_sk(
-            transformation, Transformation, scope
-        )
+        # transformation_node = self._get_node_from_obj_or_sk(
+        #     transformation, Transformation, scope
+        # )
+        raise NotImplementedError
 
     def set_task_priority(
         self, tasks: list[ScopedKey], priority: int
@@ -2504,7 +2503,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def add_protocol_dag_result_ref_tracebacks(
         self,
-        protocol_unit_failures: List[ProtocolUnitFailure],
+        protocol_unit_failures: list[ProtocolUnitFailure],
         protocol_dag_result_ref_scoped_key: ScopedKey,
     ):
         subgraph = Subgraph()
@@ -2885,7 +2884,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
-    ## task restart policies
+    # task restart policies
 
     def add_task_restart_patterns(
         self, taskhub: ScopedKey, patterns: list[str], number_of_retries: int
@@ -2974,7 +2973,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     )
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
-            actioned_task_scoped_keys: List[ScopedKey] = []
+            actioned_task_scoped_keys: list[ScopedKey] = []
 
             for actioned_task_record in actioned_task_records:
                 actioned_task_scoped_keys.append(
@@ -3132,9 +3131,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         # None => the pair never had a matching restart pattern
         # True => at least one patterns max_retries was exceeded
         # False => at least one regex matched, but no pattern max_retries were exceeded
-        cancel_map: dict[Tuple[str, str], Optional[bool]] = {}
-        to_increment: List[Tuple[str, str]] = []
-        all_task_taskhub_pairs: set[Tuple[str, str]] = set()
+        cancel_map: dict[tuple[str, str], bool | None] = {}
+        to_increment: list[tuple[str, str]] = []
+        all_task_taskhub_pairs: set[tuple[str, str]] = set()
         for record in results.records:
             task_restart_pattern = record["trp"]
             applies_relationship = record["app"]
@@ -3146,8 +3145,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             all_task_taskhub_pairs.add(task_taskhub_tuple)
 
-            # TODO: remove in v1.0.0
-            # tasks that errored, prior to the indtroduction of task restart policies will have no tracebacks in the database
+            # TODO: remove in v1.0.0 tasks that errored, prior to the
+            # introduction of task restart policies will have no
+            # tracebacks in the database
             if _tracebacks is None:
                 cancel_map[task_taskhub_tuple] = True
 
@@ -3159,7 +3159,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             num_retries = applies_relationship["num_retries"]
             max_retries = task_restart_pattern["max_retries"]
             pattern = task_restart_pattern["pattern"]
-            tracebacks: List[str] = _tracebacks["tracebacks"]
+            tracebacks: list[str] = _tracebacks["tracebacks"]
 
             compiled_pattern = re.compile(pattern)
 
@@ -3206,7 +3206,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             error=TaskStatusEnum.error.value,
         )
 
-    ## authentication
+    # authentication
 
     def create_credentialed_entity(self, entity: CredentialedEntity):
         """Create a new credentialed entity, such as a user or compute identity.
