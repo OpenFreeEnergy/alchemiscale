@@ -580,10 +580,10 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         network_tyk2,
-        user_client: client.AlchemiscaleClient,
+        user_client_no_cache: client.AlchemiscaleClient,
     ):
-        an_sk = user_client.get_scoped_key(network_tyk2, scope_test)
-        an = user_client.get_network(an_sk)
+        an_sk = user_client_no_cache.get_scoped_key(network_tyk2, scope_test)
+        an = user_client_no_cache.get_network(an_sk)
 
         assert an == network_tyk2
         assert an is network_tyk2
@@ -779,10 +779,10 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         transformation,
-        user_client: client.AlchemiscaleClient,
+        user_client_no_cache: client.AlchemiscaleClient,
     ):
-        tf_sk = user_client.get_scoped_key(transformation, scope_test)
-        tf = user_client.get_transformation(tf_sk)
+        tf_sk = user_client_no_cache.get_scoped_key(transformation, scope_test)
+        tf = user_client_no_cache.get_transformation(tf_sk)
 
         assert tf == transformation
         assert tf is transformation
@@ -849,10 +849,10 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         chemicalsystem,
-        user_client: client.AlchemiscaleClient,
+        user_client_no_cache: client.AlchemiscaleClient,
     ):
-        cs_sk = user_client.get_scoped_key(chemicalsystem, scope_test)
-        cs = user_client.get_chemicalsystem(cs_sk)
+        cs_sk = user_client_no_cache.get_scoped_key(chemicalsystem, scope_test)
+        cs = user_client_no_cache.get_chemicalsystem(cs_sk)
 
         assert cs == chemicalsystem
         assert cs is chemicalsystem
