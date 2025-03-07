@@ -73,17 +73,17 @@ class AlchemiscaleBaseClientParam:
         Parameters
         ----------
         param_value : Optional[str]
-            The explicitly provided parameter value
+            The explicitly provided parameter value.
 
         Returns
         -------
         str
-            The validated parameter value
+            The validated parameter value.
 
         Raises
         ------
         ValueError
-            If neither param_value nor environment variable is set
+            If neither param_value nor environment variable is set.
         """
         env_value = os.getenv(self.env_var_name)
 
