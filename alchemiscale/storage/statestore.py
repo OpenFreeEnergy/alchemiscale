@@ -613,7 +613,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         network: AlchemicalNetwork,
         scope: Scope,
         state: NetworkStateEnum | str = NetworkStateEnum.active,
-    ):
+    ) -> tuple[ScopedKey, ScopedKey, ScopedKey]:
         """Create all nodes and relationships needed for an AlchemicalNetwork
         represented in an alchemiscale state store.
 
@@ -2592,8 +2592,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Returns
         -------
-        dict[ScopedKey,TaskStatusEnum]
-            A dictionary of Tasks and their statuses.
+            A list of the Task statuses requested; `None` is given for any
+            Tasks that do not exist.
+
         """
         statuses = []
         with self.transaction() as tx:

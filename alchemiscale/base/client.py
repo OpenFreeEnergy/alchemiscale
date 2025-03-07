@@ -12,14 +12,19 @@ import json
 from urllib.parse import urljoin
 from functools import wraps
 import gzip
+from pathlib import Path
+import os
+import warnings
+from typing import Union, Optional
+from dataclasses import dataclass
+from diskcache import Cache
 
 import requests
 import httpx
 
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
-from ..models import Scope, ScopedKey
-from ..storage.models import TaskHub, Task
+from ..models import ScopedKey
 
 
 def json_to_gufe(jsondata):
@@ -49,17 +54,98 @@ def use_session(f):
     return _wrapper
 
 
+@dataclass
+class AlchemiscaleBaseClientParam:
+    """Parameter descriptor for AlchemiscaleBaseClient initialization.
+
+    This class encapsulates the validation and rendering logic for client parameters
+    that can be sourced from either explicit arguments or environment variables.
+    """
+
+    param_name: str
+    env_var_name: str
+    human_name: str
+    render_value: bool = False
+
+    def get_value(self, param_value: Optional[str]) -> str:
+        """Get the validated parameter value.
+
+        Parameters
+        ----------
+        param_value : Optional[str]
+            The explicitly provided parameter value.
+
+        Returns
+        -------
+        str
+            The validated parameter value.
+
+        Raises
+        ------
+        ValueError
+            If neither param_value nor environment variable is set.
+        """
+        env_value = os.getenv(self.env_var_name)
+
+        match (param_value, os.getenv(self.env_var_name)):
+            case (None, None):
+                raise ValueError(
+                    f"No {self.human_name} provided and {self.env_var_name} environment variable not set"
+                )
+            case (None, env_value):
+                param_value = env_value
+            case (param_value, env_value) if param_value != env_value:
+                self._warn_override(param_value, env_value)
+        return param_value
+
+    def _warn_override(self, param_value: str, env_value: str) -> None:
+        """Warn when explicit parameter overrides environment variable."""
+        if self.render_value:
+            msg = f"Environment variable {self.env_var_name} is set to '{env_value}'"
+            msg += f", but an explicit {self.human_name} '{param_value}' is provided."
+            msg += f" Using the explicit {self.human_name}."
+        else:
+            msg = f"Environment variable {self.env_var_name} is set"
+            msg += f", but an explicit {self.human_name} is provided."
+            msg += f" Using the explicit {self.human_name}."
+
+        warnings.warn(msg, UserWarning)
+
+
 class AlchemiscaleBaseClient:
     """Base class for Alchemiscale API clients."""
 
     _exception = AlchemiscaleBaseClientError
     _retry_status_codes = [404, 502, 503, 504]
 
+    _PARAMS = {
+        "api_url": AlchemiscaleBaseClientParam(
+            param_name="api_url",
+            env_var_name="ALCHEMISCALE_URL",
+            human_name="API URL",
+            render_value=True,
+        ),
+        "identifier": AlchemiscaleBaseClientParam(
+            param_name="identifier",
+            env_var_name="ALCHEMISCALE_ID",
+            human_name="identifier",
+            render_value=True,
+        ),
+        "key": AlchemiscaleBaseClientParam(
+            param_name="key",
+            env_var_name="ALCHEMISCALE_KEY",
+            human_name="API key",
+            render_value=False,
+        ),
+    }
+
     def __init__(
         self,
-        api_url: str,
-        identifier: str,
-        key: str,
+        api_url: Optional[str] = None,
+        identifier: Optional[str] = None,
+        key: Optional[str] = None,
+        cache_directory: Optional[Union[Path, str]] = None,
+        cache_size_limit: int = 1073741824,
         max_retries: int = 5,
         retry_base_seconds: float = 2.0,
         retry_max_seconds: float = 60.0,
@@ -70,11 +156,21 @@ class AlchemiscaleBaseClient:
         Parameters
         ----------
         api_url
-            URL of the API to interact with.
+            URL of the API to interact with. If not provided, will use ALCHEMISCALE_URL
+            environment variable.
         identifier
-            Identifier for the identity used for authentication.
+            Identifier for the identity used for authentication. If not provided, will use
+            ALCHEMISCALE_ID environment variable.
         key
-            Credential for the identity used for authentication.
+            Credential for the identity used for authentication. If not provided, will use
+            ALCHEMISCALE_KEY environment variable.
+        cache_directory
+            Location of the cache directory as either a `pathlib.Path` or `str`.
+            If ``None`` is provided then the directory will be determined via
+            the ``XDG_CACHE_HOME`` environment variable or default to
+            ``${HOME}/.cache/alchemiscale``. Default ``None``.
+        cache_size_limit
+            Maximum size of the client cache in bytes. Default 1 GiB.
         max_retries
             Maximum number of times to retry a request. In the case the API
             service is unresponsive an exponential backoff is applied with
@@ -91,9 +187,11 @@ class AlchemiscaleBaseClient:
             Whether to verify SSL certificate presented by the API server.
 
         """
-        self.api_url = api_url
-        self.identifier = identifier
-        self.key = key
+        # Validate and set required parameters
+        self.api_url = self._PARAMS["api_url"].get_value(api_url)
+        self.identifier = self._PARAMS["identifier"].get_value(identifier)
+        self.key = self._PARAMS["key"].get_value(key)
+
         self.max_retries = max_retries
 
         if retry_base_seconds <= 1.0:
@@ -110,9 +208,39 @@ class AlchemiscaleBaseClient:
         self._session = None
         self._lock = None
 
+        if cache_size_limit < 0:
+            raise ValueError(
+                "`cache_size_limit` must be greater than or equal to zero."
+            )
+
+        self._cache = Cache(
+            self._determine_cache_dir(cache_directory),
+            size_limit=cache_size_limit,
+            eviction_policy="least-recently-used",
+        )
+
+    @staticmethod
+    def _determine_cache_dir(cache_directory: Optional[Union[Path, str]]):
+        if not (isinstance(cache_directory, (Path, str)) or cache_directory is None):
+            raise TypeError(
+                "`cache_directory` must be a `str`, `pathlib.Path`, or `None`."
+            )
+
+        if cache_directory is None:
+            default_dir = Path.home() / ".cache"
+            cache_directory = (
+                Path(os.getenv("XDG_CACHE_HOME", default_dir)) / "alchemiscale"
+            )
+        else:
+            cache_directory = Path(cache_directory)
+
+        return cache_directory.absolute()
+
     def _settings(self):
         return dict(
             api_url=self.api_url,
+            cache_directory=self._cache.directory,
+            cache_size_limit=self._cache.size_limit,
             identifier=self.identifier,
             key=self.key,
             max_retries=self.max_retries,
@@ -360,7 +488,7 @@ class AlchemiscaleBaseClient:
         if not 200 <= resp.status_code < 300:
             try:
                 detail = resp.json()["detail"]
-            except:
+            except Exception:
                 detail = resp.text
             raise self._exception(
                 f"Status Code {resp.status_code} : {resp.reason} : {detail}",
@@ -395,7 +523,7 @@ class AlchemiscaleBaseClient:
         if not 200 <= resp.status_code < 300:
             try:
                 detail = resp.json()["detail"]
-            except:
+            except Exception:
                 detail = resp.text
             raise self._exception(
                 f"Status Code {resp.status_code} : {resp.reason_phrase} : {detail}",
@@ -441,7 +569,7 @@ class AlchemiscaleBaseClient:
         if not 200 <= resp.status_code < 300:
             try:
                 detail = resp.json()["detail"]
-            except:
+            except Exception:
                 detail = resp.text
             raise self._exception(
                 f"Status Code {resp.status_code} : {resp.reason} : {detail}",
@@ -465,7 +593,7 @@ class AlchemiscaleBaseClient:
         if not 200 <= resp.status_code < 300:
             try:
                 detail = resp.json()["detail"]
-            except:
+            except Exception:
                 detail = resp.text
             raise self._exception(
                 f"Status Code {resp.status_code} : {resp.reason_phrase} : {detail}",
@@ -497,7 +625,6 @@ class AlchemiscaleBaseClient:
     @staticmethod
     def _rich_progress_columns():
         from rich.progress import (
-            Progress,
             SpinnerColumn,
             MofNCompleteColumn,
             TextColumn,

@@ -412,3 +412,49 @@ class TestComputeClient:
 
         assert transformation2 == transformation_
         assert extends_protocoldagresult2 == protocoldagresults[0]
+
+    def test_set_task_result_failure(
+        self,
+        scope_test,
+        n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        compute_service_id,
+        network_tyk2_failure,
+        transformation_failure,
+        protocoldagresults_failure,
+        uvicorn_server,
+    ):
+        # register compute service id
+        compute_client.register(compute_service_id)
+
+        tf_sk = ScopedKey(gufe_key=transformation_failure.key, **scope_test.dict())
+
+        # add a network with a transformation that will always fail
+        an_sk, taskhub_sk, _ = n4js_preloaded.assemble_network(
+            network_tyk2_failure, scope_test
+        )
+
+        # create and action a task for the failing transformation
+        task_sks = n4js_preloaded.create_tasks([tf_sk])
+        n4js_preloaded.action_tasks(task_sks, taskhub_sk)
+
+        # claim the task
+        task_sks = compute_client.claim_taskhub_tasks(
+            taskhub_sk, compute_service_id=compute_service_id
+        )
+
+        # get the transformation corresponding to this task
+        (
+            transformation_,
+            extends_protocoldagresult,
+        ) = compute_client.retrieve_task_transformation(task_sks[0])
+
+        assert transformation_ == transformation_failure
+        assert extends_protocoldagresult is None
+
+        # push a failed result for the task
+        pdr_sk = compute_client.set_task_result(
+            task_sks[0], protocoldagresults_failure[0]
+        )
+
+        assert n4js_preloaded.get_task_status(task_sks)[0] == TaskStatusEnum.error
