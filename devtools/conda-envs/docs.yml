@@ -11,4 +11,3 @@ dependencies:
   - myst-parser>=0.14
   - docutils
   - sphinx-notfound-page
-  - diskcache
