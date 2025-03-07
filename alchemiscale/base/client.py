@@ -14,7 +14,9 @@ from functools import wraps
 import gzip
 from pathlib import Path
 import os
+import warnings
 from typing import Union, Optional
+from dataclasses import dataclass
 from diskcache import Cache
 
 import requests
@@ -52,17 +54,96 @@ def use_session(f):
     return _wrapper
 
 
+@dataclass
+class AlchemiscaleBaseClientParam:
+    """Parameter descriptor for AlchemiscaleBaseClient initialization.
+
+    This class encapsulates the validation and rendering logic for client parameters
+    that can be sourced from either explicit arguments or environment variables.
+    """
+
+    param_name: str
+    env_var_name: str
+    human_name: str
+    render_value: bool = False
+
+    def get_value(self, param_value: Optional[str]) -> str:
+        """Get the validated parameter value.
+
+        Parameters
+        ----------
+        param_value : Optional[str]
+            The explicitly provided parameter value.
+
+        Returns
+        -------
+        str
+            The validated parameter value.
+
+        Raises
+        ------
+        ValueError
+            If neither param_value nor environment variable is set.
+        """
+        env_value = os.getenv(self.env_var_name)
+
+        match (param_value, os.getenv(self.env_var_name)):
+            case (None, None):
+                raise ValueError(
+                    f"No {self.human_name} provided and {self.env_var_name} environment variable not set"
+                )
+            case (None, env_value):
+                param_value = env_value
+            case (param_value, env_value) if param_value != env_value:
+                self._warn_override(param_value, env_value)
+        return param_value
+
+    def _warn_override(self, param_value: str, env_value: str) -> None:
+        """Warn when explicit parameter overrides environment variable."""
+        if self.render_value:
+            msg = f"Environment variable {self.env_var_name} is set to '{env_value}'"
+            msg += f", but an explicit {self.human_name} '{param_value}' is provided."
+            msg += f" Using the explicit {self.human_name}."
+        else:
+            msg = f"Environment variable {self.env_var_name} is set"
+            msg += f", but an explicit {self.human_name} is provided."
+            msg += f" Using the explicit {self.human_name}."
+
+        warnings.warn(msg, UserWarning)
+
+
 class AlchemiscaleBaseClient:
     """Base class for Alchemiscale API clients."""
 
     _exception = AlchemiscaleBaseClientError
     _retry_status_codes = [404, 502, 503, 504]
 
+    _PARAMS = {
+        "api_url": AlchemiscaleBaseClientParam(
+            param_name="api_url",
+            env_var_name="ALCHEMISCALE_URL",
+            human_name="API URL",
+            render_value=True,
+        ),
+        "identifier": AlchemiscaleBaseClientParam(
+            param_name="identifier",
+            env_var_name="ALCHEMISCALE_ID",
+            human_name="identifier",
+            render_value=True,
+        ),
+        "key": AlchemiscaleBaseClientParam(
+            param_name="key",
+            env_var_name="ALCHEMISCALE_KEY",
+            human_name="API key",
+            render_value=False,
+        ),
+    }
+
     def __init__(
         self,
-        api_url: str,
-        identifier: str,
-        key: str,
+        api_url: Optional[str] = None,
+        identifier: Optional[str] = None,
+        key: Optional[str] = None,
         cache_directory: Optional[Union[Path, str]] = None,
         cache_size_limit: int = 1073741824,
         max_retries: int = 5,
@@ -75,11 +156,14 @@ class AlchemiscaleBaseClient:
         Parameters
         ----------
         api_url
-            URL of the API to interact with.
+            URL of the API to interact with. If not provided, will use ALCHEMISCALE_URL
+            environment variable.
         identifier
-            Identifier for the identity used for authentication.
+            Identifier for the identity used for authentication. If not provided, will use
+            ALCHEMISCALE_ID environment variable.
         key
-            Credential for the identity used for authentication.
+            Credential for the identity used for authentication. If not provided, will use
+            ALCHEMISCALE_KEY environment variable.
         cache_directory
             Location of the cache directory as either a `pathlib.Path` or `str`.
             If ``None`` is provided then the directory will be determined via
@@ -103,9 +187,11 @@ class AlchemiscaleBaseClient:
             Whether to verify SSL certificate presented by the API server.
 
         """
-        self.api_url = api_url
-        self.identifier = identifier
-        self.key = key
+        # Validate and set required parameters
+        self.api_url = self._PARAMS["api_url"].get_value(api_url)
+        self.identifier = self._PARAMS["identifier"].get_value(identifier)
+        self.key = self._PARAMS["key"].get_value(key)
+
         self.max_retries = max_retries
 
         if retry_base_seconds <= 1.0:

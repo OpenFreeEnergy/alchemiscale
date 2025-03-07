@@ -27,6 +27,44 @@ from alchemiscale.interface.client import AlchemiscaleClientError
 
 
 class TestClient:
+    def test_client_params_from_env(self, user_client_from_env):
+        assert user_client_from_env.api_url == "http://env.example.com"
+        assert user_client_from_env.identifier == "env_id"
+        assert user_client_from_env.key == "env_key"
+
+    def test_client_params_precedence(self, _client_setenv):
+        user_client = client.AlchemiscaleClient(
+            api_url="http://explicit.example.com",
+            identifier="explicit_id",
+        )
+        assert user_client.api_url == "http://explicit.example.com"
+        assert user_client.identifier == "explicit_id"
+
+    def test_client_params_warning(self, _client_setenv):
+        with pytest.warns(UserWarning) as record:
+            _ = client.AlchemiscaleClient(
+                api_url="http://explicit.example.com",
+                identifier="explicit_id",
+            )
+
+        assert len(record) == 2
+        assert str(record[0].message).startswith(
+            "Environment variable ALCHEMISCALE_URL is set to"
+        )
+        assert str(record[1].message).startswith(
+            "Environment variable ALCHEMISCALE_ID is set to"
+        )
+
+    def test_client_params_hidden_key(self, _client_setenv):
+        with pytest.warns(UserWarning) as record:
+            _ = client.AlchemiscaleClient(
+                key="explicit_key",
+            )
+
+        assert len(record) == 1
+        assert "explicit_key" not in str(record[0].message)
+        assert "env_key" not in str(record[0].message)
+
     def test_cache_size_limit_negative(
         self, user_client: client.AlchemiscaleBaseClient
     ):
@@ -207,7 +245,6 @@ class TestClient:
         n4js_preloaded,
         user_client: client.AlchemiscaleClient,
     ):
-
         fake_scoped_key = ScopedKey.from_str(
             "AlchemicalNetwork-FakeKey-test_org-test_campaign-test_project"
         )
@@ -709,7 +746,6 @@ class TestClient:
         weights,
         shouldfail,
     ):
-
         # create new networks and taskhubs
         network_sks = []
         for i in range(2):
@@ -799,7 +835,6 @@ class TestClient:
     def test_get_transformation_bad_transformation_key(
         self, scope_test, n4js_preloaded, user_client
     ):
-
         invalid_key = "Transformation-00000000000000000000000000000000-test_org-test_campaign-test_project"
         tf_sk = ScopedKey.from_str(invalid_key)
 
@@ -870,7 +905,6 @@ class TestClient:
     def test_get_chemicalsystem_bad_chemicalsystem_key(
         self, scope_test, n4js_preloaded, user_client
     ):
-
         invalid_key = "ChemicalSystem-00000000000000000000000000000000-test_org-test_campaign-test_project"
         cs_sk = ScopedKey.from_str(invalid_key)
 
@@ -1197,7 +1231,6 @@ class TestClient:
         n4js_preloaded,
         user_client: client.AlchemiscaleClient,
     ):
-
         task_sk = ScopedKey.from_str(
             "Task-00000000000000000000000000000000-test_org-test_campaign-test_project"
         )
@@ -1257,7 +1290,6 @@ class TestClient:
         network_tyk2,
         user_client: client.AlchemiscaleClient,
     ):
-
         # first, set all existing networks in the test scope to deleted
         # to avoid interactions with our new networks
         an_sks = user_client.query_networks(scope=scope_test, state=None)
@@ -1787,7 +1819,6 @@ class TestClient:
         user_client: client.AlchemiscaleClient,
         network_tyk2,
     ):
-
         an = network_tyk2
         transformation = list(an.edges)[0]
 
@@ -1976,7 +2007,6 @@ class TestClient:
     def _execute_task(
         task_scoped_key, n4js, s3os_server, shared_basedir=None, scratch_basedir=None
     ):
-
         shared_basedir = shared_basedir or Path("shared").absolute()
         shared_basedir.mkdir(exist_ok=True)
 
@@ -2049,7 +2079,6 @@ class TestClient:
     def test_cached_pdr(
         self, scope_test, n4js_preloaded, s3os_server, user_client, network_tyk2, tmpdir
     ):
-
         user_client._cache.clear()
         user_client._cache.stats(reset=True)
         user_client._async_get_protocoldagresult.cache_clear()
@@ -2489,7 +2518,6 @@ class TestClient:
 
 
 class TestTaskRestartPolicy:
-
     default_max_retries = 3
     default_patterns = ["Pattern 1", "Pattern 2", "Pattern 3"]
 
@@ -2503,7 +2531,6 @@ class TestTaskRestartPolicy:
     def test_add_task_restart_patterns(
         self, user_client, network_tyk2, scope_test, n4js_preloaded
     ):
-
         network_scoped_key = self.create_default_network(
             network_tyk2, user_client, scope_test
         )

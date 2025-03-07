@@ -85,11 +85,33 @@ Once you’ve defined an :external+gufe:py:class:`~gufe.network.AlchemicalNetwor
 This assumes the instance has been deployed and is network-accessible from your workstation.
 See :ref:`deployment` for deployment options if you do not already have an instance available for your use.
 
-Create an :py:class:`~alchemiscale.interface.client.AlchemiscaleClient` instance with and your user ``identity`` and ``key``::
+Instantiating an AlchemiscaleClient
+===================================
+
+Create an :py:class:`~alchemiscale.interface.client.AlchemiscaleClient` instance with your ``api_url``, user ``identifier``, and ``key``::
 
     >>> from alchemiscale import AlchemiscaleClient, Scope, ScopedKey
-    >>> asc = AlchemiscaleClient('https://api.<alchemiscale-uri>', user_identity, user_key)
+    >>> asc = AlchemiscaleClient('https://api.<alchemiscale-uri>', user_identifier, user_key)
 
+Additionally, the :py:class:`~alchemiscale.interface.client.AlchemiscaleClient` can automatically use the following environment variables:
+
+``ALCHEMISCALE_URL``
+    The URL of the API to interact with.
+``ALCHEMISCALE_ID``
+    The identifier for the identity used for authentication.
+``ALCHEMISCALE_KEY``
+    Credential for the identity used for authentication.
+
+For example, this will work if all aforementioned environment variables are set::
+
+    >>> from alchemiscale import AlchemiscaleClient, Scope, ScopedKey
+    >>> asc = AlchemiscaleClient()
+
+.. warning ::
+   Direct arguments take precedence over environment variables.
+   If both are set with different values, the client will use the Python arguments and issue a warning about the mismatch.
+
+After creating the :py:class:`~alchemiscale.interface.client.AlchemiscaleClient`, you can interact with it as described in the following sections.
 
 Choosing a Scope
 ================

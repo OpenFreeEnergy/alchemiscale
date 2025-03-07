@@ -53,7 +53,6 @@ def cache_dir(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def user_client(uvicorn_server, user_identity, cache_dir):
-
     test_client = client.AlchemiscaleClient(
         api_url="http://127.0.0.1:8000/",
         identifier=user_identity["identifier"],
@@ -64,6 +63,18 @@ def user_client(uvicorn_server, user_identity, cache_dir):
     test_client._cache.stats(enable=True, reset=True)
 
     return test_client
+
+
+@pytest.fixture
+def _client_setenv(monkeypatch):
+    monkeypatch.setenv("ALCHEMISCALE_URL", "http://env.example.com")
+    monkeypatch.setenv("ALCHEMISCALE_ID", "env_id")
+    monkeypatch.setenv("ALCHEMISCALE_KEY", "env_key")
+
+
+@pytest.fixture
+def user_client_from_env(_client_setenv):
+    return client.AlchemiscaleClient()
 
 
 @pytest.fixture(scope="module")
