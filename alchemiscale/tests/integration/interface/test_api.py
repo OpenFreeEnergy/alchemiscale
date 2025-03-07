@@ -1,8 +1,8 @@
 import pytest
 import json
 
-from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
-from gufe.tokenization import JSON_HANDLER, GufeTokenizable, KeyedChain
+from gufe import AlchemicalNetwork
+from gufe.tokenization import JSON_HANDLER, KeyedChain
 
 from alchemiscale.models import ScopedKey
 
@@ -59,7 +59,7 @@ class TestAPI:
         scopes = response.json()
         assert scopes == fully_scoped_credentialed_user.scopes
 
-    ### inputs
+    # inputs
 
     def test_create_network(
         self, n4js_preloaded, test_client, network_tyk2, scope_test
@@ -124,7 +124,7 @@ class TestAPI:
         auth_scope = multiple_scopes[0]  # Should also be the scope_test fixture
         unauthenticated_scope = multiple_scopes[1]
         sk_unauthenticated = n4js_preloaded.get_scoped_key(
-            network_tyk2, multiple_scopes[1]
+            network_tyk2, unauthenticated_scope
         )
         response = test_client.get(f"/networks/{sk_unauthenticated}")
         assert response.status_code == 401
@@ -156,7 +156,7 @@ class TestAPI:
     def test_get_chemicalsystem(self):
         raise NotImplementedError
 
-    ### compute
+    # compute
 
     @pytest.mark.xfail(raises=NotImplementedError)
     def test_set_strategy(self):
@@ -178,7 +178,7 @@ class TestAPI:
     def test_cancel_tasks(self):
         raise NotImplementedError
 
-    ### results
+    # results
 
     @pytest.mark.xfail(raises=NotImplementedError)
     def test_get_transformation_results(self):

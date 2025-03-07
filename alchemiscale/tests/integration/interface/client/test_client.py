@@ -185,7 +185,6 @@ class TestClient:
         assert user_client.check_exists(an_sks[0])
 
         # check that an AlchemicalNetwork that doesn't exist shows as not existing
-        an_sk = an_sks[0]
         an_sk_nonexistent = ScopedKey(
             gufe_key=GufeKey("AlchemicalNetwork-lol"), **scope_test.dict()
         )
@@ -265,7 +264,7 @@ class TestClient:
         network_sk = user_client.create_network(an, scope_test)
         with pytest.raises(
             AlchemiscaleClientError,
-            match="Status Code 400 : Bad Request : 'notastate' is not a valid state. Valid values include: \['",
+            match=r"Status Code 400 : Bad Request : 'notastate' is not a valid state. Valid values include: \['",
         ):
             user_client.set_network_state(network_sk, invalid_state)
 
@@ -970,7 +969,7 @@ class TestClient:
         # use the incorrect ScopedKey, expect to see an AlchemiscaleClientError
         with pytest.raises(
             AlchemiscaleClientError,
-            match="Status Code 400 : Bad Request : `extends` ScopedKey \(",
+            match=r"Status Code 400 : Bad Request : `extends` ScopedKey \(",
         ):
             user_client.create_tasks(sk, count=4, extends=scoped_key_wrong_qualname)
 

@@ -5,7 +5,7 @@
 """
 
 from functools import lru_cache
-from typing import Any, Union, List, Callable
+from typing import Any, Callable
 import json
 import gzip
 
@@ -53,7 +53,7 @@ def validate_scopes(scope: Scope, token: TokenData) -> None:
         )
 
 
-def minimize_scope_space(scopes: List[Scope]) -> List[Scope]:
+def minimize_scope_space(scopes: list[Scope]) -> list[Scope]:
     """Remove redundant Scopes from a list of Scopes."""
     scopes = sorted(scopes)
 
@@ -69,7 +69,7 @@ def minimize_scope_space(scopes: List[Scope]) -> List[Scope]:
 
 def validate_scopes_query(
     query_scope: Scope, token: TokenData, as_str: bool = False
-) -> Union[list[Scope], list[str]]:
+) -> list[Scope] | list[str]:
     """
     Create the intersection of queried scopes and token, where query scopes may include 'all' / wildcard (`None`).
     No scopes outside of those included in token will be included in scopes returned.
@@ -98,7 +98,7 @@ def validate_scopes_query(
     return scope_space
 
 
-def gufe_to_json(obj: GufeTokenizable):
+def gufe_to_json(obj: GufeTokenizable) -> str:
     return json.dumps(obj.to_dict(), cls=JSON_HANDLER.encoder)
 
 
@@ -112,7 +112,7 @@ class QueryGUFEHandler:
         self._return_gufe = return_gufe
         self._results = self.clear_data()
 
-    def clear_data(self):
+    def clear_data(self) -> dict | list:
         return {} if self.return_gufe else []
 
     @property
@@ -123,7 +123,7 @@ class QueryGUFEHandler:
     def return_gufe(self):
         return self._return_gufe
 
-    def update_results(self, data: Union[list, dict]):
+    def update_results(self, data: list | dict):
         if self.return_gufe:
             # handle dict
             self._results.update(data)
@@ -131,7 +131,7 @@ class QueryGUFEHandler:
             # handle list
             self._results.extend(data)
 
-    def format_return(self):
+    def format_return(self) -> dict[str, str] | list[str]:
         if self.return_gufe:
             return {str(sk): gufe_to_json(tq) for sk, tq in self._results.items()}
         else:
@@ -167,16 +167,16 @@ class GzipRoute(APIRoute):
         return custom_route_handler
 
 
-def scope_params(org: str = None, campaign: str = None, project: str = None):
+def scope_params(org: str = None, campaign: str = None, project: str = None) -> Scope:
     try:
         return Scope(org=org, campaign=campaign, project=project)
     except (AttributeError, ValueError):
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"Requested Scope cannot be processed as a 3-object tuple of form"
-                f'"X-Y-Z" and cast to string. Alpha numerical values (a-z A-Z 0-9) and "*" are accepted for '
-                f'parameter "scope"'
+                "Requested Scope cannot be processed as a 3-object tuple of form"
+                '"X-Y-Z" and cast to string. Alpha numerical values (a-z A-Z 0-9) and "*" are accepted for '
+                'parameter "scope"'
             ),
             headers={"WWW-Authenticate": "Bearer"},
         )
@@ -223,7 +223,7 @@ def get_s3os_depends(
     return get_s3os(settings)
 
 
-def get_cred_entity():
+def get_cred_entity() -> CredentialedEntity:
     return CredentialedEntity
 
 
@@ -236,7 +236,7 @@ def get_access_token(
     settings: JWTSettings = Depends(get_base_api_settings),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     cred_cls: CredentialedEntity = Depends(get_cred_entity),
-):
+) -> dict:
     entity = authenticate(n4js, cred_cls, form_data.username, form_data.password)
 
     if entity is None:

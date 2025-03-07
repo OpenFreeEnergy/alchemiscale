@@ -1,7 +1,4 @@
-from pathlib import Path
 import os
-
-import pytest
 
 from alchemiscale.compression import compress_gufe_zstd, decompress_gufe_zstd
 from alchemiscale.models import ScopedKey
