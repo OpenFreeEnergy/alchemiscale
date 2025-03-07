@@ -9,7 +9,6 @@ from collections import defaultdict
 import pytest
 from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
-from gufe.protocols import ProtocolUnitFailure
 from gufe.protocols.protocoldag import execute_DAG
 
 from alchemiscale.storage.statestore import Neo4jStore
@@ -301,7 +300,8 @@ class TestNeo4jStore(TestStateStore):
         try:
             n4js.query_transformations(name=malicious_name)
         except AttributeError as e:
-            # With old _query, AttributeError would be thrown AFTER the transaction has finished, and the database is already corrupted
+            # With old _query, AttributeError would be thrown AFTER the transaction has finished, and the database is
+            # already corrupted
             assert "'dict' object has no attribute 'labels'" in str(e)
             assert len(n4js.query_transformations(scope=multiple_scopes[0])) == 0
 
@@ -1566,11 +1566,11 @@ class TestNeo4jStore(TestStateStore):
         assert set(statuses) == {"running"}
 
         # deregister service
-        compute_service_id_ = n4js.deregister_computeservice(csid)
+        n4js.deregister_computeservice(csid)
 
         # check that all tasks are in a waiting state after deregistering
         res = n4js.execute_query(
-            f"""
+            """
         match (t:Task) where t.status = 'waiting'
         with t._scoped_key as sk
         return sk
@@ -2116,7 +2116,7 @@ class TestNeo4jStore(TestStateStore):
 
         assert returned_tracebacks == [puf.traceback for puf in protocol_unit_failures]
 
-    ### task restart policies
+    # task restart policies
 
     class TestTaskRestartPolicy:
 
@@ -2225,8 +2225,8 @@ class TestNeo4jStore(TestStateStore):
 
             # check that the applies relationships were correctly added
 
-            ## first check that the number of applies relationships is correct and
-            ## that the number of retries is zero
+            # first check that the number of applies relationships is correct and
+            # that the number of retries is zero
             applies_query = """
             MATCH (trp: TaskRestartPattern)-[app:APPLIES {num_retries: 0}]->(task: Task)<-[:ACTIONS]-(th: TaskHub)
             RETURN th, count(app) AS num_applied
@@ -2234,7 +2234,7 @@ class TestNeo4jStore(TestStateStore):
 
             records = n4js.execute_query(applies_query).records
 
-            ### one record per taskhub with tasks actioned, each with six num_applied
+            # one record per taskhub with tasks actioned, each with six num_applied
             assert len(records) == 2
             assert records[0]["num_applied"] == records[1]["num_applied"] == 6
 
@@ -2451,15 +2451,15 @@ class TestNeo4jStore(TestStateStore):
             #
             # 1. Completed Tasks do not have an actions relationship with either TaskHub
             # 2. A Task entering the error state is switched back to waiting if any restart patterns apply
-            # 3. A Task entering the error state is left in the error state if no patterns apply and only the TaskHub without
-            #    an enforcing task restart policy actions the Task
+            # 3. A Task entering the error state is left in the error state if no patterns apply and only the
+            #    TaskHub without an enforcing task restart policy actions the Task
             #
             # Tasks will be set to the error state with a spoofing method, which will create a fake ProtocolDAGResultRef
             # and Tracebacks. This is done since making a protocol fail systematically in the testing environment is not
             # obvious at this time.
 
             # reduce down all tasks until only the common elements between taskhubs exist
-            tasks_actioned_by_all_taskhubs: List[ScopedKey] = list(
+            tasks_actioned_by_all_taskhubs: list[ScopedKey] = list(
                 reduce(operator.and_, taskhub_actioned_tasks.values())
             )
 
@@ -2580,7 +2580,7 @@ class TestNeo4jStore(TestStateStore):
             # it should be waiting
             assert tasks_are_waiting(n4js, [task_to_wait])
 
-    ### authentication
+    # authentication
 
     @pytest.mark.parametrize(
         "credential_type", [CredentialedUserIdentity, CredentialedComputeIdentity]

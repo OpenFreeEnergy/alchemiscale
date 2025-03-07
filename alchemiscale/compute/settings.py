@@ -1,7 +1,7 @@
 from pathlib import Path
 from pydantic import BaseModel, Field
 
-from ..models import Scope, ScopedKey
+from ..models import Scope
 
 
 class ComputeServiceSettings(BaseModel):

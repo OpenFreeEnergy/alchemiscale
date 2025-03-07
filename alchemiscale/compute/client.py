@@ -5,16 +5,8 @@
 
 """
 
-import json
-from urllib.parse import urljoin
-from functools import wraps
-
-import requests
-from requests.auth import HTTPBasicAuth
-
 import zstandard as zstd
 
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 
@@ -25,7 +17,7 @@ from ..base.client import (
 )
 from ..compression import compress_gufe_zstd, decompress_gufe_zstd
 from ..models import Scope, ScopedKey
-from ..storage.models import TaskHub, Task, ComputeServiceID, TaskStatusEnum
+from ..storage.models import TaskHub, Task, ComputeServiceID
 
 
 class AlchemiscaleComputeClientError(AlchemiscaleBaseClientError): ...

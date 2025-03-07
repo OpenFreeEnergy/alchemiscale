@@ -6,14 +6,13 @@
 
 import asyncio
 from typing import Any, Iterable
-import json
 from itertools import chain
 from functools import lru_cache
 
 from async_lru import alru_cache
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER, KeyedChain
+from gufe.tokenization import GufeTokenizable, KeyedChain
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 import zstandard as zstd
 
@@ -1548,7 +1547,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         compress: bool = True,
         visualize: bool = True,
     ) -> dict[str, ProtocolResult | list[ProtocolDAGResult] | None]:
-        """Get a `ProtocolResult` for every `Transformation` in the given
+        r"""Get a `ProtocolResult` for every `Transformation` in the given
         `AlchemicalNetwork`.
 
         A dict giving the `ScopedKey` of each `Transformation` in the network
@@ -1592,7 +1591,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         compress: bool = True,
         visualize: bool = True,
     ) -> dict[str, list[ProtocolDAGResult]]:
-        """Get all failed `ProtocolDAGResult`s for every `Transformation` in
+        r"""Get all failed `ProtocolDAGResult`s for every `Transformation` in
         the given `AlchemicalNetwork`.
 
         A dict giving the `ScopedKey` of each `Transformation` in the network
@@ -1623,7 +1622,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         compress: bool = True,
         visualize: bool = True,
     ) -> ProtocolResult | list[ProtocolDAGResult] | None:
-        """Get a `ProtocolResult` for the given `Transformation`.
+        r"""Get a `ProtocolResult` for the given `Transformation`.
 
         A `ProtocolResult` object corresponds to the `Protocol` used for this
         `Transformation`. This is constructed from the available
@@ -1683,7 +1682,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_transformation_failures(
         self, transformation: ScopedKey, compress: bool = True, visualize: bool = True
     ) -> list[ProtocolDAGResult]:
-        """Get failed `ProtocolDAGResult`\s for the given `Transformation`.
+        r"""Get failed `ProtocolDAGResult`\s for the given `Transformation`.
 
         Parameters
         ----------

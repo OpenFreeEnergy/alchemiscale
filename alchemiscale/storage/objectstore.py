@@ -5,21 +5,15 @@
 """
 
 import os
-import io
-import json
 from datetime import datetime
 from boto3.session import Session
 from functools import lru_cache
 
-import zstandard as zstd
+from gufe.tokenization import GufeKey
 
-from gufe.protocols import ProtocolDAGResult
-from gufe.tokenization import JSON_HANDLER, GufeTokenizable, GufeKey
-
-from ..compression import decompress_gufe_zstd
-from ..models import ScopedKey, Scope
+from ..models import ScopedKey
 from .models import ProtocolDAGResultRef
-from ..settings import S3ObjectStoreSettings, get_s3objectstore_settings
+from ..settings import S3ObjectStoreSettings
 
 # default filename for object store files
 OBJECT_FILENAME = "obj.json.zst"
@@ -51,9 +45,7 @@ class S3ObjectStoreError(Exception): ...
 class S3ObjectStore:
     """Object storage for use with AWS S3."""
 
-    def __init__(
-        self, session: "boto3.Session", bucket: str, prefix: str, endpoint_url=None
-    ):
+    def __init__(self, session: Session, bucket: str, prefix: str, endpoint_url=None):
         """ """
         self.session = session
         self.resource = self.session.resource("s3", endpoint_url=endpoint_url)
@@ -137,7 +129,8 @@ class S3ObjectStore:
     def _get_bytes(self, location):
         key = os.path.join(self.prefix, location)
 
-        b = self.resource.Bucket(self.bucket)
+        # TODO: unused call
+        _ = self.resource.Bucket(self.bucket)
 
         return self.resource.Object(self.bucket, key).get()["Body"].read()
 
@@ -155,7 +148,8 @@ class S3ObjectStore:
         with open(path, "rb") as f:
             self.resource.Bucket(self.bucket).upload_fileobj(f, key)
 
-        b = self.resource.Bucket(self.bucket)
+        # TODO: unused call
+        _ = self.resource.Bucket(self.bucket)
 
     def _exists(self, location) -> bool:
         from botocore.exceptions import ClientError
@@ -299,8 +293,8 @@ class S3ObjectStore:
                 OBJECT_FILENAME,
             )
 
-        ## TODO: want organization alongside `obj.json` of `ProtocolUnit` gufe_keys
-        ## for any file objects stored in the same space
+        # TODO: want organization alongside `obj.json` of `ProtocolUnit` gufe_keys for any file objects stored in the
+        # same space
         pdr_bytes = self._get_bytes(location)
 
         return pdr_bytes

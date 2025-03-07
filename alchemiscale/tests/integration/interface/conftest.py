@@ -11,7 +11,6 @@ from alchemiscale.security.models import CredentialedUserIdentity, TokenData
 from alchemiscale.security.auth import hash_key
 from alchemiscale.base.api import (
     get_token_data_depends,
-    get_n4js_depends,
     get_s3os_depends,
 )
 
@@ -19,7 +18,7 @@ from alchemiscale.base.api import (
 from alchemiscale.tests.integration.interface.utils import get_user_settings_override
 
 
-## user api
+# user api
 
 
 @pytest.fixture(scope="module")
