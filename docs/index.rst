@@ -36,8 +36,7 @@ and the :ref:`developer-guide` for details on how the components of this archite
 
 
 .. note::
-   This software is pre-alpha and under active development. It is not yet ready
-   for production use and the API is liable to change rapidly at any time. 
+   This software is in beta and under active development. It is used for production purposes by several early-adopters, but its API is still rapidly evolving.
 
 .. _Folding@Home: https://foldingathome.org
 .. _Open Molecular Software Foundation: https://omsf.io

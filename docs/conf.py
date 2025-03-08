@@ -35,13 +35,16 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 autodoc_mock_imports = [
     "async_lru",
+    "bcrypt",
     "boto3",
     "click",
+    "diskcache",
     "fastapi",
     "gufe",
     "httpx",
     "jose",
     "networkx",
+    "neo4j",
     "numpy",
     "py2neo",
     "pydantic",

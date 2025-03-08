@@ -9,6 +9,7 @@ from typing import List, Tuple, Optional, Dict, Union
 import json
 from urllib.parse import urljoin
 from functools import wraps
+from typing import Optional
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -115,7 +116,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     def retrieve_task_transformation(
         self, task: ScopedKey
-    ) -> tuple[Transformation, ProtocolDAGResult | None]:
+    ) -> tuple[Transformation, Optional[ProtocolDAGResult]]:
         transformation_json, protocoldagresult_latin1 = self._get_resource(
             f"/tasks/{task}/transformation/gufe"
         )
