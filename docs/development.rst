@@ -88,16 +88,16 @@ Object store
 ============
 
 The *object store* is used for result storage.
-Execution of :py:class:`~alchemiscale.storage.models.Task`\s by :ref:`component-compute-services` yields :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult` objects, and these are stored
+Execution of :py:class:`~alchemiscale.storage.models.Task`\s by :ref:`component-compute-services` yields :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult` objects, and these are stored
 in a directory-like structure within the *object store* for later retrieval.
 References to these objects are created in the *state store*, allowing the *state store* to function as a fast index for finding individual results on request.
-When a user makes use of the :py:class:`~alchemiscale.interface.client.AlchemiscaleClient` to request results for a given :external+gufe:py:class:`~gufe.transformations.Transformation`, the ``AlchemiscaleAPI`` queries the *state store* for these references, then pulls the corresponding results from the *object store* and returns them as responses to the request.
+When a user makes use of the :py:class:`~alchemiscale.interface.client.AlchemiscaleClient` to request results for a given :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`, the ``AlchemiscaleAPI`` queries the *state store* for these references, then pulls the corresponding results from the *object store* and returns them as responses to the request.
 
 The choice of *object store* corresponds to the platform ``alchemiscale`` is being deployed to.
 Currently, there is only one implementation, using `AWS S3`_ as the *object store*, but there are plans to create implementations appropriate for other cloud providers, as well as to provide a "local" *object store* for single-host deployments.
 
 For the `AWS S3`_ *object store*, ``alchemiscale`` makes use of :py:class:`~alchemiscale.storage.objectstore.S3ObjectStore` as its interface.
-This object provides methods for storing and retrieving :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`\s, and over time will support methods for storage of arbitrary files as required by certain :external+gufe:py:class:`~gufe.protocols.Protocol`\s.
+This object provides methods for storing and retrieving :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s, and over time will support methods for storage of arbitrary files as required by certain :external+gufe:py:class:`~gufe.protocols.protocol.Protocol`\s.
 
 
 .. _component-apis:
@@ -167,7 +167,7 @@ This file sets the URL for the target ``alchemiscale`` instance, compute identit
 See :ref:`compute` for additional details on deployment.
 
 After starting up, the compute service registers itself with the ``AlchemiscaleComputeAPI``, creating a :py:class:`~alchemiscale.storage.models.ComputeServiceRegistration` instance in the *state store*.
-It will then claim :py:class:`~alchemiscale.storage.models.Task`\s for execution, pull the corresponding :external+gufe:py:class:`~gufe.transformations.Transformation`, create and execute a :external+gufe:py:class:`~gufe.protocols.ProtocolDAG`, and push the corresponding :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult` back to the ``AlchemiscaleComputeAPI`` upon completion or failure.
+It will then claim :py:class:`~alchemiscale.storage.models.Task`\s for execution, pull the corresponding :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`, create and execute a :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAG`, and push the corresponding :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult` back to the ``AlchemiscaleComputeAPI`` upon completion or failure.
 The compute service will continue this behavior until it reaches a configured stop condition, receives a termination signal, or is killed.
 
 The compute service periodically issues a heartbeat to the ``AlchemiscaleComputeAPI``, updating its last known heartbeat datetime in its registration.

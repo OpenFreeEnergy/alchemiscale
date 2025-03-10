@@ -49,7 +49,7 @@ Note that for the ``feflow`` protocol, you will need to install ``feflow`` into 
 RelativeHybridTopologyProtocol usage notes
 ==========================================
 
-For production use of this protocol, we recommend the default settings, with these changes to reduce execution times per :external+gufe:py:class:`~gufe.transformations.Transformation` :py:class:`~alchemiscale.storage.models.Task`::
+For production use of this protocol, we recommend the default settings, with these changes to reduce execution times per :external+gufe:py:class:`~gufe.transformations.transformation.Transformation` :py:class:`~alchemiscale.storage.models.Task`::
 
     >>> from openfe.protocols.openmm_rfe import RelativeHybridTopologyProtocol
     >>> from openff.units import unit
@@ -133,7 +133,7 @@ You can create one with, e.g.::
 
     >>> scope = Scope('my_org', 'my_campaign', 'my_project')
 
-Within a :py:class:`~alchemiscale.models.Scope`, components of an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` are deduplicated against other components already present, allowing you to e.g. submit new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s sharing :external+gufe:py:class:`~gufe.transformations.Transformation`\s with previous ones and benefit from existing results.
+Within a :py:class:`~alchemiscale.models.Scope`, components of an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` are deduplicated against other components already present, allowing you to e.g. submit new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s sharing :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s with previous ones and benefit from existing results.
 If you prefer to have an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` not share any components with previously-submitted :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s, then submit it into a different :py:class:`~alchemiscale.models.Scope`.
 
 
@@ -173,10 +173,10 @@ and you can use these with :py:meth:`~alchemiscale.interface.client.Alchemiscale
 Creating and actioning Tasks
 ****************************
 
-Submitting an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` defines it on the ``alchemiscale`` server, but it does not define where to allocate effort in evaluating the :external+gufe:py:class:`~gufe.transformations.Transformation`\s in the network.
-To do this, we need to create and action :py:class:`~alchemiscale.storage.models.Task`\s on the :external+gufe:py:class:`~gufe.transformations.Transformation`\s we are most interested in.
+Submitting an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` defines it on the ``alchemiscale`` server, but it does not define where to allocate effort in evaluating the :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s in the network.
+To do this, we need to create and action :py:class:`~alchemiscale.storage.models.Task`\s on the :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s we are most interested in.
 
-For this example, we’ll loop through every :external+gufe:py:class:`~gufe.transformations.Transformation` in our :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, creating and actioning 3 :py:class:`~alchemiscale.storage.models.Task`\s for each::
+For this example, we’ll loop through every :external+gufe:py:class:`~gufe.transformations.transformation.Transformation` in our :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, creating and actioning 3 :py:class:`~alchemiscale.storage.models.Task`\s for each::
 
     >>> tasks = []
     >>> for tf_sk in asc.get_network_transformations(an_sk):
@@ -188,8 +188,8 @@ For this example, we’ll loop through every :external+gufe:py:class:`~gufe.tran
      <ScopedKey('Task-157232d7ff794a0985ebce5055e0f336-my_org-my_campaign-my_project')>,
      ...]
 
-A :py:class:`~alchemiscale.storage.models.Task` is associated with a :external+gufe:py:class:`~gufe.transformations.Transformation` on creation, and actioning the :py:class:`~alchemiscale.storage.models.Task` marks it for execution for our :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` we submitted earlier.
-If we submit another :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` including some of the same :external+gufe:py:class:`~gufe.transformations.Transformation`\s later to the same :py:class:`~alchemiscale.models.Scope`, we could get the :py:class:`~alchemiscale.storage.models.Task`\s for each :external+gufe:py:class:`~gufe.transformations.Transformation` and only create new :py:class:`~alchemiscale.storage.models.Task`\s if necessary, actioning the existing ones to that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` as well::
+A :py:class:`~alchemiscale.storage.models.Task` is associated with a :external+gufe:py:class:`~gufe.transformations.transformation.Transformation` on creation, and actioning the :py:class:`~alchemiscale.storage.models.Task` marks it for execution for our :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` we submitted earlier.
+If we submit another :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` including some of the same :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s later to the same :py:class:`~alchemiscale.models.Scope`, we could get the :py:class:`~alchemiscale.storage.models.Task`\s for each :external+gufe:py:class:`~gufe.transformations.transformation.Transformation` and only create new :py:class:`~alchemiscale.storage.models.Task`\s if necessary, actioning the existing ones to that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` as well::
 
     >>> tasks = []
     >>> for tf_sk in asc.get_network_transformations(other_an_sk):
@@ -205,11 +205,11 @@ If we submit another :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` i
      ...]
 
 The more :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s a :py:class:`~alchemiscale.storage.models.Task` is actioned to, the higher its chances of being picked up by a compute service.
-In this way, actioning is an indicator of demand for a given :py:class:`~alchemiscale.storage.models.Task` and its corresponding :external+gufe:py:class:`~gufe.transformations.Transformation`.
+In this way, actioning is an indicator of demand for a given :py:class:`~alchemiscale.storage.models.Task` and its corresponding :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`.
 
 .. note:: 
-   Alchemiscale :py:class:`~alchemiscale.storage.models.Task`\s can be considered a single independent “repeat” of an alchemical transformation, or a :external+gufe:py:class:`~gufe.protocols.ProtocolDAG` as defined in :py:mod:`gufe`.
-   What this exactly means will be subtly different depending on the type of alchemical :external+gufe:py:class:`~gufe.protocols.Protocol` employed.
+   Alchemiscale :py:class:`~alchemiscale.storage.models.Task`\s can be considered a single independent “repeat” of an alchemical transformation, or a :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAG` as defined in :py:mod:`gufe`.
+   What this exactly means will be subtly different depending on the type of alchemical :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` employed.
 
    In the case of the :py:class:`~openfe.protocols.openmm_rfe.RelativeHybridTopologyProtocol` (i.e. for HREX, and SAMS), this effectively means that each :py:class:`~alchemiscale.storage.models.Task` carries out all the computation required to obtain a single estimate of the free energy (in practice one would want to do several repeats to get an idea of the sampling error).
 
@@ -320,7 +320,7 @@ You can quickly obtain statuses for all Tasks associated with various levels, in
 
 * :py:class:`~alchemiscale.models.Scope`
 * :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`
-* :external+gufe:py:class:`~gufe.transformations.Transformation`
+* :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`
 
 
 Scope
@@ -362,7 +362,7 @@ To get the individual statuses of all :py:class:`~alchemiscale.storage.models.Ta
 AlchemicalNetwork
 =================
 
-You can get the status counts of all :py:class:`~alchemiscale.storage.models.Task`\s associated with :external+gufe:py:class:`~gufe.transformations.Transformation`\s within a given :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` with::
+You can get the status counts of all :py:class:`~alchemiscale.storage.models.Task`\s associated with :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s within a given :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` with::
 
     >>> asc.get_network_status(an_sk)
     {'complete': 138,
@@ -392,14 +392,14 @@ To get the specific statuses of all :py:class:`~alchemiscale.storage.models.Task
 Transformation
 ==============
 
-To get the status counts of all :py:class:`~alchemiscale.storage.models.Task`\s associated with only a given :external+gufe:py:class:`~gufe.transformations.Transformation`, use::
+To get the status counts of all :py:class:`~alchemiscale.storage.models.Task`\s associated with only a given :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`, use::
 
     >>> asc.get_transformation_status(tf_sk)
     {'complete': 2,
      'error': 1,
      'running': 3}
 
-To get the specific statuses of all :py:class:`~alchemiscale.storage.models.Task`\s for a given :external+gufe:py:class:`~gufe.transformations.Transformation`, use the :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_transformation_tasks` method in combination with :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_tasks_status`::
+To get the specific statuses of all :py:class:`~alchemiscale.storage.models.Task`\s for a given :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`, use the :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_transformation_tasks` method in combination with :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_tasks_status`::
 
     >>> tasks = asc.get_transformation_tasks(tf_sk)
     >>> asc.get_tasks_status(tasks)
@@ -416,26 +416,26 @@ To get the specific statuses of all :py:class:`~alchemiscale.storage.models.Task
 Pulling and assembling results
 ******************************
 
-A :py:class:`~gufe.protocols.Protocol` is attached to each :external+gufe:py:class:`~gufe.transformations.Transformation`, and that :external+gufe:py:class:`~gufe.protocols.Protocol` defines how each :py:class:`~alchemiscale.storage.models.Task` is computed.
-It also defines how the results of each :py:class:`~alchemiscale.storage.models.Task` (called a :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`) are combined to give an estimate of the free energy difference for that :external+gufe:py:class:`~gufe.transformations.Transformation`.
+A :py:class:`~gufe.protocols.protocol.Protocol` is attached to each :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`, and that :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` defines how each :py:class:`~alchemiscale.storage.models.Task` is computed.
+It also defines how the results of each :py:class:`~alchemiscale.storage.models.Task` (called a :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`) are combined to give an estimate of the free energy difference for that :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`.
 
-We can check the status of a :external+gufe:py:class:`~gufe.transformations.Transformation` with::
+We can check the status of a :external+gufe:py:class:`~gufe.transformations.transformation.Transformation` with::
 
     >>> asc.get_transformation_status(tf_sk)
     {'complete': 2,
      'error': 1,
      'running': 3}
 
-If there are complete :py:class:`~alchemiscale.storage.models.Task`\s, we can pull in all successful :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`\s for the :external+gufe:py:class:`~gufe.transformations.Transformation` and combine them into a :external+gufe:py:class:`~gufe.protocols.ProtocolResult` corresponding to that :external+gufe:py:class:`~gufe.transformations.Transformation`/'s :external+gufe:py:class:`~gufe.protocols.Protocol` with::
+If there are complete :py:class:`~alchemiscale.storage.models.Task`\s, we can pull in all successful :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s for the :external+gufe:py:class:`~gufe.transformations.transformation.Transformation` and combine them into a :external+gufe:py:class:`~gufe.protocols.protocol.ProtocolResult` corresponding to that :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`/'s :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` with::
 
     >>> protocol_result = asc.get_transformation_results(tf_sk)
     >>> protocol_result
     <RelativeHybridTopologyProtocolResult-44b0f588f5f3073aa58d86e1017ef623>
 
-This object features a :external+gufe:py:meth:`~gufe.protocols.ProtocolResult.get_estimate` and :external+gufe:py:meth:`~gufe.protocols.ProtocolResult.get_uncertainty` method, giving the best available estimate of the free energy difference and its uncertainty. 
+This object features a :external+gufe:py:meth:`~gufe.protocols.protocol.ProtocolResult.get_estimate` and :external+gufe:py:meth:`~gufe.protocols.protocol.ProtocolResult.get_uncertainty` method, giving the best available estimate of the free energy difference and its uncertainty. 
 
-To pull the :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`\s and not combine them into a :external+gufe:py:class:`~gufe.protocols.ProtocolResult` object, you can give ``return_protocoldagresults=True`` to this method.
-Any number of :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`\s can then be manually combined into a single :external+gufe:py:class:`~gufe.protocols.ProtocolResult` with::
+To pull the :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s and not combine them into a :external+gufe:py:class:`~gufe.protocols.protocol.ProtocolResult` object, you can give ``return_protocoldagresults=True`` to this method.
+Any number of :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s can then be manually combined into a single :external+gufe:py:class:`~gufe.protocols.protocol.ProtocolResult` with::
 
     >>> # protocol_dag_results: List[ProtocolDAGResult]
     >>> protocol_dag_results = asc.get_transformation_results(tf_sk, return_protocoldagresults=True)
@@ -443,7 +443,7 @@ Any number of :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`\s can 
     >>> protocol_result
     <RelativeHybridTopologyProtocolResult-44b0f588f5f3073aa58d86e1017ef623>
 
-This can be useful for subsampling the available :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`\s and building estimates from these subsamples, such as for an analysis of convergence for the :py:class:`~feflow.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`.
+This can be useful for subsampling the available :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s and building estimates from these subsamples, such as for an analysis of convergence for the :py:class:`~feflow.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`.
 
 If you wish to pull results for only a single :py:class:`~alchemiscale.storage.models.Task`, you can do so with::
 
@@ -452,14 +452,14 @@ If you wish to pull results for only a single :py:class:`~alchemiscale.storage.m
     >>> protocol_dag_results
     [<ProtocolDAGResult-54a3ed32cbd3e3d60d87b2a17519e399>]
 
-You can then iteratively create and action new :py:class:`~alchemiscale.storage.models.Task`\s on your desired :external+gufe:py:class:`~gufe.transformations.Transformation`\s based on their current estimate and uncertainty, allocating effort where it will be most beneficial.
+You can then iteratively create and action new :py:class:`~alchemiscale.storage.models.Task`\s on your desired :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s based on their current estimate and uncertainty, allocating effort where it will be most beneficial.
 
 *******************
 Dealing with errors
 *******************
 
 If you observe many errored :py:class:`~alchemiscale.storage.models.Task`\s from running :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_transformation_status`, you can introspect the traceback raised by the :py:class:`~alchemiscale.storage.models.Task` on execution.
-For a given :external+gufe:py:class:`~gufe.transformations.Transformation`, you can pull down all failed results and print their exceptions and tracebacks with::
+For a given :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`, you can pull down all failed results and print their exceptions and tracebacks with::
 
     >>> # failed_protocol_dag_results : List[ProtocolDAGResult]
     >>> failed_protocol_dag_results = asc.get_transformation_failures(tf_sk)
@@ -469,11 +469,11 @@ For a given :external+gufe:py:class:`~gufe.transformations.Transformation`, you 
     >>>         print(failed_unit.exception)
     >>>         print(failed_unit.traceback)
 
-This may give you clues as to what is going wrong with your :external+gufe:py:class:`~gufe.transformations.Transformation`\s.
-A failure may be a symptom of the environments the compute services are running with; it could also indicate some fundamental problems with the :external+gufe:py:class:`~gufe.transformations.Transformation`\s you are attempting to execute, and in this case trying to reproduce the error locally and experimenting with possible solutions is appropriate.
-You may want to try different :external+gufe:py:class:`~gufe.protocols.Protocol` settings, different ``Mapping``\s, or try to adjust the components in your :external+gufe:py:class:`~gufe.chemicalsystem.ChemicalSystem`\s.
+This may give you clues as to what is going wrong with your :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s.
+A failure may be a symptom of the environments the compute services are running with; it could also indicate some fundamental problems with the :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s you are attempting to execute, and in this case trying to reproduce the error locally and experimenting with possible solutions is appropriate.
+You may want to try different :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` settings, different ``Mapping``\s, or try to adjust the components in your :external+gufe:py:class:`~gufe.chemicalsystem.ChemicalSystem`\s.
 
-For a given :external+gufe:py:class:`~gufe.transformations.Transformation`, you can execute it locally with::
+For a given :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`, you can execute it locally with::
 
     >>> from gufe.protocols import execute_DAG
     >>> from pathlib import Path
@@ -492,7 +492,7 @@ For a given :external+gufe:py:class:`~gufe.transformations.Transformation`, you 
     >>> protocol_result.get_estimate()
     >>> protocol_result.get_uncertainty()
 
-Note that for some :external+gufe:py:class:`~gufe.protocols.Protocol`\s, your local machine may need to meet certain requirements:
+Note that for some :external+gufe:py:class:`~gufe.protocols.protocol.Protocol`\s, your local machine may need to meet certain requirements:
 
 * :py:class:`openfe.protocols.openmm_rfe.RelativeHybridTopologyProtocol`: NVIDIA GPU if ``settings.platform == 'CUDA'``
 * :py:class:`~feflow.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`: OpenEye Toolkit license, NVIDIA GPU if ``settings.platform == 'CUDA'``
@@ -501,7 +501,7 @@ Note that for some :external+gufe:py:class:`~gufe.protocols.Protocol`\s, your lo
 Re-running errored Tasks
 ************************
 
-If you believe an errored :py:class:`~alchemiscale.storage.models.Task` is due to a random failure (such as landing on a flaky compute host, or due to inherent stochasticity in the :external+gufe:py:class:`~gufe.protocols.Protocol` itself), or due to a systematic failure that has been resolved (such as a misconfigured compute environment, now remediated), you can choose to set that :py:class:`~alchemiscale.storage.models.Task`\'s status back to ``'waiting'``.
+If you believe an errored :py:class:`~alchemiscale.storage.models.Task` is due to a random failure (such as landing on a flaky compute host, or due to inherent stochasticity in the :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` itself), or due to a systematic failure that has been resolved (such as a misconfigured compute environment, now remediated), you can choose to set that :py:class:`~alchemiscale.storage.models.Task`\'s status back to ``'waiting'``.
 This will make it eligible for being claimed and executed again, perhaps succesfully.
 
 Given a set of :py:class:`~alchemiscale.storage.models.Task`\s you wish to set back to ``'waiting'``, you can do::
@@ -528,7 +528,7 @@ Re-running Errored Tasks with Task Restart Patterns
 
 Re-running errored :py:class:`~alchemiscale.storage.models.Task`\s manually for known failure modes (such as those described in the previous section) quickly becomes tedious, especially for large networks.
 Alternatively, you can add `regular expression <https://en.wikipedia.org/wiki/Regular_expression>`_ strings as :py:class:`~alchemiscale.storage.models.Task` restart patterns to an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`.
-:py:class:`~alchemiscale.storage.models.Task`\s actioned on that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` will be automatically restarted if the :py:class:`~alchemiscale.storage.models.Task` fails during any part of its execution, provided that an enforcing pattern matches a traceback within the :py:class:`~alchemiscale.storage.models.Task`\'s failed :external+gufe:py:class:`~gufe.protocols.ProtocolDAGResult`.
+:py:class:`~alchemiscale.storage.models.Task`\s actioned on that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` will be automatically restarted if the :py:class:`~alchemiscale.storage.models.Task` fails during any part of its execution, provided that an enforcing pattern matches a traceback within the :py:class:`~alchemiscale.storage.models.Task`\'s failed :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`.
 The number of restarts is controlled by the ``num_allowed_restarts`` parameter of the :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.add_task_restart_patterns` method.
 If a :py:class:`~alchemiscale.storage.models.Task` is restarted more than ``num_allowed_restarts`` times, the :py:class:`~alchemiscale.storage.models.Task` is canceled on that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` and left in an ``error`` status.
 
