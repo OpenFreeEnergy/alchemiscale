@@ -1550,7 +1550,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         compress: bool = True,
         visualize: bool = True,
     ) -> Dict[str, Union[Optional[ProtocolResult], List[ProtocolDAGResult]]]:
-        """Get a `ProtocolResult` for every `Transformation` in the given
+        r"""Get a `ProtocolResult` for every `Transformation` in the given
         `AlchemicalNetwork`.
 
         A dict giving the `ScopedKey` of each `Transformation` in the network
@@ -1594,7 +1594,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         compress: bool = True,
         visualize: bool = True,
     ) -> Dict[str, List[ProtocolDAGResult]]:
-        """Get all failed `ProtocolDAGResult`s for every `Transformation` in
+        r"""Get all failed `ProtocolDAGResult`s for every `Transformation` in
         the given `AlchemicalNetwork`.
 
         A dict giving the `ScopedKey` of each `Transformation` in the network
@@ -1625,7 +1625,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         compress: bool = True,
         visualize: bool = True,
     ) -> Union[Optional[ProtocolResult], List[ProtocolDAGResult]]:
-        """Get a `ProtocolResult` for the given `Transformation`.
+        r"""Get a `ProtocolResult` for the given `Transformation`.
 
         A `ProtocolResult` object corresponds to the `Protocol` used for this
         `Transformation`. This is constructed from the available
@@ -1685,7 +1685,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_transformation_failures(
         self, transformation: ScopedKey, compress: bool = True, visualize: bool = True
     ) -> List[ProtocolDAGResult]:
-        """Get failed `ProtocolDAGResult`\s for the given `Transformation`.
+        r"""Get failed `ProtocolDAGResult`\s for the given `Transformation`.
 
         Parameters
         ----------
