@@ -540,9 +540,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         if not properties:
             prop_string = ""
         else:
-            prop_string = ", ".join(
-                f"{key}: ${key}" for key in properties.keys()
-            )
+            prop_string = ", ".join(f"{key}: ${key}" for key in properties.keys())
 
             prop_string = f" {{{prop_string}}}"
 
@@ -2197,8 +2195,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         task: ScopedKey,
         return_gufe=True,
     ) -> (
-        tuple[Transformation, ProtocolDAGResultRef | None] |
-        tuple[ScopedKey, ScopedKey | None]
+        tuple[Transformation, ProtocolDAGResultRef | None]
+        | tuple[ScopedKey, ScopedKey | None]
     ):
         r"""Get the `Transformation` and `ProtocolDAGResultRef` to extend from (if
         present) for the given `Task`.
@@ -2395,9 +2393,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         }
 
         prop_string = ", ".join(
-            f"{key}: ${key}"
-            for key, value in properties.items()
-            if value is not None
+            f"{key}: ${key}" for key, value in properties.items() if value is not None
         )
 
         if isinstance(network_state, NetworkStateEnum):

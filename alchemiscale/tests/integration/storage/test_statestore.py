@@ -410,7 +410,8 @@ class TestNeo4jStore(TestStateStore):
 
         assert len(cs_sks) == 2
         assert {cs_sk.gufe_key for cs_sk in cs_sks} == {
-            transformation.stateA.key, transformation.stateB.key
+            transformation.stateA.key,
+            transformation.stateB.key,
         }
 
     def test_get_chemicalsystem_transformations(
@@ -1732,7 +1733,10 @@ class TestNeo4jStore(TestStateStore):
         # claim the next layer of tasks, should be all of layer three
         claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=4)
         assert set(claimed_task_sks) == {
-            layer_three_1, layer_three_2, layer_three_3, layer_three_4
+            layer_three_1,
+            layer_three_2,
+            layer_three_3,
+            layer_three_4,
         }
 
     def test_claim_task_byweight(self, n4js: Neo4jStore, network_tyk2, scope_test):

@@ -383,9 +383,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             networks, self._get_network_weight, batch_size
         )
 
-    def set_network_weight(
-        self, network: ScopedKey, weight: float
-    ) -> ScopedKey | None:
+    def set_network_weight(self, network: ScopedKey, weight: float) -> ScopedKey | None:
         """Set the weight of the TaskHub associated with the given AlchemicalNetwork.
 
         Compute services perform a weighted selection of the AlchemicalNetworks

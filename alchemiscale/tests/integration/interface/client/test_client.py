@@ -554,7 +554,8 @@ class TestClient:
 
         assert len(cs_sks) == 2
         assert {cs_sk.gufe_key for cs_sk in cs_sks} == {
-            transformation.stateA.key, transformation.stateB.key
+            transformation.stateA.key,
+            transformation.stateB.key,
         }
 
     def test_get_chemicalsystem_transformations(
