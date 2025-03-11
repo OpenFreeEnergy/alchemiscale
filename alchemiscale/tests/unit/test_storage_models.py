@@ -9,7 +9,7 @@ from alchemiscale.storage.models import (
 from alchemiscale import ScopedKey
 
 
-class TestNetworkState(object):
+class TestNetworkState:
 
     network_sk = ScopedKey.from_str(
         "AlchemicalNetwork-foo123-FakeOrg-FakeCampaign-FakeProject"
@@ -45,7 +45,7 @@ class TestNetworkState(object):
                 NetworkStateEnum(state)
 
 
-class TestTaskRestartPattern(object):
+class TestTaskRestartPattern:
 
     pattern_value_error = "`pattern` must be a non-empty string"
     max_retries_value_error = "`max_retries` must have a positive integer value."
@@ -129,7 +129,7 @@ class TestTaskRestartPattern(object):
         assert trp_orig is trp_reconstructed
 
 
-class TestTracebacks(object):
+class TestTracebacks:
 
     valid_entry = ["traceback1", "traceback2", "traceback3"]
     source_keys = ["ProtocolUnit-ABC123", "ProtocolUnit-DEF456", "ProtocolUnit-GHI789"]

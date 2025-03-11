@@ -5,18 +5,8 @@
 
 """
 
-from typing import List, Tuple, Optional, Dict, Union
-import json
-from urllib.parse import urljoin
-from functools import wraps
-from typing import Optional
-
-import requests
-from requests.auth import HTTPBasicAuth
-
 import zstandard as zstd
 
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 
@@ -27,7 +17,7 @@ from ..base.client import (
 )
 from ..compression import compress_gufe_zstd, decompress_gufe_zstd
 from ..models import Scope, ScopedKey
-from ..storage.models import TaskHub, Task, ComputeServiceID, TaskStatusEnum
+from ..storage.models import TaskHub, Task, ComputeServiceID
 
 
 class AlchemiscaleComputeClientError(AlchemiscaleBaseClientError): ...
@@ -52,15 +42,15 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         res = self._post_resource(f"/computeservice/{compute_service_id}/heartbeat", {})
         return ComputeServiceID(res)
 
-    def list_scopes(self) -> List[Scope]:
+    def list_scopes(self) -> list[Scope]:
         scopes = self._get_resource(
             f"/identities/{self.identifier}/scopes",
         )
         return [Scope.from_str(s) for s in scopes]
 
     def query_taskhubs(
-        self, scopes: List[Scope], return_gufe=False
-    ) -> Union[List[ScopedKey], Dict[ScopedKey, TaskHub]]:
+        self, scopes: list[Scope], return_gufe=False
+    ) -> list[ScopedKey] | dict[ScopedKey, TaskHub]:
         """Return all `TaskHub`s corresponding to given `Scope`."""
         if return_gufe:
             taskhubs = {}
@@ -81,7 +71,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         taskhub: ScopedKey,
         compute_service_id: ComputeServiceID,
         count: int = 1,
-        protocols: Optional[List[str]] = None,
+        protocols: list[str] | None = None,
     ) -> Task:
         """Claim a `Task` from the specified `TaskHub`"""
         data = dict(
@@ -93,10 +83,10 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     def claim_tasks(
         self,
-        scopes: List[Scope],
+        scopes: list[Scope],
         compute_service_id: ComputeServiceID,
         count: int = 1,
-        protocols: Optional[List[str]] = None,
+        protocols: list[str] | None = None,
     ):
         """Claim Tasks from TaskHubs within a list of Scopes."""
         data = dict(
@@ -116,7 +106,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     def retrieve_task_transformation(
         self, task: ScopedKey
-    ) -> tuple[Transformation, Optional[ProtocolDAGResult]]:
+    ) -> tuple[Transformation, ProtocolDAGResult | None]:
         transformation_json, protocoldagresult_latin1 = self._get_resource(
             f"/tasks/{task}/transformation/gufe"
         )
@@ -140,7 +130,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         self,
         task: ScopedKey,
         protocoldagresult: ProtocolDAGResult,
-        compute_service_id: Optional[ComputeServiceID] = None,
+        compute_service_id: ComputeServiceID | None = None,
     ) -> ScopedKey:
 
         data = dict(

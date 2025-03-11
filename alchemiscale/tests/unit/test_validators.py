@@ -2,7 +2,7 @@ import pytest
 
 from openfe_benchmarks import tyk2
 from gufe import ChemicalSystem, Transformation, AlchemicalNetwork
-from gufe.tests.test_protocol import DummyProtocol, BrokenProtocol
+from gufe.tests.test_protocol import DummyProtocol
 
 from alchemiscale import validators
 

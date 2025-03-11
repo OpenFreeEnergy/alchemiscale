@@ -38,18 +38,16 @@ def record_data_to_node(node):
 
 
 def subgraph_from_path_record(path_record):
-    path_nodes = set((record_data_to_node(n) for n in path_record.nodes))
-    path_rels = set(
-        (
-            Relationship(
-                record_data_to_node(rel.start_node),
-                rel.type,
-                record_data_to_node(rel.end_node),
-                **rel._properties,
-            )
-            for rel in path_record.relationships
+    path_nodes = {record_data_to_node(n) for n in path_record.nodes}
+    path_rels = {
+        Relationship(
+            record_data_to_node(rel.start_node),
+            rel.type,
+            record_data_to_node(rel.end_node),
+            **rel._properties,
         )
-    )
+        for rel in path_record.relationships
+    }
 
     return Subgraph(path_nodes, path_rels)
 

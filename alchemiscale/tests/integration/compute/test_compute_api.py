@@ -1,12 +1,9 @@
 import pytest
 
 from gufe import Transformation
-from gufe.tokenization import GufeTokenizable
 
 from alchemiscale.base.client import json_to_gufe
 from alchemiscale.models import ScopedKey
-from alchemiscale.compute import client
-from alchemiscale.storage.models import ObjectStoreRef
 
 
 class TestComputeAPI:

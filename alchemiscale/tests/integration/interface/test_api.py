@@ -1,8 +1,8 @@
 import pytest
 import json
 
-from gufe import AlchemicalNetwork, ChemicalSystem, Transformation
-from gufe.tokenization import JSON_HANDLER, GufeTokenizable, KeyedChain
+from gufe import AlchemicalNetwork
+from gufe.tokenization import JSON_HANDLER, KeyedChain
 
 from alchemiscale.models import ScopedKey
 
@@ -124,7 +124,7 @@ class TestAPI:
         auth_scope = multiple_scopes[0]  # Should also be the scope_test fixture
         unauthenticated_scope = multiple_scopes[1]
         sk_unauthenticated = n4js_preloaded.get_scoped_key(
-            network_tyk2, multiple_scopes[1]
+            network_tyk2, unauthenticated_scope
         )
         response = test_client.get(f"/networks/{sk_unauthenticated}")
         assert response.status_code == 401

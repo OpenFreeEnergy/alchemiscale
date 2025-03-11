@@ -9,7 +9,7 @@ def secret_key():
 
 
 def test_create_token(secret_key):
-    token = auth.create_access_token(
+    _ = auth.create_access_token(
         data={
             "sub": "nothing",
             "scopes": ["*-*-*"],

@@ -4,9 +4,7 @@
 ### below from `py2neo.test.integration.conftest.py`
 
 import os
-from time import sleep
 from pathlib import Path
-from typing import Union
 
 from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
@@ -22,9 +20,9 @@ from gufe.tests.test_protocol import DummyProtocol, BrokenProtocol
 from openfe_benchmarks import tyk2
 
 from alchemiscale.models import Scope
-from alchemiscale.settings import Neo4jStoreSettings, S3ObjectStoreSettings
+from alchemiscale.settings import S3ObjectStoreSettings
 from alchemiscale.storage.statestore import Neo4jStore
-from alchemiscale.storage.objectstore import S3ObjectStore, get_s3os
+from alchemiscale.storage.objectstore import get_s3os
 from alchemiscale.storage.models import ComputeServiceID
 
 
@@ -32,7 +30,7 @@ NEO4J_PROCESS = {}
 NEO4J_VERSION = os.getenv("NEO4J_VERSION", "")
 
 
-class DeploymentProfile(object):
+class DeploymentProfile:
     def __init__(self, release=None, topology=None, cert=None, schemes=None):
         self.release = release
         self.topology = topology  # "CE|EE-SI|EE-C3|EE-C3-R2"
@@ -40,11 +38,11 @@ class DeploymentProfile(object):
         self.schemes = schemes
 
     def __str__(self):
-        server = "%s.%s %s" % (self.release[0], self.release[1], self.topology)
+        server = f"{self.release[0]}.{self.release[1]} {self.topology}"
         if self.cert:
-            server += " %s" % (self.cert,)
+            server += f" {self.cert}"
         schemes = " ".join(self.schemes)
-        return "[%s]-[%s]" % (server, schemes)
+        return f"[{server}]-[{schemes}]"
 
 
 class TestProfile:
@@ -54,11 +52,11 @@ class TestProfile:
         assert self.topology == "CE"
 
     def __str__(self):
-        extra = "%s" % (self.topology,)
+        extra = f"{self.topology}"
         if self.cert:
-            extra += "; %s" % (self.cert,)
+            extra += f"; {self.cert}"
         bits = [
-            "Neo4j/%s.%s (%s)" % (self.release[0], self.release[1], extra),
+            f"Neo4j/{self.release[0]}.{self.release[1]} ({extra})",
             "over",
             "'%s'" % self.scheme,
         ]
@@ -133,8 +131,7 @@ def test_profile(request):
 
 @fixture(scope="session")
 def neo4j_service_and_uri(test_profile):
-    for service, uri in test_profile.generate_uri("py2neo"):
-        yield service, uri
+    yield from test_profile.generate_uri("py2neo")
 
     # prune all docker volumes left behind
     docker.volumes.prune()
@@ -284,22 +281,22 @@ def network_tyk2():
     tyk2s = tyk2.get_system()
 
     solvated = {
-        l.name: ChemicalSystem(
-            components={"ligand": l, "solvent": tyk2s.solvent_component},
-            name=f"{l.name}_water",
+        ligand.name: ChemicalSystem(
+            components={"ligand": ligand, "solvent": tyk2s.solvent_component},
+            name=f"{ligand.name}_water",
         )
-        for l in tyk2s.ligand_components
+        for ligand in tyk2s.ligand_components
     }
     complexes = {
-        l.name: ChemicalSystem(
+        ligand.name: ChemicalSystem(
             components={
-                "ligand": l,
+                "ligand": ligand,
                 "solvent": tyk2s.solvent_component,
                 "protein": tyk2s.protein_component,
             },
-            name=f"{l.name}_complex",
+            name=f"{ligand.name}_complex",
         )
-        for l in tyk2s.ligand_components
+        for ligand in tyk2s.ligand_components
     }
 
     complex_network = [
@@ -338,7 +335,7 @@ def network_tyk2():
 
 def get_edge_type(
     network: AlchemicalNetwork, edge_class
-) -> Union[Transformation, NonTransformation]:
+) -> Transformation | NonTransformation:
     for tf in sorted(network.edges):
         if type(tf) is edge_class:
             return tf

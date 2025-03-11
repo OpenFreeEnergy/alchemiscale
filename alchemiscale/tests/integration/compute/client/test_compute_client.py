@@ -4,13 +4,12 @@ import os
 from datetime import datetime
 from time import sleep
 
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
+from gufe.tokenization import JSON_HANDLER
 
 from alchemiscale.compute import client
 from alchemiscale.models import ScopedKey
 from alchemiscale.storage.models import (
     TaskStatusEnum,
-    ComputeServiceID,
     ProtocolDAGResultRef,
 )
 from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
@@ -34,7 +33,7 @@ class TestComputeClient:
         uvicorn_server,
     ):
         settings = get_compute_settings_override()
-        assert compute_client._jwtoken == None
+        assert compute_client._jwtoken is None
         compute_client._get_token()
 
         token = compute_client._jwtoken
@@ -291,7 +290,7 @@ class TestComputeClient:
         assert extends_protocoldagresult is None
 
         # push a result for the task
-        pdr_sk = compute_client.set_task_result(task_sks[0], protocoldagresults[0])
+        _ = compute_client.set_task_result(task_sks[0], protocoldagresults[0])
 
         # now, create a task that extends the one we just "performed"
         task_sk2 = n4js_preloaded.create_task(tf_sk, extends=task_sks[0])
@@ -386,9 +385,7 @@ class TestComputeClient:
         # step 2: set the task result in the statestore to reflect the
         # protocoldagresult in the objectstore
 
-        result_sk = n4js_preloaded.set_task_result(
-            task=task_sk, protocoldagresultref=pdrr
-        )
+        _ = n4js_preloaded.set_task_result(task=task_sk, protocoldagresultref=pdrr)
 
         # step 3: set the task to complete in the statestore
 
@@ -453,8 +450,6 @@ class TestComputeClient:
         assert extends_protocoldagresult is None
 
         # push a failed result for the task
-        pdr_sk = compute_client.set_task_result(
-            task_sks[0], protocoldagresults_failure[0]
-        )
+        _ = compute_client.set_task_result(task_sks[0], protocoldagresults_failure[0])
 
         assert n4js_preloaded.get_task_status(task_sks)[0] == TaskStatusEnum.error

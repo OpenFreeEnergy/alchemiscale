@@ -1,13 +1,11 @@
 import pytest
 from copy import copy
-from time import sleep
 
 import uvicorn
 
 from alchemiscale.settings import get_base_api_settings
-from alchemiscale.base.api import get_n4js_depends, get_s3os_depends
+from alchemiscale.base.api import get_s3os_depends
 from alchemiscale.compute import api, client
-from alchemiscale.storage.models import ComputeServiceID
 
 from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
 from alchemiscale.tests.integration.utils import running_service

@@ -11,7 +11,6 @@ from alchemiscale.security.models import CredentialedUserIdentity, TokenData
 from alchemiscale.security.auth import hash_key
 from alchemiscale.base.api import (
     get_token_data_depends,
-    get_n4js_depends,
     get_s3os_depends,
 )
 
