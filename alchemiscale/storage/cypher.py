@@ -1,5 +1,4 @@
 from alchemiscale import ScopedKey
-from typing import List, Optional
 
 from py2neo.cypher.queries import (
     _create_clause,

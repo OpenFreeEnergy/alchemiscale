@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 import random
-from typing import List, Dict
 from pathlib import Path
 from functools import reduce
 from itertools import chain
@@ -10,7 +9,6 @@ from collections import defaultdict
 import pytest
 from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
-from gufe.protocols import ProtocolUnitFailure
 from gufe.protocols.protocoldag import execute_DAG
 
 from alchemiscale.storage.statestore import Neo4jStore
@@ -1568,11 +1566,11 @@ class TestNeo4jStore(TestStateStore):
         assert set(statuses) == {"running"}
 
         # deregister service
-        compute_service_id_ = n4js.deregister_computeservice(csid)
+        _ = n4js.deregister_computeservice(csid)
 
         # check that all tasks are in a waiting state after deregistering
         res = n4js.execute_query(
-            f"""
+            """
         match (t:Task) where t.status = 'waiting'
         with t._scoped_key as sk
         return sk
@@ -2456,8 +2454,8 @@ class TestNeo4jStore(TestStateStore):
             #
             # 1. Completed Tasks do not have an actions relationship with either TaskHub
             # 2. A Task entering the error state is switched back to waiting if any restart patterns apply
-            # 3. A Task entering the error state is left in the error state if no patterns apply and only the TaskHub without
-            #    an enforcing task restart policy actions the Task
+            # 3. A Task entering the error state is left in the error state if no patterns apply and only the TaskHub
+            #    without an enforcing task restart policy actions the Task
             #
             # Tasks will be set to the error state with a spoofing method, which will create a fake ProtocolDAGResultRef
             # and Tracebacks. This is done since making a protocol fail systematically in the testing environment is not

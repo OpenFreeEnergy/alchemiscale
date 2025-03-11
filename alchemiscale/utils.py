@@ -6,7 +6,6 @@ from gufe.tokenization import (
     modify_dependencies,
 )
 from itertools import chain
-from typing import Union, Dict, List
 import networkx as nx
 
 

@@ -8,7 +8,6 @@ import click
 import yaml
 import json
 import signal
-from typing import Type
 
 from .security.models import (
     CredentialedEntity,
@@ -237,7 +236,6 @@ def api(
 ):  # fmt: skip
     from alchemiscale.interface.api import app
     from .settings import APISettings, get_base_api_settings
-    from .security.auth import generate_secret_key
 
     # CONSIDER GENERATING A JWT_SECRET_KEY if none provided with
     # key = generate_secret_key()
@@ -310,7 +308,6 @@ def api(
 ):  # fmt: skip
     from alchemiscale.compute.api import app
     from .settings import ComputeAPISettings, get_base_api_settings
-    from .security.auth import generate_secret_key
 
     # CONSIDER GENERATING A JWT_SECRET_KEY if none provided with
     # key = generate_secret_key()

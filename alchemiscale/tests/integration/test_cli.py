@@ -17,7 +17,7 @@ from alchemiscale.tests.integration.utils import running_service
 from alchemiscale.cli import get_settings_from_options, cli
 from alchemiscale.cli_utils import ApiApplication
 from alchemiscale.models import Scope
-from alchemiscale.security.auth import hash_key, authenticate, AuthenticationError
+from alchemiscale.security.auth import hash_key, authenticate
 from alchemiscale.security.models import (
     CredentialedUserIdentity,
     CredentialedComputeIdentity,
@@ -416,7 +416,7 @@ def test_identity_remove(n4js_fresh, identity_type):
         assert click_success(result)
 
         with pytest.raises(KeyError, match="No such object in database"):
-            cred = n4js.get_credentialed_entity(ident, identity_type_cls)
+            _ = n4js.get_credentialed_entity(ident, identity_type_cls)
 
 
 def test_identity_list(n4js_fresh):

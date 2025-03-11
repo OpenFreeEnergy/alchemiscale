@@ -1,4 +1,3 @@
-from typing import List, Optional
 import threading
 import time
 import os
@@ -61,7 +60,6 @@ class TestSynchronousComputeService:
         assert not heartbeat_thread.is_alive()
 
     def test_claim_tasks(self, n4js_preloaded, service):
-        n4js: Neo4jStore = n4js_preloaded
 
         service._register()
 
@@ -127,7 +125,6 @@ class TestSynchronousComputeService:
 
     def test_cycle(self, n4js_preloaded, s3os_server_fresh, service):
         n4js: Neo4jStore = n4js_preloaded
-        s3os: S3ObjectStore = s3os_server_fresh
 
         service._register()
 
@@ -166,7 +163,6 @@ class TestSynchronousComputeService:
 
     def test_start(self, n4js_preloaded, s3os_server_fresh, service):
         n4js: Neo4jStore = n4js_preloaded
-        s3os: S3ObjectStore = s3os_server_fresh
 
         # start up service in a thread; will register itself
         service_thread = threading.Thread(target=service.start, daemon=True)
@@ -216,4 +212,4 @@ class TestSynchronousComputeService:
 
     def test_kwarg_scopes(self):
         # TODO: add test here with alternative settings to `service` fixture
-        scope = Scope("totally", "different", "scope")
+        _ = Scope("totally", "different", "scope")

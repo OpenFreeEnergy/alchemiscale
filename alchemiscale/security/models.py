@@ -4,8 +4,7 @@
 
 """
 
-from datetime import datetime, timedelta
-from typing import List, Union, Optional
+from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
@@ -46,7 +45,7 @@ class ScopedIdentity(BaseModel):
             elif isinstance(scope, str):
                 try:
                     scopes_.append(str(Scope.from_str(scope)))
-                except:
+                except Exception:
                     raise ValueError(f"Invalid scope `{scope}` set for `{cls}`")
             else:
                 raise ValueError(f"Invalid scope `{scope}` set for `{cls}`")

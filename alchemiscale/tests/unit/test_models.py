@@ -9,7 +9,7 @@ from alchemiscale.models import Scope, ScopedKey
     "scope_string", ["*-*-*", "org1-*-*", "org1-campaignA-*", "org1-campaignA-projectI"]
 )
 def test_wildcard_scopes_valid(scope_string):
-    scope = Scope.from_str(scope_string)
+    _ = Scope.from_str(scope_string)
 
 
 @pytest.mark.parametrize(
@@ -18,7 +18,7 @@ def test_wildcard_scopes_valid(scope_string):
 )
 def test_wildcard_scopes_invalid(scope_string):
     with pytest.raises(ValidationError):
-        scope = Scope.from_str(scope_string)
+        _ = Scope.from_str(scope_string)
 
 
 @pytest.mark.parametrize(
@@ -87,7 +87,7 @@ def test_scope_non_alphanumeric_invalid(scope_string):
     with pytest.raises(
         ValidationError, match="contain only alphanumeric or underscore"
     ):
-        scope = Scope.from_str(scope_string)
+        _ = Scope.from_str(scope_string)
 
 
 @pytest.mark.parametrize(
@@ -100,7 +100,7 @@ def test_scope_non_alphanumeric_invalid(scope_string):
     ],
 )
 def test_underscore_scopes_valid(scope_string):
-    scope = Scope.from_str(scope_string)
+    _ = Scope.from_str(scope_string)
 
 
 @pytest.mark.parametrize(
@@ -130,6 +130,6 @@ def test_gufe_key_invalid(gufe_key):
     ],
 )
 def test_gufe_key_valid(gufe_key):
-    scoped_key = ScopedKey(
+    _ = ScopedKey(
         gufe_key=gufe_key, org="org1", campaign="campaignA", project="projectI"
     )

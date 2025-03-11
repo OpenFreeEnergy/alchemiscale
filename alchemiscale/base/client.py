@@ -15,7 +15,6 @@ import gzip
 from pathlib import Path
 import os
 import warnings
-from typing import Union, Optional
 from dataclasses import dataclass
 from diskcache import Cache
 

@@ -4,28 +4,21 @@
 
 """
 
-import os
 import gc
-import asyncio
 import sched
 import time
 import logging
 from uuid import uuid4
-import random
 import threading
-from typing import Union, Optional, List, Dict, Tuple
 from pathlib import Path
-from threading import Thread
 import shutil
-
-import requests
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from .client import AlchemiscaleComputeClient
 from .settings import ComputeServiceSettings
-from ..storage.models import Task, TaskHub, ComputeServiceID
+from ..storage.models import ComputeServiceID
 from ..models import Scope, ScopedKey
 
 

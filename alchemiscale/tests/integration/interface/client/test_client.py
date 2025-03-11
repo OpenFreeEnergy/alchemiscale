@@ -185,7 +185,6 @@ class TestClient:
         assert user_client.check_exists(an_sks[0])
 
         # check that an AlchemicalNetwork that doesn't exist shows as not existing
-        an_sk = an_sks[0]
         an_sk_nonexistent = ScopedKey(
             gufe_key=GufeKey("AlchemicalNetwork-lol"), **scope_test.dict()
         )

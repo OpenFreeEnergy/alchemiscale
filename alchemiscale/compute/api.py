@@ -4,16 +4,13 @@
 
 """
 
-from typing import Any, Dict, List, Optional
-import os
 import json
 from datetime import datetime, timedelta
 import random
 
 from fastapi import FastAPI, APIRouter, Body, Depends, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER
-import zstandard as zstd
+from gufe.tokenization import JSON_HANDLER
 from gufe.protocols import ProtocolDAGResult
 
 from ..base.api import (
@@ -37,18 +34,15 @@ from ..settings import (
     get_compute_api_settings,
     ComputeAPISettings,
 )
-from ..storage.statestore import Neo4jStore, get_n4js
+from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
 from ..storage.models import (
     ProtocolDAGResultRef,
     ComputeServiceID,
     ComputeServiceRegistration,
-    TaskStatusEnum,
 )
 from ..models import Scope, ScopedKey
-from ..security.auth import get_token_data, oauth2_scheme
 from ..security.models import (
-    Token,
     TokenData,
     CredentialedComputeIdentity,
 )
@@ -302,7 +296,7 @@ def retrieve_task_transformation(
             pdr_bytes: bytes = s3os.pull_protocoldagresult(
                 pdr_sk, transformation_sk, ok=True
             )
-        except:
+        except Exception:
             # if we fail to get the object with the above, fall back to
             # location-based retrieval
             pdr_bytes: bytes = s3os.pull_protocoldagresult(

@@ -5,7 +5,7 @@
 """
 
 from functools import lru_cache
-from typing import Any, Union, List
+from typing import Any
 from collections.abc import Callable
 import json
 import gzip
@@ -175,9 +175,9 @@ def scope_params(org: str = None, campaign: str = None, project: str = None):
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"Requested Scope cannot be processed as a 3-object tuple of form"
-                f'"X-Y-Z" and cast to string. Alpha numerical values (a-z A-Z 0-9) and "*" are accepted for '
-                f'parameter "scope"'
+                "Requested Scope cannot be processed as a 3-object tuple of form"
+                '"X-Y-Z" and cast to string. Alpha numerical values (a-z A-Z 0-9) and "*" are accepted for '
+                'parameter "scope"'
             ),
             headers={"WWW-Authenticate": "Bearer"},
         )

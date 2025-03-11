@@ -5,16 +5,15 @@
 """
 
 import asyncio
-from typing import Union, List, Dict, Optional, Tuple, Any
+from typing import Any
 from collections.abc import Iterable
-import json
 from itertools import chain
 from functools import lru_cache
 
 from async_lru import alru_cache
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
-from gufe.tokenization import GufeTokenizable, JSON_HANDLER, KeyedChain
+from gufe.tokenization import GufeTokenizable, KeyedChain
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 import zstandard as zstd
 

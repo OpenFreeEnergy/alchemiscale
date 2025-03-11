@@ -10,7 +10,6 @@ from contextlib import contextmanager
 import json
 import re
 from functools import lru_cache, update_wrapper
-from typing import Dict, List, Optional, Union, Tuple, Set
 from collections import defaultdict
 from collections.abc import Iterable
 import weakref
@@ -43,7 +42,7 @@ from .models import (
 )
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
-from .cypher import cypher_list_from_scoped_keys, cypher_or
+from .cypher import cypher_or
 
 from ..security.models import CredentialedEntity
 from ..settings import Neo4jStoreSettings
@@ -155,7 +154,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             tx = session.begin_transaction()
             try:
                 yield tx
-            except:
+            except Exception:
                 tx.rollback()
                 if not ignore_exceptions:
                     raise
@@ -699,7 +698,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         self.delete_taskhub(network)
 
         # then delete the network
-        q = """
+        _ = """
         MATCH (an:AlchemicalNetwork {_scoped_key: $network})
         DETACH DELETE an
         """
@@ -2276,9 +2275,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         raise NotImplementedError
         # TODO: finish this one out when we have a reasonable approach to locking
         # too hard to perform in a single Cypher query; unclear how to create many nodes in a loop
-        transformation_node = self._get_node_from_obj_or_sk(
-            transformation, Transformation, scope
-        )
+        scope = transformation.scope
+        _ = self._get_node_from_obj_or_sk(transformation, Transformation, scope)
 
     def set_task_priority(
         self, tasks: list[ScopedKey], priority: int
@@ -3142,8 +3140,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             all_task_taskhub_pairs.add(task_taskhub_tuple)
 
-            # TODO: remove in v1.0.0
-            # tasks that errored, prior to the indtroduction of task restart policies will have no tracebacks in the database
+            # TODO: remove in v1.0.0 tasks that errored, prior to the indtroduction of task restart policies will have
+            # no tracebacks in the database
+
             if _tracebacks is None:
                 cancel_map[task_taskhub_tuple] = True
 

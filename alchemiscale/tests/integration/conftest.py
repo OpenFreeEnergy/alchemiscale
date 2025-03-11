@@ -4,9 +4,7 @@
 ### below from `py2neo.test.integration.conftest.py`
 
 import os
-from time import sleep
 from pathlib import Path
-from typing import Union
 
 from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
@@ -22,9 +20,9 @@ from gufe.tests.test_protocol import DummyProtocol, BrokenProtocol
 from openfe_benchmarks import tyk2
 
 from alchemiscale.models import Scope
-from alchemiscale.settings import Neo4jStoreSettings, S3ObjectStoreSettings
+from alchemiscale.settings import S3ObjectStoreSettings
 from alchemiscale.storage.statestore import Neo4jStore
-from alchemiscale.storage.objectstore import S3ObjectStore, get_s3os
+from alchemiscale.storage.objectstore import get_s3os
 from alchemiscale.storage.models import ComputeServiceID
 
 
@@ -283,22 +281,22 @@ def network_tyk2():
     tyk2s = tyk2.get_system()
 
     solvated = {
-        l.name: ChemicalSystem(
-            components={"ligand": l, "solvent": tyk2s.solvent_component},
-            name=f"{l.name}_water",
+        ligand.name: ChemicalSystem(
+            components={"ligand": ligand, "solvent": tyk2s.solvent_component},
+            name=f"{ligand.name}_water",
         )
-        for l in tyk2s.ligand_components
+        for ligand in tyk2s.ligand_components
     }
     complexes = {
-        l.name: ChemicalSystem(
+        ligand.name: ChemicalSystem(
             components={
-                "ligand": l,
+                "ligand": ligand,
                 "solvent": tyk2s.solvent_component,
                 "protein": tyk2s.protein_component,
             },
-            name=f"{l.name}_complex",
+            name=f"{ligand.name}_complex",
         )
-        for l in tyk2s.ligand_components
+        for ligand in tyk2s.ligand_components
     }
 
     complex_network = [

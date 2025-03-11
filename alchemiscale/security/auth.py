@@ -5,17 +5,14 @@
 """
 
 import secrets
-import hashlib
 from datetime import datetime, timedelta
-from typing import Optional, Union
 
 import bcrypt
 from fastapi import HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from pydantic import BaseModel
 
-from .models import CredentialedEntity, Token, TokenData
+from .models import CredentialedEntity, TokenData
 
 
 # we set a max size to avoid denial-of-service attacks
