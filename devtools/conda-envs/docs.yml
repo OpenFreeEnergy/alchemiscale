@@ -4,9 +4,8 @@ channels:
 
 dependencies:
   - python<3.13
-  - sphinx>=5.0,<6
-  - sphinx_rtd_theme
-  - async-lru
+  - sphinx
+  - sphinx-rtd-theme
   - myst-nb
   - myst-parser>=0.14
   - docutils

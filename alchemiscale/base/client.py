@@ -146,7 +146,7 @@ class AlchemiscaleBaseClient:
         key: Optional[str] = None,
         cache_directory: Optional[Union[Path, str]] = None,
         cache_size_limit: int = 1073741824,
-        use_local_cache = True,
+        use_local_cache=True,
         max_retries: int = 5,
         retry_base_seconds: float = 2.0,
         retry_max_seconds: float = 60.0,
@@ -213,7 +213,9 @@ class AlchemiscaleBaseClient:
 
         self._cache_enabled = use_local_cache
         self._cache_size_limit = cache_size_limit
-        self._cache_directory = self._determine_cache_dir(cache_directory) if self._cache_enabled else None
+        self._cache_directory = (
+            self._determine_cache_dir(cache_directory) if self._cache_enabled else None
+        )
 
         if self._cache_size_limit < 0:
             raise ValueError(
