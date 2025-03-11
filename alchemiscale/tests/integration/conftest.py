@@ -32,7 +32,7 @@ NEO4J_PROCESS = {}
 NEO4J_VERSION = os.getenv("NEO4J_VERSION", "")
 
 
-class DeploymentProfile(object):
+class DeploymentProfile:
     def __init__(self, release=None, topology=None, cert=None, schemes=None):
         self.release = release
         self.topology = topology  # "CE|EE-SI|EE-C3|EE-C3-R2"
@@ -40,11 +40,11 @@ class DeploymentProfile(object):
         self.schemes = schemes
 
     def __str__(self):
-        server = "%s.%s %s" % (self.release[0], self.release[1], self.topology)
+        server = f"{self.release[0]}.{self.release[1]} {self.topology}"
         if self.cert:
-            server += " %s" % (self.cert,)
+            server += f" {self.cert}"
         schemes = " ".join(self.schemes)
-        return "[%s]-[%s]" % (server, schemes)
+        return f"[{server}]-[{schemes}]"
 
 
 class TestProfile:
@@ -54,11 +54,11 @@ class TestProfile:
         assert self.topology == "CE"
 
     def __str__(self):
-        extra = "%s" % (self.topology,)
+        extra = f"{self.topology}"
         if self.cert:
-            extra += "; %s" % (self.cert,)
+            extra += f"; {self.cert}"
         bits = [
-            "Neo4j/%s.%s (%s)" % (self.release[0], self.release[1], extra),
+            f"Neo4j/{self.release[0]}.{self.release[1]} ({extra})",
             "over",
             "'%s'" % self.scheme,
         ]
@@ -133,8 +133,7 @@ def test_profile(request):
 
 @fixture(scope="session")
 def neo4j_service_and_uri(test_profile):
-    for service, uri in test_profile.generate_uri("py2neo"):
-        yield service, uri
+    yield from test_profile.generate_uri("py2neo")
 
     # prune all docker volumes left behind
     docker.volumes.prune()
@@ -338,7 +337,7 @@ def network_tyk2():
 
 def get_edge_type(
     network: AlchemicalNetwork, edge_class
-) -> Union[Transformation, NonTransformation]:
+) -> Transformation | NonTransformation:
     for tf in sorted(network.edges):
         if type(tf) is edge_class:
             return tf

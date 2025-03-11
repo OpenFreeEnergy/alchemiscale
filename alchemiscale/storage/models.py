@@ -93,20 +93,20 @@ class Task(GufeTokenizable):
 
     status: TaskStatusEnum
     priority: int
-    claim: Optional[str]
-    datetime_created: Optional[datetime]
-    creator: Optional[str]
-    extends: Optional[str]
+    claim: str | None
+    datetime_created: datetime | None
+    creator: str | None
+    extends: str | None
 
     def __init__(
         self,
         *,
-        status: Union[str, TaskStatusEnum] = TaskStatusEnum.waiting,
+        status: str | TaskStatusEnum = TaskStatusEnum.waiting,
         priority: int = 10,
-        datetime_created: Optional[datetime] = None,
-        creator: Optional[str] = None,
-        extends: Optional[str] = None,
-        claim: Optional[str] = None,
+        datetime_created: datetime | None = None,
+        creator: str | None = None,
+        extends: str | None = None,
+        claim: str | None = None,
         _key: str = None,
     ):
         if _key is not None:
@@ -165,7 +165,7 @@ class TaskRestartPattern(GufeTokenizable):
     taskhub_sk: str
 
     def __init__(
-        self, pattern: str, max_retries: int, taskhub_scoped_key: Union[str, ScopedKey]
+        self, pattern: str, max_retries: int, taskhub_scoped_key: str | ScopedKey
     ):
 
         if not isinstance(pattern, str) or pattern == "":
@@ -213,9 +213,9 @@ class Tracebacks(GufeTokenizable):
 
     def __init__(
         self,
-        tracebacks: List[str],
-        source_keys: List[GufeKey],
-        failure_keys: List[GufeKey],
+        tracebacks: list[str],
+        source_keys: list[GufeKey],
+        failure_keys: list[GufeKey],
     ):
         value_error = ValueError(
             "`tracebacks` must be a non-empty list of non-empty string values"
@@ -345,7 +345,7 @@ class NetworkMark(Mark):
     def __init__(
         self,
         target: ScopedKey,
-        state: Union[str, NetworkStateEnum] = NetworkStateEnum.active,
+        state: str | NetworkStateEnum = NetworkStateEnum.active,
     ):
         self.state = state
         super().__init__(target)
@@ -383,8 +383,8 @@ class TaskArchive(GufeTokenizable):
 
 
 class ObjectStoreRef(GufeTokenizable):
-    location: Optional[str]
-    obj_key: Optional[GufeKey]
+    location: str | None
+    obj_key: GufeKey | None
     scope: Scope
 
     def __init__(self, *, location: str = None, obj_key: GufeKey = None, scope: Scope):
@@ -416,12 +416,12 @@ class ProtocolDAGResultRef(ObjectStoreRef):
     def __init__(
         self,
         *,
-        location: Optional[str] = None,
+        location: str | None = None,
         obj_key: GufeKey,
         scope: Scope,
         ok: bool,
-        datetime_created: Optional[datetime] = None,
-        creator: Optional[str] = None,
+        datetime_created: datetime | None = None,
+        creator: str | None = None,
     ):
         self.location = location
         self.obj_key = GufeKey(obj_key)

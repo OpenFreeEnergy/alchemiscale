@@ -26,7 +26,7 @@ from ..settings import S3ObjectStoreSettings, get_s3objectstore_settings
 OBJECT_FILENAME = "obj.json.zst"
 
 
-@lru_cache()
+@lru_cache
 def get_s3os(settings: S3ObjectStoreSettings, endpoint_url=None) -> "S3ObjectStore":
     """Convenience function for getting an S3ObjectStore directly from settings."""
 
@@ -203,7 +203,7 @@ class S3ObjectStore:
         protocoldagresult_ok: bool,
         protocoldagresult_gufekey: GufeKey,
         transformation: ScopedKey,
-        creator: Optional[str] = None,
+        creator: str | None = None,
     ) -> ProtocolDAGResultRef:
         """Push given `ProtocolDAGResult` to this `ObjectStore`.
 
@@ -252,9 +252,9 @@ class S3ObjectStore:
 
     def pull_protocoldagresult(
         self,
-        protocoldagresult: Optional[ScopedKey] = None,
-        transformation: Optional[ScopedKey] = None,
-        location: Optional[str] = None,
+        protocoldagresult: ScopedKey | None = None,
+        transformation: ScopedKey | None = None,
+        location: str | None = None,
         ok=True,
     ) -> bytes:
         """Pull the `ProtocolDAGResult` corresponding to the given `ProtocolDAGResultRef`.

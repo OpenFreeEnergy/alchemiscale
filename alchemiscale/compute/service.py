@@ -157,7 +157,7 @@ class SynchronousComputeService:
             self.beat()
             time.sleep(self.heartbeat_interval)
 
-    def claim_tasks(self, count=1) -> List[Optional[ScopedKey]]:
+    def claim_tasks(self, count=1) -> list[ScopedKey | None]:
         """Get a Task to execute from compute API.
 
         Returns `None` if no Task was available matching service configuration.
@@ -179,7 +179,7 @@ class SynchronousComputeService:
 
     def task_to_protocoldag(
         self, task: ScopedKey
-    ) -> Tuple[ProtocolDAG, Transformation, Optional[ProtocolDAGResult]]:
+    ) -> tuple[ProtocolDAG, Transformation, ProtocolDAGResult | None]:
         """Given a Task, produce a corresponding ProtocolDAG that can be executed.
 
         Also gives the Transformation that this ProtocolDAG corresponds to.
@@ -294,13 +294,13 @@ class SynchronousComputeService:
                 )
                 raise KeyboardInterrupt
 
-    def cycle(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
+    def cycle(self, max_tasks: int | None = None, max_time: int | None = None):
         self._check_max_tasks(max_tasks)
         self._check_max_time(max_time)
 
         # claim tasks from the compute API
         self.logger.info("Claiming tasks")
-        tasks: List[ScopedKey] = self.claim_tasks(count=self.claim_limit)
+        tasks: list[ScopedKey] = self.claim_tasks(count=self.claim_limit)
         self.logger.info("Claimed %d tasks", len([t for t in tasks if t is not None]))
 
         # if no tasks claimed, sleep
@@ -332,7 +332,7 @@ class SynchronousComputeService:
         self._check_max_tasks(max_tasks)
         self._check_max_time(max_time)
 
-    def start(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
+    def start(self, max_tasks: int | None = None, max_time: int | None = None):
         """Start the service.
 
         Limits to the maximum number of executed tasks or seconds to run for

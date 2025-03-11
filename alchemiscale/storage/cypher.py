@@ -14,7 +14,7 @@ from py2neo.cypher.queries import (
 from py2neo.cypher.queries import NodeKey
 
 
-def cypher_list_from_scoped_keys(scoped_keys: List[Optional[ScopedKey]]) -> str:
+def cypher_list_from_scoped_keys(scoped_keys: list[ScopedKey | None]) -> str:
     """Generate a Cypher list structure from a list of ScopedKeys, ignoring NoneType entries.
 
     Parameters
@@ -48,7 +48,7 @@ def cypher_or(items):
 def _match_clause(name, node_key, value, prefix="(", suffix=")"):
     if node_key is None:
         # ... add MATCH by id clause
-        return "MATCH %s%s%s WHERE elementId(%s) = %s" % (
+        return "MATCH {}{}{} WHERE elementId({}) = {}".format(
             prefix,
             name,
             suffix,
@@ -60,9 +60,9 @@ def _match_clause(name, node_key, value, prefix="(", suffix=")"):
         nk = NodeKey(node_key)
         n_pk = len(nk.keys())
         if n_pk == 0:
-            return "MATCH %s%s%s%s" % (prefix, name, nk.label_string(), suffix)
+            return f"MATCH {prefix}{name}{nk.label_string()}{suffix}"
         elif n_pk == 1:
-            return "MATCH %s%s%s {%s:%s}%s" % (
+            return "MATCH {}{}{} {{{}:{}}}{}".format(
                 prefix,
                 name,
                 nk.label_string(),
@@ -71,7 +71,7 @@ def _match_clause(name, node_key, value, prefix="(", suffix=")"):
                 suffix,
             )
         else:
-            return "MATCH %s%s%s {%s}%s" % (
+            return "MATCH {}{}{} {{{}}}{}".format(
                 prefix,
                 name,
                 nk.label_string(),

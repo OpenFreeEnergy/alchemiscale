@@ -5,7 +5,8 @@
 """
 
 from functools import lru_cache
-from typing import Any, Union, List, Callable
+from typing import Any, Union, List
+from collections.abc import Callable
 import json
 import gzip
 
@@ -53,7 +54,7 @@ def validate_scopes(scope: Scope, token: TokenData) -> None:
         )
 
 
-def minimize_scope_space(scopes: List[Scope]) -> List[Scope]:
+def minimize_scope_space(scopes: list[Scope]) -> list[Scope]:
     """Remove redundant Scopes from a list of Scopes."""
     scopes = sorted(scopes)
 
@@ -69,7 +70,7 @@ def minimize_scope_space(scopes: List[Scope]) -> List[Scope]:
 
 def validate_scopes_query(
     query_scope: Scope, token: TokenData, as_str: bool = False
-) -> Union[list[Scope], list[str]]:
+) -> list[Scope] | list[str]:
     """
     Create the intersection of queried scopes and token, where query scopes may include 'all' / wildcard (`None`).
     No scopes outside of those included in token will be included in scopes returned.
@@ -123,7 +124,7 @@ class QueryGUFEHandler:
     def return_gufe(self):
         return self._return_gufe
 
-    def update_results(self, data: Union[list, dict]):
+    def update_results(self, data: list | dict):
         if self.return_gufe:
             # handle dict
             self._results.update(data)

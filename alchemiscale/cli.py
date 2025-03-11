@@ -478,7 +478,7 @@ def v03_to_v04(url, user, password, dbname):
     click.echo("Migration completed without errors.")
 
 
-def _identity_type_string_to_cls(identity_type: str) -> Type[CredentialedEntity]:
+def _identity_type_string_to_cls(identity_type: str) -> type[CredentialedEntity]:
     if identity_type == "user":
         identity_type_cls = CredentialedUserIdentity
     elif identity_type == "compute":
@@ -504,7 +504,7 @@ def identifier(func):
     identifier = click.option(
         "--identifier", "-i", help="identifier", required=True, type=str
     )
-    return identifier((func))
+    return identifier(func)
 
 
 def key(func):

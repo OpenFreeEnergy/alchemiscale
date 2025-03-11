@@ -544,7 +544,7 @@ def test_scope_add(n4js_fresh, scopes):
         assert click_success(result)
         scopes_ = n4js.list_scopes("bill", CredentialedUserIdentity)
         assert len(scopes_) == len(scopes)
-        assert set(scopes_) == set([Scope.from_str(scope) for scope in scopes])
+        assert set(scopes_) == {Scope.from_str(scope) for scope in scopes}
 
 
 @pytest.mark.parametrize(

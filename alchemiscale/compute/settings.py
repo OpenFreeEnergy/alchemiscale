@@ -52,11 +52,11 @@ class ComputeServiceSettings(BaseModel):
     heartbeat_interval: int = Field(
         300, description="Frequency at which to send heartbeats to compute API."
     )
-    scopes: Optional[List[Scope]] = Field(
+    scopes: list[Scope] | None = Field(
         None,
         description="Scopes to limit Task claiming to; defaults to all Scopes accessible by compute identity.",
     )
-    protocols: Optional[List[str]] = Field(
+    protocols: list[str] | None = Field(
         None,
         description="Names of Protocols to run with this service; `None` means no restriction.",
     )
@@ -67,7 +67,7 @@ class ComputeServiceSettings(BaseModel):
         "WARN",
         description="The loglevel at which to report; see the :mod:`logging` docs for available levels.",
     )
-    logfile: Optional[Path] = Field(
+    logfile: Path | None = Field(
         None,
         description="Path to file for logging output; if not set, logging will only go to STDOUT.",
     )

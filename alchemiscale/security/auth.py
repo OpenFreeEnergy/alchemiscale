@@ -30,7 +30,7 @@ MAX_SECRET_SIZE = 4096
 _BNULL = b"\x00"
 
 
-class BcryptPasswordHandler(object):
+class BcryptPasswordHandler:
 
     def __init__(self, rounds: int = 12, ident: str = "2b"):
         self.rounds = rounds
@@ -71,7 +71,7 @@ def generate_secret_key():
     return secrets.token_hex(32)
 
 
-def authenticate(db, cls, identifier: str, key: str) -> Optional[CredentialedEntity]:
+def authenticate(db, cls, identifier: str, key: str) -> CredentialedEntity | None:
     """Authenticate the given identity+key against the db instance.
 
     Parameters
@@ -110,8 +110,8 @@ def create_access_token(
     *,
     data: dict,
     secret_key: str,
-    expires_seconds: Optional[int] = 900,
-    jwt_algorithm: Optional[str] = "HS256",
+    expires_seconds: int | None = 900,
+    jwt_algorithm: str | None = "HS256",
 ) -> str:
     to_encode = data.copy()
 
@@ -123,7 +123,7 @@ def create_access_token(
 
 
 def get_token_data(
-    *, token: str, secret_key: str, jwt_algorithm: Optional[str] = "HS256"
+    *, token: str, secret_key: str, jwt_algorithm: str | None = "HS256"
 ) -> TokenData:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
