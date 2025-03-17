@@ -2204,11 +2204,12 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         s3os_server_fresh,
-        user_client: client.AlchemiscaleClient,
+        user_client_no_cache: client.AlchemiscaleClient,
         network_tyk2,
         tmpdir,
         legacy,
     ):
+        user_client = user_client_no_cache
         n4js = n4js_preloaded
         s3os_server = s3os_server_fresh
 
