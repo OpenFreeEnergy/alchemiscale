@@ -244,7 +244,7 @@ class AlchemiscaleBaseClient:
         else:
             cache_directory = Path(cache_directory)
 
-        return cache_directory.absolute()
+        return cache_directory.resolve()
 
     def _settings(self):
         return dict(
