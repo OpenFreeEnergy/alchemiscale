@@ -65,6 +65,32 @@ class TestClient:
         assert "explicit_key" not in str(record[0].message)
         assert "env_key" not in str(record[0].message)
 
+    def test_cache_disable(self, user_client_no_cache):
+        # first check that the provided "no_cache" client doesn't have an enabled cache
+        with pytest.raises(
+            AttributeError,
+            match=r"'AlchemiscaleClient' object has no attribute '_cache'",
+        ):
+            _ = user_client_no_cache._cache
+
+        # test passing settings to a new client
+        client_clone = client.AlchemiscaleClient(**user_client_no_cache._settings())
+
+        # assert all settings were preserved
+        assert (
+            client_clone._cache_enabled is user_client_no_cache._cache_enabled is False
+        )
+        assert (
+            client_clone._cache_directory
+            is user_client_no_cache._cache_directory
+            is None
+        )
+        assert (
+            client_clone._cache_size_limit
+            == user_client_no_cache._cache_size_limit
+            == 1073741824
+        )
+
     def test_cache_size_limit_negative(
         self, user_client: client.AlchemiscaleBaseClient
     ):
