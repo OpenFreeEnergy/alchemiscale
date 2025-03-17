@@ -249,8 +249,8 @@ class AlchemiscaleBaseClient:
     def _settings(self):
         return dict(
             api_url=self.api_url,
-            cache_directory=self._cache.directory,
-            cache_size_limit=self._cache.size_limit,
+            cache_directory=self._cache_directory,
+            cache_size_limit=self._cache_size_limit,
             use_local_cache=self._cache_enabled,
             identifier=self.identifier,
             key=self.key,
