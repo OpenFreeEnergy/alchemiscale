@@ -94,8 +94,12 @@ class AlchemiscaleBaseClientParam:
                 )
             case (None, env_value):
                 param_value = env_value
+            case (param_value, None):
+                pass
             case (param_value, env_value) if param_value != env_value:
                 self._warn_override(param_value, env_value)
+            case _:
+                pass
         return param_value
 
     def _warn_override(self, param_value: str, env_value: str) -> None:

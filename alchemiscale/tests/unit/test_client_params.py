@@ -110,3 +110,26 @@ class TestAlchemiscaleBaseClientParam:
             value = param.get_value("same_value")
 
         assert value == "same_value"
+
+    def test_different_value_warning(self, monkeypatch):
+        """Test that warning IS issued when environment variable differs from explicit value."""
+        monkeypatch.setenv("TEST_VAR", "different_value")
+
+        param = AlchemiscaleBaseClientParam(
+            param_name="test",
+            env_var_name="TEST_VAR",
+            human_name="test parameter",
+            render_value=True,
+        )
+
+        with pytest.warns(UserWarning) as record:
+            value = param.get_value("my_value")
+
+        assert len(record) == 1
+        assert record[0].message.args[0] == (
+            "Environment variable TEST_VAR is set to 'different_value'"
+            ", but an explicit test parameter 'my_value' is provided."
+            " Using the explicit test parameter."
+        )
+
+        assert value == "my_value"
