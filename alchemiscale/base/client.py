@@ -87,17 +87,17 @@ class AlchemiscaleBaseClientParam:
         """
         env_value = os.getenv(self.env_var_name)
 
-        match (param_value, os.getenv(self.env_var_name)):
+        match (param_value, env_value):
             case (None, None):
                 raise ValueError(
                     f"No {self.human_name} provided and {self.env_var_name} environment variable not set"
                 )
-            case (None, env_value):
-                param_value = env_value
-            case (param_value, None):
+            case (None, fromenv):
+                param_value = fromenv
+            case (fromparam, None):
                 pass
-            case (param_value, env_value) if param_value != env_value:
-                self._warn_override(param_value, env_value)
+            case (fromparam, fromenv) if fromparam != fromenv:
+                self._warn_override(fromparam, fromenv)
             case _:
                 pass
         return param_value
