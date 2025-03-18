@@ -6,10 +6,13 @@ import pytest
 import warnings
 
 from alchemiscale.base.client import AlchemiscaleBaseClientParam
+
+
 class RecordType(Enum):
     WARN = auto()
     RAISE = auto()
     NONE = auto()
+
 
 class TestAlchemiscaleBaseClientParam:
     def test_get_value_from_explicit(self):
