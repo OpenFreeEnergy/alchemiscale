@@ -35,13 +35,16 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 autodoc_mock_imports = [
     "async_lru",
+    "bcrypt",
     "boto3",
     "click",
+    "diskcache",
     "fastapi",
     "gufe",
     "httpx",
     "jose",
     "networkx",
+    "neo4j",
     "numpy",
     "py2neo",
     "pydantic",
@@ -51,7 +54,7 @@ autodoc_mock_imports = [
 ]
 
 intersphinx_mapping = {
-    "gufe": ("https://gufe.readthedocs.io/en/latest/", None),
+    "gufe": ("https://gufe.openfree.energy/en/v1.2.0/", None),
     "openfe": ("https://docs.openfree.energy/en/stable/", None),
     "python": ("https://docs.python.org/3", None),
 }
@@ -60,8 +63,6 @@ intersphinx_mapping = {
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = "sphinx_rtd_theme"
-html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
-
 
 # -- Options for MystNB ------------------------------------------------------
 

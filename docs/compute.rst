@@ -4,7 +4,7 @@
 Compute
 #######
 
-In order to actually execute :external+gufe:py:class:`~gufe.transformations.Transformation`\s to obtain free energy estimates, you must deploy compute services to resources suitable for executing these types of calculations.
+In order to actually execute :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s to obtain free energy estimates, you must deploy compute services to resources suitable for executing these types of calculations.
 This document details how to do this on several different types of compute resources.
 
 There currently exists a single implementation of an ``alchemiscale`` compute service: the :py:class:`~alchemiscale.compute.service.SynchronousComputeService`.
