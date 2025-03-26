@@ -146,7 +146,7 @@ class AlchemiscaleBaseClient:
         key: Optional[str] = None,
         cache_directory: Optional[Union[Path, str]] = None,
         cache_size_limit: int = 1073741824,
-        use_local_cache=True,
+        use_local_cache: bool = True,
         max_retries: int = 5,
         retry_base_seconds: float = 2.0,
         retry_max_seconds: float = 60.0,
