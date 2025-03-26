@@ -495,23 +495,25 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self, scopedkey: ScopedKey, get_content_function
     ) -> GufeTokenizable:
 
-        try:
-            # check cache for object with a matching gufe key, decompress and return
-            if content := self._cache.get(str(scopedkey), None):
-                return decompress_gufe_zstd(content)
-        # any issue with decompressing should delete the cached bytes
-        except zstd.ZstdError:
-            warn(
-                f"Error decompressing cached {scopedkey.qualname} ({scopedkey}), deleting entry and retrieving new content."
-            )
-            self._cache.delete(str(scopedkey))
+        if self._cache_enabled:
+            try:
+                # check cache for object with a matching gufe key, decompress and return
+                if content := self._cache.get(str(scopedkey), None):
+                    return decompress_gufe_zstd(content)
+            # any issue with decompressing should delete the cached bytes
+            except zstd.ZstdError:
+                warn(
+                    f"Error decompressing cached {scopedkey.qualname} ({scopedkey}), deleting entry and retrieving new content."
+                )
+                self._cache.delete(str(scopedkey))
 
         # get the keyed chain and convert to a GufeTokenizable
         keyed_chain = get_content_function()
         gufe_object = GufeTokenizable.from_keyed_chain(keyed_chain)
 
-        # add the keyed chain in compressed form to the cache
-        self._cache.add(str(scopedkey), compress_keyed_chain_zstd(keyed_chain))
+        if self._cache_enabled:
+            # add the keyed chain in compressed form to the cache
+            self._cache.add(str(scopedkey), compress_keyed_chain_zstd(keyed_chain))
 
         return gufe_object
 
@@ -1386,10 +1388,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     async def _async_get_protocoldagresult(
         self, protocoldagresultref, transformation, route, compress
     ):
-        # check the disk cache for the PDR
-        if pdr_bytes := self._cache.get(str(protocoldagresultref)):
-            pass
+        if self._cache_enabled:
+            pdr_bytes = self._cache.get(str(protocoldagresultref))
         else:
+            pdr_bytes = None
+
+        if not pdr_bytes:
             # query the alchemiscale server for the PDR
             pdr_latin1_decoded = await self._get_resource_async(
                 f"/transformations/{transformation}/{route}/{protocoldagresultref}",
@@ -1397,11 +1401,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             )
             pdr_bytes = pdr_latin1_decoded[0].encode("latin-1")
 
-            # add the resulting PDR to the cache
-            self._cache.add(
-                str(protocoldagresultref),
-                pdr_bytes,
-            )
+            if self._cache_enabled:
+                # add the resulting PDR to the cache
+                self._cache.add(
+                    str(protocoldagresultref),
+                    pdr_bytes,
+                )
 
         try:
             # Attempt to decompress the ProtocolDAGResult object
