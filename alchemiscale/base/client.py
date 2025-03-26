@@ -146,6 +146,7 @@ class AlchemiscaleBaseClient:
         key: Optional[str] = None,
         cache_directory: Optional[Union[Path, str]] = None,
         cache_size_limit: int = 1073741824,
+        use_local_cache: bool = True,
         max_retries: int = 5,
         retry_base_seconds: float = 2.0,
         retry_max_seconds: float = 60.0,
@@ -171,6 +172,8 @@ class AlchemiscaleBaseClient:
             ``${HOME}/.cache/alchemiscale``. Default ``None``.
         cache_size_limit
             Maximum size of the client cache in bytes. Default 1 GiB.
+        use_local_cache
+            Whether or not to use the local cache on disk.
         max_retries
             Maximum number of times to retry a request. In the case the API
             service is unresponsive an exponential backoff is applied with
@@ -208,16 +211,23 @@ class AlchemiscaleBaseClient:
         self._session = None
         self._lock = None
 
-        if cache_size_limit < 0:
+        self._cache_enabled = use_local_cache
+        self._cache_size_limit = cache_size_limit
+        self._cache_directory = (
+            self._determine_cache_dir(cache_directory) if self._cache_enabled else None
+        )
+
+        if self._cache_size_limit < 0:
             raise ValueError(
                 "`cache_size_limit` must be greater than or equal to zero."
             )
 
-        self._cache = Cache(
-            self._determine_cache_dir(cache_directory),
-            size_limit=cache_size_limit,
-            eviction_policy="least-recently-used",
-        )
+        if self._cache_enabled:
+            self._cache = Cache(
+                self._cache_directory,
+                size_limit=self._cache_size_limit,
+                eviction_policy="least-recently-used",
+            )
 
     @staticmethod
     def _determine_cache_dir(cache_directory: Optional[Union[Path, str]]):
@@ -234,13 +244,14 @@ class AlchemiscaleBaseClient:
         else:
             cache_directory = Path(cache_directory)
 
-        return cache_directory.absolute()
+        return cache_directory.resolve()
 
     def _settings(self):
         return dict(
             api_url=self.api_url,
-            cache_directory=self._cache.directory,
-            cache_size_limit=self._cache.size_limit,
+            cache_directory=self._cache_directory,
+            cache_size_limit=self._cache_size_limit,
+            use_local_cache=self._cache_enabled,
             identifier=self.identifier,
             key=self.key,
             max_retries=self.max_retries,

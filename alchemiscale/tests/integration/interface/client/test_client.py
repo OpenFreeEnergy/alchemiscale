@@ -65,6 +65,32 @@ class TestClient:
         assert "explicit_key" not in str(record[0].message)
         assert "env_key" not in str(record[0].message)
 
+    def test_cache_disable(self, user_client_no_cache):
+        # first check that the provided "no_cache" client doesn't have an enabled cache
+        with pytest.raises(
+            AttributeError,
+            match=r"'AlchemiscaleClient' object has no attribute '_cache'",
+        ):
+            _ = user_client_no_cache._cache
+
+        # test passing settings to a new client
+        client_clone = client.AlchemiscaleClient(**user_client_no_cache._settings())
+
+        # assert all settings were preserved
+        assert (
+            client_clone._cache_enabled is user_client_no_cache._cache_enabled is False
+        )
+        assert (
+            client_clone._cache_directory
+            is user_client_no_cache._cache_directory
+            is None
+        )
+        assert (
+            client_clone._cache_size_limit
+            == user_client_no_cache._cache_size_limit
+            == 1073741824
+        )
+
     def test_cache_size_limit_negative(
         self, user_client: client.AlchemiscaleBaseClient
     ):
@@ -580,10 +606,10 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         network_tyk2,
-        user_client: client.AlchemiscaleClient,
+        user_client_no_cache: client.AlchemiscaleClient,
     ):
-        an_sk = user_client.get_scoped_key(network_tyk2, scope_test)
-        an = user_client.get_network(an_sk)
+        an_sk = user_client_no_cache.get_scoped_key(network_tyk2, scope_test)
+        an = user_client_no_cache.get_network(an_sk)
 
         assert an == network_tyk2
         assert an is network_tyk2
@@ -779,10 +805,10 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         transformation,
-        user_client: client.AlchemiscaleClient,
+        user_client_no_cache: client.AlchemiscaleClient,
     ):
-        tf_sk = user_client.get_scoped_key(transformation, scope_test)
-        tf = user_client.get_transformation(tf_sk)
+        tf_sk = user_client_no_cache.get_scoped_key(transformation, scope_test)
+        tf = user_client_no_cache.get_transformation(tf_sk)
 
         assert tf == transformation
         assert tf is transformation
@@ -849,10 +875,10 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         chemicalsystem,
-        user_client: client.AlchemiscaleClient,
+        user_client_no_cache: client.AlchemiscaleClient,
     ):
-        cs_sk = user_client.get_scoped_key(chemicalsystem, scope_test)
-        cs = user_client.get_chemicalsystem(cs_sk)
+        cs_sk = user_client_no_cache.get_scoped_key(chemicalsystem, scope_test)
+        cs = user_client_no_cache.get_chemicalsystem(cs_sk)
 
         assert cs == chemicalsystem
         assert cs is chemicalsystem
@@ -2204,11 +2230,12 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         s3os_server_fresh,
-        user_client: client.AlchemiscaleClient,
+        user_client_no_cache: client.AlchemiscaleClient,
         network_tyk2,
         tmpdir,
         legacy,
     ):
+        user_client = user_client_no_cache
         n4js = n4js_preloaded
         s3os_server = s3os_server_fresh
 
