@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 import random
-from typing import List, Dict
 from pathlib import Path
 from functools import reduce
 from itertools import chain
@@ -10,7 +9,6 @@ from collections import defaultdict
 import pytest
 from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
-from gufe.protocols import ProtocolUnitFailure
 from gufe.protocols.protocoldag import execute_DAG
 
 from alchemiscale.storage.statestore import Neo4jStore
@@ -226,7 +224,7 @@ class TestNeo4jStore(TestStateStore):
 
         n4js.set_network_state([sk, sk2], ["active", "inactive"])
 
-        an_sks: List[ScopedKey] = n4js.query_networks()
+        an_sks: list[ScopedKey] = n4js.query_networks()
 
         assert sk in an_sks
         assert sk2 in an_sks
@@ -363,9 +361,9 @@ class TestNeo4jStore(TestStateStore):
         tf_sks = n4js.get_network_transformations(sk)
 
         assert len(tf_sks) == len(network_tyk2.edges)
-        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(
+        assert {tf_sk.gufe_key for tf_sk in tf_sks} == {
             t.key for t in network_tyk2.edges
-        )
+        }
 
     def test_get_transformation_networks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -384,9 +382,9 @@ class TestNeo4jStore(TestStateStore):
         cs_sks = n4js.get_network_chemicalsystems(sk)
 
         assert len(cs_sks) == len(network_tyk2.nodes)
-        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(
+        assert {cs_sk.gufe_key for cs_sk in cs_sks} == {
             cs.key for cs in network_tyk2.nodes
-        )
+        }
 
     def test_get_chemicalsystem_networks(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -409,9 +407,10 @@ class TestNeo4jStore(TestStateStore):
         cs_sks = n4js.get_transformation_chemicalsystems(tf_sk)
 
         assert len(cs_sks) == 2
-        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(
-            [transformation.stateA.key, transformation.stateB.key]
-        )
+        assert {cs_sk.gufe_key for cs_sk in cs_sks} == {
+            transformation.stateA.key,
+            transformation.stateB.key,
+        }
 
     def test_get_chemicalsystem_transformations(
         self, n4js, network_tyk2, scope_test, chemicalsystem
@@ -428,7 +427,7 @@ class TestNeo4jStore(TestStateStore):
             if chemicalsystem in (tf.stateA, tf.stateB):
                 tfs.append(tf)
 
-        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(t.key for t in tfs)
+        assert {tf_sk.gufe_key for tf_sk in tf_sks} == {t.key for t in tfs}
 
     def test_get_transformation_results(
         self,
@@ -483,9 +482,9 @@ class TestNeo4jStore(TestStateStore):
         pdr_ref_sks_3 = n4js.get_transformation_results(transformation_sk)
 
         assert len(pdr_ref_sks_3) == 3
-        assert set([n4js.get_gufe(p).obj_key for p in pdr_ref_sks_3]) == set(
-            [p.key for p in protocoldagresults]
-        )
+        assert {n4js.get_gufe(p).obj_key for p in pdr_ref_sks_3} == {
+            p.key for p in protocoldagresults
+        }
 
     def test_get_transformation_failures(
         self,
@@ -548,9 +547,9 @@ class TestNeo4jStore(TestStateStore):
         pdr_ref_sks_3 = n4js.get_transformation_failures(transformation_sk)
 
         assert len(pdr_ref_sks_3) == 3
-        assert set([n4js.get_gufe(p).obj_key for p in pdr_ref_sks_3]) == set(
-            [p.key for p in protocoldagresults_failure]
-        )
+        assert {n4js.get_gufe(p).obj_key for p in pdr_ref_sks_3} == {
+            p.key for p in protocoldagresults_failure
+        }
 
     ### compute
 
@@ -830,7 +829,7 @@ class TestNeo4jStore(TestStateStore):
                     task_sks.append(task_k)
 
         # get all tasks for the transformation
-        all_task_sks: List[ScopedKey] = n4js.get_transformation_tasks(transformation_sk)
+        all_task_sks: list[ScopedKey] = n4js.get_transformation_tasks(transformation_sk)
 
         def f(x, y):
             return x**y + x ** (y - 1) + x ** (y - 2)
@@ -1008,11 +1007,11 @@ class TestNeo4jStore(TestStateStore):
         )
         n4js.assemble_network(an2, scope_test)
 
-        tq_sks: List[ScopedKey] = n4js.query_taskhubs()
+        tq_sks: list[ScopedKey] = n4js.query_taskhubs()
         assert len(tq_sks) == 2
         assert all([isinstance(i, ScopedKey) for i in tq_sks])
 
-        tq_dict: Dict[ScopedKey, TaskHub] = n4js.query_taskhubs(return_gufe=True)
+        tq_dict: dict[ScopedKey, TaskHub] = n4js.query_taskhubs(return_gufe=True)
         assert len(tq_dict) == 2
         assert all([isinstance(i, TaskHub) for i in tq_dict.values()])
 
@@ -1567,11 +1566,11 @@ class TestNeo4jStore(TestStateStore):
         assert set(statuses) == {"running"}
 
         # deregister service
-        compute_service_id_ = n4js.deregister_computeservice(csid)
+        _ = n4js.deregister_computeservice(csid)
 
         # check that all tasks are in a waiting state after deregistering
         res = n4js.execute_query(
-            f"""
+            """
         match (t:Task) where t.status = 'waiting'
         with t._scoped_key as sk
         return sk
@@ -1724,16 +1723,19 @@ class TestNeo4jStore(TestStateStore):
 
         # claim the next layer of tasks, should be all of layer two
         claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=2)
-        assert set(claimed_task_sks) == set([layer_two_1, layer_two_2])
+        assert set(claimed_task_sks) == {layer_two_1, layer_two_2}
 
         # complete the layer two tasks
         n4js.set_task_complete([layer_two_1, layer_two_2])
 
         # claim the next layer of tasks, should be all of layer three
         claimed_task_sks = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=4)
-        assert set(claimed_task_sks) == set(
-            [layer_three_1, layer_three_2, layer_three_3, layer_three_4]
-        )
+        assert set(claimed_task_sks) == {
+            layer_three_1,
+            layer_three_2,
+            layer_three_3,
+            layer_three_4,
+        }
 
     def test_claim_task_byweight(self, n4js: Neo4jStore, network_tyk2, scope_test):
         an = network_tyk2
@@ -2452,15 +2454,15 @@ class TestNeo4jStore(TestStateStore):
             #
             # 1. Completed Tasks do not have an actions relationship with either TaskHub
             # 2. A Task entering the error state is switched back to waiting if any restart patterns apply
-            # 3. A Task entering the error state is left in the error state if no patterns apply and only the TaskHub without
-            #    an enforcing task restart policy actions the Task
+            # 3. A Task entering the error state is left in the error state if no patterns apply and only the TaskHub
+            #    without an enforcing task restart policy actions the Task
             #
             # Tasks will be set to the error state with a spoofing method, which will create a fake ProtocolDAGResultRef
             # and Tracebacks. This is done since making a protocol fail systematically in the testing environment is not
             # obvious at this time.
 
             # reduce down all tasks until only the common elements between taskhubs exist
-            tasks_actioned_by_all_taskhubs: List[ScopedKey] = list(
+            tasks_actioned_by_all_taskhubs: list[ScopedKey] = list(
                 reduce(operator.and_, taskhub_actioned_tasks.values())
             )
 
@@ -2679,7 +2681,7 @@ class TestNeo4jStore(TestStateStore):
         self,
         n4js: Neo4jStore,
         credential_type: CredentialedEntity,
-        scope_strs: List[str],
+        scope_strs: list[str],
     ):
         user = credential_type(
             identifier="bill",

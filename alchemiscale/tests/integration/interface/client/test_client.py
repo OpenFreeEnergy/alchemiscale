@@ -211,7 +211,6 @@ class TestClient:
         assert user_client.check_exists(an_sks[0])
 
         # check that an AlchemicalNetwork that doesn't exist shows as not existing
-        an_sk = an_sks[0]
         an_sk_nonexistent = ScopedKey(
             gufe_key=GufeKey("AlchemicalNetwork-lol"), **scope_test.dict()
         )
@@ -291,7 +290,7 @@ class TestClient:
         network_sk = user_client.create_network(an, scope_test)
         with pytest.raises(
             AlchemiscaleClientError,
-            match="Status Code 400 : Bad Request : 'notastate' is not a valid state. Valid values include: \['",
+            match=r"Status Code 400 : Bad Request : 'notastate' is not a valid state. Valid values include: \['",
         ):
             user_client.set_network_state(network_sk, invalid_state)
 
@@ -523,9 +522,9 @@ class TestClient:
         tf_sks = user_client.get_network_transformations(n_sk)
 
         assert len(tf_sks) == len(network_tyk2.edges)
-        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(
+        assert {tf_sk.gufe_key for tf_sk in tf_sks} == {
             t.key for t in network_tyk2.edges
-        )
+        }
 
     def test_get_transformation_networks(
         self,
@@ -551,9 +550,9 @@ class TestClient:
         cs_sks = user_client.get_network_chemicalsystems(n_sk)
 
         assert len(cs_sks) == len(network_tyk2.nodes)
-        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(
+        assert {cs_sk.gufe_key for cs_sk in cs_sks} == {
             cs.key for cs in network_tyk2.nodes
-        )
+        }
 
     def test_get_chemicalsystem_networks(
         self,
@@ -579,9 +578,10 @@ class TestClient:
         cs_sks = user_client.get_transformation_chemicalsystems(tf_sk)
 
         assert len(cs_sks) == 2
-        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(
-            [transformation.stateA.key, transformation.stateB.key]
-        )
+        assert {cs_sk.gufe_key for cs_sk in cs_sks} == {
+            transformation.stateA.key,
+            transformation.stateB.key,
+        }
 
     def test_get_chemicalsystem_transformations(
         self,
@@ -599,7 +599,7 @@ class TestClient:
             if chemicalsystem in (tf.stateA, tf.stateB):
                 tfs.append(tf)
 
-        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(t.key for t in tfs)
+        assert {tf_sk.gufe_key for tf_sk in tf_sks} == {t.key for t in tfs}
 
     def test_get_network(
         self,
@@ -996,7 +996,7 @@ class TestClient:
         # use the incorrect ScopedKey, expect to see an AlchemiscaleClientError
         with pytest.raises(
             AlchemiscaleClientError,
-            match="Status Code 400 : Bad Request : `extends` ScopedKey \(",
+            match=r"Status Code 400 : Bad Request : `extends` ScopedKey \(",
         ):
             user_client.create_tasks(sk, count=4, extends=scoped_key_wrong_qualname)
 
@@ -1830,7 +1830,7 @@ class TestClient:
         taskhub_sk = n4js.get_taskhub(network_sk)
         hub_task_sks = n4js.get_taskhub_tasks(taskhub_sk)
 
-        assert set([actioned_sks[0], actioned_sks[2]]) == set(hub_task_sks)
+        assert {actioned_sks[0], actioned_sks[2]} == set(hub_task_sks)
         assert canceled_sks == [actioned_sks[1]]
 
         # try to cancel a task that's not present on the hub

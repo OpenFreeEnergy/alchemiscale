@@ -15,7 +15,6 @@ import gzip
 from pathlib import Path
 import os
 import warnings
-from typing import Union, Optional
 from dataclasses import dataclass
 from diskcache import Cache
 
@@ -67,7 +66,7 @@ class AlchemiscaleBaseClientParam:
     human_name: str
     render_value: bool = False
 
-    def get_value(self, param_value: Optional[str]) -> str:
+    def get_value(self, param_value: str | None) -> str:
         """Get the validated parameter value.
 
         Parameters
@@ -141,10 +140,10 @@ class AlchemiscaleBaseClient:
 
     def __init__(
         self,
-        api_url: Optional[str] = None,
-        identifier: Optional[str] = None,
-        key: Optional[str] = None,
-        cache_directory: Optional[Union[Path, str]] = None,
+        api_url: str | None = None,
+        identifier: str | None = None,
+        key: str | None = None,
+        cache_directory: Path | str | None = None,
         cache_size_limit: int = 1073741824,
         use_local_cache: bool = True,
         max_retries: int = 5,
@@ -230,7 +229,7 @@ class AlchemiscaleBaseClient:
             )
 
     @staticmethod
-    def _determine_cache_dir(cache_directory: Optional[Union[Path, str]]):
+    def _determine_cache_dir(cache_directory: Path | str | None):
         if not (isinstance(cache_directory, (Path, str)) or cache_directory is None):
             raise TypeError(
                 "`cache_directory` must be a `str`, `pathlib.Path`, or `None`."

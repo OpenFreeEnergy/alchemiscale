@@ -4,7 +4,7 @@
 
 """
 
-from typing import Optional, Union, Any
+from typing import Any
 from pydantic import BaseModel, field_validator, model_validator, ConfigDict
 from gufe.tokenization import GufeKey
 from re import fullmatch
@@ -13,9 +13,9 @@ import string
 
 
 class Scope(BaseModel):
-    org: Optional[str] = None
-    campaign: Optional[str] = None
-    project: Optional[str] = None
+    org: str | None = None
+    campaign: str | None = None
+    project: str | None = None
 
     model_config = ConfigDict(
         frozen=True,
@@ -218,11 +218,11 @@ class ScopedKey(BaseModel):
 class InvalidScopeError(ValueError): ...
 
 
-def _is_wildcard(char: Union[str, None]) -> bool:
+def _is_wildcard(char: str | None) -> bool:
     return char is None
 
 
-def _find_wildcard(scope_list: list) -> Union[int, None]:
+def _find_wildcard(scope_list: list) -> int | None:
     """Finds the index of the first wildcard in a scope list."""
     for i, scope in enumerate(scope_list):
         if _is_wildcard(scope):
@@ -230,7 +230,7 @@ def _find_wildcard(scope_list: list) -> Union[int, None]:
     return None
 
 
-def _hierarchy_valid(scope_dict: dict[str : Union[str, None]]) -> bool:
+def _hierarchy_valid(scope_dict: dict[str : str | None]) -> bool:
     """Checks that the scope hierarchy is valid from a dictionary of scope components."""
 
     org = scope_dict.get("org")
