@@ -4,7 +4,6 @@
 
 """
 
-from typing import Dict, List, Optional, Union
 from collections import Counter
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Request
@@ -80,7 +79,7 @@ def list_scopes(
     identity_identifier,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[str]:
+) -> list[str]:
     scopes = n4js.list_scopes(identity_identifier, CredentialedUserIdentity)
     return [str(scope) for scope in scopes]
 
@@ -142,11 +141,11 @@ async def create_network(
 @router.post("/bulk/networks/state/set")
 def set_networks_state(
     *,
-    networks: List[str] = Body(embed=True),
-    states: List[str] = Body(embed=True),
+    networks: list[str] = Body(embed=True),
+    states: list[str] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[Optional[str]]:
+) -> list[str | None]:
     network_sks = []
     for network in networks:
         network_sk = ScopedKey.from_str(network)
@@ -164,10 +163,10 @@ def set_networks_state(
 @router.post("/bulk/networks/state/get")
 def get_networks_state(
     *,
-    networks: List[str] = Body(embed=True),
+    networks: list[str] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[Optional[str]]:
+) -> list[str | None]:
     network_sks = []
     for network in networks:
         network_sk = ScopedKey.from_str(network)
@@ -395,18 +394,18 @@ def get_chemicalsystem(
 
 
 @router.post("/networks/{scoped_key}/strategy")
-def set_strategy(scoped_key: str, *, strategy: Dict = Body(...), scope: Scope): ...
+def set_strategy(scoped_key: str, *, strategy: dict = Body(...), scope: Scope): ...
 
 
 @router.post("/transformations/{transformation_scoped_key}/tasks")
 def create_tasks(
     transformation_scoped_key,
     *,
-    extends: Optional[ScopedKey] = None,
+    extends: ScopedKey | None = None,
     count: int = Body(...),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[str]:
+) -> list[str]:
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
@@ -424,8 +423,8 @@ def create_tasks(
 @router.post("/bulk/transformations/tasks/create")
 def create_transformations_tasks(
     *,
-    transformations: List[str] = Body(embed=True),
-    extends: Optional[List[Optional[str]]] = None,
+    transformations: list[str] = Body(embed=True),
+    extends: list[str | None] | None = None,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -589,10 +588,10 @@ def get_network_status(
 @router.post("/bulk/networks/status")
 def get_networks_status(
     *,
-    networks: List[str] = Body(embed=True),
+    networks: list[str] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[Dict[str, int]]:
+) -> list[dict[str, int]]:
 
     network_sks = [ScopedKey.from_str(sk) for sk in networks]
 
@@ -625,7 +624,7 @@ def get_network_actioned_tasks(
     task_weights: bool = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> Union[Dict[str, float], List[str]]:
+) -> dict[str, float] | list[str]:
     network_sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(network_sk.scope, token)
 
@@ -645,11 +644,11 @@ def get_network_actioned_tasks(
 @router.post("/bulk/networks/tasks/actioned")
 def get_networks_actioned_tasks(
     *,
-    networks: List[str] = Body(embed=True),
+    networks: list[str] = Body(embed=True),
     task_weights: bool = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[Union[Dict[str, float], List[str]]]:
+) -> list[dict[str, float] | list[str]]:
 
     network_sks = [ScopedKey.from_str(network) for network in networks]
 
@@ -678,7 +677,7 @@ def get_task_actioned_networks(
     task_weights: bool = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> Union[Dict[str, float], List[str]]:
+) -> dict[str, float] | list[str]:
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
 
@@ -694,11 +693,11 @@ def get_task_actioned_networks(
 def action_tasks(
     network_scoped_key,
     *,
-    tasks: List[ScopedKey] = Body(embed=True),
-    weight: Optional[Union[float, List[float]]] = Body(None, embed=True),
+    tasks: list[ScopedKey] = Body(embed=True),
+    weight: float | list[float] | None = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[Union[str, None]]:
+) -> list[str | None]:
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
@@ -744,10 +743,10 @@ def get_network_weight(
 @router.post("/bulk/networks/weight/get")
 def get_networks_weight(
     *,
-    networks: List[str] = Body(embed=True),
+    networks: list[str] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[float]:
+) -> list[float]:
 
     network_sks = [ScopedKey.from_str(network_str) for network_str in networks]
 
@@ -778,8 +777,8 @@ def set_network_weight(
 @router.post("/bulk/networks/weight/set")
 def set_networks_weight(
     *,
-    networks: List[str] = Body(embed=True),
-    weights: List[float] = Body(embed=True),
+    networks: list[str] = Body(embed=True),
+    weights: list[float] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> None:
@@ -802,10 +801,10 @@ def set_networks_weight(
 def cancel_tasks(
     network_scoped_key,
     *,
-    tasks: List[ScopedKey] = Body(embed=True),
+    tasks: list[ScopedKey] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[Union[str, None]]:
+) -> list[str | None]:
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
 
@@ -822,10 +821,10 @@ def cancel_tasks(
 @router.post("/bulk/tasks/priority/get")
 def tasks_priority_get(
     *,
-    tasks: List[ScopedKey] = Body(embed=True),
+    tasks: list[ScopedKey] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[int]:
+) -> list[int]:
     valid_tasks = []
     for task_sk in tasks:
         try:
@@ -842,11 +841,11 @@ def tasks_priority_get(
 @router.post("/bulk/tasks/priority/set")
 def tasks_priority_set(
     *,
-    tasks: List[ScopedKey] = Body(embed=True),
+    tasks: list[ScopedKey] = Body(embed=True),
     priority: int = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[Union[str, None]]:
+) -> list[str | None]:
     valid_tasks = []
     for task_sk in tasks:
         try:
@@ -866,10 +865,10 @@ def tasks_priority_set(
 @router.post("/bulk/tasks/status/get")
 def tasks_status_get(
     *,
-    tasks: List[ScopedKey] = Body(embed=True),
+    tasks: list[ScopedKey] = Body(embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[Union[str, None]]:
+) -> list[str | None]:
     valid_tasks = []
     for task_sk in tasks:
         try:
@@ -886,11 +885,11 @@ def tasks_status_get(
 @router.post("/bulk/tasks/status/set")
 def tasks_status_set(
     *,
-    tasks: List[ScopedKey] = Body(),
+    tasks: list[ScopedKey] = Body(),
     status: str = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[Union[str, None]]:
+) -> list[str | None]:
     status = TaskStatusEnum(status)
     if status not in (
         TaskStatusEnum.waiting,
@@ -1110,7 +1109,7 @@ def get_protocoldagresult(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> List[str]:
+) -> list[str]:
     if route == "results":
         ok = True
     elif route == "failures":

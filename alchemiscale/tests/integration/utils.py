@@ -18,7 +18,7 @@ def running_service(target, port, args):
         try:
             ping = requests.get(f"http://127.0.0.1:{port}/ping")
             ping.raise_for_status()
-        except IOError:
+        except OSError:
             sleep(0.25)
             continue
         timeout = False

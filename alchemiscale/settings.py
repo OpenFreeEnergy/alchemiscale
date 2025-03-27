@@ -5,7 +5,6 @@
 """
 
 from functools import lru_cache
-from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -38,9 +37,9 @@ class S3ObjectStoreSettings(FrozenSettings):
 
     """
 
-    AWS_ACCESS_KEY_ID: Optional[str] = None
-    AWS_SECRET_ACCESS_KEY: Optional[str] = None
-    AWS_SESSION_TOKEN: Optional[str] = None
+    AWS_ACCESS_KEY_ID: str | None = None
+    AWS_SECRET_ACCESS_KEY: str | None = None
+    AWS_SESSION_TOKEN: str | None = None
     AWS_S3_BUCKET: str
     AWS_S3_PREFIX: str
     AWS_DEFAULT_REGION: str
@@ -83,31 +82,31 @@ class ComputeAPISettings(BaseAPISettings):
     ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS: int = 1800
 
 
-@lru_cache()
+@lru_cache
 def get_neo4jstore_settings():
     return Neo4jStoreSettings()
 
 
-@lru_cache()
+@lru_cache
 def get_s3objectstore_settings():
     return S3ObjectStoreSettings()
 
 
-@lru_cache()
+@lru_cache
 def get_jwt_settings():
     return JWTSettings()
 
 
-@lru_cache()
+@lru_cache
 def get_base_api_settings():
     return BaseAPISettings()
 
 
-@lru_cache()
+@lru_cache
 def get_api_settings():
     return APISettings()
 
 
-@lru_cache()
+@lru_cache
 def get_compute_api_settings():
     return ComputeAPISettings()

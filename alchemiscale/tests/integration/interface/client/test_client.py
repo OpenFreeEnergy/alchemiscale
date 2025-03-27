@@ -65,6 +65,32 @@ class TestClient:
         assert "explicit_key" not in str(record[0].message)
         assert "env_key" not in str(record[0].message)
 
+    def test_cache_disable(self, user_client_no_cache):
+        # first check that the provided "no_cache" client doesn't have an enabled cache
+        with pytest.raises(
+            AttributeError,
+            match=r"'AlchemiscaleClient' object has no attribute '_cache'",
+        ):
+            _ = user_client_no_cache._cache
+
+        # test passing settings to a new client
+        client_clone = client.AlchemiscaleClient(**user_client_no_cache._settings())
+
+        # assert all settings were preserved
+        assert (
+            client_clone._cache_enabled is user_client_no_cache._cache_enabled is False
+        )
+        assert (
+            client_clone._cache_directory
+            is user_client_no_cache._cache_directory
+            is None
+        )
+        assert (
+            client_clone._cache_size_limit
+            == user_client_no_cache._cache_size_limit
+            == 1073741824
+        )
+
     def test_cache_size_limit_negative(
         self, user_client: client.AlchemiscaleBaseClient
     ):
@@ -185,7 +211,6 @@ class TestClient:
         assert user_client.check_exists(an_sks[0])
 
         # check that an AlchemicalNetwork that doesn't exist shows as not existing
-        an_sk = an_sks[0]
         an_sk_nonexistent = ScopedKey(
             gufe_key=GufeKey("AlchemicalNetwork-lol"), **scope_test.dict()
         )
@@ -265,7 +290,7 @@ class TestClient:
         network_sk = user_client.create_network(an, scope_test)
         with pytest.raises(
             AlchemiscaleClientError,
-            match="Status Code 400 : Bad Request : 'notastate' is not a valid state. Valid values include: \['",
+            match=r"Status Code 400 : Bad Request : 'notastate' is not a valid state. Valid values include: \['",
         ):
             user_client.set_network_state(network_sk, invalid_state)
 
@@ -497,9 +522,9 @@ class TestClient:
         tf_sks = user_client.get_network_transformations(n_sk)
 
         assert len(tf_sks) == len(network_tyk2.edges)
-        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(
+        assert {tf_sk.gufe_key for tf_sk in tf_sks} == {
             t.key for t in network_tyk2.edges
-        )
+        }
 
     def test_get_transformation_networks(
         self,
@@ -525,9 +550,9 @@ class TestClient:
         cs_sks = user_client.get_network_chemicalsystems(n_sk)
 
         assert len(cs_sks) == len(network_tyk2.nodes)
-        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(
+        assert {cs_sk.gufe_key for cs_sk in cs_sks} == {
             cs.key for cs in network_tyk2.nodes
-        )
+        }
 
     def test_get_chemicalsystem_networks(
         self,
@@ -553,9 +578,10 @@ class TestClient:
         cs_sks = user_client.get_transformation_chemicalsystems(tf_sk)
 
         assert len(cs_sks) == 2
-        assert set(cs_sk.gufe_key for cs_sk in cs_sks) == set(
-            [transformation.stateA.key, transformation.stateB.key]
-        )
+        assert {cs_sk.gufe_key for cs_sk in cs_sks} == {
+            transformation.stateA.key,
+            transformation.stateB.key,
+        }
 
     def test_get_chemicalsystem_transformations(
         self,
@@ -573,17 +599,17 @@ class TestClient:
             if chemicalsystem in (tf.stateA, tf.stateB):
                 tfs.append(tf)
 
-        assert set(tf_sk.gufe_key for tf_sk in tf_sks) == set(t.key for t in tfs)
+        assert {tf_sk.gufe_key for tf_sk in tf_sks} == {t.key for t in tfs}
 
     def test_get_network(
         self,
         scope_test,
         n4js_preloaded,
         network_tyk2,
-        user_client: client.AlchemiscaleClient,
+        user_client_no_cache: client.AlchemiscaleClient,
     ):
-        an_sk = user_client.get_scoped_key(network_tyk2, scope_test)
-        an = user_client.get_network(an_sk)
+        an_sk = user_client_no_cache.get_scoped_key(network_tyk2, scope_test)
+        an = user_client_no_cache.get_network(an_sk)
 
         assert an == network_tyk2
         assert an is network_tyk2
@@ -779,10 +805,10 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         transformation,
-        user_client: client.AlchemiscaleClient,
+        user_client_no_cache: client.AlchemiscaleClient,
     ):
-        tf_sk = user_client.get_scoped_key(transformation, scope_test)
-        tf = user_client.get_transformation(tf_sk)
+        tf_sk = user_client_no_cache.get_scoped_key(transformation, scope_test)
+        tf = user_client_no_cache.get_transformation(tf_sk)
 
         assert tf == transformation
         assert tf is transformation
@@ -849,10 +875,10 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         chemicalsystem,
-        user_client: client.AlchemiscaleClient,
+        user_client_no_cache: client.AlchemiscaleClient,
     ):
-        cs_sk = user_client.get_scoped_key(chemicalsystem, scope_test)
-        cs = user_client.get_chemicalsystem(cs_sk)
+        cs_sk = user_client_no_cache.get_scoped_key(chemicalsystem, scope_test)
+        cs = user_client_no_cache.get_chemicalsystem(cs_sk)
 
         assert cs == chemicalsystem
         assert cs is chemicalsystem
@@ -970,7 +996,7 @@ class TestClient:
         # use the incorrect ScopedKey, expect to see an AlchemiscaleClientError
         with pytest.raises(
             AlchemiscaleClientError,
-            match="Status Code 400 : Bad Request : `extends` ScopedKey \(",
+            match=r"Status Code 400 : Bad Request : `extends` ScopedKey \(",
         ):
             user_client.create_tasks(sk, count=4, extends=scoped_key_wrong_qualname)
 
@@ -1804,7 +1830,7 @@ class TestClient:
         taskhub_sk = n4js.get_taskhub(network_sk)
         hub_task_sks = n4js.get_taskhub_tasks(taskhub_sk)
 
-        assert set([actioned_sks[0], actioned_sks[2]]) == set(hub_task_sks)
+        assert {actioned_sks[0], actioned_sks[2]} == set(hub_task_sks)
         assert canceled_sks == [actioned_sks[1]]
 
         # try to cancel a task that's not present on the hub
@@ -2204,11 +2230,12 @@ class TestClient:
         scope_test,
         n4js_preloaded,
         s3os_server_fresh,
-        user_client: client.AlchemiscaleClient,
+        user_client_no_cache: client.AlchemiscaleClient,
         network_tyk2,
         tmpdir,
         legacy,
     ):
+        user_client = user_client_no_cache
         n4js = n4js_preloaded
         s3os_server = s3os_server_fresh
 
