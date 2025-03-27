@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from alchemiscale.base.api import validate_scopes, validate_scopes_query
 from alchemiscale.models import Scope, ScopedKey
-from alchemiscale.security.models import Token, TokenData, CredentialedEntity
+from alchemiscale.security.models import TokenData
 
 
 @pytest.mark.parametrize(
