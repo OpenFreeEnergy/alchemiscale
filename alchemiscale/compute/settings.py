@@ -70,6 +70,22 @@ class ComputeServiceSettings(BaseModel):
         None,
         description="Path to file for logging output; if not set, logging will only go to STDOUT.",
     )
+    client_cache_directory: Path | str | None = Field(
+        None,
+        description=(
+            "Location of the cache directory as either a `pathlib.Path` or `str`. "
+            "If ``None`` is provided then the directory will be determined via "
+            "the ``XDG_CACHE_HOME`` environment variable or default to "
+            "``${HOME}/.cache/alchemiscale``. Default ``None``."
+        ),
+    )
+    client_cache_size_limit: int = Field(
+        1073741824,
+        description="Maximum size of the client cache in bytes. Default 1 GiB.",
+    )
+    client_use_local_cache: bool = Field(
+        False, description="Whether or not to use the local cache on disk."
+    )
     client_max_retries: int = Field(
         5,
         description=(
@@ -85,7 +101,10 @@ class ComputeServiceSettings(BaseModel):
     )
     client_retry_max_seconds: float = Field(
         60.0,
-        description="Maximum number of seconds to sleep between retries; avoids runaway exponential backoff while allowing for many retries.",
+        description=(
+            "Maximum number of seconds to sleep between retries; "
+            "avoids runaway exponential backoff while allowing for many retries."
+        ),
     )
     client_verify: bool = Field(
         True,

@@ -78,9 +78,12 @@ class SynchronousComputeService:
         self.claim_limit = self.settings.claim_limit
 
         self.client = AlchemiscaleComputeClient(
-            self.settings.api_url,
-            self.settings.identifier,
-            self.settings.key,
+            api_url=self.settings.api_url,
+            identifier=self.settings.identifier,
+            key=self.settings.key,
+            cache_directory=self.settings.client_cache_directory,
+            cache_size_limit=self.settings.client_cache_size_limit,
+            use_local_cache=self.settings.client_use_local_cache,
             max_retries=self.settings.client_max_retries,
             retry_base_seconds=self.settings.client_retry_base_seconds,
             retry_max_seconds=self.settings.client_retry_max_seconds,
