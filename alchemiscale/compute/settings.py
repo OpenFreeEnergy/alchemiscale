@@ -81,11 +81,10 @@ class ComputeServiceSettings(BaseModel):
     )
     client_cache_size_limit: int = Field(
         1073741824,
-        description="Maximum size of the client cache in bytes. Default 1 GiB."
+        description="Maximum size of the client cache in bytes. Default 1 GiB.",
     )
     client_use_local_cache: bool = Field(
-        False,
-        description="Whether or not to use the local cache on disk."
+        False, description="Whether or not to use the local cache on disk."
     )
     client_max_retries: int = Field(
         5,
@@ -104,7 +103,8 @@ class ComputeServiceSettings(BaseModel):
         60.0,
         description=(
             "Maximum number of seconds to sleep between retries; "
-            "avoids runaway exponential backoff while allowing for many retries."),
+            "avoids runaway exponential backoff while allowing for many retries."
+        ),
     )
     client_verify: bool = Field(
         True,
