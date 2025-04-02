@@ -260,117 +260,118 @@ class Neo4jStore(AlchemiscaleStateStore):
         node["_scoped_key"] = str(scoped_key)
 
         for key, value in sdct.items():
-            if isinstance(value, dict):
-                if all([isinstance(x, GufeTokenizable) for x in value.values()]):
-                    for k, v in value.items():
-                        node_ = subgraph_ = self.gufe_nodes.get(
-                            (v.key, scope.org, scope.campaign, scope.project)
-                        )
-                        if node_ is None:
-                            subgraph_, node_, scoped_key_ = self._gufe_to_subgraph(
-                                v.to_shallow_dict(),
-                                labels=["GufeTokenizable", v.__class__.__name__],
-                                gufe_key=v.key,
-                                scope=scope,
+            match (key, value):
+                case (_, dict()):
+                    if all([isinstance(x, GufeTokenizable) for x in value.values()]):
+                        for k, v in value.items():
+                            node_ = subgraph_ = self.gufe_nodes.get(
+                                (v.key, scope.org, scope.campaign, scope.project)
                             )
-                            self.gufe_nodes[
-                                (str(v.key), scope.org, scope.campaign, scope.project)
-                            ] = node_
-                        subgraph = (
-                            subgraph
-                            | Relationship.type("DEPENDS_ON")(
-                                node,
-                                node_,
-                                attribute=key,
-                                key=k,
-                                _org=scope.org,
-                                _campaign=scope.campaign,
-                                _project=scope.project,
+                            if node_ is None:
+                                subgraph_, node_, scoped_key_ = self._gufe_to_subgraph(
+                                    v.to_shallow_dict(),
+                                    labels=["GufeTokenizable", v.__class__.__name__],
+                                    gufe_key=v.key,
+                                    scope=scope,
+                                )
+                                self.gufe_nodes[
+                                    (str(v.key), scope.org, scope.campaign, scope.project)
+                                ] = node_
+                            subgraph = (
+                                subgraph
+                                | Relationship.type("DEPENDS_ON")(
+                                    node,
+                                    node_,
+                                    attribute=key,
+                                    key=k,
+                                    _org=scope.org,
+                                    _campaign=scope.campaign,
+                                    _project=scope.project,
+                                )
+                                | subgraph_
                             )
-                            | subgraph_
-                        )
-                else:
-                    node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
-                    node["_json_props"].append(key)
-            elif isinstance(value, list):
-                # lists can only be made of a single, primitive data type
-                # we encode these as strings with a special starting indicator
-                if isinstance(value[0], (int, float, str)) and all(
-                    [isinstance(x, type(value[0])) for x in value]
-                ):
-                    node[key] = value
-                elif all([isinstance(x, GufeTokenizable) for x in value]):
-                    for i, x in enumerate(value):
-                        node_ = subgraph_ = self.gufe_nodes.get(
-                            (x.key, scope.org, scope.campaign, scope.project)
-                        )
-                        if node_ is None:
-                            subgraph_, node_, scoped_key_ = self._gufe_to_subgraph(
-                                x.to_shallow_dict(),
-                                labels=["GufeTokenizable", x.__class__.__name__],
-                                gufe_key=x.key,
-                                scope=scope,
-                            )
-                            self.gufe_nodes[
+                    else:
+                        node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
+                        node["_json_props"].append(key)
+                case (_, list()):
+                    # lists can only be made of a single, primitive data type
+                    # we encode these as strings with a special starting indicator
+                    if isinstance(value[0], (int, float, str)) and all(
+                        [isinstance(x, type(value[0])) for x in value]
+                    ):
+                        node[key] = value
+                    elif all([isinstance(x, GufeTokenizable) for x in value]):
+                        for i, x in enumerate(value):
+                            node_ = subgraph_ = self.gufe_nodes.get(
                                 (x.key, scope.org, scope.campaign, scope.project)
-                            ] = node_
-                        subgraph = (
-                            subgraph
-                            | Relationship.type("DEPENDS_ON")(
-                                node,
-                                node_,
-                                attribute=key,
-                                index=i,
-                                _org=scope.org,
-                                _campaign=scope.campaign,
-                                _project=scope.project,
                             )
-                            | subgraph_
-                        )
-                else:
-                    node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
+                            if node_ is None:
+                                subgraph_, node_, scoped_key_ = self._gufe_to_subgraph(
+                                    x.to_shallow_dict(),
+                                    labels=["GufeTokenizable", x.__class__.__name__],
+                                    gufe_key=x.key,
+                                    scope=scope,
+                                )
+                                self.gufe_nodes[
+                                    (x.key, scope.org, scope.campaign, scope.project)
+                                ] = node_
+                            subgraph = (
+                                subgraph
+                                | Relationship.type("DEPENDS_ON")(
+                                    node,
+                                    node_,
+                                    attribute=key,
+                                    index=i,
+                                    _org=scope.org,
+                                    _campaign=scope.campaign,
+                                    _project=scope.project,
+                                )
+                                | subgraph_
+                            )
+                    else:
+                        node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
+                        node["_json_props"].append(key)
+                case (_, tuple()):
+                    # lists can only be made of a single, primitive data type
+                    # we encode these as strings with a special starting indicator
+                    if not (
+                        isinstance(value[0], (int, float, str))
+                        and all([isinstance(x, type(value[0])) for x in value])
+                    ):
+                        node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
+                        node["_json_props"].append(key)
+                case (_, SettingsBaseModel()):
+                    node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
                     node["_json_props"].append(key)
-            elif isinstance(value, tuple):
-                # lists can only be made of a single, primitive data type
-                # we encode these as strings with a special starting indicator
-                if not (
-                    isinstance(value[0], (int, float, str))
-                    and all([isinstance(x, type(value[0])) for x in value])
-                ):
-                    node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
-                    node["_json_props"].append(key)
-            elif isinstance(value, SettingsBaseModel):
-                node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
-                node["_json_props"].append(key)
-            elif isinstance(value, GufeTokenizable):
-                node_ = subgraph_ = self.gufe_nodes.get(
-                    (value.key, scope.org, scope.campaign, scope.project)
-                )
-                if node_ is None:
-                    subgraph_, node_, scoped_key_ = self._gufe_to_subgraph(
-                        value.to_shallow_dict(),
-                        labels=["GufeTokenizable", value.__class__.__name__],
-                        gufe_key=value.key,
-                        scope=scope,
-                    )
-                    self.gufe_nodes[
+                case (_, GufeTokenizable()):
+                    node_ = subgraph_ = self.gufe_nodes.get(
                         (value.key, scope.org, scope.campaign, scope.project)
-                    ] = node_
-                subgraph = (
-                    subgraph
-                    | Relationship.type("DEPENDS_ON")(
-                        node,
-                        node_,
-                        attribute=key,
-                        _org=scope.org,
-                        _campaign=scope.campaign,
-                        _project=scope.project,
                     )
-                    | subgraph_
-                )
+                    if node_ is None:
+                        subgraph_, node_, scoped_key_ = self._gufe_to_subgraph(
+                            value.to_shallow_dict(),
+                            labels=["GufeTokenizable", value.__class__.__name__],
+                            gufe_key=value.key,
+                            scope=scope,
+                        )
+                        self.gufe_nodes[
+                            (value.key, scope.org, scope.campaign, scope.project)
+                        ] = node_
+                    subgraph = (
+                        subgraph
+                        | Relationship.type("DEPENDS_ON")(
+                            node,
+                            node_,
+                            attribute=key,
+                            _org=scope.org,
+                            _campaign=scope.campaign,
+                            _project=scope.project,
+                        )
+                        | subgraph_
+                    )
 
-            else:
-                node[key] = value
+                case (_, _):
+                    node[key] = value
 
         subgraph = subgraph | node
 
