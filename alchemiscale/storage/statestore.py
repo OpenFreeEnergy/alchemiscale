@@ -260,8 +260,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         node["_scoped_key"] = str(scoped_key)
 
         for key, value in sdct.items():
-            match (key, value):
-                case (_, dict()):
+            match value:
+                case dict():
                     if all([isinstance(x, GufeTokenizable) for x in value.values()]):
                         for k, v in value.items():
                             node_ = subgraph_ = self.gufe_nodes.get(
@@ -293,7 +293,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     else:
                         node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
                         node["_json_props"].append(key)
-                case (_, list()):
+                case list():
                     # lists can only be made of a single, primitive data type
                     # we encode these as strings with a special starting indicator
                     if isinstance(value[0], (int, float, str)) and all(
@@ -331,7 +331,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     else:
                         node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
                         node["_json_props"].append(key)
-                case (_, tuple()):
+                case tuple():
                     # lists can only be made of a single, primitive data type
                     # we encode these as strings with a special starting indicator
                     if not (
@@ -340,10 +340,10 @@ class Neo4jStore(AlchemiscaleStateStore):
                     ):
                         node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
                         node["_json_props"].append(key)
-                case (_, SettingsBaseModel()):
+                case SettingsBaseModel():
                     node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
                     node["_json_props"].append(key)
-                case (_, GufeTokenizable()):
+                case GufeTokenizable():
                     node_ = subgraph_ = self.gufe_nodes.get(
                         (value.key, scope.org, scope.campaign, scope.project)
                     )
@@ -370,7 +370,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                         | subgraph_
                     )
 
-                case (_, _):
+                case _:
                     node[key] = value
 
         subgraph = subgraph | node
