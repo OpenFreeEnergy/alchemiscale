@@ -410,7 +410,9 @@ def create_tasks(
     validate_scopes(sk.scope, token)
 
     try:
-        task_sks = n4js.create_tasks([sk] * count, [extends] * count, creator=token.entity)
+        task_sks = n4js.create_tasks(
+            [sk] * count, [extends] * count, creator=token.entity
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
