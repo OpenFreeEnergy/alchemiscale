@@ -204,14 +204,16 @@ class TestNeo4jStore(TestStateStore):
         an = network_tyk2
         sk: ScopedKey = n4js.assemble_network(an, scope_test)[0]
 
-        an2 = n4js.get_gufe(sk)
+        an2 = n4js.get_keyed_chain(sk).to_gufe()
+        # an2 = n4js.get_gufe(sk)
 
         assert an2 == an
         assert an2 is an
 
         TOKENIZABLE_REGISTRY.clear()
 
-        an3 = n4js.get_gufe(sk)
+        an3 = n4js.get_keyed_chain(sk).to_gufe()
+        # an3 = n4js.get_gufe(sk)
 
         assert an3 == an2 == an
 
