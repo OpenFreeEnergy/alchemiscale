@@ -251,9 +251,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Parameters
         ----------
-        keyed_chain: KeyedChain
+        keyed_chain
             The keyed chain to convert into a subgraph.
-        scope: Scope
+        scope
             The scope to assign to the Subgraph Node objects.
 
         Returns
@@ -296,6 +296,18 @@ class Neo4jStore(AlchemiscaleStateStore):
             )
             relationships.append(rel)
 
+        def handle_dict(node, key, dct):
+            # e.g. {'ligand': {':gufe-key:': 'SmallMoleculeComponent-abc123'}}
+            if all(map(is_gufe_dict, dct.values())):
+                for k, v in dct.items():
+                    rel_key = v[":gufe-key:"]
+                    update_relationships(
+                        node, get_previous_node(rel_key), attribute=key, key=k
+                    )
+            else:
+                node[key] = json.dumps(dct, cls=JSON_HANDLER.encoder)
+                node["_json_props"].append(key)
+
         def handle_list(node, key, values):
             if isinstance(values[0], (int, float, str)) and all(
                 (isinstance(x, type(values[0])) for x in values)
@@ -313,18 +325,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                 node[key] = json.dumps(values, cls=JSON_HANDLER.encoder)
                 node["_json_props"].append(key)
 
-        def handle_dict(node, key, dct):
-            # e.g. {'ligand': {':gufe-key:': 'SmallMoleculeComponent-abc123'}}
-            if all(map(is_gufe_dict, dct.values())):
-                for k, v in dct.items():
-                    rel_key = v[":gufe-key:"]
-                    update_relationships(
-                        node, get_previous_node(rel_key), attribute=key, key=k
-                    )
-            else:
-                node[key] = json.dumps(dct, cls=JSON_HANDLER.encoder)
-                node["_json_props"].append(key)
-
         def handle_tuple(node, key, values):
             if not (
                 isinstance(values[0], (int, float, str))
@@ -332,6 +332,10 @@ class Neo4jStore(AlchemiscaleStateStore):
             ):
                 node[key] = json.dumps(values, cls=JSON_HANDLER.encoder)
                 node["_json_props"].append(key)
+
+        def handle_settings(node, key, value):
+            node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
+            node["_json_props"].append(key)
 
         def process_keyed_dict(gufe_key, kd):
             node = Node("GufeTokenizable", kd["__qualname__"])
@@ -349,10 +353,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     case tuple():
                         handle_tuple(node, key, value)
                     case SettingsBaseModel():
-                        node[key] = json.dumps(
-                            value, cls=JSON_HANDLER.encoder, sort_keys=True
-                        )
-                        node["_json_props"].append(key)
+                        handle_settings(node, key, value)
                     case _:
                         node[key] = value
 
