@@ -326,12 +326,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                 node["_json_props"].append(key)
 
         def handle_tuple(node, key, values):
-            if not (
-                isinstance(values[0], (int, float, str))
-                and all((isinstance(x, type(values[0])) for x in values))
-            ):
-                node[key] = json.dumps(values, cls=JSON_HANDLER.encoder)
-                node["_json_props"].append(key)
+            node[key] = json.dumps(values, cls=JSON_HANDLER.encoder)
+            node["_json_props"].append(key)
 
         def handle_settings(node, key, value):
             node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
