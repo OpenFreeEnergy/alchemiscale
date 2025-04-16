@@ -55,6 +55,7 @@ and the :ref:`developer-guide` for details on how the components of this archite
    ./operations
    ./development
    ./api
+   CHANGELOG
 
 
 Indices and tables
