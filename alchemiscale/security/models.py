@@ -4,8 +4,7 @@
 
 """
 
-from datetime import datetime, timedelta
-from typing import List, Union, Optional
+from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
@@ -18,19 +17,19 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    entity: Optional[str] = None
-    scopes: List[str] = None
+    entity: str | None = None
+    scopes: list[str] = None
 
 
 class CredentialedEntity(BaseModel):
     hashed_key: str
-    expires: Optional[datetime] = None
+    expires: datetime | None = None
 
 
 class ScopedIdentity(BaseModel):
     identifier: str
     disabled: bool = False
-    scopes: List[str] = []
+    scopes: list[str] = []
 
     @field_validator("scopes", mode="before")
     @classmethod
@@ -46,7 +45,7 @@ class ScopedIdentity(BaseModel):
             elif isinstance(scope, str):
                 try:
                     scopes_.append(str(Scope.from_str(scope)))
-                except:
+                except Exception:
                     raise ValueError(f"Invalid scope `{scope}` set for `{cls}`")
             else:
                 raise ValueError(f"Invalid scope `{scope}` set for `{cls}`")
@@ -55,15 +54,15 @@ class ScopedIdentity(BaseModel):
 
 
 class UserIdentity(ScopedIdentity):
-    email: Optional[str] = None
-    full_name: Optional[str] = None
+    email: str | None = None
+    full_name: str | None = None
 
 
 class CredentialedUserIdentity(UserIdentity, CredentialedEntity): ...
 
 
 class ComputeIdentity(ScopedIdentity):
-    email: Optional[str] = None
+    email: str | None = None
 
 
 class CredentialedComputeIdentity(ComputeIdentity, CredentialedEntity): ...

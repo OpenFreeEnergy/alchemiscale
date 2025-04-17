@@ -15,7 +15,6 @@ import gzip
 from pathlib import Path
 import os
 import warnings
-from typing import Union, Optional
 from dataclasses import dataclass
 from diskcache import Cache
 
@@ -67,7 +66,7 @@ class AlchemiscaleBaseClientParam:
     human_name: str
     render_value: bool = False
 
-    def get_value(self, param_value: Optional[str]) -> str:
+    def get_value(self, param_value: str | None) -> str:
         """Get the validated parameter value.
 
         Parameters
@@ -85,7 +84,6 @@ class AlchemiscaleBaseClientParam:
         ValueError
             If neither param_value nor environment variable is set.
         """
-        env_value = os.getenv(self.env_var_name)
 
         match (param_value, os.getenv(self.env_var_name)):
             case (None, None):
@@ -94,8 +92,12 @@ class AlchemiscaleBaseClientParam:
                 )
             case (None, env_value):
                 param_value = env_value
+            case (param_value, None):
+                pass
             case (param_value, env_value) if param_value != env_value:
                 self._warn_override(param_value, env_value)
+            case _:
+                pass
         return param_value
 
     def _warn_override(self, param_value: str, env_value: str) -> None:
@@ -141,11 +143,12 @@ class AlchemiscaleBaseClient:
 
     def __init__(
         self,
-        api_url: Optional[str] = None,
-        identifier: Optional[str] = None,
-        key: Optional[str] = None,
-        cache_directory: Optional[Union[Path, str]] = None,
+        api_url: str | None = None,
+        identifier: str | None = None,
+        key: str | None = None,
+        cache_directory: Path | str | None = None,
         cache_size_limit: int = 1073741824,
+        use_local_cache: bool = True,
         max_retries: int = 5,
         retry_base_seconds: float = 2.0,
         retry_max_seconds: float = 60.0,
@@ -171,6 +174,8 @@ class AlchemiscaleBaseClient:
             ``${HOME}/.cache/alchemiscale``. Default ``None``.
         cache_size_limit
             Maximum size of the client cache in bytes. Default 1 GiB.
+        use_local_cache
+            Whether or not to use the local cache on disk.
         max_retries
             Maximum number of times to retry a request. In the case the API
             service is unresponsive an exponential backoff is applied with
@@ -208,19 +213,26 @@ class AlchemiscaleBaseClient:
         self._session = None
         self._lock = None
 
-        if cache_size_limit < 0:
+        self._cache_enabled = use_local_cache
+        self._cache_size_limit = cache_size_limit
+        self._cache_directory = (
+            self._determine_cache_dir(cache_directory) if self._cache_enabled else None
+        )
+
+        if self._cache_size_limit < 0:
             raise ValueError(
                 "`cache_size_limit` must be greater than or equal to zero."
             )
 
-        self._cache = Cache(
-            self._determine_cache_dir(cache_directory),
-            size_limit=cache_size_limit,
-            eviction_policy="least-recently-used",
-        )
+        if self._cache_enabled:
+            self._cache = Cache(
+                self._cache_directory,
+                size_limit=self._cache_size_limit,
+                eviction_policy="least-recently-used",
+            )
 
     @staticmethod
-    def _determine_cache_dir(cache_directory: Optional[Union[Path, str]]):
+    def _determine_cache_dir(cache_directory: Path | str | None):
         if not (isinstance(cache_directory, (Path, str)) or cache_directory is None):
             raise TypeError(
                 "`cache_directory` must be a `str`, `pathlib.Path`, or `None`."
@@ -234,13 +246,14 @@ class AlchemiscaleBaseClient:
         else:
             cache_directory = Path(cache_directory)
 
-        return cache_directory.absolute()
+        return cache_directory.resolve()
 
     def _settings(self):
         return dict(
             api_url=self.api_url,
-            cache_directory=self._cache.directory,
-            cache_size_limit=self._cache.size_limit,
+            cache_directory=self._cache_directory,
+            cache_size_limit=self._cache_size_limit,
+            use_local_cache=self._cache_enabled,
             identifier=self.identifier,
             key=self.key,
             max_retries=self.max_retries,

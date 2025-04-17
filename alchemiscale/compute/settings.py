@@ -1,8 +1,7 @@
 from pathlib import Path
-from typing import Union, Optional, List, Dict, Tuple
 from pydantic import BaseModel, Field
 
-from ..models import Scope, ScopedKey
+from ..models import Scope
 
 
 class ComputeServiceSettings(BaseModel):
@@ -52,11 +51,11 @@ class ComputeServiceSettings(BaseModel):
     heartbeat_interval: int = Field(
         300, description="Frequency at which to send heartbeats to compute API."
     )
-    scopes: Optional[List[Scope]] = Field(
+    scopes: list[Scope] | None = Field(
         None,
         description="Scopes to limit Task claiming to; defaults to all Scopes accessible by compute identity.",
     )
-    protocols: Optional[List[str]] = Field(
+    protocols: list[str] | None = Field(
         None,
         description="Names of Protocols to run with this service; `None` means no restriction.",
     )
@@ -67,9 +66,25 @@ class ComputeServiceSettings(BaseModel):
         "WARN",
         description="The loglevel at which to report; see the :mod:`logging` docs for available levels.",
     )
-    logfile: Optional[Path] = Field(
+    logfile: Path | None = Field(
         None,
         description="Path to file for logging output; if not set, logging will only go to STDOUT.",
+    )
+    client_cache_directory: Path | str | None = Field(
+        None,
+        description=(
+            "Location of the cache directory as either a `pathlib.Path` or `str`. "
+            "If ``None`` is provided then the directory will be determined via "
+            "the ``XDG_CACHE_HOME`` environment variable or default to "
+            "``${HOME}/.cache/alchemiscale``. Default ``None``."
+        ),
+    )
+    client_cache_size_limit: int = Field(
+        1073741824,
+        description="Maximum size of the client cache in bytes. Default 1 GiB.",
+    )
+    client_use_local_cache: bool = Field(
+        False, description="Whether or not to use the local cache on disk."
     )
     client_max_retries: int = Field(
         5,
@@ -86,7 +101,10 @@ class ComputeServiceSettings(BaseModel):
     )
     client_retry_max_seconds: float = Field(
         60.0,
-        description="Maximum number of seconds to sleep between retries; avoids runaway exponential backoff while allowing for many retries.",
+        description=(
+            "Maximum number of seconds to sleep between retries; "
+            "avoids runaway exponential backoff while allowing for many retries."
+        ),
     )
     client_verify: bool = Field(
         True,

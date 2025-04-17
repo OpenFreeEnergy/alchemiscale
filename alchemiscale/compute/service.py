@@ -4,28 +4,21 @@
 
 """
 
-import os
 import gc
-import asyncio
 import sched
 import time
 import logging
 from uuid import uuid4
-import random
 import threading
-from typing import Union, Optional, List, Dict, Tuple
 from pathlib import Path
-from threading import Thread
 import shutil
-
-import requests
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
 from .client import AlchemiscaleComputeClient
 from .settings import ComputeServiceSettings
-from ..storage.models import Task, TaskHub, ComputeServiceID
+from ..storage.models import ComputeServiceID
 from ..models import Scope, ScopedKey
 
 
@@ -85,9 +78,12 @@ class SynchronousComputeService:
         self.claim_limit = self.settings.claim_limit
 
         self.client = AlchemiscaleComputeClient(
-            self.settings.api_url,
-            self.settings.identifier,
-            self.settings.key,
+            api_url=self.settings.api_url,
+            identifier=self.settings.identifier,
+            key=self.settings.key,
+            cache_directory=self.settings.client_cache_directory,
+            cache_size_limit=self.settings.client_cache_size_limit,
+            use_local_cache=self.settings.client_use_local_cache,
             max_retries=self.settings.client_max_retries,
             retry_base_seconds=self.settings.client_retry_base_seconds,
             retry_max_seconds=self.settings.client_retry_max_seconds,
@@ -157,7 +153,7 @@ class SynchronousComputeService:
             self.beat()
             time.sleep(self.heartbeat_interval)
 
-    def claim_tasks(self, count=1) -> List[Optional[ScopedKey]]:
+    def claim_tasks(self, count=1) -> list[ScopedKey | None]:
         """Get a Task to execute from compute API.
 
         Returns `None` if no Task was available matching service configuration.
@@ -179,7 +175,7 @@ class SynchronousComputeService:
 
     def task_to_protocoldag(
         self, task: ScopedKey
-    ) -> Tuple[ProtocolDAG, Transformation, Optional[ProtocolDAGResult]]:
+    ) -> tuple[ProtocolDAG, Transformation, ProtocolDAGResult | None]:
         """Given a Task, produce a corresponding ProtocolDAG that can be executed.
 
         Also gives the Transformation that this ProtocolDAG corresponds to.
@@ -294,13 +290,13 @@ class SynchronousComputeService:
                 )
                 raise KeyboardInterrupt
 
-    def cycle(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
+    def cycle(self, max_tasks: int | None = None, max_time: int | None = None):
         self._check_max_tasks(max_tasks)
         self._check_max_time(max_time)
 
         # claim tasks from the compute API
         self.logger.info("Claiming tasks")
-        tasks: List[ScopedKey] = self.claim_tasks(count=self.claim_limit)
+        tasks: list[ScopedKey] = self.claim_tasks(count=self.claim_limit)
         self.logger.info("Claimed %d tasks", len([t for t in tasks if t is not None]))
 
         # if no tasks claimed, sleep
@@ -332,7 +328,7 @@ class SynchronousComputeService:
         self._check_max_tasks(max_tasks)
         self._check_max_time(max_time)
 
-    def start(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
+    def start(self, max_tasks: int | None = None, max_time: int | None = None):
         """Start the service.
 
         Limits to the maximum number of executed tasks or seconds to run for

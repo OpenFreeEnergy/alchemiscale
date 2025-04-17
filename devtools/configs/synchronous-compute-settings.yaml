@@ -58,6 +58,18 @@ init:
   # STDOUT.
   logfile: null
 
+  # Location of the cache directory as either a `pathlib.Path` or `str`.
+  # If ``None`` is provided then the directory will be determined via
+  # the ``XDG_CACHE_HOME`` environment variable or default to
+  # ``${HOME}/.cache/alchemiscale``. Default ``None``.
+  client_cache_directory: null
+
+  # Maximum size of the client cache in bytes. Default 1 GiB.
+  client_cache_size_limit: 1073741824
+
+  # Whether or not to use the local cache on disk.
+  client_use_local_cache: false
+
   # Maximum number of times to retry a request. In the case the API service is
   # unresponsive an expoenential backoff is applied with retries until this
   # number is reached. If set to -1, retries will continue indefinitely until
