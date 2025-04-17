@@ -326,6 +326,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                 node["_json_props"].append(key)
 
         def handle_tuple(node, key, values):
+            # currently this won't roundtrip exactly due to `gufe` JSON
+            # encoder's non-handling of tuples
             node[key] = json.dumps(values, cls=JSON_HANDLER.encoder)
             node["_json_props"].append(key)
 
