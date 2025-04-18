@@ -577,11 +577,10 @@ class TestClient:
         tf_sk = user_client.get_scoped_key(transformation, scope_test)
         cs_sks = user_client.get_transformation_chemicalsystems(tf_sk)
 
-        assert len(cs_sks) == 2
-        assert {cs_sk.gufe_key for cs_sk in cs_sks} == {
+        assert [cs_sk.gufe_key for cs_sk in cs_sks] == [
             transformation.stateA.key,
             transformation.stateB.key,
-        }
+        ]
 
     def test_get_chemicalsystem_transformations(
         self,
