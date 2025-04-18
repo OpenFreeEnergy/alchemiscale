@@ -23,7 +23,7 @@ from gufe import (
     Protocol,
 )
 from gufe.settings import SettingsBaseModel
-from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER
+from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER, KeyedChain
 from gufe.protocols import ProtocolUnitFailure
 
 from neo4j import Transaction, GraphDatabase, Driver
@@ -242,138 +242,138 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## gufe object handling
 
-    def _gufe_to_subgraph(
-        self, sdct: dict, labels: list[str], gufe_key: GufeKey, scope: Scope
+    def _keyed_chain_to_subgraph(
+        self,
+        keyed_chain: KeyedChain,
+        scope: Scope,
     ) -> tuple[Subgraph, Node, str]:
-        subgraph = Subgraph()
-        node = Node(*labels)
+        r"""Construct a Subgraph from a KeyedChain.
 
-        # used to keep track of which properties we json-encoded so we can
-        # apply decoding efficiently
-        node["_json_props"] = []
-        node["_gufe_key"] = str(gufe_key)
-        node.update(
-            {"_org": scope.org, "_campaign": scope.campaign, "_project": scope.project}
-        )
+        Parameters
+        ----------
+        keyed_chain
+            The keyed chain to convert into a subgraph.
+        scope
+            The scope to assign to the Subgraph Node objects.
 
-        scoped_key = ScopedKey(gufe_key=node["_gufe_key"], **scope.dict())
-        node["_scoped_key"] = str(scoped_key)
+        Returns
+        -------
+        Subgraph, Node, str
+            The Subgraph, the node of the top-level GufeTokenizable, and its
+            GufeKey as a string.
+        """
 
-        for key, value in sdct.items():
-            if isinstance(value, dict):
-                if all([isinstance(x, GufeTokenizable) for x in value.values()]):
-                    for k, v in value.items():
-                        node_ = subgraph_ = self.gufe_nodes.get(
-                            (v.key, scope.org, scope.campaign, scope.project)
-                        )
-                        if node_ is None:
-                            subgraph_, node_, scoped_key_ = self._gufe_to_subgraph(
-                                v.to_shallow_dict(),
-                                labels=["GufeTokenizable", v.__class__.__name__],
-                                gufe_key=v.key,
-                                scope=scope,
-                            )
-                            self.gufe_nodes[
-                                (str(v.key), scope.org, scope.campaign, scope.project)
-                            ] = node_
-                        subgraph = (
-                            subgraph
-                            | Relationship.type("DEPENDS_ON")(
-                                node,
-                                node_,
-                                attribute=key,
-                                key=k,
-                                _org=scope.org,
-                                _campaign=scope.campaign,
-                                _project=scope.project,
-                            )
-                            | subgraph_
-                        )
-                else:
-                    node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
-                    node["_json_props"].append(key)
-            elif isinstance(value, list):
-                # lists can only be made of a single, primitive data type
-                # we encode these as strings with a special starting indicator
-                if isinstance(value[0], (int, float, str)) and all(
-                    [isinstance(x, type(value[0])) for x in value]
-                ):
-                    node[key] = value
-                elif all([isinstance(x, GufeTokenizable) for x in value]):
-                    for i, x in enumerate(value):
-                        node_ = subgraph_ = self.gufe_nodes.get(
-                            (x.key, scope.org, scope.campaign, scope.project)
-                        )
-                        if node_ is None:
-                            subgraph_, node_, scoped_key_ = self._gufe_to_subgraph(
-                                x.to_shallow_dict(),
-                                labels=["GufeTokenizable", x.__class__.__name__],
-                                gufe_key=x.key,
-                                scope=scope,
-                            )
-                            self.gufe_nodes[
-                                (x.key, scope.org, scope.campaign, scope.project)
-                            ] = node_
-                        subgraph = (
-                            subgraph
-                            | Relationship.type("DEPENDS_ON")(
-                                node,
-                                node_,
-                                attribute=key,
-                                index=i,
-                                _org=scope.org,
-                                _campaign=scope.campaign,
-                                _project=scope.project,
-                            )
-                            | subgraph_
-                        )
-                else:
-                    node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
-                    node["_json_props"].append(key)
-            elif isinstance(value, tuple):
-                # lists can only be made of a single, primitive data type
-                # we encode these as strings with a special starting indicator
-                if not (
-                    isinstance(value[0], (int, float, str))
-                    and all([isinstance(x, type(value[0])) for x in value])
-                ):
-                    node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
-                    node["_json_props"].append(key)
-            elif isinstance(value, SettingsBaseModel):
-                node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
-                node["_json_props"].append(key)
-            elif isinstance(value, GufeTokenizable):
-                node_ = subgraph_ = self.gufe_nodes.get(
-                    (value.key, scope.org, scope.campaign, scope.project)
+        relationships = []
+        previous_nodes = {}
+
+        def is_gufe_dict(dct):
+            if not isinstance(dct, dict):
+                return False
+            return ":gufe-key:" in dct.keys()
+
+        def add_previous_node(node_gufe_key, node):
+            previous_nodes[
+                (node_gufe_key, scope.org, scope.campaign, scope.project)
+            ] = node
+
+        def get_previous_node(node_gufe_key):
+            if (
+                rel_node := previous_nodes.get(
+                    (node_gufe_key, scope.org, scope.campaign, scope.project)
                 )
-                if node_ is None:
-                    subgraph_, node_, scoped_key_ = self._gufe_to_subgraph(
-                        value.to_shallow_dict(),
-                        labels=["GufeTokenizable", value.__class__.__name__],
-                        gufe_key=value.key,
-                        scope=scope,
-                    )
-                    self.gufe_nodes[
-                        (value.key, scope.org, scope.campaign, scope.project)
-                    ] = node_
-                subgraph = (
-                    subgraph
-                    | Relationship.type("DEPENDS_ON")(
-                        node,
-                        node_,
-                        attribute=key,
-                        _org=scope.org,
-                        _campaign=scope.campaign,
-                        _project=scope.project,
-                    )
-                    | subgraph_
-                )
+            ) is None:
+                raise ValueError("Possibly corrupt keyedchain")
+            return rel_node
 
+        def update_relationships(node_a, node_b, **kwargs):
+            rel = Relationship.type("DEPENDS_ON")(
+                node_a,
+                node_b,
+                _org=scope.org,
+                _campaign=scope.campaign,
+                _project=scope.project,
+                **kwargs,
+            )
+            relationships.append(rel)
+
+        def handle_dict(node, key, dct):
+            # e.g. {'ligand': {':gufe-key:': 'SmallMoleculeComponent-abc123'}}
+            if all(map(is_gufe_dict, dct.values())):
+                for k, v in dct.items():
+                    rel_key = v[":gufe-key:"]
+                    update_relationships(
+                        node, get_previous_node(rel_key), attribute=key, key=k
+                    )
             else:
-                node[key] = value
+                node[key] = json.dumps(dct, cls=JSON_HANDLER.encoder)
+                node["_json_props"].append(key)
 
-        subgraph = subgraph | node
+        def handle_list(node, key, values):
+            if isinstance(values[0], (int, float, str)) and all(
+                (isinstance(x, type(values[0])) for x in values)
+            ):
+                node[key] = values
+                return
+            # list of gufe key: [{":gufe-key:": ...}, {":gufe-key:": ...}, {":gufe-key:": ...}]
+            elif all(map(is_gufe_dict, values)):
+                for i, x in enumerate(values):
+                    rel_key = x[":gufe-key:"]
+                    update_relationships(
+                        node, get_previous_node(rel_key), attribute=key, index=i
+                    )
+            else:
+                node[key] = json.dumps(values, cls=JSON_HANDLER.encoder)
+                node["_json_props"].append(key)
 
+        def handle_tuple(node, key, values):
+            # currently this won't roundtrip exactly due to `gufe` JSON
+            # encoder's non-handling of tuples
+            node[key] = json.dumps(values, cls=JSON_HANDLER.encoder)
+            node["_json_props"].append(key)
+
+        def handle_settings(node, key, value):
+            node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
+            node["_json_props"].append(key)
+
+        def process_keyed_dict(gufe_key, kd):
+            node = Node("GufeTokenizable", kd["__qualname__"])
+            node["_json_props"] = []
+            for key, value in kd.items():
+                match value:
+                    case {":gufe-key:": rel_key}:
+                        update_relationships(
+                            node, get_previous_node(rel_key), attribute=key
+                        )
+                    case dict():
+                        handle_dict(node, key, value)
+                    case list():
+                        handle_list(node, key, value)
+                    case tuple():
+                        handle_tuple(node, key, value)
+                    case SettingsBaseModel():
+                        handle_settings(node, key, value)
+                    case _:
+                        node[key] = value
+
+            node["_gufe_key"] = str(gufe_key)
+            node["_scoped_key"] = str(ScopedKey(gufe_key=str(gufe_key), **scope.dict()))
+            node.update(
+                {
+                    "_org": scope.org,
+                    "_campaign": scope.campaign,
+                    "_project": scope.project,
+                }
+            )
+
+            return node
+
+        for gufe_key, kd in keyed_chain:
+            # process each keyed_dict, mutating the relationships list
+            node = process_keyed_dict(gufe_key, kd)
+            add_previous_node(gufe_key, node)
+
+        subgraph = Subgraph(None, relationships)
+        scoped_key = ScopedKey(gufe_key=node["_gufe_key"], **scope.dict())
         return subgraph, node, scoped_key
 
     def _subgraph_to_gufe(
@@ -659,12 +659,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         validate_network_nonself(network)
 
-        ndict = network.to_shallow_dict()
-
-        subgraph, node, scoped_key = self._gufe_to_subgraph(
-            ndict,
-            labels=["GufeTokenizable", network.__class__.__name__],
-            gufe_key=network.key,
+        subgraph, node, scoped_key = self._keyed_chain_to_subgraph(
+            KeyedChain.from_gufe(network),
             scope=scope,
         )
 
@@ -762,10 +758,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         network_mark = NetworkMark(target=str(network_sk), state=state)
 
-        _, network_mark_node, scoped_key = self._gufe_to_subgraph(
-            network_mark.to_shallow_dict(),
-            labels=["GufeTokenizable", network_mark.__class__.__name__],
-            gufe_key=network_mark.key,
+        _, network_mark_node, scoped_key = self._keyed_chain_to_subgraph(
+            KeyedChain.from_gufe(network_mark),
             scope=scope,
         )
 
@@ -1167,10 +1161,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         scope = network_sk.scope
 
         taskhub = TaskHub(network=str(network_sk))
-        _, taskhub_node, scoped_key = self._gufe_to_subgraph(
-            taskhub.to_shallow_dict(),
-            labels=["GufeTokenizable", taskhub.__class__.__name__],
-            gufe_key=taskhub.key,
+
+        _, taskhub_node, scoped_key = self._keyed_chain_to_subgraph(
+            KeyedChain.from_gufe(taskhub),
             scope=scope,
         )
 
@@ -2014,10 +2007,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                     creator=creator,
                     extends=str(_extends) if _extends is not None else None,
                 )
-                _, task_node, scoped_key = self._gufe_to_subgraph(
-                    _task.to_shallow_dict(),
-                    labels=["GufeTokenizable", _task.__class__.__name__],
-                    gufe_key=_task.key,
+                _, task_node, scoped_key = self._keyed_chain_to_subgraph(
+                    KeyedChain.from_gufe(_task),
                     scope=scope,
                 )
 
@@ -2452,10 +2443,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         scope = task.scope
         task_node = self._get_node(task)
 
-        subgraph, protocoldagresultref_node, scoped_key = self._gufe_to_subgraph(
-            protocoldagresultref.to_shallow_dict(),
-            labels=["GufeTokenizable", protocoldagresultref.__class__.__name__],
-            gufe_key=protocoldagresultref.key,
+        subgraph, protocoldagresultref_node, scoped_key = self._keyed_chain_to_subgraph(
+            KeyedChain.from_gufe(protocoldagresultref),
             scope=scope,
         )
 
@@ -2535,10 +2524,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             tracebacks = Tracebacks(tracebacks, source_keys, failure_keys)
 
-            _, tracebacks_node, _ = self._gufe_to_subgraph(
-                tracebacks.to_shallow_dict(),
-                labels=["GufeTokenizable", tracebacks.__class__.__name__],
-                gufe_key=tracebacks.key,
+            _, tracebacks_node, _ = self._keyed_chain_to_subgraph(
+                KeyedChain.from_gufe(tracebacks),
                 scope=protocol_dag_result_ref_scoped_key.scope,
             )
 
@@ -2945,11 +2932,11 @@ class Neo4jStore(AlchemiscaleStateStore):
                     taskhub_scoped_key=str(taskhub),
                 )
 
-                _, task_restart_pattern_node, scoped_key = self._gufe_to_subgraph(
-                    task_restart_pattern.to_shallow_dict(),
-                    labels=["GufeTokenizable", task_restart_pattern.__class__.__name__],
-                    gufe_key=task_restart_pattern.key,
-                    scope=scope,
+                _, task_restart_pattern_node, scoped_key = (
+                    self._keyed_chain_to_subgraph(
+                        KeyedChain.from_gufe(task_restart_pattern),
+                        scope=scope,
+                    )
                 )
 
                 subgraph |= Relationship.type("ENFORCES")(
