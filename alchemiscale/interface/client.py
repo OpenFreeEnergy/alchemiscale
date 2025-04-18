@@ -478,7 +478,19 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_transformation_chemicalsystems(
         self, transformation: ScopedKey
     ) -> list[ScopedKey]:
-        """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
+        """List ScopedKeys for the ChemicalSystems associated with the given Transformation.
+
+        Parameters
+        ----------
+        transformation
+            The ScopedKey of a Transformation or NonTransformation.
+
+        Returns
+        -------
+        A list of ChemicalSystem ScopedKey objects ordered by the state names, i.e. "stateA" and "stateB". If the
+        ScopedKey of a NonTransformation was provided, then the list will have only one element: the ScopedKey of the
+        "system" ChemicalSystem.
+        """
         return self._query_resource(
             f"/transformations/{transformation}/chemicalsystems"
         )
