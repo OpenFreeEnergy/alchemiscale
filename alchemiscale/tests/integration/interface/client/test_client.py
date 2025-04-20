@@ -590,12 +590,12 @@ class TestClient:
         tf_sk = user_client.get_scoped_key(_transformation, scope_test)
         cs_sks = user_client.get_transformation_chemicalsystems(tf_sk)
 
-        if transformation_class_name is "Transformation":
+        if transformation_class_name == "Transformation":
             assert [cs_sk.gufe_key for cs_sk in cs_sks] == [
                 _transformation.stateA.key,
                 _transformation.stateB.key,
             ]
-        elif transformation_class_name is "NonTransformation":
+        elif transformation_class_name == "NonTransformation":
             assert len(cs_sks) == 1
             assert cs_sks[0].gufe_key == _transformation.system.key
 

@@ -422,12 +422,12 @@ class TestNeo4jStore(TestStateStore):
         tf_sk = ScopedKey(gufe_key=_transformation.key, **scope_test.dict())
         cs_sks = n4js.get_transformation_chemicalsystems(tf_sk)
 
-        if transformation_class_name is "Transformation":
+        if transformation_class_name == "Transformation":
             assert [cs_sk.gufe_key for cs_sk in cs_sks] == [
                 _transformation.stateA.key,
                 _transformation.stateB.key,
             ]
-        elif transformation_class_name is "NonTransformation":
+        elif transformation_class_name == "NonTransformation":
             assert len(cs_sks) == 1
             assert cs_sks[0].gufe_key == _transformation.system.key
 
