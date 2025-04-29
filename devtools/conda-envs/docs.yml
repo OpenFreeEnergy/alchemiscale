@@ -10,5 +10,5 @@ dependencies:
   - myst-parser>=0.14
   - docutils
   - sphinx-notfound-page
-  - gufe
+  - gufe=1.3.0
   - py2neo
