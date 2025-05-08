@@ -604,8 +604,19 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_gufe(self, scoped_key: ScopedKey):
         return self.get_keyed_chain(scoped_key).to_gufe()
 
-    # TODO: docstring
-    def get_keyed_chain(self, scoped_key: ScopedKey):
+    def get_keyed_chain(self, scoped_key: ScopedKey) -> KeyedChain:
+        """Retrieve the ``KeyedChain`` form of a ``GufeTokenizable`` from the database.
+
+        Parameters
+        ----------
+        scoped_key
+            The ``ScopedKey`` of the ``GufeTokenizable`` to retrieve
+
+        Returns
+        -------
+        ``KeyedChain``
+            The ``KeyedChain`` form of the tokenizable
+        """
 
         # find the root node and all nodes that are connected by any number of
         # "DEPENDS_ON" relationships. Discard the path object, just collecting
@@ -692,11 +703,23 @@ class Neo4jStore(AlchemiscaleStateStore):
             graph_data[gufe_key] = (properties, keys)
 
         # topological sort before return
-        return KeyedChain(self.topological_sort(graph_data))
+        return KeyedChain(self._topological_sort(graph_data))
 
     # TODO: subordering
-    def topological_sort(self, graph_data):
-        """Kahn's algorithm"""
+    def _topological_sort(self, graph_data: dict[GufeKey, tuple[Node, list[GufeKey]]]):
+        """Topologically sort graph data using Kahn's algorithm.
+
+        Parameters
+        ----------
+        graph_data
+            A dictionary mapping a ``GufeKey`` to it's ``Node``
+            represenation and the keys of the ``GufeTokenizable``
+            objects it depends on.
+
+        Returns
+        -------
+            The ``KeyedChain`` represenation of the graph data.
+        """
         L = []
 
         S = [
