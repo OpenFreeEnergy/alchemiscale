@@ -5,6 +5,7 @@
 """
 
 import abc
+import bisect
 from datetime import datetime
 from contextlib import contextmanager
 import json
@@ -705,7 +706,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         # topological sort before return
         return KeyedChain(self._topological_sort(graph_data))
 
-    # TODO: subordering
     def _topological_sort(self, graph_data: dict[GufeKey, tuple[Node, list[GufeKey]]]):
         """Topologically sort graph data using Kahn's algorithm.
 
@@ -727,6 +727,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             for key, (node, rel_keys) in graph_data.items()
             if rel_keys == []
         ]
+        S.sort(key=lambda x: x[0])
         for rk, _ in S:
             graph_data.pop(rk)
 
@@ -747,7 +748,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 # if we're left with an empty dependency list, remove the node
                 if graph_data[pkey][1] == []:
                     pnode = graph_data[pkey][0]
-                    S.append((pkey, pnode))
+                    bisect.insort(S, (pkey, pnode), key=lambda x: x[0])
                     removal_keys.append(pkey)
             for rk in removal_keys:
                 graph_data.pop(rk)
