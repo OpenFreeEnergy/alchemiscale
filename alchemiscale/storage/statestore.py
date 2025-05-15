@@ -705,7 +705,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         # topological sort before return
         return KeyedChain(self._topological_sort(graph_data))
 
-    def _topological_sort(self, graph_data: dict[GufeKey, tuple[Node, list[GufeKey]]]):
+    @staticmethod
+    def _topological_sort(graph_data: dict[GufeKey, tuple[Node, list[GufeKey]]]):
         """Topologically sort graph data using Kahn's algorithm.
 
         Parameters
