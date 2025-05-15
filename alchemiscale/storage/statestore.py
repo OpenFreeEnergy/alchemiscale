@@ -627,11 +627,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         query = """
         MATCH (root:GufeTokenizable {`_scoped_key`: $scoped_key })
         OPTIONAL MATCH (root)-[:DEPENDS_ON*]->(dep)
-        WITH root, collect(dep) AS deps
+        WITH root, COLLECT(dep) AS deps
         UNWIND [root] + deps AS node
         OPTIONAL MATCH (node)-[r:DEPENDS_ON]->(dep)
-        WITH node, collect(r) AS rels, COLLECT(DISTINCT dep.`_gufe_key`) AS keys
-        // ORDER BY size(rels) ASC // is there a good reason to order by size?
+        WITH node, COLLECT(r) AS rels, COLLECT(DISTINCT dep.`_gufe_key`) AS keys
         RETURN node, rels, keys"""
 
         results = self.execute_query(query, scoped_key=str(scoped_key))
@@ -641,21 +640,21 @@ class Neo4jStore(AlchemiscaleStateStore):
             raise KeyError("No such object in database")
 
         # A dicionary whose keys are a nodes gufe key, and whose
-        # values are a tuple with the nodes data in its first element
+        # values are a tuple with the node's data in its first element
         # and its dependency keys as its second element.
-        graph_data = {}
+        graph_data: dict[GufeKey, tuple[Node, list[GufeKey]]] = {}
 
         # iterate over the nodes of a network, the "DEPENDS_ON"
         # relationships that each node has with other nodes in the
         # network along with the keys of those child nodes
         for node, rels, keys in results.records:
 
-            attrs = {}  # collect attributes for each node and update
-            # at the end
+            # collect attributes for each node and update at the end
+            attrs = {}
 
             # for each pair of relationship and dependency gufe key
-            # (transformed into the gufe gufe-key dictionary
-            # structures found in keyed_dicts)
+            # Note: transform the key into the form used within gufe
+            # keyed_dicts
             for depends_on, key in zip(rels, map(lambda k: {":gufe-key:": k}, keys)):
                 # determine the attribute type using map destructuring
                 match depends_on._properties:
@@ -676,9 +675,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                     case {"attribute": _attr}:
                         attrs[_attr] = key
 
-            # start the process of updating the properties of the node
-            # into a keyed_dict form from the collected relationship
-            # attributes while popping out irrelvant data
+            # start updating the properties of the node into a
+            # keyed_dict form from the collected relationship
+            # attributes and popping out irrelevant data
             properties = node._properties
             gufe_key = properties.pop("_gufe_key")
 
@@ -689,9 +688,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             properties.pop("_scoped_key", None)
 
             for key, value in attrs.items():
-                # sort the previously unsorted list by the the
-                # included indices leaving the value as the intended
-                # original list
+                # sort the previously unsorted list by the included
+                # indices leaving the value as the intended original
+                # list
                 if isinstance(value, list):
                     value.sort(key=lambda elem: elem[0])
                     value = [elem[1] for elem in value]
