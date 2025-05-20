@@ -74,6 +74,7 @@ class SynchronousComputeService:
         self.api_url = self.settings.api_url
         self.name = self.settings.name
         self.sleep_interval = self.settings.sleep_interval
+        self.deep_sleep_interval = self.settings.deep_sleep_interval
         self.heartbeat_interval = self.settings.heartbeat_interval
         self.claim_limit = self.settings.claim_limit
 
@@ -300,8 +301,7 @@ class SynchronousComputeService:
 
         if tasks is None:
             self.logger.info("No tasks claimed. Compute API denied request.")
-            # TODO: unique, longer interval
-            time.sleep(self.sleep_interval)
+            time.sleep(self.deep_sleep_interval)
             return
 
         self.logger.info("Claimed %d tasks", len([t for t in tasks if t is not None]))

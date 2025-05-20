@@ -217,7 +217,6 @@ def claim_tasks(
         now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
         settings.ALCHEMISCALE_COMPUTE_API_MAX_FAILURES,
     ):
-        # TODO: do we want to raise a custom exception instead?
         # differs from list[str | None], this shows that the service was
         # actively denied
         return None

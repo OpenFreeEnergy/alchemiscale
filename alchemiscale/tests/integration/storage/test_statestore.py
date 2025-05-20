@@ -688,15 +688,16 @@ class TestNeo4jStore(TestStateStore):
 
         # no fails at 1 min
         assert n4js.compute_service_can_claim(
-            compute_service_id, now - timedelta(minutes=1), 1
+            compute_service_id, now - timedelta(minutes=1), 0
         )
         # we have 1 failure at t=-5s, so we can't claim
         assert not n4js.compute_service_can_claim(
-            compute_service_id, now - timedelta(minutes=6), 1
+            compute_service_id, now - timedelta(minutes=6), 0
         )
-        # increase to 2 allowed failures, will allow claiming with same forgive time
+
+        # increase to 1 allowed failures, will allow claiming with same forgive time
         assert n4js.compute_service_can_claim(
-            compute_service_id, now - timedelta(minutes=6), 2
+            compute_service_id, now - timedelta(minutes=6), 1
         )
 
     def test_create_task(self, n4js, network_tyk2, scope_test):

@@ -29,6 +29,7 @@ class TestSynchronousComputeService:
                     scratch_basedir=Path("scratch").absolute(),
                     heartbeat_interval=1,
                     sleep_interval=1,
+                    deep_sleep_interval=1,
                 )
             )
 
@@ -173,7 +174,7 @@ class TestSynchronousComputeService:
         SET cs.failure_times = [localdatetime()] + cs.failure_times
         """
 
-        for _ in range(3):
+        for _ in range(4):
             n4js.execute_query(query, compute_service_id=service.compute_service_id)
 
         service.cycle()

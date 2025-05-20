@@ -1140,13 +1140,20 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [ComputeServiceID(i) for i in identities]
 
-    # TODO: docstring
     def log_failure_compute_service(
         self,
         compute_service_id: ComputeServiceID,
         failure_time: datetime,
     ) -> ComputeServiceID:
-        """Add a reported compute service failure to the database."""
+        """Add a reported compute service failure to the database.
+
+        Parameters
+        ----------
+        compute_service_id
+            The identifier for the compute service that failed.
+        failure_time
+            The time the failure should be reported as.
+        """
         q = """
         MATCH (n:ComputeServiceRegistration {identifier: $compute_service_id})
         SET n.failure_times = [localdatetime($failure_time)] + n.failure_times
@@ -1167,7 +1174,22 @@ class Neo4jStore(AlchemiscaleStateStore):
         compute_service_id: ComputeServiceID,
         forgive_time: datetime,
         max_failures: int,
-    ):
+    ) -> bool:
+        """Check if a compute service is able to claim ``Task``s.
+
+        Parameters
+        ----------
+        compute_service_id
+            The compute service to validate.
+        forgive_time
+            The time cutoff used to filter failure time reports for
+            the a compute service. Only entries occuring after this
+            time are considered.
+        max_failures
+            The number of failures allowed to occur between
+            ``forgive_time`` and now. Any value greater than this
+            denies the claim request.
+        """
         # get the number of failures that occured after `forgive_time`
         query = """
         MATCH (cs:ComputeServiceRegistration {identifier: $compute_service_id})
@@ -1176,8 +1198,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         results = self.execute_query(
             query, compute_service_id=compute_service_id, forgive_time=forgive_time
         )
-        # TODO: error handling
-        return results.records[0]["n_failures"] < max_failures
+        return results.records[0]["n_failures"] <= max_failures
 
     ## task hubs
 
