@@ -1140,6 +1140,45 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [ComputeServiceID(i) for i in identities]
 
+    # TODO: docstring
+    def log_failure_compute_service(
+        self,
+        compute_service_id: ComputeServiceID,
+        failure_time: datetime,
+    ) -> ComputeServiceID:
+        """Add a reported compute service failure to the database."""
+        q = """
+        MATCH (n:ComputeServiceRegistration {identifier: $compute_service_id})
+        SET n.failure_times = [localdatetime($failure_time)] + n.failure_times
+        """
+
+        with self.transaction() as tx:
+            tx.run(
+                q,
+                compute_service_id=str(compute_service_id),
+                failure_time=failure_time,
+            )
+
+        return compute_service_id
+
+    # TODO: docstring
+    def compute_service_can_claim(
+        self,
+        compute_service_id: ComputeServiceID,
+        forgive_time: datetime,
+        max_failures: int,
+    ):
+        # get the number of failures that occured after `forgive_time`
+        query = """
+        MATCH (cs:ComputeServiceRegistration {identifier: $compute_service_id})
+        RETURN size([entry IN cs.failure_times WHERE entry > localdatetime($forgive_time)]) as n_failures
+        """
+        results = self.execute_query(
+            query, compute_service_id=compute_service_id, forgive_time=forgive_time
+        )
+        # TODO: error handling
+        return results.records[0]["n_failures"] < max_failures
+
     ## task hubs
 
     def create_taskhub_subgraph(self, network_node: Node):

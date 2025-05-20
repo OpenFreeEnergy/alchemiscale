@@ -153,6 +153,35 @@ class TestSynchronousComputeService:
 
         assert results.records
 
+    def test_cycle_max_failures(self, n4js_preloaded, s3os_server_fresh, service):
+        n4js: Neo4jStore = n4js_preloaded
+
+        service._register()
+
+        q = """
+        match (pdr:ProtocolDAGResultRef)
+        return pdr
+        """
+
+        # preconditions
+        protocoldagresultref = n4js.execute_query(q)
+        assert not protocoldagresultref.records
+
+        # create blocking failures
+        query = """
+        MATCH (cs:ComputeServiceRegistration {identifier: $compute_service_id})
+        SET cs.failure_times = [localdatetime()] + cs.failure_times
+        """
+
+        for _ in range(3):
+            n4js.execute_query(query, compute_service_id=service.compute_service_id)
+
+        service.cycle()
+
+        # postconditions
+        protocoldagresultref = n4js.execute_query(q)
+        assert not protocoldagresultref.records
+
     @pytest.mark.xfail(raises=NotImplementedError)
     def test_cycle_max_tasks(self):
         raise NotImplementedError

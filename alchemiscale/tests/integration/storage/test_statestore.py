@@ -646,6 +646,59 @@ class TestNeo4jStore(TestStateStore):
         assert not results.records
         assert compute_service_id in identities
 
+    def test_log_failure_computeservice(self, n4js, compute_service_id):
+        now = datetime.utcnow()
+        registration = ComputeServiceRegistration(
+            identifier=compute_service_id, registered=now, heartbeat=now
+        )
+
+        n4js.register_computeservice(registration)
+
+        previous_failures = 5
+
+        # pretend we failed before, 5 minutes apart from one another
+        for i in range(1, previous_failures + 1):
+            previous_failure_time = now - timedelta(minutes=5 * i)
+            n4js.log_failure_compute_service(compute_service_id, previous_failure_time)
+
+        q = """MATCH (n:ComputeServiceRegistration {identifier: $compute_service_id})
+        RETURN size(n.failure_times) AS n_failures
+        """
+        results = n4js.execute_query(q, compute_service_id=str(compute_service_id))
+        assert 5 == results.records[0]["n_failures"]
+
+        n4js.log_failure_compute_service(compute_service_id, now)
+        results = n4js.execute_query(q, compute_service_id=str(compute_service_id))
+        assert 6 == results.records[0]["n_failures"]
+
+    def test_compute_service_can_claim(self, n4js, compute_service_id):
+        now = datetime.utcnow()
+        registration = ComputeServiceRegistration(
+            identifier=compute_service_id, registered=now, heartbeat=now
+        )
+
+        n4js.register_computeservice(registration)
+
+        previous_failures = 5
+
+        # pretend we failed before, 5 minutes apart from one another
+        for i in range(1, previous_failures + 1):
+            previous_failure_time = now - timedelta(minutes=5 * i)
+            n4js.log_failure_compute_service(compute_service_id, previous_failure_time)
+
+        # no fails at 1 min
+        assert n4js.compute_service_can_claim(
+            compute_service_id, now - timedelta(minutes=1), 1
+        )
+        # we have 1 failure at t=-5s, so we can't claim
+        assert not n4js.compute_service_can_claim(
+            compute_service_id, now - timedelta(minutes=6), 1
+        )
+        # increase to 2 allowed failures, will allow claiming with same forgive time
+        assert n4js.compute_service_can_claim(
+            compute_service_id, now - timedelta(minutes=6), 2
+        )
+
     def test_create_task(self, n4js, network_tyk2, scope_test):
         # add alchemical network, then try generating task
         an = network_tyk2

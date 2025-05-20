@@ -27,6 +27,7 @@ class ComputeServiceRegistration(BaseModel):
     identifier: ComputeServiceID
     registered: datetime
     heartbeat: datetime
+    failure_times: list[datetime] = []
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

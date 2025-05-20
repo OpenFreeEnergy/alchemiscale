@@ -296,7 +296,14 @@ class SynchronousComputeService:
 
         # claim tasks from the compute API
         self.logger.info("Claiming tasks")
-        tasks: list[ScopedKey] = self.claim_tasks(count=self.claim_limit)
+        tasks: list[ScopedKey] | None = self.claim_tasks(count=self.claim_limit)
+
+        if tasks is None:
+            self.logger.info("No tasks claimed. Compute API denied request.")
+            # TODO: unique, longer interval
+            time.sleep(self.sleep_interval)
+            return
+
         self.logger.info("Claimed %d tasks", len([t for t in tasks if t is not None]))
 
         # if no tasks claimed, sleep
