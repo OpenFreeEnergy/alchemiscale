@@ -556,7 +556,10 @@ class TestNeo4jStore(TestStateStore):
     def test_register_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
         registration = ComputeServiceRegistration(
-            identifier=compute_service_id, registered=now, heartbeat=now
+            identifier=compute_service_id,
+            registered=now,
+            heartbeat=now,
+            failure_times=[],
         )
 
         compute_service_id_ = n4js.register_computeservice(registration)
@@ -579,7 +582,10 @@ class TestNeo4jStore(TestStateStore):
     def test_deregister_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
         registration = ComputeServiceRegistration(
-            identifier=compute_service_id, registered=now, heartbeat=now
+            identifier=compute_service_id,
+            registered=now,
+            heartbeat=now,
+            failure_times=[],
         )
 
         n4js.register_computeservice(registration)
@@ -599,7 +605,10 @@ class TestNeo4jStore(TestStateStore):
     def test_heartbeat_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
         registration = ComputeServiceRegistration(
-            identifier=compute_service_id, registered=now, heartbeat=now
+            identifier=compute_service_id,
+            registered=now,
+            heartbeat=now,
+            failure_times=[],
         )
 
         n4js.register_computeservice(registration)
@@ -627,7 +636,10 @@ class TestNeo4jStore(TestStateStore):
         yesterday = now - timedelta(days=1)
         an_hour_ago = now - timedelta(hours=1)
         registration = ComputeServiceRegistration(
-            identifier=compute_service_id, registered=yesterday, heartbeat=an_hour_ago
+            identifier=compute_service_id,
+            registered=yesterday,
+            heartbeat=an_hour_ago,
+            failure_times=[],
         )
 
         n4js.register_computeservice(registration)
@@ -649,7 +661,10 @@ class TestNeo4jStore(TestStateStore):
     def test_log_failure_computeservice(self, n4js, compute_service_id):
         now = datetime.utcnow()
         registration = ComputeServiceRegistration(
-            identifier=compute_service_id, registered=now, heartbeat=now
+            identifier=compute_service_id,
+            registered=now,
+            heartbeat=now,
+            failure_times=[],
         )
 
         n4js.register_computeservice(registration)
@@ -674,7 +689,10 @@ class TestNeo4jStore(TestStateStore):
     def test_compute_service_can_claim(self, n4js, compute_service_id):
         now = datetime.utcnow()
         registration = ComputeServiceRegistration(
-            identifier=compute_service_id, registered=now, heartbeat=now
+            identifier=compute_service_id,
+            registered=now,
+            heartbeat=now,
+            failure_times=[],
         )
 
         n4js.register_computeservice(registration)

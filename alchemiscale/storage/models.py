@@ -27,7 +27,7 @@ class ComputeServiceRegistration(BaseModel):
     identifier: ComputeServiceID
     registered: datetime
     heartbeat: datetime
-    failure_times: list[datetime] = []
+    failure_times: list[datetime]
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -40,7 +40,9 @@ class ComputeServiceRegistration(BaseModel):
     @classmethod
     def from_now(cls, identifier: ComputeServiceID):
         now = datetime.utcnow()
-        return cls(identifier=identifier, registered=now, heartbeat=now)
+        return cls(
+            identifier=identifier, registered=now, heartbeat=now, failure_times=[]
+        )
 
     def to_dict(self):
         dct = self.dict()

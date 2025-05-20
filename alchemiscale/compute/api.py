@@ -105,7 +105,10 @@ def register_computeservice(
 ):
     now = datetime.utcnow()
     csreg = ComputeServiceRegistration(
-        identifier=ComputeServiceID(compute_service_id), registered=now, heartbeat=now
+        identifier=ComputeServiceID(compute_service_id),
+        registered=now,
+        heartbeat=now,
+        failure_times=[],
     )
 
     compute_service_id_ = n4js.register_computeservice(csreg)
@@ -203,12 +206,13 @@ def claim_tasks(
     settings: ComputeAPISettings = Depends(get_base_api_settings),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    """Claim ``count`` ``Tasks`` for a given ``ComputeServiceRegistration``.
+    """Claim ``count`` ``Tasks`` for a given compute service.
 
-    This method returns ``None`` if the ``ComputeServiceRegistration``
-    request has been denied. Otherwise, it returns a list with
-    ``count`` elements.  These elements are either the string
-    representation of a claimed ``Task`` ``ScopedKey``, or ``None``.
+    This method returns ``None`` if the compute service request has
+    been denied. Otherwise, it returns a list with ``count`` elements.
+    These elements are either the string representation of a claimed
+    ``Task`` ``ScopedKey``, or ``None``.
+
     """
     # check if the compute service can claim tasks
     now = datetime.now()
