@@ -193,7 +193,6 @@ def claim_taskhub_tasks(
     return [str(t) if t is not None else None for t in tasks]
 
 
-# TODO: docstring
 @router.post("/claim")
 def claim_tasks(
     scopes: list[Scope] = Body(),
@@ -204,7 +203,13 @@ def claim_tasks(
     settings: ComputeAPISettings = Depends(get_base_api_settings),
     token: TokenData = Depends(get_token_data_depends),
 ):
+    """Claim ``count`` ``Tasks`` for a given ``ComputeServiceRegistration``.
 
+    This method returns ``None`` if the ``ComputeServiceRegistration``
+    request has been denied. Otherwise, it returns a list with
+    ``count`` elements.  These elements are either the string
+    representation of a claimed ``Task`` ``ScopedKey``, or ``None``.
+    """
     # check if the compute service can claim tasks
     now = datetime.now()
     if not n4js.compute_service_can_claim(
