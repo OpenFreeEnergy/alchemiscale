@@ -1168,7 +1168,6 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return compute_service_id
 
-    # TODO: docstring
     def compute_service_can_claim(
         self,
         compute_service_id: ComputeServiceID,
@@ -1193,7 +1192,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         # get the number of failures that occured after `forgive_time`
         query = """
         MATCH (cs:ComputeServiceRegistration {identifier: $compute_service_id})
-        RETURN size([entry IN cs.failure_times WHERE entry > localdatetime($forgive_time)]) as n_failures
+        SET cs.failure_times = [entry IN cs.failure_times WHERE entry > localdatetime($forgive_time)]
+        RETURN size(cs.failure_times) as n_failures
         """
         results = self.execute_query(
             query, compute_service_id=compute_service_id, forgive_time=forgive_time
