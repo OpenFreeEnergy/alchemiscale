@@ -97,6 +97,9 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         )
         tasks = self._post_resource("/claim", data)
 
+        if tasks is None:
+            return None
+
         return [ScopedKey.from_str(t) if t is not None else None for t in tasks]
 
     def get_task_transformation(self, task: ScopedKey) -> ScopedKey:

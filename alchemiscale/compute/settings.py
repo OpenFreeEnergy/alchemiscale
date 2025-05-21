@@ -48,6 +48,10 @@ class ComputeServiceSettings(BaseModel):
     sleep_interval: int = Field(
         30, description="Time in seconds to sleep if no Tasks claimed from compute API."
     )
+    deep_sleep_interval: int = Field(
+        300,
+        description="Time in seconds to sleep if a Task claim request is denied by the compute API.",
+    )
     heartbeat_interval: int = Field(
         300, description="Frequency at which to send heartbeats to compute API."
     )
