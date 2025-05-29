@@ -611,12 +611,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         Parameters
         ----------
         scoped_key
-            The ``ScopedKey`` of the ``GufeTokenizable`` to retrieve
+            The ``ScopedKey`` of the ``GufeTokenizable`` to retrieve.
 
         Returns
         -------
         ``KeyedChain``
-            The ``KeyedChain`` form of the tokenizable
+            The ``KeyedChain`` form of the tokenizable.
         """
 
         # find the root node and all nodes that are connected by any number of
@@ -639,14 +639,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         if len(results.records) == 0:
             raise KeyError("No such object in database")
 
-        # A dicionary whose keys are a nodes gufe key, and whose
+        # A dictionary whose keys are a node's gufe key, and whose
         # values are a tuple with the node's data in its first element
         # and its dependency keys as its second element.
         graph_data: dict[GufeKey, tuple[Node, list[GufeKey]]] = {}
 
-        # iterate over the nodes of a network, the "DEPENDS_ON"
-        # relationships that each node has with other nodes in the
-        # network along with the keys of those child nodes
+        # iterate over the nodes, the "DEPENDS_ON" relationships that each node
+        # has with other nodes, along with the keys of those child nodes
         for node, rels, keys in results.records:
 
             # collect attributes for each node and update at the end
@@ -735,21 +734,27 @@ class Neo4jStore(AlchemiscaleStateStore):
         while S:
             # remove the first node for processing
             key, node = S.pop(0)
+
             # add to the sorted list
             L.append((key, node))
+
             # iterate over all graph nodes and their keys
             removal_keys = []
             for pkey in graph_data.keys():
+
                 # if child node isn't a dependency, continue
                 if key not in graph_data[pkey][1]:
                     continue
+
                 # remove the child node from the dependencies
                 graph_data[pkey][1].remove(key)
+
                 # if we're left with an empty dependency list, remove the node
                 if graph_data[pkey][1] == []:
                     pnode = graph_data[pkey][0]
                     bisect.insort(S, (pkey, pnode), key=lambda x: x[0])
                     removal_keys.append(pkey)
+
             for rk in removal_keys:
                 graph_data.pop(rk)
         return L
