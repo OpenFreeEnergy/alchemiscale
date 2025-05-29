@@ -1174,7 +1174,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         forgive_time: datetime,
         max_failures: int,
     ) -> bool:
-        """Check if a compute service is able to claim ``Task``s.
+        """Check if a compute service is able to claim a ``Task``.
 
         Parameters
         ----------
