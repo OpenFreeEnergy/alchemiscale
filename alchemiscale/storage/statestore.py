@@ -1181,13 +1181,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         compute_service_id
             The compute service to validate.
         forgive_time
-            The time cutoff used to filter failure time reports for
-            the a compute service. Only entries occuring after this
-            time are considered.
+            The time cutoff used to filter failure time reports for the compute
+            service. Only entries occuring after this time are considered.
         max_failures
-            The number of failures allowed to occur between
-            ``forgive_time`` and now. Any value greater than this
-            denies the claim request.
+            The number of failures allowed to occur between ``forgive_time``
+            and now. Any value greater than this denies the claim request.
         """
         # get the number of failures that occured after `forgive_time`
         query = """
