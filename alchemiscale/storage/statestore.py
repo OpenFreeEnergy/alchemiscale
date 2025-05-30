@@ -630,7 +630,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         WITH root, COLLECT(dep) AS deps
         UNWIND [root] + deps AS node
         OPTIONAL MATCH (node)-[r:DEPENDS_ON]->(dep)
-        WITH node, COLLECT(r) AS rels, COLLECT(DISTINCT dep.`_gufe_key`) AS keys
+        WITH node, COLLECT(r) AS rels, COLLECT(dep.`_gufe_key`) AS keys
         RETURN node, rels, keys"""
 
         results = self.execute_query(query, scoped_key=str(scoped_key))
