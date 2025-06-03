@@ -567,21 +567,37 @@ class TestClient:
         for an_sk in an_sks:
             assert cs_sk in user_client.get_network_chemicalsystems(an_sk)
 
+    @pytest.mark.parametrize(
+        "transformation_class_name", ["Transformation", "NonTransformation"]
+    )
     def test_get_transformation_chemicalsystems(
         self,
         scope_test,
         n4js_preloaded,
         transformation,
+        nontransformation,
         user_client: client.AlchemiscaleClient,
+        transformation_class_name,
     ):
-        tf_sk = user_client.get_scoped_key(transformation, scope_test)
+        match transformation_class_name:
+            case "Transformation":
+                _transformation = transformation
+            case "NonTransformation":
+                _transformation = nontransformation
+            case _:
+                raise ValueError('Expected "Transformation" or "NonTransformation"')
+
+        tf_sk = user_client.get_scoped_key(_transformation, scope_test)
         cs_sks = user_client.get_transformation_chemicalsystems(tf_sk)
 
-        assert len(cs_sks) == 2
-        assert {cs_sk.gufe_key for cs_sk in cs_sks} == {
-            transformation.stateA.key,
-            transformation.stateB.key,
-        }
+        if transformation_class_name == "Transformation":
+            assert [cs_sk.gufe_key for cs_sk in cs_sks] == [
+                _transformation.stateA.key,
+                _transformation.stateB.key,
+            ]
+        elif transformation_class_name == "NonTransformation":
+            assert len(cs_sks) == 1
+            assert cs_sks[0].gufe_key == _transformation.system.key
 
     def test_get_chemicalsystem_transformations(
         self,

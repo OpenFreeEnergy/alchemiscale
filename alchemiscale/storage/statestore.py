@@ -1121,8 +1121,9 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> list[ScopedKey]:
         """List ScopedKeys for the ChemicalSystems associated with the given Transformation."""
         q = """
-        MATCH (:Transformation|NonTransformation {_scoped_key: $transformation})-[:DEPENDS_ON]->(cs:ChemicalSystem)
+        MATCH (:Transformation|NonTransformation {_scoped_key: $transformation})-[deps_on:DEPENDS_ON]->(cs:ChemicalSystem)
         WITH cs._scoped_key as sk
+        ORDER BY deps_on.attribute
         RETURN sk
         """
         sks = []
