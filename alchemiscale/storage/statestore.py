@@ -5,6 +5,7 @@
 """
 
 import abc
+import bisect
 from datetime import datetime
 from contextlib import contextmanager
 import json
@@ -602,8 +603,161 @@ class Neo4jStore(AlchemiscaleStateStore):
         return res[0]
 
     def get_gufe(self, scoped_key: ScopedKey):
-        node, subgraph = self._get_node(scoped_key=scoped_key, return_subgraph=True)
-        return self._subgraph_to_gufe([node], subgraph)[node]
+        return self.get_keyed_chain(scoped_key).to_gufe()
+
+    def get_keyed_chain(self, scoped_key: ScopedKey) -> KeyedChain:
+        """Retrieve the ``KeyedChain`` form of a ``GufeTokenizable`` from the database.
+
+        Parameters
+        ----------
+        scoped_key
+            The ``ScopedKey`` of the ``GufeTokenizable`` to retrieve.
+
+        Returns
+        -------
+        ``KeyedChain``
+            The ``KeyedChain`` form of the tokenizable.
+        """
+
+        # find the root node and all nodes that are connected by any number of
+        # "DEPENDS_ON" relationships. Discard the path object, just collecting
+        # the child nodes into a single set of nodes. Unwind all nodes and get
+        # their dependencies, both the data embedded in the relationship,
+        # and their keys.
+        query = """
+        MATCH (root:GufeTokenizable {`_scoped_key`: $scoped_key })
+        OPTIONAL MATCH (root)-[:DEPENDS_ON*]->(dep)
+        WITH root, COLLECT(DISTINCT dep) AS deps
+        UNWIND [root] + deps AS node
+        OPTIONAL MATCH (node)-[r:DEPENDS_ON]->(dep)
+        WITH node, COLLECT(r) AS rels, COLLECT(dep.`_gufe_key`) AS keys
+        RETURN node, rels, keys"""
+
+        results = self.execute_query(query, scoped_key=str(scoped_key))
+
+        # the root node wasn't found
+        if len(results.records) == 0:
+            raise KeyError("No such object in database")
+
+        # A dictionary whose keys are a node's gufe key, and whose
+        # values are a tuple with the node's data in its first element
+        # and its dependency keys as its second element.
+        graph_data: dict[GufeKey, tuple[Node, list[GufeKey]]] = {}
+
+        # iterate over the nodes, the "DEPENDS_ON" relationships that each node
+        # has with other nodes, along with the keys of those child nodes
+        for node, rels, keys in results.records:
+
+            # collect attributes for each node and update at the end
+            attrs = {}
+
+            # for each pair of relationship and dependency gufe key
+            # Note: transform the key into the form used within gufe
+            # keyed_dicts
+            for depends_on, key in zip(rels, map(lambda k: {":gufe-key:": k}, keys)):
+                # determine the attribute type using map destructuring
+                match depends_on._properties:
+                    # dictionary of tokenizables
+                    case {"attribute": _attr, "key": _key}:
+                        if _attr not in attrs.keys():
+                            attrs[_attr] = {}
+                        attrs[_attr][_key] = key
+                    # list of tokenizables---since the list is order
+                    # dependent, keep the attribute in an intermediate
+                    # format, e.g. (index, key) instead of just key,
+                    # for sorting later.
+                    case {"attribute": _attr, "index": _index}:
+                        if _attr not in attrs.keys():
+                            attrs[_attr] = []
+                        attrs[_attr].append((_index, key))
+                    # direct gufe
+                    case {"attribute": _attr}:
+                        attrs[_attr] = key
+
+            # start updating the properties of the node into a
+            # keyed_dict form from the collected relationship
+            # attributes and popping out irrelevant data
+            properties = node._properties
+            gufe_key = properties.pop("_gufe_key")
+
+            # throw away remaining neo4j attributes
+            properties.pop("_org", None)
+            properties.pop("_campaign", None)
+            properties.pop("_project", None)
+            properties.pop("_scoped_key", None)
+
+            for key, value in attrs.items():
+                # sort the previously unsorted list by the included
+                # indices leaving the value as the intended original
+                # list
+                if isinstance(value, list):
+                    value.sort(key=lambda elem: elem[0])
+                    value = [elem[1] for elem in value]
+                properties[key] = value
+
+            for json_key in properties.pop("_json_props"):
+                properties[json_key] = json.loads(
+                    properties[json_key], cls=JSON_HANDLER.decoder
+                )
+            graph_data[gufe_key] = (properties, keys)
+
+        # topological sort before return
+        return KeyedChain(self._topological_sort(graph_data))
+
+    @staticmethod
+    def _topological_sort(graph_data: dict[GufeKey, tuple[Node, list[GufeKey]]]):
+        """Topologically sort graph data using Kahn's algorithm.
+
+        Parameters
+        ----------
+        graph_data
+            A dictionary mapping a ``GufeKey`` to it's ``Node``
+            represenation and the keys of the ``GufeTokenizable``
+            objects it depends on.
+
+        Returns
+        -------
+            The ``KeyedChain`` represenation of the graph data.
+        """
+        L = []
+
+        S = [
+            (key, node)
+            for key, (node, rel_keys) in graph_data.items()
+            if rel_keys == []
+        ]
+        S.sort(key=lambda x: x[0])
+        for rk, _ in S:
+            graph_data.pop(rk)
+
+        # while we have nodes with indegree 0
+        while S:
+            # remove the first node for processing
+            key, node = S.pop(0)
+
+            # add to the sorted list
+            L.append((key, node))
+
+            # iterate over all graph nodes and their keys
+            removal_keys = []
+            for pkey in graph_data.keys():
+
+                # if child node isn't a dependency, continue
+                if key not in graph_data[pkey][1]:
+                    continue
+
+                # remove the child node from the dependencies
+                graph_data[pkey][1].remove(key)
+
+                # if we're left with an empty dependency list, remove the node
+                if graph_data[pkey][1] == []:
+                    pnode = graph_data[pkey][0]
+                    bisect.insort(S, (pkey, pnode), key=lambda x: x[0])
+                    removal_keys.append(pkey)
+
+            for rk in removal_keys:
+                graph_data.pop(rk)
+        return L
 
     def assemble_network(
         self,
