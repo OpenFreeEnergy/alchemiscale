@@ -532,7 +532,7 @@ Alternatively, you can add `regular expression <https://en.wikipedia.org/wiki/Re
 The number of restarts is controlled by the ``num_allowed_restarts`` parameter of the :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.add_task_restart_patterns` method.
 If a :py:class:`~alchemiscale.storage.models.Task` is restarted more than ``num_allowed_restarts`` times, the :py:class:`~alchemiscale.storage.models.Task` is canceled on that :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` and left in an ``error`` status.
 
-As an example, if you wanted to rerun any :py:class:`~alchemiscale.storage.models.Task` that failed with a ``RuntimeError`` or a ``MemoryError`` and attempt it at least 5 times, you could add the following patterns::
+As an example, if you wanted to rerun any :py:class:`~alchemiscale.storage.models.Task` that failed with a ``RuntimeError`` or a ``MemoryError`` and attempt it at most 5 times, you could add the following patterns::
 
   >>> asc.add_task_restart_patterns(an_sk, [r"RuntimeError: .+", r"MemoryError: Unable to allocate \d+ GiB"], 5)
 
