@@ -627,7 +627,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         query = """
         MATCH (root:GufeTokenizable {`_scoped_key`: $scoped_key })
         OPTIONAL MATCH (root)-[:DEPENDS_ON*]->(dep)
-        WITH root, COLLECT(dep) AS deps
+        WITH root, COLLECT(DISTINCT dep) AS deps
         UNWIND [root] + deps AS node
         OPTIONAL MATCH (node)-[r:DEPENDS_ON]->(dep)
         WITH node, COLLECT(r) AS rels, COLLECT(dep.`_gufe_key`) AS keys
