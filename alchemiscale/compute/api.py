@@ -105,7 +105,10 @@ def register_computeservice(
 ):
     now = datetime.utcnow()
     csreg = ComputeServiceRegistration(
-        identifier=ComputeServiceID(compute_service_id), registered=now, heartbeat=now
+        identifier=ComputeServiceID(compute_service_id),
+        registered=now,
+        heartbeat=now,
+        failure_times=[],
     )
 
     compute_service_id_ = n4js.register_computeservice(csreg)
@@ -200,8 +203,28 @@ def claim_tasks(
     count: int = Body(),
     protocols: list[str] | None = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
     token: TokenData = Depends(get_token_data_depends),
 ):
+    """Claim ``count`` ``Tasks`` for a given compute service.
+
+    This method returns ``None`` if the compute service request has
+    been denied. Otherwise, it returns a list with ``count`` elements.
+    These elements are either the string representation of a claimed
+    ``Task`` ``ScopedKey``, or ``None``.
+
+    """
+    # check if the compute service can claim tasks
+    now = datetime.now()
+    if not n4js.compute_service_can_claim(
+        compute_service_id,
+        now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
+        settings.ALCHEMISCALE_COMPUTE_API_MAX_FAILURES,
+    ):
+        # differs from list[str | None], this shows that the service was
+        # actively denied
+        return None
+
     # intersect query scopes with accessible scopes in the token
     scopes_reduced = minimize_scope_space(scopes)
     query_scopes = []
@@ -359,6 +382,10 @@ async def set_task_result(
             pdr.protocol_unit_failures, result_sk
         )
         n4js.set_task_error(tasks=[task_sk])
+
+        # report that the compute service experienced a failure
+        now = datetime.utcnow()
+        n4js.log_failure_compute_service(compute_service_id, now)
         n4js.resolve_task_restarts(task_scoped_keys=[task_sk])
 
     return result_sk

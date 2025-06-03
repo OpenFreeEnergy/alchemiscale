@@ -1295,6 +1295,64 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [ComputeServiceID(i) for i in identities]
 
+    def log_failure_compute_service(
+        self,
+        compute_service_id: ComputeServiceID,
+        failure_time: datetime,
+    ) -> ComputeServiceID:
+        """Add a reported compute service failure to the database.
+
+        Parameters
+        ----------
+        compute_service_id
+            The identifier for the compute service that failed.
+        failure_time
+            The time the failure should be reported as.
+        """
+        q = """
+        MATCH (n:ComputeServiceRegistration {identifier: $compute_service_id})
+        SET n.failure_times = [localdatetime($failure_time)] + n.failure_times
+        """
+
+        with self.transaction() as tx:
+            tx.run(
+                q,
+                compute_service_id=str(compute_service_id),
+                failure_time=failure_time,
+            )
+
+        return compute_service_id
+
+    def compute_service_can_claim(
+        self,
+        compute_service_id: ComputeServiceID,
+        forgive_time: datetime,
+        max_failures: int,
+    ) -> bool:
+        """Check if a compute service is able to claim a ``Task``.
+
+        Parameters
+        ----------
+        compute_service_id
+            The compute service to validate.
+        forgive_time
+            The time cutoff used to filter failure time reports for the compute
+            service. Only entries occuring after this time are considered.
+        max_failures
+            The number of failures allowed to occur between ``forgive_time``
+            and now. Any value greater than this denies the claim request.
+        """
+        # get the number of failures that occured after `forgive_time`
+        query = """
+        MATCH (cs:ComputeServiceRegistration {identifier: $compute_service_id})
+        SET cs.failure_times = [entry IN cs.failure_times WHERE entry > localdatetime($forgive_time)]
+        RETURN size(cs.failure_times) as n_failures
+        """
+        results = self.execute_query(
+            query, compute_service_id=compute_service_id, forgive_time=forgive_time
+        )
+        return results.records[0]["n_failures"] <= max_failures
+
     ## task hubs
 
     def create_taskhub_subgraph(self, network_node: Node):
