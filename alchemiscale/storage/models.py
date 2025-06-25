@@ -39,7 +39,7 @@ class ComputeServiceRegistration(BaseModel):
 
     @classmethod
     def from_now(cls, identifier: ComputeServiceID):
-        datetime.datetime.now(tz=datetime.UTC)
+        now = datetime.datetime.now(tz=datetime.UTC)
         return cls(
             identifier=identifier, registered=now, heartbeat=now, failure_times=[]
         )
