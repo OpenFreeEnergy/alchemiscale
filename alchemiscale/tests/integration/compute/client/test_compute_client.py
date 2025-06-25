@@ -378,7 +378,7 @@ class TestComputeClient:
             obj_key=protocoldagresult.key,
             scope=tf_sk.scope,
             ok=protocoldagresult.ok(),
-            datetime_created=datetime.utcnow(),
+            datetime_created=datetime.datetime.now(tz=datetime.UTC),
             creator=None,
         )
 
