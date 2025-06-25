@@ -118,7 +118,9 @@ class Task(GufeTokenizable):
         self.priority = priority
 
         self.datetime_created = (
-            datetime_created if datetime_created is not None else datetime.datetime.now(tz=datetime.UTC)
+            datetime_created
+            if datetime_created is not None
+            else datetime.datetime.now(tz=datetime.UTC)
         )
 
         self.creator = creator
