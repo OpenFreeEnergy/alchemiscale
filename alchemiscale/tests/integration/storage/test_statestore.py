@@ -1,4 +1,5 @@
-import datetime, timedelta
+import datetime
+from datetime import timedelta
 import random
 from pathlib import Path
 from functools import reduce

@@ -5,7 +5,8 @@
 """
 
 import secrets
-import datetime, timedelta
+import datetime
+from datetime import timedelta
 
 import bcrypt
 from fastapi import HTTPException, status
