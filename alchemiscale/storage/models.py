@@ -96,7 +96,7 @@ class Task(GufeTokenizable):
     status: TaskStatusEnum
     priority: int
     claim: str | None
-    datetime_created: datetime | None
+    datetime_created: datetime.datetime | None
     creator: str | None
     extends: str | None
 
@@ -105,7 +105,7 @@ class Task(GufeTokenizable):
         *,
         status: str | TaskStatusEnum = TaskStatusEnum.waiting,
         priority: int = 10,
-        datetime_created: datetime | None = None,
+        datetime_created: datetime.datetime | None = None,
         creator: str | None = None,
         extends: str | None = None,
         claim: str | None = None,
@@ -424,7 +424,7 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         obj_key: GufeKey,
         scope: Scope,
         ok: bool,
-        datetime_created: datetime | None = None,
+        datetime_created: datetime.datetime | None = None,
         creator: str | None = None,
     ):
         self.location = location
@@ -452,7 +452,7 @@ class ProtocolDAGResultRef(ObjectStoreRef):
     def _from_dict(cls, d):
         d_ = copy(d)
         d_["datetime_created"] = (
-            datetime.fromisoformat(d["datetime_created"])
+            datetime.datetime.fromisoformat(d["datetime_created"])
             if d.get("received") is not None
             else None
         )
