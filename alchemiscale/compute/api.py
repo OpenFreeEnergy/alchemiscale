@@ -216,7 +216,7 @@ def claim_tasks(
 
     """
     # check if the compute service can claim tasks
-    now = datetime.now()
+    now = datetime.datetime.now()
     if not n4js.compute_service_can_claim(
         compute_service_id,
         now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
