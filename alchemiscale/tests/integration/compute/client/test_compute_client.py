@@ -237,7 +237,7 @@ class TestComputeClient:
         # register compute service id
         compute_client.register(compute_service_id)
 
-        an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.dict())
+        an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.to_dict())
 
         taskhub_sk = n4js_preloaded.get_taskhub(an_sk)
 
@@ -271,8 +271,8 @@ class TestComputeClient:
         # register compute service id
         compute_client.register(compute_service_id)
 
-        an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.dict())
-        tf_sk = ScopedKey(gufe_key=transformation.key, **scope_test.dict())
+        an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.to_dict())
+        tf_sk = ScopedKey(gufe_key=transformation.key, **scope_test.to_dict())
         taskhub_sk = n4js_preloaded.get_taskhub(an_sk)
 
         # claim our first task
@@ -322,8 +322,8 @@ class TestComputeClient:
         # register compute service id
         compute_client.register(compute_service_id)
 
-        an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.dict())
-        tf_sk = ScopedKey(gufe_key=transformation.key, **scope_test.dict())
+        an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.to_dict())
+        tf_sk = ScopedKey(gufe_key=transformation.key, **scope_test.to_dict())
         taskhub_sk = n4js_preloaded.get_taskhub(an_sk)
 
         # claim our first task
@@ -424,7 +424,7 @@ class TestComputeClient:
         # register compute service id
         compute_client.register(compute_service_id)
 
-        tf_sk = ScopedKey(gufe_key=transformation_failure.key, **scope_test.dict())
+        tf_sk = ScopedKey(gufe_key=transformation_failure.key, **scope_test.to_dict())
 
         # add a network with a transformation that will always fail
         an_sk, taskhub_sk, _ = n4js_preloaded.assemble_network(

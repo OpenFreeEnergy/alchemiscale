@@ -84,7 +84,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         if scope.specific():
-            return ScopedKey(gufe_key=obj.key, **scope.dict())
+            return ScopedKey(gufe_key=obj.key, **scope.to_dict())
         else:
             raise ValueError(
                 "Scope for a ScopedKey must be specific; it cannot contain wildcards."
@@ -143,11 +143,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         state = NetworkStateEnum(state)
 
-        sk = ScopedKey(gufe_key=network.key, **scope.dict())
+        sk = ScopedKey(gufe_key=network.key, **scope.to_dict())
 
         def post():
             keyed_chain = KeyedChain.gufe_to_keyed_chain_rep(network)
-            data = dict(network=keyed_chain, scope=scope.dict(), state=state.value)
+            data = dict(network=keyed_chain, scope=scope.to_dict(), state=state.value)
             return self._post_resource("/networks", data, compress=compress)
 
         if visualize:
@@ -286,7 +286,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if isinstance(state, NetworkStateEnum):
             state = state.value
 
-        params = dict(name=name, **scope.dict(), state=state)
+        params = dict(name=name, **scope.to_dict(), state=state)
 
         return self._query_resource("/networks", params=params)
 
@@ -304,7 +304,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        params = dict(name=name, **scope.dict())
+        params = dict(name=name, **scope.to_dict())
 
         return self._query_resource("/transformations", params=params)
 
@@ -322,7 +322,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        params = dict(name=name, **scope.dict())
+        params = dict(name=name, **scope.to_dict())
 
         return self._query_resource("/chemicalsystems", params=params)
 
@@ -723,7 +723,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         """
         if extends:
-            extends = extends.dict()
+            extends = extends.to_dict()
 
         data = dict(extends=extends, count=count)
         task_sks = self._post_resource(f"/transformations/{transformation}/tasks", data)
@@ -801,7 +801,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if scope is None:
             scope = Scope()
 
-        params = dict(status=status, **scope.dict())
+        params = dict(status=status, **scope.to_dict())
 
         return self._query_resource("/tasks", params=params)
 
@@ -1139,7 +1139,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             will be returned in its place.
 
         """
-        data = dict(tasks=[t.dict() for t in tasks], weight=weight)
+        data = dict(tasks=[t.to_dict() for t in tasks], weight=weight)
         actioned_sks = self._post_resource(f"/networks/{network}/tasks/action", data)
 
         return [ScopedKey.from_str(i) if i is not None else None for i in actioned_sks]
@@ -1169,7 +1169,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             be returned in its place.
 
         """
-        data = dict(tasks=[t.dict() for t in tasks])
+        data = dict(tasks=[t.to_dict() for t in tasks])
         canceled_sks = self._post_resource(f"/networks/{network}/tasks/cancel", data)
 
         return [ScopedKey.from_str(i) if i is not None else None for i in canceled_sks]
@@ -1246,7 +1246,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self, tasks: list[ScopedKey], status: TaskStatusEnum
     ) -> list[ScopedKey | None]:
         """Set the statuses for many Tasks"""
-        data = dict(tasks=[t.dict() for t in tasks], status=status.value)
+        data = dict(tasks=[t.to_dict() for t in tasks], status=status.value)
         tasks_updated = await self._post_resource_async(
             "/bulk/tasks/status/set", data=data
         )
@@ -1290,7 +1290,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     async def _get_task_status(self, tasks: list[ScopedKey]) -> list[TaskStatusEnum]:
         """Get the statuses for many Tasks"""
-        data = dict(tasks=[t.dict() for t in tasks])
+        data = dict(tasks=[t.to_dict() for t in tasks])
         statuses = await self._post_resource_async("/bulk/tasks/status/get", data=data)
         return statuses
 
@@ -1319,7 +1319,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     async def _set_task_priority(
         self, tasks: list[ScopedKey], priority: int
     ) -> list[ScopedKey | None]:
-        data = dict(tasks=[t.dict() for t in tasks], priority=priority)
+        data = dict(tasks=[t.to_dict() for t in tasks], priority=priority)
         tasks_updated = await self._post_resource_async(
             "/bulk/tasks/priority/set", data=data
         )
@@ -1360,7 +1360,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     async def _get_task_priority(self, tasks: list[ScopedKey]) -> list[int]:
         """Get the priority for many Tasks"""
-        data = dict(tasks=[t.dict() for t in tasks])
+        data = dict(tasks=[t.to_dict() for t in tasks])
         priorities = await self._post_resource_async(
             "/bulk/tasks/priority/get", data=data
         )

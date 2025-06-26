@@ -15,7 +15,7 @@ class TestS3ObjectStore:
     def test_push_protocoldagresult(
         self, s3os: S3ObjectStore, protocoldagresults, transformation, scope_test
     ):
-        transformation_sk = ScopedKey(gufe_key=transformation.key, **scope_test.dict())
+        transformation_sk = ScopedKey(gufe_key=transformation.key, **scope_test.to_dict())
         protocoldagresult = protocoldagresults[0]
 
         # try to push the result
@@ -37,7 +37,7 @@ class TestS3ObjectStore:
     def test_pull_protocoldagresult(
         self, s3os: S3ObjectStore, protocoldagresults, transformation, scope_test
     ):
-        transformation_sk = ScopedKey(gufe_key=transformation.key, **scope_test.dict())
+        transformation_sk = ScopedKey(gufe_key=transformation.key, **scope_test.to_dict())
         protocoldagresult = protocoldagresults[0]
 
         objstoreref: ProtocolDAGResultRef = s3os.push_protocoldagresult(
@@ -48,9 +48,9 @@ class TestS3ObjectStore:
         )
 
         # round trip it
-        sk = ScopedKey(gufe_key=objstoreref.obj_key, **scope_test.dict())
+        sk = ScopedKey(gufe_key=objstoreref.obj_key, **scope_test.to_dict())
         tf_sk = ScopedKey(
-            gufe_key=protocoldagresult.transformation_key, **scope_test.dict()
+            gufe_key=protocoldagresult.transformation_key, **scope_test.to_dict()
         )
         pdr = decompress_gufe_zstd(s3os.pull_protocoldagresult(sk, tf_sk))
 

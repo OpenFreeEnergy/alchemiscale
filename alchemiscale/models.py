@@ -208,7 +208,7 @@ class ScopedKey(BaseModel):
         return self.gufe_key.split("-")[0]
 
     def to_dict(self):
-        return self.dict()
+        return self.model_dump()
 
     @classmethod
     def from_dict(cls, d):

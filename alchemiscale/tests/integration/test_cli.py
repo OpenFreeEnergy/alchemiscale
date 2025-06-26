@@ -260,7 +260,7 @@ def test_get_settings_from_options(cli_vars):
     kwargs = {k: cli_vars[k] if k in cli_vars else None for k in expected}
     with set_env_vars(context_vars):
         settings = get_settings_from_options(kwargs, Neo4jStoreSettings)
-        settings_dict = settings.dict()
+        settings_dict = settings.model_dump()
 
     for key in expected:
         assert expected[key] == settings_dict[key]
