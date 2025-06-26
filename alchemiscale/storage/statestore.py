@@ -1298,7 +1298,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def log_failure_compute_service(
         self,
         compute_service_id: ComputeServiceID,
-        failure_time: datetime,
+        failure_time: datetime.datetime,
     ) -> ComputeServiceID:
         """Add a reported compute service failure to the database.
 
@@ -1326,7 +1326,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def compute_service_can_claim(
         self,
         compute_service_id: ComputeServiceID,
-        forgive_time: datetime,
+        forgive_time: datetime.datetime,
         max_failures: int,
     ) -> bool:
         """Check if a compute service is able to claim a ``Task``.
@@ -2074,7 +2074,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                 tx.run(
                     CLAIM_QUERY,
                     tasks_list=[str(task) for task in tasks if task is not None],
-                    datetimestr=str(datetime.datetime.now(tz=datetime.UTC).isoformat()),
+                    datetimestr=str(datetime.utcnow().isoformat()),
+                    # datetimestr=str(datetime.datetime.now(tz=datetime.UTC).isoformat()),
                     compute_service_id=str(compute_service_id),
                 )
 
