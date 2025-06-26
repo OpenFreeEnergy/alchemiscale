@@ -1255,7 +1255,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         return ComputeServiceID(identifier)
 
     def heartbeat_computeservice(
-        self, compute_service_id: ComputeServiceID, heartbeat: datetime
+        self, compute_service_id: ComputeServiceID, heartbeat: datetime.datetime
     ):
         """Update the heartbeat for the given ComputeServiceID."""
 
@@ -1269,7 +1269,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return compute_service_id
 
-    def expire_registrations(self, expire_time: datetime):
+    def expire_registrations(self, expire_time: datetime.datetime):
         """Remove all registrations with last heartbeat prior to the given `expire_time`."""
         q = f"""
         MATCH (n:ComputeServiceRegistration)
@@ -2074,8 +2074,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 tx.run(
                     CLAIM_QUERY,
                     tasks_list=[str(task) for task in tasks if task is not None],
-                    datetimestr=str(datetime.datetime.utcnow().isoformat()),
-                    # datetimestr=str(datetime.datetime.now(tz=datetime.UTC).isoformat()),
+                    datetimestr=str(datetime.datetime.now(tz=None).isoformat()),
                     compute_service_id=str(compute_service_id),
                 )
 

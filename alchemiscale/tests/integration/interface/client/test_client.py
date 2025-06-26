@@ -2212,7 +2212,7 @@ class TestClient:
             obj_key=protocoldagresult.key,
             scope=transformation_sk.scope,
             ok=ok,
-            datetime_created=datetime.datetime.now(tz=datetime.UTC),
+            datetime_created=datetime.datetime.now(tz=None),
             creator=None,
         )
         n4js.set_task_result(

@@ -237,7 +237,7 @@ class S3ObjectStore:
             obj_key=protocoldagresult_gufekey,
             scope=transformation.scope,
             ok=ok,
-            datetime_created=datetime.datetime.now(tz=datetime.UTC),
+            datetime_created=datetime.datetime.now(tz=None),
             creator=creator,
         )
 

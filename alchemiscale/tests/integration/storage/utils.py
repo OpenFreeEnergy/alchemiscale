@@ -58,7 +58,7 @@ def complete_tasks(
     for task in tasks:
         ok_pdrr = ProtocolDAGResultRef(
             ok=True,
-            datetime_created=datetime.datetime.now(tz=datetime.UTC),
+            datetime_created=datetime.datetime.now(tz=None),
             obj_key=task.gufe_key,
             scope=task.scope,
         )
@@ -78,7 +78,7 @@ def fail_task(
 
     not_ok_pdrr = ProtocolDAGResultRef(
         ok=False,
-        datetime_created=datetime.datetime.now(tz=datetime.UTC),
+        datetime_created=datetime.datetime.now(tz=None),
         obj_key=task.gufe_key,
         scope=task.scope,
     )

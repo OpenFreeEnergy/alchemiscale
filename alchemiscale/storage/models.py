@@ -39,7 +39,7 @@ class ComputeServiceRegistration(BaseModel):
 
     @classmethod
     def from_now(cls, identifier: ComputeServiceID):
-        now = datetime.datetime.now(tz=datetime.UTC)
+        now = datetime.datetime.now(tz=None)
         return cls(
             identifier=identifier, registered=now, heartbeat=now, failure_times=[]
         )
@@ -120,7 +120,7 @@ class Task(GufeTokenizable):
         self.datetime_created = (
             datetime_created
             if datetime_created is not None
-            else datetime.datetime.now(tz=datetime.UTC)
+            else datetime.datetime.now(tz=None)
         )
 
         self.creator = creator

@@ -574,7 +574,7 @@ class TestNeo4jStore(TestStateStore):
     ### compute
 
     def test_register_computeservice(self, n4js, compute_service_id):
-        now = datetime.datetime.now(tz=datetime.UTC)
+        now = datetime.datetime.now(tz=None)
         registration = ComputeServiceRegistration(
             identifier=compute_service_id,
             registered=now,
@@ -600,7 +600,7 @@ class TestNeo4jStore(TestStateStore):
         assert int(csreg["heartbeat"].to_native().timestamp()) == int(now.timestamp())
 
     def test_deregister_computeservice(self, n4js, compute_service_id):
-        now = datetime.datetime.now(tz=datetime.UTC)
+        now = datetime.datetime.now(tz=None)
         registration = ComputeServiceRegistration(
             identifier=compute_service_id,
             registered=now,
@@ -623,7 +623,7 @@ class TestNeo4jStore(TestStateStore):
         assert not csreg.records
 
     def test_heartbeat_computeservice(self, n4js, compute_service_id):
-        now = datetime.datetime.now(tz=datetime.UTC)
+        now = datetime.datetime.now(tz=None)
         registration = ComputeServiceRegistration(
             identifier=compute_service_id,
             registered=now,
@@ -652,7 +652,7 @@ class TestNeo4jStore(TestStateStore):
         )
 
     def test_expire_registrations(self, n4js, compute_service_id):
-        now = datetime.datetime.now(tz=datetime.UTC)
+        now = datetime.datetime.now(tz=None)
         yesterday = now - timedelta(days=1)
         an_hour_ago = now - timedelta(hours=1)
         registration = ComputeServiceRegistration(
@@ -679,7 +679,7 @@ class TestNeo4jStore(TestStateStore):
         assert compute_service_id in identities
 
     def test_log_failure_computeservice(self, n4js, compute_service_id):
-        now = datetime.datetime.now(tz=datetime.UTC)
+        now = datetime.datetime.now(tz=None)
         registration = ComputeServiceRegistration(
             identifier=compute_service_id,
             registered=now,
@@ -707,7 +707,7 @@ class TestNeo4jStore(TestStateStore):
         assert 6 == results.records[0]["n_failures"]
 
     def test_compute_service_can_claim(self, n4js, compute_service_id):
-        now = datetime.datetime.now(tz=datetime.UTC)
+        now = datetime.datetime.now(tz=None)
         registration = ComputeServiceRegistration(
             identifier=compute_service_id,
             registered=now,

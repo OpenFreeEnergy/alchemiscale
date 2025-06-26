@@ -225,7 +225,7 @@ def test_compute_synchronous(
                     break
 
             assert csreg.records[0]["csreg"]["registered"] > datetime.datetime.now(
-                tz=datetime.UTC
+                tz=None
             ) - timedelta(seconds=30)
 
             proc.terminate()
