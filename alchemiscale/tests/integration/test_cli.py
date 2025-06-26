@@ -6,7 +6,7 @@ import contextlib
 import os
 import traceback
 import multiprocessing
-from datetime import datetime, timedelta
+import datetime, timedelta
 
 import yaml
 

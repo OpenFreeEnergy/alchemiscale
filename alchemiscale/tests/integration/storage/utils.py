@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 
 from gufe.protocols import ProtocolUnitFailure
 

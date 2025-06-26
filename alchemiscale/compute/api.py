@@ -5,7 +5,7 @@
 """
 
 import json
-from datetime import datetime, timedelta
+import datetime, timedelta
 import random
 
 from fastapi import FastAPI, APIRouter, Body, Depends, Request

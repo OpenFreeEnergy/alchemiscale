@@ -6,7 +6,7 @@
 
 import abc
 import bisect
-from datetime import datetime
+import datetime
 from contextlib import contextmanager
 import json
 import re

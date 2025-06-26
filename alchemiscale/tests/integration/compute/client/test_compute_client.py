@@ -1,7 +1,7 @@
 import pytest
 import json
 import os
-from datetime import datetime
+import datetime
 from time import sleep
 
 from gufe.tokenization import JSON_HANDLER
