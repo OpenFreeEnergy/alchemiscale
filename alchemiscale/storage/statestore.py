@@ -2074,7 +2074,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 tx.run(
                     CLAIM_QUERY,
                     tasks_list=[str(task) for task in tasks if task is not None],
-                    datetimestr=str(datetime.utcnow().isoformat()),
+                    datetimestr=str(datetime.datetime.utcnow().isoformat()),
                     # datetimestr=str(datetime.datetime.now(tz=datetime.UTC).isoformat()),
                     compute_service_id=str(compute_service_id),
                 )
