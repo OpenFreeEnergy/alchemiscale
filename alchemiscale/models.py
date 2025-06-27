@@ -120,6 +120,9 @@ class Scope(BaseModel):
         """Return `True` if this Scope has no unspecified elements."""
         return all(self.to_tuple())
 
+    def to_dict(self) -> dict:
+        return self.model_dump()
+
 
 class InvalidGufeKeyError(ValueError): ...
 

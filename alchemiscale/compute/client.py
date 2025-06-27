@@ -90,7 +90,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
     ):
         """Claim Tasks from TaskHubs within a list of Scopes."""
         data = dict(
-            scopes=[scope.dict() for scope in scopes],
+            scopes=[scope.to_dict() for scope in scopes],
             compute_service_id=str(compute_service_id),
             count=count,
             protocols=protocols,
