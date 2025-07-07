@@ -516,6 +516,42 @@ def scope(func):
     return scope(func)
 
 
+@cli.command(help="Start the strategist service.")
+@click.option(
+    "--config-file",
+    type=click.File("r"),
+    help="YAML configuration file for the strategist service.",
+    required=True,
+)
+def strategist(config_file):
+    """Start the strategist service for executing strategies on networks."""
+    from alchemiscale.models import Scope
+    from alchemiscale.strategist.service import StrategistService  
+    from alchemiscale.strategist.settings import StrategistSettings
+
+    params = yaml.safe_load(config_file)
+
+    params_init = params.get("init", {})
+    params_start = params.get("start", {})
+
+    if "scopes" in params_init:
+        params_init["scopes"] = [
+            Scope.from_str(scope) for scope in params_init["scopes"]
+        ]
+
+    service = StrategistService(StrategistSettings(**params_init))
+
+    # add signal handling
+    for signame in {"SIGHUP", "SIGINT", "SIGTERM"}:
+
+        def stop(*args, **kwargs):
+            service.stop()
+
+        signal.signal(getattr(signal, signame), stop)
+
+    service.start(**params_start)
+
+
 @cli.group(help="Subcommands for managing identities")
 def identity(): ...
 

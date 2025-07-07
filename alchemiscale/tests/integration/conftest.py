@@ -24,6 +24,7 @@ from alchemiscale.settings import S3ObjectStoreSettings
 from alchemiscale.storage.statestore import Neo4jStore
 from alchemiscale.storage.objectstore import get_s3os
 from alchemiscale.storage.models import ComputeServiceID
+from stratocaster.base import Strategy, StrategyResult, StrategySettings
 
 
 NEO4J_PROCESS = {}
@@ -271,6 +272,33 @@ class DummyProtocolB(DummyProtocol):
 
 class DummyProtocolC(DummyProtocol):
     pass
+
+
+class DummyStrategySettings(StrategySettings):
+    """Settings for DummyStrategy."""
+    pass
+
+
+class DummyStrategy(Strategy):
+    """Test strategy for integration tests."""
+    
+    _settings_cls = DummyStrategySettings
+    
+    def __init__(self, settings=None):
+        if settings is None:
+            settings = self._default_settings()
+        super().__init__(settings)
+    
+    @classmethod
+    def _default_settings(cls):
+        return DummyStrategySettings()
+    
+    def _propose(self, alchemical_network, protocol_results):
+        """Simple strategy that returns equal weights for all transformations."""
+        weights = {}
+        for transformation in alchemical_network.edges:
+            weights[transformation.key] = 0.5
+        return StrategyResult(weights)
 
 
 # TODO: add in atom mapping once `gufe`#35 is settled

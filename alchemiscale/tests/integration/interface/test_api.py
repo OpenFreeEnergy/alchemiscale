@@ -158,9 +158,108 @@ class TestAPI:
 
     ### compute
 
-    @pytest.mark.xfail(raises=NotImplementedError)
-    def test_set_strategy(self):
-        raise NotImplementedError
+    def test_set_network_strategy(self, n4js_preloaded, test_client, prepared_network):
+        """Test setting and removing network strategy via API."""
+        import json
+        from .conftest import DummyStrategy
+        from gufe.tokenization import KeyedChain, JSON_HANDLER
+        
+        an2, sk = prepared_network
+        
+        # Test setting strategy
+        strategy = DummyStrategy()
+        strategy_data = KeyedChain.gufe_to_keyed_chain_rep(strategy)
+        headers = {"Content-type": "application/json"}
+        data = json.dumps({"strategy": strategy_data}, cls=JSON_HANDLER.encoder)
+        
+        response = test_client.post(f"/networks/{sk}/strategy", data=data, headers=headers)
+        assert response.status_code == 200
+        
+        # Verify strategy was set in database
+        stored_strategy = n4js_preloaded.get_network_strategy(sk)
+        assert stored_strategy is not None
+        assert type(stored_strategy) == DummyStrategy
+        
+        # Test getting strategy via API
+        response = test_client.get(f"/networks/{sk}/strategy")
+        assert response.status_code == 200
+        retrieved_data = response.json()
+        retrieved_strategy = KeyedChain.keyed_chain_rep_to_gufe(retrieved_data)
+        assert type(retrieved_strategy) == DummyStrategy
+        assert retrieved_strategy == strategy
+        
+        # Test getting strategy state
+        response = test_client.get(f"/networks/{sk}/strategy/state")
+        assert response.status_code == 200
+        state_data = response.json()
+        assert "status" in state_data
+        assert "iterations" in state_data
+        
+        # Test getting strategy status only
+        response = test_client.get(f"/networks/{sk}/strategy/status")
+        assert response.status_code == 200
+        status = response.json()
+        assert status in ["awake", "dormant", "disabled", "error"]
+        
+        # Test removing strategy (setting to null)
+        data = json.dumps({"strategy": None}, cls=JSON_HANDLER.encoder)
+        response = test_client.post(f"/networks/{sk}/strategy", data=data, headers=headers)
+        assert response.status_code == 200
+        
+        # Verify strategy was removed
+        assert n4js_preloaded.get_network_strategy(sk) is None
+        
+    def test_set_network_strategy_awake(self, n4js_preloaded, test_client, prepared_network):
+        """Test waking up dormant/error strategies."""
+        import json
+        from alchemiscale.tests.integration.conftest import DummyStrategy
+        from alchemiscale.storage.models import StrategyState, StrategyStatusEnum
+        from gufe.tokenization import KeyedChain, JSON_HANDLER
+        
+        an2, sk = prepared_network
+        
+        # First set a strategy
+        strategy = DummyStrategy()
+        strategy_data = KeyedChain.gufe_to_keyed_chain_rep(strategy)
+        headers = {"Content-type": "application/json"}
+        data = json.dumps({"strategy": strategy_data}, cls=JSON_HANDLER.encoder)
+        
+        response = test_client.post(f"/networks/{sk}/strategy", data=data, headers=headers)
+        assert response.status_code == 200
+        
+        # Put it into dormant state
+        state = StrategyState(
+            status=StrategyStatusEnum.dormant,
+            iterations=5
+        )
+        n4js_preloaded.update_strategy_state(sk, state)
+        
+        # Test waking it up
+        response = test_client.post(f"/networks/{sk}/strategy/awake")
+        assert response.status_code == 200
+        
+        # Verify it's now awake
+        response = test_client.get(f"/networks/{sk}/strategy/status")
+        assert response.status_code == 200
+        status = response.json()
+        assert status == "awake"
+        
+    def test_strategy_validation_error(self, test_client, prepared_network):
+        """Test API validation error handling for invalid strategy data."""
+        import json
+        
+        an2, sk = prepared_network
+        headers = {"Content-type": "application/json"}
+        
+        # Test with invalid JSON structure
+        invalid_data = json.dumps({"invalid": "data"})
+        response = test_client.post(f"/networks/{sk}/strategy", data=invalid_data, headers=headers)
+        assert response.status_code == 422  # Validation error
+        
+        # Test with malformed strategy object
+        malformed_data = json.dumps({"strategy": {"invalid": "strategy_object"}})
+        response = test_client.post(f"/networks/{sk}/strategy", data=malformed_data, headers=headers)
+        assert response.status_code == 422  # Validation error
 
     @pytest.mark.xfail(raises=NotImplementedError)
     def test_create_tasks(self):

@@ -12,7 +12,7 @@ from uuid import uuid4
 import hashlib
 
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, PositiveInt
 from gufe.tokenization import GufeTokenizable, GufeKey
 
 from ..models import ScopedKey, Scope
@@ -456,3 +456,45 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         )
 
         return super()._from_dict(d_)
+
+
+class StrategyModeEnum(Enum):
+    full = "full"
+    partial = "partial"
+    disabled = "disabled"
+
+
+class StrategyStatusEnum(Enum):
+    awake = "awake"
+    dormant = "dormant"
+    error = "error"
+
+
+class StrategyTaskScalingEnum(Enum):
+    linear = "linear"
+    exponential = "exponential"
+
+
+class StrategyState(BaseModel):
+    """State information for a Strategy on an AlchemicalNetwork."""
+    
+    mode: StrategyModeEnum = StrategyModeEnum.partial
+    status: StrategyStatusEnum = StrategyStatusEnum.awake
+    iterations: int = 0
+    sleep_interval: PositiveInt = 3600  # seconds
+    last_iteration: datetime | None = None
+    last_iteration_result_count: int = 0
+    max_tasks_per_transformation: PositiveInt = 3
+    max_tasks_per_network: PositiveInt | None = None
+    task_scaling: StrategyTaskScalingEnum = StrategyTaskScalingEnum.exponential
+    exception: tuple[str, str] | None = None  # (exception_type, exception_message)
+    traceback: str | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return self.dict()
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(**d)

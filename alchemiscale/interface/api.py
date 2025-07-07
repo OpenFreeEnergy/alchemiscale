@@ -12,6 +12,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 import json
 from gufe.tokenization import JSON_HANDLER, KeyedChain
+from pydantic import ValidationError
 
 from ..base.api import (
     GufeJSONResponse,
@@ -30,7 +31,7 @@ from ..settings import get_api_settings
 from ..settings import get_base_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import TaskStatusEnum
+from ..storage.models import TaskStatusEnum, StrategyState
 from ..models import Scope, ScopedKey
 from ..security.models import TokenData, CredentialedUserIdentity
 
@@ -1178,6 +1179,166 @@ def get_task_failures(
     validate_scopes(sk.scope, token)
 
     return [str(sk) for sk in n4js.get_task_failures(sk)]
+
+
+### strategies
+
+
+@router.post("/networks/{network_scoped_key}/strategy")
+async def set_network_strategy(
+    network_scoped_key: str,
+    *,
+    request: Request,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    """Set a Strategy for the given AlchemicalNetwork.
+    
+    Expected request body:
+    {
+        "strategy": {...},  // GUFE strategy object, or null to remove
+        "max_tasks_per_transformation": 3,
+        "max_tasks_per_network": null,
+        "task_scaling": "exponential", 
+        "mode": "partial",
+        "sleep_interval": 3600
+    }
+    """
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    # Handle request body with custom JSON decoder for GUFE objects
+    body = await request.body()
+    body_ = json.loads(body.decode("utf-8"), cls=JSON_HANDLER.decoder)
+    
+    strategy_keyed_chain = body_.get("strategy")
+    
+    # Convert KeyedChain to GufeTokenizable if strategy is provided
+    if strategy_keyed_chain is not None:
+        strategy_kc = KeyedChain(strategy_keyed_chain)
+        strategy = strategy_kc.to_gufe()
+    else:
+        strategy = None
+    
+    if strategy is not None:
+        # Create strategy state from body parameters
+        try:
+            strategy_state = StrategyState(
+                mode=body_.get("mode"),
+                max_tasks_per_transformation=body_.get("max_tasks_per_transformation"),
+                max_tasks_per_network=body_.get("max_tasks_per_network"),
+                task_scaling=body_.get("task_scaling"),
+                sleep_interval=body_.get("sleep_interval"),
+            )
+        except ValidationError as e:
+            raise HTTPException(
+                status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid strategy configuration: {e}",
+            )
+        
+        strategy_sk = n4js.set_network_strategy(sk, strategy, strategy_state)
+        return str(strategy_sk) if strategy_sk else None
+    else:
+        # Remove strategy
+        n4js.set_network_strategy(sk, None)
+        return None
+
+
+
+@router.get("/networks/{network_scoped_key}/strategy", response_class=GufeJSONResponse)
+def get_network_strategy(
+    network_scoped_key: str,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    """Get the Strategy for the given AlchemicalNetwork."""
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+    
+    strategy = n4js.get_network_strategy(sk)
+    if strategy is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"No strategy found for network '{network_scoped_key}'",
+        )
+    
+    return strategy
+
+
+@router.get("/networks/{network_scoped_key}/strategy/state")
+def get_network_strategy_state(
+    network_scoped_key: str,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    """Get the StrategyState for the given AlchemicalNetwork."""
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+    
+    strategy_state = n4js.get_network_strategy_state(sk)
+    if strategy_state is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"No strategy found for network '{network_scoped_key}'",
+        )
+    
+    return strategy_state.to_dict()
+
+
+@router.get("/networks/{network_scoped_key}/strategy/status")
+def get_network_strategy_status(
+    network_scoped_key: str,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    """Get the status of the Strategy for the given AlchemicalNetwork."""
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+    
+    strategy_state = n4js.get_network_strategy_state(sk)
+    if strategy_state is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"No strategy found for network '{network_scoped_key}'",
+        )
+    
+    return strategy_state.status.value
+
+
+@router.post("/networks/{network_scoped_key}/strategy/awake")
+def set_network_strategy_awake(
+    network_scoped_key: str,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    """Set the Strategy status to 'awake' for the given AlchemicalNetwork."""
+    sk = ScopedKey.from_str(network_scoped_key)
+    validate_scopes(sk.scope, token)
+    
+    strategy_state = n4js.get_network_strategy_state(sk)
+    if strategy_state is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"No strategy found for network '{network_scoped_key}'",
+        )
+    
+    # Update strategy state to awake and clear error info
+    strategy_state.status = "awake"
+    strategy_state.exception = None
+    strategy_state.traceback = None
+    
+    success = n4js.update_strategy_state(sk, strategy_state)
+    if not success:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update strategy state",
+        )
+    
+    return {"status": "awake"}
 
 
 ### add router

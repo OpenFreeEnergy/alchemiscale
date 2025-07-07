@@ -35,13 +35,17 @@ from .models import (
     NetworkMark,
     NetworkStateEnum,
     ProtocolDAGResultRef,
+    StrategyState,
+    StrategyModeEnum,
+    StrategyStatusEnum,
+    StrategyTaskScalingEnum,
     Task,
     TaskHub,
     TaskRestartPattern,
     TaskStatusEnum,
     Tracebacks,
 )
-from ..strategies import Strategy
+from stratocaster.base import Strategy
 from ..models import Scope, ScopedKey
 from .cypher import cypher_or
 
@@ -1190,18 +1194,266 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## compute
 
-    def set_strategy(
+    def set_network_strategy(
         self,
-        strategy: Strategy,
         network: ScopedKey,
-    ) -> ScopedKey:
-        """Set the compute Strategy for the given AlchemicalNetwork."""
-
+        strategy: GufeTokenizable | None,
+        strategy_state: StrategyState | None = None,
+    ) -> ScopedKey | None:
+        """Set the compute Strategy for the given AlchemicalNetwork.
+        
+        If strategy is None, removes the strategy from the network and cleans up
+        orphaned Strategy nodes.
+        
+        Parameters
+        ----------
+        network
+            ScopedKey of the AlchemicalNetwork
+        strategy
+            Strategy object (GufeTokenizable) or None to remove strategy
+        strategy_state
+            Initial strategy state, if None uses defaults
+            
+        Returns
+        -------
+        ScopedKey
+            ScopedKey of the Strategy that was set, or None if strategy was removed
+        """
         if network.qualname != "AlchemicalNetwork":
             raise ValueError(
                 "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
             )
-        raise NotImplementedError
+
+        if strategy is None:
+            # Remove strategy from network and clean up orphaned Strategy nodes
+            q = """
+            MATCH (an:AlchemicalNetwork {_scoped_key: $network})-[r:PROGRESSES]->(s:Strategy)
+            DELETE r
+            
+            // Clean up Strategy node if it has no remaining PROGRESSES relationships
+            WITH s
+            OPTIONAL MATCH (s)<-[:PROGRESSES]-()
+            WITH s, count(*) as remaining_relationships
+            WHERE remaining_relationships = 0
+            DELETE s
+            """
+            with self.transaction() as tx:
+                tx.run(q, network=str(network))
+            return None
+
+        # Create/update strategy and relationship
+        strategy_sk = self.assemble_scoped_key(strategy, network.scope)
+        
+        if strategy_state is None:
+            strategy_state = StrategyState()
+            
+        # First ensure the strategy exists
+        strategy_node = self._gufe_to_node(strategy, network.scope)
+        
+        q = """
+        MERGE (s:Strategy {_scoped_key: $strategy_sk})
+        SET s += $strategy_props
+        
+        WITH s
+        MATCH (an:AlchemicalNetwork {_scoped_key: $network})
+        
+        // Remove any existing PROGRESSES relationship and clean up orphaned Strategy
+        OPTIONAL MATCH (an)-[old_r:PROGRESSES]->(old_s:Strategy)
+        WHERE old_s is not s
+        DELETE old_r
+        WITH s, an, old_s
+        WHERE old_s IS NOT NULL
+        
+        // Clean up old Strategy node if it has no remaining PROGRESSES relationships
+        OPTIONAL MATCH (old_s)<-[:PROGRESSES]-()
+        WITH s, an, old_s, count(*) as remaining_relationships
+        WHERE old_s IS NOT NULL AND remaining_relationships = 0
+        DELETE old_s
+        
+        WITH s, an
+        // Create new PROGRESSES relationship with strategy state
+        CREATE (an)-[r:PROGRESSES]->(s)
+        SET r += $strategy_state
+        
+        RETURN s._scoped_key AS strategy_key
+        """
+        
+        strategy_props = strategy_node.get_properties()
+        strategy_state_props = strategy_state.to_dict()
+        
+        with self.transaction() as tx:
+            result = tx.run(
+                q,
+                strategy_sk=str(strategy_sk),
+                strategy_props=strategy_props,
+                network=str(network),
+                strategy_state=strategy_state_props,
+            )
+            record = result.single()
+            
+        return ScopedKey.from_str(record["strategy_key"]) if record else None
+
+    def get_network_strategy(self, network: ScopedKey) -> GufeTokenizable | None:
+        """Get the Strategy for the given AlchemicalNetwork.
+        
+        Parameters
+        ----------
+        network
+            ScopedKey of the AlchemicalNetwork
+            
+        Returns
+        -------
+        GufeTokenizable | None
+            Strategy object or None if no strategy is set
+        """
+        q = """
+        MATCH (an:AlchemicalNetwork {_scoped_key: $network})-[:PROGRESSES]->(s:Strategy)
+        RETURN s
+        """
+        
+        with self.transaction() as tx:
+            result = tx.run(q, network=str(network))
+            record = result.single()
+            
+        if record:
+            strategy_node = record["s"]
+            return self._node_to_gufe(strategy_node)
+        return None
+
+    def get_network_strategy_state(self, network: ScopedKey) -> StrategyState | None:
+        """Get the StrategyState for the given AlchemicalNetwork.
+        
+        Parameters
+        ----------
+        network
+            ScopedKey of the AlchemicalNetwork
+            
+        Returns
+        -------
+        StrategyState | None
+            Strategy state or None if no strategy is set
+        """
+        q = """
+        MATCH (an:AlchemicalNetwork {_scoped_key: $network})-[r:PROGRESSES]->(:Strategy)
+        RETURN properties(r) AS state_props
+        """
+        
+        with self.transaction() as tx:
+            result = tx.run(q, network=str(network))
+            record = result.single()
+            
+        if record:
+            state_props = record["state_props"]
+            return StrategyState.from_dict(state_props)
+        return None
+
+    def get_strategies_for_execution(
+        self, 
+        scopes: list[Scope] | None = None,
+        min_sleep_interval: int = 0
+    ) -> list[tuple[ScopedKey, ScopedKey, StrategyState]]:
+        """Get strategies that are ready for execution by the Strategist service.
+        
+        Returns strategies that are:
+        - Not disabled
+        - Not in error status
+        - Due for execution based on sleep interval
+        
+        Parameters
+        ----------
+        scopes
+            List of scopes to filter by, if None returns all scopes
+        min_sleep_interval
+            Minimum sleep interval enforced by Strategist service
+            
+        Returns
+        -------
+        list[tuple[ScopedKey, ScopedKey, StrategyState]]
+            List of (network_sk, strategy_sk, strategy_state) tuples
+        """
+        scope_filter = ""
+        if scopes:
+            scope_conditions = []
+            for scope in scopes:
+                conditions = []
+                if scope.org is not None:
+                    conditions.append(f"an._org = '{scope.org}'")
+                if scope.campaign is not None:
+                    conditions.append(f"an._campaign = '{scope.campaign}'")
+                if scope.project is not None:
+                    conditions.append(f"an._project = '{scope.project}'")
+                if conditions:
+                    scope_conditions.append(f"({' AND '.join(conditions)})")
+            
+            if scope_conditions:
+                scope_filter = f"WHERE {' OR '.join(scope_conditions)}"
+
+        q = f"""
+        MATCH (an:AlchemicalNetwork)-[r:PROGRESSES]->(s:Strategy)
+        {scope_filter}
+        
+        // Filter out disabled and error strategies
+        WHERE r.mode <> 'disabled' AND r.status <> 'error'
+        
+        // Check if strategy is due for execution
+        WITH an, s, r,
+             coalesce(r.last_iteration, datetime('1970-01-01T00:00:00Z')) AS last_iter,
+             greatest($min_sleep_interval, r.sleep_interval) AS effective_sleep
+        WHERE datetime() >= last_iter + duration({{seconds: effective_sleep}})
+        
+        RETURN an._scoped_key AS network_sk, 
+               s._scoped_key AS strategy_sk,
+               properties(r) AS state_props
+        """
+        
+        results = []
+        with self.transaction() as tx:
+            result = tx.run(q, min_sleep_interval=min_sleep_interval)
+            for record in result:
+                network_sk = ScopedKey.from_str(record["network_sk"])
+                strategy_sk = ScopedKey.from_str(record["strategy_sk"])
+                state_props = record["state_props"]
+                strategy_state = StrategyState.from_dict(state_props)
+                results.append((network_sk, strategy_sk, strategy_state))
+                
+        return results
+
+    def update_strategy_state(
+        self, 
+        network: ScopedKey, 
+        strategy_state: StrategyState
+    ) -> bool:
+        """Update the StrategyState for the given AlchemicalNetwork.
+        
+        Parameters
+        ----------
+        network
+            ScopedKey of the AlchemicalNetwork
+        strategy_state
+            Updated strategy state
+            
+        Returns
+        -------
+        bool
+            True if update was successful, False if no strategy found
+        """
+        q = """
+        MATCH (an:AlchemicalNetwork {_scoped_key: $network})-[r:PROGRESSES]->(:Strategy)
+        SET r += $strategy_state
+        RETURN count(r) AS updated_count
+        """
+        
+        strategy_state_props = strategy_state.to_dict()
+        
+        with self.transaction() as tx:
+            result = tx.run(
+                q, 
+                network=str(network), 
+                strategy_state=strategy_state_props
+            )
+            record = result.single()
+            
+        return record["updated_count"] > 0 if record else False
 
     def register_computeservice(
         self, compute_service_registration: ComputeServiceRegistration
