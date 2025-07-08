@@ -144,23 +144,26 @@ class StrategistService:
         transformations = self.n4js.get_network_transformations(network_sk)
         
         for transformation_sk in transformations:
-            # Get successful ProtocolDAGResults for this transformation
-            result_refs = self.n4js.get_transformation_results(
-                transformation_sk, 
-                status=TaskStatusEnum.complete
-            )
+            # Get the transformation object
+            transformation = self.n4js.get_gufe(transformation_sk)
             
-            protocol_results = []
+            # Get successful ProtocolDAGResults for this transformation
+            result_refs = self.n4js.get_transformation_results(transformation_sk)
+            
+            # Collect all ProtocolDAGResults for this transformation
+            pdrs = []
             for result_ref in result_refs:
                 if result_ref.ok:
                     # Get ProtocolDAGResult with caching
                     pdr = self._get_protocoldagresult_cached(result_ref, transformation_sk)
-                    
-                    # Extract ProtocolResults from ProtocolDAGResult
-                    if hasattr(pdr, 'protocol_results'):
-                        protocol_results.extend(pdr.protocol_results)
+                    pdrs.append(pdr)
             
-            results[transformation_sk] = protocol_results
+            # Use transformation.gather() to get ProtocolResult from ProtocolDAGResults
+            if len(pdrs) != 0:
+                protocol_result = transformation.gather(pdrs)
+                results[transformation_sk] = protocol_result
+            else:
+                results[transformation_sk] = None
             
         return results
     
@@ -226,7 +229,7 @@ class StrategistService:
             
             # Get network and results
             network = self.n4js.get_gufe(network_sk)
-            protocol_results = self._get_protocol_results(network_sk)
+            protocol_results: list[ProtocolResult|None] = self._get_protocol_results(network_sk)
             
             # Get strategy object
             strategy = self.n4js.get_network_strategy(network_sk)
@@ -245,11 +248,10 @@ class StrategistService:
                 
                 # If in full mode, cancel all actioned tasks
                 if strategy_state.mode == StrategyModeEnum.full:
-                    network_tasks = self.n4js.get_network_tasks(network_sk)
-                    for task_sk in network_tasks:
-                        task = self.n4js.get_task(task_sk)
-                        if task.status in [TaskStatusEnum.waiting, TaskStatusEnum.running]:
-                            self.n4js.cancel_task(task_sk)
+                    taskhub_sk = self.n4js.get_taskhub(network_sk)
+                    with self.n4js.transaction() as tx:
+                        task_sks = self.n4js.get_taskhub_tasks(taskhub_sk, tx=tx)
+                        self.n4js.cancel_tasks(task_sks, taskhub_sk, tx=tx)
                 
                 strategy_state.last_iteration_result_count = current_result_count
                 strategy_state.last_iteration = datetime.utcnow()
@@ -259,12 +261,9 @@ class StrategistService:
             # Set weights to None for transformations with errored tasks
             transformations = self.n4js.get_network_transformations(network_sk)
             for transformation_sk in transformations:
-                tasks = self.n4js.get_transformation_tasks(transformation_sk)
-                for task_sk in tasks:
-                    task = self.n4js.get_task(task_sk)
-                    if task.status == TaskStatusEnum.error:
-                        weights[transformation_sk] = None
-                        break
+                counts = self.n4js.get_transformation_status(transformation_sk)
+                if counts.get(TaskStatusEnum.error.value):
+                    weights[transformation_sk] = None
             
             # Convert weights to task counts
             task_counts = self._weights_to_task_counts(
@@ -375,7 +374,7 @@ class StrategistService:
                                 logger.debug(f"Updated strategy state for network {network_sk}")
                                 
                         except Exception as e:
-                            logger.exception(f"Strategy execution future failed for network {network_sk}: {e}")
+                            logger.exception(f"Strategy execution failed for network {network_sk}: {e}")
 
                         future_to_network.pop(future)
                         network_to_future.pop(network_sk)

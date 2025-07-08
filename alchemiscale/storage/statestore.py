@@ -2129,8 +2129,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return filtered_tasks
 
+    @chainable
     def get_taskhub_tasks(
-        self, taskhub: ScopedKey, return_gufe=False
+        self, taskhub: ScopedKey, return_gufe=False, 
+        tx=None,
     ) -> list[ScopedKey] | dict[ScopedKey, Task]:
         """Get a list of Tasks on the TaskHub."""
 
@@ -2139,8 +2141,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (th:TaskHub {_scoped_key: $taskhub})-[:ACTIONS]->(task:Task)
         RETURN task
         """
-        with self.transaction() as tx:
-            res = tx.run(q, taskhub=str(taskhub)).to_eager_result()
+        res = tx.run(q, taskhub=str(taskhub)).to_eager_result()
 
         tasks = []
         subgraph = Subgraph()
