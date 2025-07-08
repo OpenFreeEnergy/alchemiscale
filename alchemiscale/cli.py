@@ -549,7 +549,10 @@ def strategist(config_file):
 
         signal.signal(getattr(signal, signame), stop)
 
-    service.start(**params_start)
+    try:
+        service.start(**params_start)
+    except KeyboardInterrupt:
+        pass
 
 
 @cli.group(help="Subcommands for managing identities")

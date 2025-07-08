@@ -21,10 +21,9 @@ import zstandard as zstd
 from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
-    json_to_gufe,
     use_session,
 )
-from ..compression import decompress_gufe_zstd, compress_keyed_chain_zstd
+from ..compression import decompress_gufe_zstd, compress_keyed_chain_zstd, json_to_gufe
 from ..models import Scope, ScopedKey
 from ..storage.models import (
     TaskStatusEnum,

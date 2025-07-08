@@ -5,6 +5,7 @@
 """
 
 import logging
+import os
 import time
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -12,7 +13,11 @@ from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+import warnings
 import numpy as np
+
+from diskcache import Cache
+import zstandard as zstd
 
 from gufe import AlchemicalNetwork, ProtocolResult
 from gufe.protocols import ProtocolDAGResult
@@ -28,6 +33,7 @@ from ..storage.models import (
     TaskStatusEnum,
 )
 from ..settings import Neo4jStoreSettings, S3ObjectStoreSettings
+from ..compression import compress_keyed_chain_zstd, decompress_gufe_zstd, json_to_gufe
 from .settings import StrategistSettings
 
 
@@ -46,6 +52,20 @@ class StrategistService:
     5. Updating strategy state
     """
     
+    @staticmethod
+    def _determine_cache_dir(cache_directory: Path | str | None = None) -> Path:
+        """Determine the cache directory path following XDG conventions."""
+        if cache_directory is not None:
+            return Path(cache_directory)
+        
+        # Use XDG_CACHE_HOME if set, otherwise default to ~/.cache
+        if xdg_cache_home := os.environ.get("XDG_CACHE_HOME"):
+            cache_base = Path(xdg_cache_home)
+        else:
+            cache_base = Path.home() / ".cache"
+        
+        return cache_base / "alchemiscale-strategist"
+    
     def __init__(self, settings: StrategistSettings):
         self.settings = settings
         self.sleep_interval = settings.sleep_interval
@@ -56,17 +76,69 @@ class StrategistService:
         self.n4js = get_n4js(settings.neo4j_settings or Neo4jStoreSettings())
         self.s3os = get_s3os(settings.s3_settings or S3ObjectStoreSettings())
         
-        # LRU cache for ProtocolDAGResults to reduce object store hits
-        self._result_cache = {}
-        self._cache_max_size = settings.cache_size
+        # Initialize disk-based cache
+        self._cache_enabled = settings.use_local_cache
+        if self._cache_enabled:
+            self._cache_directory = self._determine_cache_dir(settings.cache_directory)
+            self._cache_directory.mkdir(parents=True, exist_ok=True)
+            self._cache = Cache(
+                str(self._cache_directory),
+                size_limit=settings.cache_size_limit,
+                eviction_policy="least-recently-used",
+            )
+        else:
+            self._cache = None
         
         self._stop = False
         
-    @lru_cache(maxsize=1000)
+    def _get_protocoldagresult_cached(self, result_ref, transformation_sk: ScopedKey) -> ProtocolDAGResult:
+        """Get ProtocolDAGResult with disk caching."""
+        cache_key = str(result_ref.obj_key)
+        
+        if self._cache_enabled:
+            try:
+                if cached_content := self._cache.get(cache_key, None):
+                    return decompress_gufe_zstd(cached_content)
+            except zstd.ZstdError:
+                # Handle decompression errors by removing corrupted cache entry
+                warnings.warn(f"Error decompressing cached ProtocolDAGResult {cache_key}, "
+                             "deleting entry and retrieving new content.")
+                self._cache.delete(cache_key)
+        
+        # Retrieve from object store using s3os.pull_protocoldagresult
+        try:
+            pdr_bytes = self.s3os.pull_protocoldagresult(
+                ScopedKey(gufe_key=result_ref.obj_key, **result_ref.scope.dict()),
+                transformation_sk,
+                ok=result_ref.ok
+            )
+        except Exception:
+            # Fallback to location-based retrieval
+            pdr_bytes = self.s3os.pull_protocoldagresult(
+                location=result_ref.location,
+                ok=result_ref.ok
+            )
+        
+        # Decompress the raw bytes to get ProtocolDAGResult
+        try:
+            pdr = decompress_gufe_zstd(pdr_bytes)
+        except zstd.ZstdError:
+            # Fallback to JSON deserialization for uncompressed data
+            pdr = json_to_gufe(pdr_bytes.decode("utf-8"))
+        
+        if self._cache_enabled:
+            try:
+                # Cache the already compressed bytes directly 
+                self._cache.set(cache_key, pdr_bytes)
+            except Exception as e:
+                warnings.warn(f"Failed to cache ProtocolDAGResult {cache_key}: {e}")
+        
+        return pdr
+    
     def _get_protocol_results(self, network_sk: ScopedKey) -> dict[ScopedKey, list[ProtocolResult]]:
         """Get ProtocolResults for all transformations in a network.
         
-        This method is cached to avoid repeated expensive lookups.
+        This method uses disk-based caching to avoid repeated expensive lookups.
         """
         results = {}
         transformations = self.n4js.get_network_transformations(network_sk)
@@ -81,20 +153,8 @@ class StrategistService:
             protocol_results = []
             for result_ref in result_refs:
                 if result_ref.ok:
-                    # Check cache first
-                    cache_key = str(result_ref.obj_key)
-                    if cache_key in self._result_cache:
-                        pdr = self._result_cache[cache_key]
-                    else:
-                        # Load from object store
-                        pdr = self.s3os.get_protocoldagresult(result_ref)
-                        
-                        # Add to cache with LRU eviction
-                        if len(self._result_cache) >= self._cache_max_size:
-                            # Remove oldest item (simple FIFO for now)
-                            oldest_key = next(iter(self._result_cache))
-                            del self._result_cache[oldest_key]
-                        self._result_cache[cache_key] = pdr
+                    # Get ProtocolDAGResult with caching
+                    pdr = self._get_protocoldagresult_cached(result_ref, transformation_sk)
                     
                     # Extract ProtocolResults from ProtocolDAGResult
                     if hasattr(pdr, 'protocol_results'):
@@ -151,7 +211,7 @@ class StrategistService:
             # Check if strategy went dormant - count successful results
             current_result_count = len([
                 ref for transformation_sk in self.n4js.get_network_transformations(network_sk)
-                for ref in self.n4js.get_transformation_results(transformation_sk, TaskStatusEnum.complete)
+                for ref in self.n4js.get_transformation_results(transformation_sk)
                 if ref.ok
             ])
             
@@ -276,7 +336,7 @@ class StrategistService:
             
             return strategy_state
     
-    def _iteration(self):
+    def cycle(self):
         """Perform one iteration of strategy execution."""
         # Get strategies ready for execution
         ready_strategies = self.n4js.get_strategies_for_execution(
@@ -297,23 +357,50 @@ class StrategistService:
                 executor.submit(self._execute_strategy, network_sk, strategy_sk, strategy_state): network_sk
                 for network_sk, strategy_sk, strategy_state in ready_strategies
             }
-            
-            # Collect results and update database
-            for future in as_completed(future_to_network):
-                network_sk = future_to_network[future]
+            network_to_future = {value: key for key, value in future_to_network.items()}
+
+            while future_to_network and not self._stop:
+                # Collect results and update database
                 try:
-                    updated_state = future.result()
-                    
-                    # Update strategy state in database
-                    success = self.n4js.update_strategy_state(network_sk, updated_state)
-                    if not success:
-                        logger.error(f"Failed to update strategy state for network {network_sk}")
-                    else:
-                        logger.debug(f"Updated strategy state for network {network_sk}")
+                    for future in as_completed(list(future_to_network.keys()), timeout=self.sleep_interval):
+                        network_sk = future_to_network[future]
+                        try:
+                            updated_state = future.result()
+                            
+                            # Update strategy state in database
+                            success = self.n4js.update_strategy_state(network_sk, updated_state)
+                            if not success:
+                                logger.error(f"Failed to update strategy state for network {network_sk}")
+                            else:
+                                logger.debug(f"Updated strategy state for network {network_sk}")
+                                
+                        except Exception as e:
+                            logger.exception(f"Strategy execution future failed for network {network_sk}: {e}")
+
+                        future_to_network.pop(future)
+                        network_to_future.pop(network_sk)
+
+                except TimeoutError:
+                    # Check if we should stop before adding new strategies
+                    if self._stop:
+                        break
                         
-                except Exception as e:
-                    logger.exception(f"Strategy execution future failed for network {network_sk}: {e}")
-    
+                    # if we ran out of time waiting for strategies to finish, check for new ones
+                    # and continue
+                    ready_strategies = self.n4js.get_strategies_for_execution(
+                        scopes=self.scopes,
+                        min_sleep_interval=self.sleep_interval
+                    )
+
+                    for network_sk, strategy_sk, strategy_state in ready_strategies:
+                        # Only submit strategies that aren't already running
+                        if network_sk not in network_to_future:
+                            # Submit new strategy execution
+                            future = executor.submit(self._execute_strategy, network_sk, strategy_sk, strategy_state)
+                            future_to_network[future] = network_sk
+                            network_to_future[network_sk] = future
+                            logger.debug(f"Added new strategy execution for network {network_sk}")
+
     def start(self):
         """Start the Strategist service."""
 
@@ -321,13 +408,17 @@ class StrategistService:
         self._stop = True
         
         try:
-            while self._stop:
+            while not self._stop:
                 start_time = time.time()
                 
                 try:
-                    self._iteration()
+                    self.cycle()
                 except Exception as e:
                     logger.exception(f"Iteration failed: {e}")
+                
+                # Check if we should stop before sleeping
+                if self._stop:
+                    break
                 
                 # Sleep for remaining time
                 elapsed = time.time() - start_time
@@ -340,9 +431,9 @@ class StrategistService:
         except KeyboardInterrupt:
             logger.info("Received interrupt signal")
         finally:
-            self._stop = False
+            self._stop = True
             logger.info("Strategist service stopped")
     
     def stop(self):
         """Stop the strategist service."""
-        self._stop = False
+        self._stop = True

@@ -1,3 +1,4 @@
+from pathlib import Path
 from pydantic import BaseModel, Field, PositiveInt
 
 from ..models import Scope
@@ -21,9 +22,17 @@ class StrategistSettings(BaseModel):
         None,
         description="Scopes to limit strategy execution to; defaults to all accessible scopes."
     )
-    cache_size: PositiveInt = Field(
-        1000,
-        description="LRU cache size for ProtocolDAGResults to reduce object store hits."
+    cache_directory: Path | str | None = Field(
+        None,
+        description="Location of the cache directory; defaults to ${HOME}/.cache/alchemiscale-strategist"
+    )
+    cache_size_limit: int = Field(
+        1073741824,  # 1 GiB
+        description="Maximum size of the strategist cache in bytes"
+    )
+    use_local_cache: bool = Field(
+        True,
+        description="Whether to use persistent disk-based caching"
     )
     neo4j_settings: Neo4jStoreSettings | None = Field(
         None,
