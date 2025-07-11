@@ -42,25 +42,3 @@ and the :ref:`developer-guide` for details on how the components of this archite
 .. _Open Molecular Software Foundation: https://omsf.io
 .. _OpenForceField: https://openforcefield.org
 .. _OpenFreeEnergy: https://openfree.energy/
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Contents:
-
-
-   ./user_guide
-   ./tutorials/index
-   ./deployment
-   ./compute
-   ./operations
-   ./development
-   ./api
-   CHANGELOG
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
