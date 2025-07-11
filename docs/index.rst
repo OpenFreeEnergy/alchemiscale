@@ -49,6 +49,7 @@ and the :ref:`developer-guide` for details on how the components of this archite
 
 
    ./user_guide
+   ./strategy_guide
    ./tutorials/index
    ./deployment
    ./compute

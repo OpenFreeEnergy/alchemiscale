@@ -135,7 +135,7 @@ class StrategistService:
         
         return pdr
     
-    def _get_protocol_results(self, network_sk: ScopedKey) -> dict[ScopedKey, list[ProtocolResult]]:
+    def _get_protocol_results(self, network_sk: ScopedKey) -> dict[ScopedKey, ProtocolResult|None]:
         """Get ProtocolResults for all transformations in a network.
         
         This method uses disk-based caching to avoid repeated expensive lookups.
@@ -229,7 +229,7 @@ class StrategistService:
             
             # Get network and results
             network = self.n4js.get_gufe(network_sk)
-            protocol_results: list[ProtocolResult|None] = self._get_protocol_results(network_sk)
+            protocol_results: dict[ScopedKey, ProtocolResult|None] = self._get_protocol_results(network_sk)
             
             # Get strategy object
             strategy = self.n4js.get_network_strategy(network_sk)
