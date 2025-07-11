@@ -206,7 +206,6 @@ class StrategistService:
     def _execute_strategy(
         self, 
         network_sk: ScopedKey, 
-        strategy_sk: ScopedKey, 
         strategy_state: StrategyState
     ) -> StrategyState:
         """Execute a single strategy and return updated state."""
@@ -273,46 +272,73 @@ class StrategistService:
                 strategy_state.task_scaling,
             )
             
+            taskhub_sk = self.n4js.get_taskhub(network_sk)
+
             # Set task counts for each transformation
             for transformation_sk, target_count in task_counts.items():
-                current_tasks = self.n4js.get_transformation_tasks(transformation_sk)
-                actioned_tasks = [
-                    task_sk for task_sk in current_tasks
-                    if self.n4js.get_task(task_sk).status in [TaskStatusEnum.waiting, TaskStatusEnum.running]
-                ]
-                current_count = len(actioned_tasks)
+
+                actioned_tasks = self.n4js.get_transformation_actioned_tasks(transformation_sk, taskhub_sk)
+                actioned_count = len(actioned_tasks)
                 
-                if target_count > current_count:
-                    # Create new tasks
-                    for _ in range(target_count - current_count):
-                        self.n4js.create_task(transformation_sk)
+                if target_count > actioned_count:
+                    # Action additional tasks, creating them as necessary
+                    required = target_count - actioned_count
+                    tasks_to_action = []
+
+                    # Get existing actionable tasks for the transformation
+                    transformation_tasks = self.n4js.get_transformation_tasks(transformation_sk)
+                    actionable_tasks_status = {
+                        task_sk: status for task_sk, status in zip(transformation_tasks, self.n4js.get_task_status(transformation_tasks))
+                        if status in [TaskStatusEnum.waiting, TaskStatusEnum.running] and task_sk not in actioned_tasks
+                    }
+
+                    # Add actionable tasks not already actioned, starting with those that are already running
+                    for task_sk in actionable_tasks_status:
+                        status =  actionable_tasks_status[task_sk]
+                        if status == TaskStatusEnum.running:
+                            tasks_to_action.append(task_sk)
+                            if len(tasks_to_action) >= required:
+                                break
                         
-                elif target_count < current_count and strategy_state.mode == StrategyModeEnum.full:
-                    # Cancel excess tasks (prioritize unclaimed ones)
-                    excess = current_count - target_count
+                    # If we still need more, add actionable tasks that are waiting
+                    if len(tasks_to_action) < required:
+                        for task_sk in actionable_tasks_status:
+                            status =  actionable_tasks_status[task_sk]
+                            if status == TaskStatusEnum.waiting:
+                                tasks_to_action.append(task_sk)
+                                if len(tasks_to_action) >= required:
+                                    break
+
+                    # Create new tasks if needed 
+                    if len(tasks_to_action) < required:
+                        new_tasks = self.n4js.create_tasks([transformation_sk] * (required - len(tasks_to_action)))
+                        tasks_to_action.extend(new_tasks)
+
+                    self.n4js.action_tasks(tasks_to_action, taskhub_sk)
+                        
+                elif target_count < actioned_count and strategy_state.mode == StrategyModeEnum.full:
+                    # Cancel excess tasks
+                    excess = actioned_count - target_count
                     tasks_to_cancel = []
+
+                    actioned_status = self.n4js.get_task_status(actioned_tasks)
                     
-                    # First cancel unclaimed tasks
-                    for task_sk in actioned_tasks:
-                        task = self.n4js.get_task(task_sk)
-                        if task.status == TaskStatusEnum.waiting and task.claim is None:
+                    # First cancel waiting tasks
+                    for task_sk, status in zip(actioned_tasks, actioned_status):
+                        if status == TaskStatusEnum.waiting:
                             tasks_to_cancel.append(task_sk)
                             if len(tasks_to_cancel) >= excess:
                                 break
                     
-                    # Then cancel claimed but not running tasks if needed
+                    # Then cancel running tasks if needed
                     if len(tasks_to_cancel) < excess:
-                        for task_sk in actioned_tasks:
-                            if task_sk not in tasks_to_cancel:
-                                task = self.n4js.get_task(task_sk)
-                                if task.status == TaskStatusEnum.waiting:
-                                    tasks_to_cancel.append(task_sk)
-                                    if len(tasks_to_cancel) >= excess:
-                                        break
+                        for task_sk, status in zip(actioned_tasks, actioned_status):
+                            if status == TaskStatusEnum.running:
+                                tasks_to_cancel.append(task_sk)
+                                if len(tasks_to_cancel) >= excess:
+                                    break
                     
-                    # Cancel the selected tasks
-                    for task_sk in tasks_to_cancel:
-                        self.n4js.cancel_task(task_sk)
+                    self.n4js.cancel_tasks(tasks_to_cancel, taskhub_sk)
             
             # Update strategy state
             strategy_state.last_iteration = datetime.utcnow()
@@ -327,10 +353,11 @@ class StrategistService:
             # Strategy execution failed
             logger.exception(f"Strategy execution failed for network {network_sk}")
             
-            strategy_state.status = StrategyStatusEnum.error
-            strategy_state.exception = (type(e).__name__, str(e))
-            strategy_state.traceback = traceback.format_exc()
             strategy_state.last_iteration = datetime.utcnow()
+            strategy_state.last_iteration_result_count = current_result_count
+            strategy_state.status = StrategyStatusEnum.error
+            strategy_state.exception = (e.__class__.__qualname__, str(e))
+            strategy_state.traceback = traceback.format_exc()
             strategy_state.iterations += 1
             
             return strategy_state
@@ -353,7 +380,7 @@ class StrategistService:
         with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
             # Submit all strategy executions
             future_to_network = {
-                executor.submit(self._execute_strategy, network_sk, strategy_sk, strategy_state): network_sk
+                executor.submit(self._execute_strategy, network_sk, strategy_state): network_sk
                 for network_sk, strategy_sk, strategy_state in ready_strategies
             }
             network_to_future = {value: key for key, value in future_to_network.items()}

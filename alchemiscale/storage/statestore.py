@@ -2646,6 +2646,41 @@ class Neo4jStore(AlchemiscaleStateStore):
                 for t in tasks
             }
 
+    def get_transformation_actioned_tasks(
+        self,
+        transformation: ScopedKey,
+        taskhub: ScopedKey,
+    ) -> list[ScopedKey]:
+        """Get all Tasks for a Transformation that are actioned by the given TaskHub.
+
+        Parameters
+        ----------
+        transformation
+            ScopedKey of the Transformation to retrieve actioned Tasks for.
+        taskhub
+            ScopedKey of the TaskHub to check for actioned Tasks.
+
+        Returns
+        -------
+        tasks
+            List of Task ScopedKeys that perform the given Transformation and are
+            actioned by the given TaskHub.
+        """
+        q = """
+        MATCH (th:TaskHub {_scoped_key: $taskhub})-[:ACTIONS]->(task:Task),
+              (task)-[:PERFORMS]->(trans:Transformation|NonTransformation {_scoped_key: $transformation})
+        RETURN task._scoped_key
+        """
+
+        with self.transaction() as tx:
+            results = tx.run(
+                q,
+                transformation=str(transformation),
+                taskhub=str(taskhub),
+            ).to_eager_result()
+
+        return [ScopedKey.from_str(record["task._scoped_key"]) for record in results.records]
+
     def get_task_transformation(
         self,
         task: ScopedKey,

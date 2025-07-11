@@ -4,9 +4,6 @@
 Using Strategies with alchemiscale
 ##################################
 
-.. contents:: Contents
-   :depth: 2
-
 Overview
 ========
 
