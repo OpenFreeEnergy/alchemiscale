@@ -12,7 +12,6 @@ author = '"OpenFE and OpenFF developers"'
 
 import sys
 import os
-import sphinx_rtd_theme
 
 sys.path.insert(0, os.path.abspath("."))
 
@@ -58,7 +57,12 @@ intersphinx_mapping = {
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = "sphinx_rtd_theme"
+html_theme = "furo"
+html_logo = "assets/logo/logo_full_horizontal_inverted.png"
+html_theme_options = {
+    "sidebar_hide_name": True,
+    "navigation_with_keys": True,
+}
 
 # -- Options for MystNB ------------------------------------------------------
 
