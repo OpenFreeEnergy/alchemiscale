@@ -44,9 +44,9 @@ and the :ref:`developer-guide` for details on how the components of this archite
 .. _OpenFreeEnergy: https://openfree.energy/
 
 .. toctree::
+   :hidden:
    :maxdepth: 1
    :caption: Contents:
-
 
    ./user_guide
    ./tutorials/index
@@ -56,11 +56,3 @@ and the :ref:`developer-guide` for details on how the components of this archite
    ./development
    ./api
    CHANGELOG
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
