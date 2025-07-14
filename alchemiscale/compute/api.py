@@ -39,6 +39,8 @@ from ..storage.objectstore import S3ObjectStore
 from ..storage.models import (
     ProtocolDAGResultRef,
     ComputeServiceID,
+    ComputeManagerID,
+    ComputeManagerRegistration,
     ComputeServiceRegistration,
 )
 from ..models import Scope, ScopedKey
@@ -389,6 +391,51 @@ async def set_task_result(
         n4js.resolve_task_restarts(task_scoped_keys=[task_sk])
 
     return result_sk
+
+
+@router.post("/computemanager/{compute_manager_id}/register")
+def computemanager_register(
+    compute_manager_id,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    now = datetime.utcnow()
+    cm_registration = ComputeManagerRegistration(
+        identifier=ComputeManagerID(compute_manager_id),
+        registered=now,
+        last_status_update=now,
+    )
+
+    compute_manager_id_ = n4js.register_computemanager(cm_registration)
+
+    return compute_manager_id_
+
+
+@router.post("/computemanager/{compute_manager_id}/deregister")
+def computemanager_deregister(
+    compute_manager_id,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    compute_manager_id_ = n4js.deregister_computemanager(
+        ComputeManagerID(compute_manager_id)
+    )
+
+    return compute_manager_id_
+
+
+@router.post("/computemanager/{compute_manager_id}/get_instruction")
+def computemanager_get_instruction(
+    compute_manager_id,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    raise NotImplementedError
+
+
+@router.post("/computemanager/{compute_manager_id}/update_status")
+def computemanager_update_status(
+    compute_manager_id,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    raise NotImplementedError
 
 
 ### add router

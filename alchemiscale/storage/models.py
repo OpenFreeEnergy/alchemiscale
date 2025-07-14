@@ -7,7 +7,7 @@
 from abc import abstractmethod
 from copy import copy
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from uuid import uuid4
 import hashlib
 
@@ -56,6 +56,33 @@ class ComputeServiceRegistration(BaseModel):
         dct_["identifier"] = ComputeServiceID(dct_["identifier"])
 
         return cls(**dct_)
+
+
+class ComputeManagerID(str):
+
+    @property
+    def name(self):
+        return self.split("-")[0]
+
+    @property
+    def uuit(self):
+        return self.split("-")[1]
+
+
+class ComputeManagerStatus(StrEnum):
+    OK = "OK"
+    STALLED = "STALLED"
+    ERRORED = "ERRORED"
+
+
+class ComputeManagerRegistration(BaseModel):
+
+    manager_id: str
+    uuid: str
+    last_status_update: datetime
+    status: str
+    detail: str
+    saturation: float
 
 
 class TaskProvenance(BaseModel):

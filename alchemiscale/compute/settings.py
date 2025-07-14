@@ -114,3 +114,12 @@ class ComputeServiceSettings(BaseModel):
         True,
         description="Whether to verify SSL certificate presented by the API server.",
     )
+
+
+class ComputeManagerSettings(BaseModel):
+
+    api_url: str
+    name: str
+    status_update_interval: int
+    logfile: Path | None
+    max_compute_services: int

@@ -17,7 +17,13 @@ from ..base.client import (
 )
 from ..compression import compress_gufe_zstd, decompress_gufe_zstd
 from ..models import Scope, ScopedKey
-from ..storage.models import TaskHub, Task, ComputeServiceID
+from ..storage.models import (
+    TaskHub,
+    Task,
+    ComputeServiceID,
+    ComputeManagerStatus,
+    ComputeManagerID,
+)
 
 
 class AlchemiscaleComputeClientError(AlchemiscaleBaseClientError): ...
@@ -144,3 +150,17 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         pdr_sk = self._post_resource(f"/tasks/{task}/results", data)
 
         return ScopedKey.from_dict(pdr_sk)
+
+
+class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
+
+    def register(self) -> ComputeManagerID:
+        raise NotImplementedError
+
+    def deregister(self) -> ComputeManagerID:
+        raise NotImplementedError
+
+    def update_status(
+        self, status: ComputeManagerStatus, detail: str | None = None
+    ) -> ComputeManagerID:
+        raise NotImplementedError
