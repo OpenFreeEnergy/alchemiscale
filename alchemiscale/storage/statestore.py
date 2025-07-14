@@ -32,6 +32,7 @@ from neo4j import Transaction, GraphDatabase, Driver
 from .models import (
     ComputeServiceID,
     ComputeServiceRegistration,
+    ComputeManagerID,
     NetworkMark,
     NetworkStateEnum,
     ProtocolDAGResultRef,
@@ -1352,6 +1353,25 @@ class Neo4jStore(AlchemiscaleStateStore):
             query, compute_service_id=compute_service_id, forgive_time=forgive_time
         )
         return results.records[0]["n_failures"] <= max_failures
+
+    ## compute manager
+
+    def get_compute_manager_compute_services(
+        self, compute_manager_id: ComputeManagerID
+    ):
+        raise NotImplementedError
+
+    def deregister_computemanager(self, compute_manager_id: ComputeManagerID):
+        raise NotImplementedError
+
+    def register_computemanager(self, compute_manager_id: ComputeManagerID):
+        raise NotImplementedError
+
+    def expire_computemanager_registrations(self, expire_time: datetime):
+        raise NotImplementedError
+
+    def get_computemanager_instruction(self, compute_manager_id: ComputeManagerID):
+        raise NotImplementedError
 
     ## task hubs
 
