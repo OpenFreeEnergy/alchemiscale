@@ -8,7 +8,7 @@ from abc import abstractmethod
 from copy import copy
 from datetime import datetime
 from enum import Enum, StrEnum
-from uuid import uuid4
+from uuid import uuid4, UUID
 import hashlib
 
 
@@ -60,13 +60,37 @@ class ComputeServiceRegistration(BaseModel):
 
 class ComputeManagerID(str):
 
-    @property
-    def name(self):
-        return self.split("-")[0]
+    def __init__(self, value):
+        super().__init__(value)
+
+        parts = self.split("-")
+
+        if len(parts) != 6:
+            # this currently only supports field-separated hex uuid4s
+            raise ValueError("ComputeManagerID must have the form `{name}-{uuid}` with a field-separated hex")
+
+        self._name = parts[0]
+        self._uuid = "-".join(parts[1:])
+
+        if not self.name.isalnum():
+            raise ValueError("ComputeManagerID only allows alpha-numeric names")
+
+        try:
+            UUID(self.uuid)
+        except Exception:
+            raise ValueError("Could not interpret the provided UUID.")
+
+    @classmethod
+    def from_name(cls,  name: str):
+        return cls(f"{name}-{uuid4()}")
 
     @property
-    def uuit(self):
-        return self.split("-")[1]
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def uuid(self) -> str:
+        return self._uuid
 
 
 class ComputeManagerStatus(StrEnum):
