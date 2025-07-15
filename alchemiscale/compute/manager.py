@@ -9,6 +9,7 @@ from enum import StrEnum
 
 from alchemsicale.storage.models import ComputeManagerID
 from .client import AlchemiscaleComputeManagerClient
+from .manager import ComputeManagerInstruction
 from settings import ComputeManagerSettings
 
 
@@ -33,8 +34,11 @@ class ComputeManager:
     def _deregister(self):
         self.client.deregister(self.compute_client_id)
 
-    def request_instruction(self):
-        raise NotImplementedError
+    def request_instruction(self) -> ComputeManagerInstruction:
+        instruction = self.client._post_resource(
+            f"/computemanager/{self.compute_manager_id}/update_status", {}
+        )
+        return instruction
 
     @abstractmethod
     def start(self):

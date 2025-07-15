@@ -67,7 +67,9 @@ class ComputeManagerID(str):
 
         if len(parts) != 6:
             # this currently only supports field-separated hex uuid4s
-            raise ValueError("ComputeManagerID must have the form `{name}-{uuid}` with a field-separated hex")
+            raise ValueError(
+                "ComputeManagerID must have the form `{name}-{uuid}` with a field-separated hex"
+            )
 
         self._name = parts[0]
         self._uuid = "-".join(parts[1:])
@@ -81,7 +83,7 @@ class ComputeManagerID(str):
             raise ValueError("Could not interpret the provided UUID.")
 
     @classmethod
-    def from_name(cls,  name: str):
+    def from_name(cls, name: str):
         return cls(f"{name}-{uuid4()}")
 
     @property

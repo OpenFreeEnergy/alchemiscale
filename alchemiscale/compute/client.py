@@ -154,13 +154,29 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
 class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
 
-    def register(self) -> ComputeManagerID:
-        raise NotImplementedError
+    def register(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
+        res = self._post_resource(f"/computemanager/{compute_manager_id}/register", {})
+        return ComputeManagerID(res)
 
-    def deregister(self) -> ComputeManagerID:
-        raise NotImplementedError
+    def deregister(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
+        res = self._post_resource(
+            f"/computemanager/{compute_manager_id}/deregister", {}
+        )
+        return ComputeManagerID(res)
 
     def update_status(
-        self, status: ComputeManagerStatus, detail: str | None = None
+        self,
+        compute_manager_id: ComputeManagerID,
+        status: ComputeManagerStatus,
+        detail: str | None = None,
     ) -> ComputeManagerID:
+        payload = {"detail": detail, status: str(status)}
+        res = self._post_resource(
+            f"/computemanager/{compute_manager_id}/status",
+            payload,
+        )
+
+        return ComputeManagerID(res)
+
+    def get_instruction(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
         raise NotImplementedError

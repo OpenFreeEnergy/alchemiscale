@@ -8,7 +8,8 @@ import json
 from datetime import datetime, timedelta
 import random
 
-from fastapi import FastAPI, APIRouter, Body, Depends, Request
+from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Request
+from fastapi import status as http_status
 from fastapi.middleware.gzip import GZipMiddleware
 from gufe.tokenization import JSON_HANDLER
 from gufe.protocols import ProtocolDAGResult
@@ -42,6 +43,7 @@ from ..storage.models import (
     ComputeManagerID,
     ComputeManagerRegistration,
     ComputeServiceRegistration,
+    ComputeManagerStatus,
 )
 from ..models import Scope, ScopedKey
 from ..security.models import (
@@ -425,6 +427,7 @@ def computemanager_deregister(
 @router.post("/computemanager/{compute_manager_id}/get_instruction")
 def computemanager_get_instruction(
     compute_manager_id,
+    *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     raise NotImplementedError
@@ -433,9 +436,42 @@ def computemanager_get_instruction(
 @router.post("/computemanager/{compute_manager_id}/update_status")
 def computemanager_update_status(
     compute_manager_id,
+    *,
+    status: str = Body(),
+    detail: str | None = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    raise NotImplementedError
+
+    try:
+        compute_manager_id = ComputeManagerID(compute_manager_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            details=e.args[0],
+        )
+
+    try:
+        status = ComputeManagerStatus(status)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            details=e.args[0],
+        )
+
+    name, uuid = compute_manager_id.name, compute_manager_id.uuid
+
+    query = f"""
+    MATCH (cms: ComputeServiceManager {uuid: {uuid}, name: {name}})
+    SET cms.status = {status}
+    SET cms.detail = {detail}
+    RETURN cms
+    """
+
+    results = n4js.execute_query(query, status=str(status), uuid=uuid, name=name, detail=detail)
+
+    if len(results.records) == 0:
+        detail = f"No entry for ComputeManager: {compute_manager_id}"
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
 ### add router
