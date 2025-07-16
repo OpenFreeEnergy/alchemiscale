@@ -428,6 +428,9 @@ def computemanager_register(
         identifier=ComputeManagerID(compute_manager_id),
         registered=now,
         last_status_update=now,
+        status=ComputeManagerStatus.OK,
+        detail="",
+        saturation=0,
     )
 
     compute_manager_id_ = n4js.register_computemanager(cm_registration)
@@ -446,7 +449,7 @@ def computemanager_deregister(
     return compute_manager_id
 
 
-@router.post("/computemanager/{compute_manager_id}/get_instruction")
+@router.post("/computemanager/{compute_manager_id}/instruction")
 def computemanager_get_instruction(
     compute_manager_id,
     *,

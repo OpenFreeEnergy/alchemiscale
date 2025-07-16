@@ -10,6 +10,8 @@ import zstandard as zstd
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 
+from .manager import ComputeManagerInstruction
+
 from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
@@ -179,4 +181,8 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         return ComputeManagerID(res)
 
     def get_instruction(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
-        raise NotImplementedError
+        res = self._post_resource(
+            f"/computemanager/{compute_manager_id}/instruction",
+            {},
+        )
+        return ComputeManagerInstruction(res)

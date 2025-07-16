@@ -7,9 +7,8 @@
 from abc import abstractmethod
 from enum import StrEnum
 
-from alchemsicale.storage.models import ComputeManagerID
+from ..storage.models import ComputeManagerID
 from .client import AlchemiscaleComputeManagerClient
-from .manager import ComputeManagerInstruction
 from settings import ComputeManagerSettings
 
 

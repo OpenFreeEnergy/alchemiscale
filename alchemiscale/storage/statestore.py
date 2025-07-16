@@ -32,6 +32,7 @@ from neo4j import Transaction, GraphDatabase, Driver
 from .models import (
     ComputeServiceID,
     ComputeServiceRegistration,
+    ComputeManagerRegistration,
     ComputeManagerID,
     ComputeManagerStatus,
     NetworkMark,
@@ -1358,45 +1359,91 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## compute manager
 
-    def get_compute_manager_compute_services(
+    def get_compute_manager_compute_service_ids(
         self, compute_manager_id: ComputeManagerID
     ):
-        raise NotImplementedError
+
+        manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
+
+        query = """
+        MATCH (:ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid})-[:MANAGES]->(csr:ComputeServiceRegistration)
+        RETURN csr.identifier as id
+        """
+
+        results = self.execute_query(query, manager_id=manager_id, uuid=uuid)
+
+        ids = []
+        for record in results.records:
+            ids.append(ComputeServiceID(record["id"]))
+
+        return ids
 
     def deregister_computemanager(
         self, compute_manager_id: ComputeManagerID, force=False
     ):
-        name, uuid = compute_manager_id.name, compute_manager_id.uuid
+        manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
 
         full_delete_query = """
-            MATCH (csm:ComputeServiceManager {name: $name, uuid: $uuid})
+            MATCH (csm:ComputeServiceManager {manager_id: $manager_id, uuid: $uuid})
             DELETE csm
             RETURN
             """
 
         if force:
-            self.execute_query(full_delete_query, name=name, uuid=uuid)
+            self.execute_query(full_delete_query, manager_id=manager_id, uuid=uuid)
             return compute_manager_id
 
         query = """
-        MATCH (csm: ComputeServiceManager {name: $name, uuid: $uuid})-[rel:MANAGES]->(ComputeServiceRegistration)
+        MATCH (csm: ComputeServiceManager {manager_id: $manager_id, uuid: $uuid})-[rel:MANAGES]->(ComputeServiceRegistration)
         DELETE rel
         RETURN csm.status AS status
         """
 
-        results = self.execute_query(query, name=name, uuid=uuid)
+        results = self.execute_query(query, manager_id=manager_id, uuid=uuid)
 
         if (
             ComputeManagerStatus(results.records[0]["status"])
             != ComputeManagerStatus.ERRORED
         ):
-            self.execute_query(full_delete_query, name=name, uuid=uuid)
+            self.execute_query(full_delete_query, manager_id=manager_id, uuid=uuid)
 
-    def register_computemanager(self, compute_manager_id: ComputeManagerID):
-        raise NotImplementedError
+    def register_computemanager(
+        self, compute_manager_registration: ComputeManagerRegistration
+    ):
+        node = Node(
+            "ComputeManagerRegistration", **compute_manager_registration.to_dict()
+        )
+
+        with self.transaction() as tx:
+            create_subgraph(tx, Subgraph() | node)
+
+        identifier = (
+            compute_manager_registration.manager_id
+            + "-"
+            + compute_manager_registration.uuid
+        )
+        return identifier
 
     def expire_computemanager_registrations(self, expire_time: datetime):
-        raise NotImplementedError
+        query = """
+        MATCH (cmr:ComputeManagerRegistration)
+        WHERE cmr.last_status_update < localdatetime($expire_time)
+
+        DETACH DELETE cmr
+
+        RETURN cmr.manager_id as id, cmr.uuid as uuid
+        """
+
+        results = self.execute_query(query, expire_time=expire_time.isoformat())
+
+        identities = set()
+        for record in results:
+            compute_manager_id = ComputeManagerID(
+                record["manager_id"] + "-" + record["uuid"]
+            )
+            identities.add(compute_manager_id)
+
+        return identities
 
     def get_computemanager_instruction(
         self,
@@ -1405,15 +1452,15 @@ class Neo4jStore(AlchemiscaleStateStore):
         max_failures: int,
     ) -> ComputeManagerInstruction:
 
-        name, uuid = compute_manager_id.name, compute_manager_id.uuid
+        manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
 
         query = """
-        MATCH (csm: ComputeServiceManager {name: $name, uuid: $uuid})
+        MATCH (csm: ComputeServiceManager {manager_id: $manager_id, uuid: $uuid})
         OPTIONAL MATCH (csm)-[rel:MANAGES]->(csr: ComputeServiceRegistration)
         RETURN csm, csr.identifier as csr_id
         """
 
-        results = self.execute_query(query, name=name, uuid=uuid)
+        results = self.execute_query(query, manager_id=manager_id, uuid=uuid)
 
         # no compute manager was found the given name and UUID
         if len(results.records) == 0:
@@ -1441,17 +1488,17 @@ class Neo4jStore(AlchemiscaleStateStore):
     ):
         status = ComputeManagerStatus(status)
 
-        name, uuid = compute_manager_id.name, compute_manager_id.uuid
+        manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
 
         query = """
-        MATCH (csm: ComputeServiceManager {name: $name, uuid: $uuid})
+        MATCH (csm: ComputeServiceManager {manager_id: $manager_id, uuid: $uuid})
         SET csm.status = $status
         SET csm.detail = $detail
         RETURN csm
         """
 
         results = self.execute_query(
-            query, status=str(status), uuid=uuid, name=name, detail=detail
+            query, status=str(status), uuid=uuid, manager_id=manager_id, detail=detail
         )
 
         if len(results.records) == 0:
