@@ -10,20 +10,17 @@ import zstandard as zstd
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 
-from .manager import ComputeManagerInstruction
-
 from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
     json_to_gufe,
 )
 from ..compression import compress_gufe_zstd, decompress_gufe_zstd
-from ..models import Scope, ScopedKey
+from ..models import Scope, ScopedKey, ComputeManagerInstruction, ComputeManagerStatus
 from ..storage.models import (
     TaskHub,
     Task,
     ComputeServiceID,
-    ComputeManagerStatus,
     ComputeManagerID,
 )
 

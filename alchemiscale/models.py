@@ -5,6 +5,7 @@
 """
 
 from typing import Any
+from enum import StrEnum
 from pydantic import BaseModel, field_validator, model_validator, ConfigDict
 from gufe.tokenization import GufeKey
 from re import fullmatch
@@ -247,3 +248,15 @@ def _hierarchy_valid(scope_dict: dict[str : str | None]) -> bool:
     if any([not _is_wildcard(i) for i in sublevels]):
         return False
     return True
+
+
+class ComputeManagerInstruction(StrEnum):
+    OK = "OK"
+    SKIP = "SKIP"
+    SHUTDOWN = "SHUTDOWN"
+
+
+class ComputeManagerStatus(StrEnum):
+    OK = "OK"
+    STALLED = "STALLED"
+    ERRORED = "ERRORED"

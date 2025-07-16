@@ -95,12 +95,6 @@ class ComputeManagerID(str):
         return self._uuid
 
 
-class ComputeManagerStatus(StrEnum):
-    OK = "OK"
-    STALLED = "STALLED"
-    ERRORED = "ERRORED"
-
-
 class ComputeManagerRegistration(BaseModel):
 
     manager_id: str

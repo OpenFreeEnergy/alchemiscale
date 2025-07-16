@@ -34,7 +34,6 @@ from .models import (
     ComputeServiceRegistration,
     ComputeManagerRegistration,
     ComputeManagerID,
-    ComputeManagerStatus,
     NetworkMark,
     NetworkStateEnum,
     ProtocolDAGResultRef,
@@ -44,9 +43,9 @@ from .models import (
     TaskStatusEnum,
     Tracebacks,
 )
-from ..compute.manager import ComputeManagerInstruction
+
 from ..strategies import Strategy
-from ..models import Scope, ScopedKey
+from ..models import Scope, ScopedKey, ComputeManagerStatus, ComputeManagerInstruction
 from .cypher import cypher_or
 
 from ..security.models import CredentialedEntity

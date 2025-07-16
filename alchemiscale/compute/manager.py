@@ -5,17 +5,11 @@
 """
 
 from abc import abstractmethod
-from enum import StrEnum
 
 from ..storage.models import ComputeManagerID
 from .client import AlchemiscaleComputeManagerClient
-from settings import ComputeManagerSettings
-
-
-class ComputeManagerInstruction(StrEnum):
-    OK = "OK"
-    SKIP = "SKIP"
-    SHUTDOWN = "SHUTDOWN"
+from .settings import ComputeManagerSettings
+from .models import ComputeManagerInstruction
 
 
 class ComputeManager:
