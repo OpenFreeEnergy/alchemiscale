@@ -33,6 +33,7 @@ from .models import (
     ComputeServiceID,
     ComputeServiceRegistration,
     ComputeManagerID,
+    ComputeManagerStatus,
     NetworkMark,
     NetworkStateEnum,
     ProtocolDAGResultRef,
@@ -42,6 +43,7 @@ from .models import (
     TaskStatusEnum,
     Tracebacks,
 )
+from ..compute.manager import ComputeManagerInstruction
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
 from .cypher import cypher_or
@@ -1361,8 +1363,34 @@ class Neo4jStore(AlchemiscaleStateStore):
     ):
         raise NotImplementedError
 
-    def deregister_computemanager(self, compute_manager_id: ComputeManagerID):
-        raise NotImplementedError
+    def deregister_computemanager(
+        self, compute_manager_id: ComputeManagerID, force=False
+    ):
+        name, uuid = compute_manager_id.name, compute_manager_id.uuid
+
+        full_delete_query = """
+            MATCH (csm:ComputeServiceManager {name: $name, uuid: $uuid})
+            DELETE csm
+            RETURN
+            """
+
+        if force:
+            self.execute_query(full_delete_query, name=name, uuid=uuid)
+            return compute_manager_id
+
+        query = """
+        MATCH (csm: ComputeServiceManager {name: $name, uuid: $uuid})-[rel:MANAGES]->(ComputeServiceRegistration)
+        DELETE rel
+        RETURN csm.status AS status
+        """
+
+        results = self.execute_query(query, name=name, uuid=uuid)
+
+        if (
+            ComputeManagerStatus(results.records[0]["status"])
+            != ComputeManagerStatus.ERRORED
+        ):
+            self.execute_query(full_delete_query, name=name, uuid=uuid)
 
     def register_computemanager(self, compute_manager_id: ComputeManagerID):
         raise NotImplementedError
@@ -1370,8 +1398,65 @@ class Neo4jStore(AlchemiscaleStateStore):
     def expire_computemanager_registrations(self, expire_time: datetime):
         raise NotImplementedError
 
-    def get_computemanager_instruction(self, compute_manager_id: ComputeManagerID):
-        raise NotImplementedError
+    def get_computemanager_instruction(
+        self,
+        compute_manager_id: ComputeManagerID,
+        forgive_time: datetime,
+        max_failures: int,
+    ) -> ComputeManagerInstruction:
+
+        name, uuid = compute_manager_id.name, compute_manager_id.uuid
+
+        query = """
+        MATCH (csm: ComputeServiceManager {name: $name, uuid: $uuid})
+        OPTIONAL MATCH (csm)-[rel:MANAGES]->(csr: ComputeServiceRegistration)
+        RETURN csm, csr.identifier as csr_id
+        """
+
+        results = self.execute_query(query, name=name, uuid=uuid)
+
+        # no compute manager was found the given name and UUID
+        if len(results.records) == 0:
+            return ComputeManagerInstruction.SHUTDOWN
+
+        # TODO: very chatty, try and do this in a single query
+        # this would require a new state store method that requests
+        # failure times in bulk
+        for record in results.records:
+            csr_id = record["csr_id"]
+            if not self.compute_service_can_claim(
+                csr_id,
+                forgive_time,
+                max_failures,
+            ):
+                return ComputeManagerInstruction.SKIP
+
+        return ComputeManagerInstruction.OK
+
+    def update_compute_manager_status(
+        self,
+        compute_manager_id: ComputeManagerID,
+        status: ComputeManagerStatus,
+        detail: str,
+    ):
+        status = ComputeManagerStatus(status)
+
+        name, uuid = compute_manager_id.name, compute_manager_id.uuid
+
+        query = """
+        MATCH (csm: ComputeServiceManager {name: $name, uuid: $uuid})
+        SET csm.status = $status
+        SET csm.detail = $detail
+        RETURN csm
+        """
+
+        results = self.execute_query(
+            query, status=str(status), uuid=uuid, name=name, detail=detail
+        )
+
+        if len(results.records) == 0:
+            detail = f"No entry for ComputeManager: {compute_manager_id}"
+            raise ValueError(detail)
 
     ## task hubs
 

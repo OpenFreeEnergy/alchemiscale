@@ -395,11 +395,34 @@ async def set_task_result(
     return result_sk
 
 
+def process_compute_manager_id_string(
+    compute_manager_id_string: str,
+) -> ComputeManagerID:
+    """Try creating a ComputeManagerID from a string representation. Raise HTTPException."""
+    try:
+        compute_manager_id = ComputeManagerID(compute_manager_id_string)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            details=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
+
+    return compute_manager_id
+
+
 @router.post("/computemanager/{compute_manager_id}/register")
 def computemanager_register(
     compute_manager_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
+
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+
     now = datetime.utcnow()
     cm_registration = ComputeManagerRegistration(
         identifier=ComputeManagerID(compute_manager_id),
@@ -415,13 +438,12 @@ def computemanager_register(
 @router.post("/computemanager/{compute_manager_id}/deregister")
 def computemanager_deregister(
     compute_manager_id,
+    force: bool = False,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    compute_manager_id_ = n4js.deregister_computemanager(
-        ComputeManagerID(compute_manager_id)
-    )
-
-    return compute_manager_id_
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+    n4js.deregister_computemanager(compute_manager_id, force=force)
+    return compute_manager_id
 
 
 @router.post("/computemanager/{compute_manager_id}/get_instruction")
@@ -429,8 +451,16 @@ def computemanager_get_instruction(
     compute_manager_id,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
 ):
-    raise NotImplementedError
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+    now = datetime.utcnow()
+    instruction = n4js.get_computemanager_instruction(
+        compute_manager_id,
+        now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
+        settings.ALCHEMISCALE_COMPUTE_API_MAX_FAILURES,
+    )
+    return instruction
 
 
 @router.post("/computemanager/{compute_manager_id}/update_status")
@@ -441,37 +471,19 @@ def computemanager_update_status(
     detail: str | None = Body(),
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
     try:
-        compute_manager_id = ComputeManagerID(compute_manager_id)
+        n4js.update_compute_manager_status(compute_manager_id, status, detail)
     except ValueError as e:
         raise HTTPException(
-            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            details=e.args[0],
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            details=str(e),
         )
-
-    try:
-        status = ComputeManagerStatus(status)
-    except ValueError as e:
+    except Exception as e:
         raise HTTPException(
-            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            details=e.args[0],
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            details=str(e),
         )
-
-    name, uuid = compute_manager_id.name, compute_manager_id.uuid
-
-    query = f"""
-    MATCH (cms: ComputeServiceManager {uuid: {uuid}, name: {name}})
-    SET cms.status = {status}
-    SET cms.detail = {detail}
-    RETURN cms
-    """
-
-    results = n4js.execute_query(query, status=str(status), uuid=uuid, name=name, detail=detail)
-
-    if len(results.records) == 0:
-        detail = f"No entry for ComputeManager: {compute_manager_id}"
-        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
 ### add router
