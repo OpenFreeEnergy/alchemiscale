@@ -1379,34 +1379,30 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return ids
 
-    def deregister_computemanager(
-        self, compute_manager_id: ComputeManagerID, force=False
-    ):
+    def deregister_errored_computemanager(self, compute_manager_id: ComputeManagerID):
         manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
 
-        full_delete_query = """
-            MATCH (csm:ComputeServiceManager {manager_id: $manager_id, uuid: $uuid})
-            DELETE csm
-            RETURN
-            """
+        query = """
+        MATCH (cmr:ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid})
+        DETACH DELETE cmr
+        RETURN
+        """
 
-        if force:
-            self.execute_query(full_delete_query, manager_id=manager_id, uuid=uuid)
-            return compute_manager_id
+        self.execute_query(query, manager_id=manager_id, uuid=uuid)
+
+    def deregister_computemanager(self, compute_manager_id: ComputeManagerID):
+        manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
 
         query = """
-        MATCH (csm: ComputeServiceManager {manager_id: $manager_id, uuid: $uuid})-[rel:MANAGES]->(ComputeServiceRegistration)
+        MATCH (cmr: ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid})-[rel:MANAGES]->(ComputeServiceRegistration)
         DELETE rel
-        RETURN csm.status AS status
+        WITH cmr
+        MATCH (cmr)
+        WHERE cmr.status <> "ERRORED"
+        DELETE cmr
         """
 
         results = self.execute_query(query, manager_id=manager_id, uuid=uuid)
-
-        if (
-            ComputeManagerStatus(results.records[0]["status"])
-            != ComputeManagerStatus.ERRORED
-        ):
-            self.execute_query(full_delete_query, manager_id=manager_id, uuid=uuid)
 
     def register_computemanager(
         self, compute_manager_registration: ComputeManagerRegistration
