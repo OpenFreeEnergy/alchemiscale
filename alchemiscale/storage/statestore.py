@@ -33,6 +33,8 @@ from .models import (
     ComputeServiceID,
     ComputeServiceRegistration,
     ComputeManagerRegistration,
+    ComputeManagerInstruction,
+    ComputeManagerStatus,
     ComputeManagerID,
     NetworkMark,
     NetworkStateEnum,
@@ -45,7 +47,7 @@ from .models import (
 )
 
 from ..strategies import Strategy
-from ..models import Scope, ScopedKey, ComputeManagerStatus, ComputeManagerInstruction
+from ..models import Scope, ScopedKey
 from .cypher import cypher_or
 
 from ..security.models import CredentialedEntity

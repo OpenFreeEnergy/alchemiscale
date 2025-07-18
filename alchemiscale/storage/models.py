@@ -58,6 +58,18 @@ class ComputeServiceRegistration(BaseModel):
         return cls(**dct_)
 
 
+class ComputeManagerInstruction(StrEnum):
+    OK = "OK"
+    SKIP = "SKIP"
+    SHUTDOWN = "SHUTDOWN"
+
+
+class ComputeManagerStatus(StrEnum):
+    OK = "OK"
+    STALLED = "STALLED"
+    ERRORED = "ERRORED"
+
+
 class ComputeManagerID(str):
 
     def __init__(self, value):

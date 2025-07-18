@@ -16,12 +16,14 @@ from ..base.client import (
     json_to_gufe,
 )
 from ..compression import compress_gufe_zstd, decompress_gufe_zstd
-from ..models import Scope, ScopedKey, ComputeManagerInstruction, ComputeManagerStatus
+from ..models import Scope, ScopedKey
 from ..storage.models import (
     TaskHub,
     Task,
     ComputeServiceID,
     ComputeManagerID,
+    ComputeManagerInstruction,
+    ComputeManagerStatus,
 )
 
 

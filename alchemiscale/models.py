@@ -248,15 +248,3 @@ def _hierarchy_valid(scope_dict: dict[str : str | None]) -> bool:
     if any([not _is_wildcard(i) for i in sublevels]):
         return False
     return True
-
-
-class ComputeManagerInstruction(StrEnum):
-    OK = "OK"
-    SKIP = "SKIP"
-    SHUTDOWN = "SHUTDOWN"
-
-
-class ComputeManagerStatus(StrEnum):
-    OK = "OK"
-    STALLED = "STALLED"
-    ERRORED = "ERRORED"

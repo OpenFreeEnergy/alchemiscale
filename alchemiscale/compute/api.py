@@ -43,8 +43,9 @@ from ..storage.models import (
     ComputeManagerID,
     ComputeManagerRegistration,
     ComputeServiceRegistration,
+    ComputeManagerStatus,
 )
-from ..models import Scope, ScopedKey, ComputeManagerStatus
+from ..models import Scope, ScopedKey
 from ..security.models import (
     TokenData,
     CredentialedComputeIdentity,
