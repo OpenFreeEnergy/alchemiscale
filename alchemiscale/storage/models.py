@@ -80,13 +80,13 @@ class ComputeManagerID(str):
         if len(parts) != 6:
             # this currently only supports field-separated hex uuid4s
             raise ValueError(
-                "ComputeManagerID must have the form `{name}-{uuid}` with a field-separated hex"
+                "ComputeManagerID must have the form `{manager_id}-{uuid}` with a field-separated hex"
             )
 
-        self._name = parts[0]
+        self._manager_id = parts[0]
         self._uuid = "-".join(parts[1:])
 
-        if not self.name.isalnum():
+        if not self.manager_id.isalnum():
             raise ValueError("ComputeManagerID only allows alpha-numeric names")
 
         try:
@@ -95,12 +95,12 @@ class ComputeManagerID(str):
             raise ValueError("Could not interpret the provided UUID.")
 
     @classmethod
-    def from_name(cls, name: str):
-        return cls(f"{name}-{uuid4()}")
+    def from_manager_id(cls, manager_id: str):
+        return cls(f"{manager_id}-{uuid4()}")
 
     @property
-    def name(self) -> str:
-        return self._name
+    def manager_id(self) -> str:
+        return self._manager_id
 
     @property
     def uuid(self) -> str:
