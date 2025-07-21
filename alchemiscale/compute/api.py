@@ -441,11 +441,10 @@ def computemanager_register(
 @router.post("/computemanager/{compute_manager_id}/deregister")
 def computemanager_deregister(
     compute_manager_id,
-    force: bool = False,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
-    n4js.deregister_computemanager(compute_manager_id, force=force)
+    n4js.deregister_computemanager(compute_manager_id)
     return compute_manager_id
 
 
