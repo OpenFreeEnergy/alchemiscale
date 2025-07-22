@@ -73,7 +73,7 @@ class ComputeManagerStatus(StrEnum):
 class ComputeManagerID(str):
 
     def __init__(self, value):
-        super().__init__(value)
+        super().__init__()
 
         parts = self.split("-")
 
@@ -115,6 +115,35 @@ class ComputeManagerRegistration(BaseModel):
     status: str
     detail: str
     saturation: float
+
+    def __repr__(self):  # pragma: no cover
+        return f"<ComputeManagerRegistration('{str(self)}')>"
+
+    def __str__(self):
+        return "-".join([self.manager_id, self.uuid])
+
+    @classmethod
+    def from_now(cls, identifier: ComputeManagerID):
+        now = datetime.utcnow()
+        return cls(
+            manager_id=identifier.manager_id,
+            uuid=identifier.uuid,
+            last_status_update=now,
+            status=ComputeManagerStatus.OK,
+            detail="",
+            saturation=0,
+        )
+
+    def to_dict(self):
+        dct = self.dict()
+        dct["manager_id"] = str(self.manager_id)
+        dct["uuid"] = str(self.uuid)
+
+        return dct
+
+    @classmethod
+    def from_dict(cls, dct):
+        return cls(**dct_)
 
 
 class TaskProvenance(BaseModel):

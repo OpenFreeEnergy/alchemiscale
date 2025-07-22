@@ -425,7 +425,8 @@ def computemanager_register(
 
     now = datetime.utcnow()
     cm_registration = ComputeManagerRegistration(
-        identifier=ComputeManagerID(compute_manager_id),
+        manager_id=compute_manager_id.manager_id,
+        uuid=compute_manager_id.uuid,
         registered=now,
         last_status_update=now,
         status=ComputeManagerStatus.OK,
@@ -434,7 +435,6 @@ def computemanager_register(
     )
 
     compute_manager_id_ = n4js.register_computemanager(cm_registration)
-
     return compute_manager_id_
 
 
@@ -457,12 +457,13 @@ def computemanager_get_instruction(
 ):
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
     now = datetime.utcnow()
-    instruction = n4js.get_computemanager_instruction(
+    instruction, payload = n4js.get_computemanager_instruction(
         compute_manager_id,
         now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
         settings.ALCHEMISCALE_COMPUTE_API_MAX_FAILURES,
     )
-    return instruction
+    payload["instruction"] = str(instruction)
+    return payload
 
 
 @router.post("/computemanager/{compute_manager_id}/update_status")

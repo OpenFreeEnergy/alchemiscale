@@ -118,8 +118,31 @@ class ComputeServiceSettings(BaseModel):
 
 class ComputeManagerSettings(BaseModel):
 
-    api_url: str
-    name: str
-    status_update_interval: int
-    logfile: Path | None
-    max_compute_services: int
+    api_url: str | None = Field(
+        ..., description="URL of the compute API to manager services for."
+    )
+    identifier: str | None = Field(
+        ..., description="Identifier for the compute identity used for authentication."
+    )
+    key: str | None = Field(
+        ..., description="Credential for the compute identity used for authentication."
+    )
+    name: str = Field(
+        ...,
+        description=(
+            "The name to give this compute manager. This value should be distinct from all"
+            "other compute managers."
+        ),
+    )
+
+    status_update_interval: int = Field(
+        ..., description="Time in seconds to send a status update to the compute API."
+    )
+    logfile: Path | None = Field(..., description="File path to write logs to.")
+    max_compute_services: int = Field(
+        ...,
+        description="Maximum number of compute services the manager is allowed to have running at a time.",
+    )
+    sleep_interval: int = Field(
+        1800, description="Time in seconds to wait for another instruction."
+    )

@@ -153,7 +153,12 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         return ScopedKey.from_dict(pdr_sk)
 
 
+class AlchemiscaleComputeManagerClientError(AlchemiscaleBaseClientError): ...
+
+
 class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
+
+    _exception = AlchemiscaleComputeManagerClientError
 
     def register(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
         res = self._post_resource(f"/computemanager/{compute_manager_id}/register", {})
@@ -179,9 +184,29 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
 
         return ComputeManagerID(res)
 
-    def get_instruction(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
-        res = self._post_resource(
+    def get_instruction(
+        self, compute_manager_id: ComputeManagerID
+    ) -> tuple[ComputeManagerInstruction, dict]:
+        instruction_data = self._post_resource(
             f"/computemanager/{compute_manager_id}/instruction",
             {},
         )
-        return ComputeManagerInstruction(res)
+
+        match instruction_data:
+            case {
+                "instruction": "OK",
+                "num_registered": num_registered,
+                "compute_service_ids": ids,
+            }:
+                return ComputeManagerInstruction.OK, {
+                    "num_registered": num_registered,
+                    "compute_service_ids": ids,
+                }
+            case {"instruction": "SKIP"}:
+                return ComputeManagerInstruction.SKIP, {}
+            case {"instruction": "SHUTDOWN", "message": message}:
+                return ComputeManagerInstruction.SHUTDOWN, {message: message}
+            case _:
+                raise self._exception(
+                    f"Received unknown instruction pattern: {instruction_data}"
+                )

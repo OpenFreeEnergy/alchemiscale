@@ -1447,12 +1447,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         compute_manager_id: ComputeManagerID,
         forgive_time: datetime,
         max_failures: int,
-    ) -> ComputeManagerInstruction:
+    ) -> tuple[ComputeManagerInstruction, dict]:
 
         manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
 
         query = """
-        MATCH (csm: ComputeServiceManager {manager_id: $manager_id, uuid: $uuid})
+        MATCH (csm: ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid})
         OPTIONAL MATCH (csm)-[rel:MANAGES]->(csr: ComputeServiceRegistration)
         RETURN csm, csr.identifier as csr_id
         """
@@ -1461,21 +1461,29 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         # no compute manager was found the given name and UUID
         if len(results.records) == 0:
-            return ComputeManagerInstruction.SHUTDOWN
+            msg = "no compute manager was found the given name and UUID"
+            return ComputeManagerInstruction.SHUTDOWN, {"message": msg}
 
         # TODO: very chatty, try and do this in a single query
         # this would require a new state store method that requests
         # failure times in bulk
+        csr_ids = []
         for record in results.records:
-            csr_id = record["csr_id"]
-            if not self.compute_service_can_claim(
-                csr_id,
-                forgive_time,
-                max_failures,
-            ):
-                return ComputeManagerInstruction.SKIP
+            if csr_id := record["csr_id"]:
+                if not self.compute_service_can_claim(
+                    csr_id,
+                    forgive_time,
+                    max_failures,
+                ):
+                    return ComputeManagerInstruction.SKIP, {}
+            else:
+                break
+            csr_ids.append(ComputeServiceID(csr_id))
 
-        return ComputeManagerInstruction.OK
+        return ComputeManagerInstruction.OK, {
+            "num_registered": len(csr_ids),
+            "compute_service_ids": csr_ids,
+        }
 
     def update_compute_manager_status(
         self,
