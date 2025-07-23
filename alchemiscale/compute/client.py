@@ -35,8 +35,15 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     _exception = AlchemiscaleComputeClientError
 
-    def register(self, compute_service_id: ComputeServiceID):
-        res = self._post_resource(f"/computeservice/{compute_service_id}/register", {})
+    def register(
+        self,
+        compute_service_id: ComputeServiceID,
+        compute_manager_id: ComputeManagerID | None = None,
+    ):
+        res = self._post_resource(
+            f"/computeservice/{compute_service_id}/register",
+            {"compute_manager_id": compute_manager_id},
+        )
         return ComputeServiceID(res)
 
     def deregister(self, compute_service_id: ComputeServiceID):
@@ -176,7 +183,7 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         status: ComputeManagerStatus,
         detail: str | None = None,
     ) -> ComputeManagerID:
-        payload = {"detail": detail, status: str(status)}
+        payload = {"detail": detail, "status": str(status)}
         res = self._post_resource(
             f"/computemanager/{compute_manager_id}/status",
             payload,
@@ -205,7 +212,7 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
             case {"instruction": "SKIP"}:
                 return ComputeManagerInstruction.SKIP, {}
             case {"instruction": "SHUTDOWN", "message": message}:
-                return ComputeManagerInstruction.SHUTDOWN, {message: message}
+                return ComputeManagerInstruction.SHUTDOWN, {"message": message}
             case _:
                 raise self._exception(
                     f"Received unknown instruction pattern: {instruction_data}"

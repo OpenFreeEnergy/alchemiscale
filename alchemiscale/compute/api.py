@@ -105,14 +105,23 @@ def list_scopes(
 @router.post("/computeservice/{compute_service_id}/register")
 def register_computeservice(
     compute_service_id,
+    *,
+    compute_manager_id: str | None = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     now = datetime.utcnow()
+
+    if compute_manager_id:
+        manager_id = process_compute_manager_id_string(compute_manager_id).manager_id
+    else:
+        manager_id = None
+
     csreg = ComputeServiceRegistration(
         identifier=ComputeServiceID(compute_service_id),
         registered=now,
         heartbeat=now,
         failure_times=[],
+        manager=manager_id,
     )
 
     compute_service_id_ = n4js.register_computeservice(csreg)
@@ -466,12 +475,12 @@ def computemanager_get_instruction(
     return payload
 
 
-@router.post("/computemanager/{compute_manager_id}/update_status")
+@router.post("/computemanager/{compute_manager_id}/status")
 def computemanager_update_status(
     compute_manager_id,
     *,
     status: str = Body(),
-    detail: str | None = Body(),
+    detail: str | None = Body(None),
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
@@ -487,6 +496,8 @@ def computemanager_update_status(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             details=str(e),
         )
+
+    return compute_manager_id
 
 
 ### add router

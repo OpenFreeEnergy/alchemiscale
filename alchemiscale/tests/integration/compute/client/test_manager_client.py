@@ -1,9 +1,15 @@
+from datetime import datetime
 from time import sleep
 
 import pytest
 
 from alchemiscale.compute import client
-from alchemiscale.storage.models import ComputeManagerID, ComputeManagerInstruction
+from alchemiscale.storage.models import (
+    ComputeManagerID,
+    ComputeManagerInstruction,
+    ComputeManagerStatus,
+    ComputeServiceID,
+)
 from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
 
 
@@ -22,24 +28,24 @@ class TestComputeManager:
     def test_refresh_credential(
         self,
         n4js_preloaded,
-        compute_client: client.AlchemiscaleComputeManagerClient,
+        compute_manager_client: client.AlchemiscaleComputeManagerClient,
         uvicorn_server,
     ):
         settings = get_compute_settings_override()
-        assert compute_client._jwtoken is None
-        compute_client._get_token()
+        assert compute_manager_client._jwtoken is None
+        compute_manager_client._get_token()
 
-        token = compute_client._jwtoken
+        token = compute_manager_client._jwtoken
         assert token is not None
 
         # token shouldn't change this fast
-        compute_client.get_info()
-        assert token == compute_client._jwtoken
+        compute_manager_client.get_info()
+        assert token == compute_manager_client._jwtoken
 
         # should change if we wait a bit
         sleep(settings.JWT_EXPIRE_SECONDS + 2)
-        compute_client.get_info()
-        assert token != compute_client._jwtoken
+        compute_manager_client.get_info()
+        assert token != compute_manager_client._jwtoken
 
     def test_api_check(
         self,
@@ -72,20 +78,134 @@ class TestComputeManager:
     def test_get_instruction(
         self,
         n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        compute_service_id: ComputeServiceID,
         compute_manager_client: client.AlchemiscaleComputeManagerClient,
     ):
         compute_manager_id = ComputeManagerID.from_manager_id("testmanager")
         compute_manager_client.register(compute_manager_id)
+
+        # no compute services being managed
         instruction, payload = compute_manager_client.get_instruction(
             compute_manager_id
         )
 
         assert instruction == ComputeManagerInstruction.OK, (instruction, payload)
-        assert payload == {"compute_service_ids": [], "num_registered": 0}
+        assert payload == {"compute_service_ids": [], "num_registered": 0}, (
+            instruction,
+            payload,
+        )
+
+        # mock the creation of a compute service
+        _compute_service_id = compute_client.register(
+            compute_service_id, compute_manager_id=compute_manager_id
+        )
+
+        instruction, payload = compute_manager_client.get_instruction(
+            compute_manager_id
+        )
+
+        assert instruction == ComputeManagerInstruction.OK, (instruction, payload)
+        assert payload == {
+            "compute_service_ids": [_compute_service_id],
+            "num_registered": 1,
+        }, (instruction, payload)
+
+        # add in many failures to trigger a SKIP instruction on next request
+
+        add_fake_failures_query = """
+        UNWIND $failure_times AS failure_time
+        MATCH (csr: ComputeServiceRegistration {identifier: $compute_service_id})
+        SET csr.failure_times = localdatetime(failure_time) + csr.failure_times
+        """
+
+        failure_times = [datetime.utcnow()] * 4
+        n4js_preloaded.execute_query(
+            add_fake_failures_query,
+            compute_service_id=compute_service_id,
+            failure_times=failure_times,
+        )
+
+        instruction, payload = compute_manager_client.get_instruction(
+            compute_manager_id
+        )
+
+        assert instruction == ComputeManagerInstruction.SKIP, (instruction, payload)
+        assert payload == {}, (instruction, payload)
+
+        # change the UUID associated with the stored manager to simulate usurping
+
+        usurp_query = """
+        MATCH (cmr: ComputeManagerRegistration {manager_id: $manager_id})
+        SET cmr.uuid = $new_uuid
+        """
+        from uuid import uuid4
+
+        new_uuid = uuid4()
+        params = {
+            "manager_id": compute_manager_id.manager_id,
+            "new_uuid": str(new_uuid),
+        }
+        n4js_preloaded.execute_query(usurp_query, params)
+
+        instruction, payload = compute_manager_client.get_instruction(
+            compute_manager_id
+        )
+
+        assert instruction == ComputeManagerInstruction.SHUTDOWN, (instruction, payload)
+        assert payload == {
+            "message": "no compute manager was found with the given manager id and UUID"
+        }, (instruction, payload)
 
     def test_update_status(
         self,
         n4js_preloaded,
         compute_manager_client: client.AlchemiscaleComputeManagerClient,
     ):
-        raise NotImplementedError
+        compute_manager_id = ComputeManagerID.from_manager_id("testmanager")
+        compute_manager_client.register(compute_manager_id)
+
+        query = """
+        MATCH (cmr: ComputeManagerRegistration {manager_id: $manager_id})
+        RETURN cmr.status AS status, cmr.detail as detail
+        """
+
+        params = {"manager_id": compute_manager_id.manager_id}
+
+        # status: OK
+        returned_id = compute_manager_client.update_status(
+            compute_manager_id, ComputeManagerStatus.OK
+        )
+
+        assert returned_id == compute_manager_id
+
+        results = n4js_preloaded.execute_query(query, params)
+        record = results.records[0]
+        assert record["status"] == "OK" and record["detail"] is None
+
+        # status: ERRORED
+        exception = RuntimeError("UnexpectedError")
+
+        returned_id = compute_manager_client.update_status(
+            compute_manager_id,
+            ComputeManagerStatus.ERRORED,
+            repr(exception),
+        )
+
+        assert returned_id == compute_manager_id
+
+        results = n4js_preloaded.execute_query(query, params)
+        record = results.records[0]
+        assert record["status"] == "ERRORED" and record["detail"] == repr(exception)
+
+        # status: STALLED
+        returned_id = compute_manager_client.update_status(
+            compute_manager_id,
+            ComputeManagerStatus.STALLED,
+        )
+
+        assert returned_id == compute_manager_id
+
+        results = n4js_preloaded.execute_query(query, params)
+        record = results.records[0]
+        assert record["status"] == "STALLED" and record["detail"] is None

@@ -28,6 +28,7 @@ class ComputeServiceRegistration(BaseModel):
     registered: datetime
     heartbeat: datetime
     failure_times: list[datetime] = []
+    manager: str | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

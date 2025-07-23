@@ -1226,6 +1226,20 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             create_subgraph(tx, Subgraph() | node)
 
+            if compute_service_registration.manager:
+                query = """
+                MATCH (cmr: ComputeManagerRegistration {manager_id: $manager_id}), (csr: ComputeServiceRegistration {manager: $manager_id, identifier: $identifier})
+                CREATE (cmr)-[rel:MANAGES]->(csr)
+                RETURN cmr, rel, csr
+                """
+                results = tx.run(
+                    query,
+                    manager_id=compute_service_registration.manager,
+                    identifier=compute_service_registration.identifier,
+                )
+                if not len(list(results)):
+                    raise ValueError("Could not find ComputeManagerRegistration")
+
         return compute_service_registration.identifier
 
     def deregister_computeservice(self, compute_service_id: ComputeServiceID):
@@ -1461,7 +1475,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         # no compute manager was found the given name and UUID
         if len(results.records) == 0:
-            msg = "no compute manager was found the given name and UUID"
+            msg = "no compute manager was found with the given manager id and UUID"
             return ComputeManagerInstruction.SHUTDOWN, {"message": msg}
 
         # TODO: very chatty, try and do this in a single query
@@ -1496,7 +1510,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
 
         query = """
-        MATCH (csm: ComputeServiceManager {manager_id: $manager_id, uuid: $uuid})
+        MATCH (csm: ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid})
         SET csm.status = $status
         SET csm.detail = $detail
         RETURN csm
@@ -1507,7 +1521,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         if len(results.records) == 0:
-            detail = f"No entry for ComputeManager: {compute_manager_id}"
+            detail = f"No record for ComputeManager: {compute_manager_id}"
             raise ValueError(detail)
 
     ## task hubs
