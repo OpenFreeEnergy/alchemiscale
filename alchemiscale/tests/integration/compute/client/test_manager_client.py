@@ -86,6 +86,6 @@ class TestComputeManager:
     def test_update_status(
         self,
         n4js_preloaded,
-        computer_manager_client: client.AlchemiscaleComputeManagerClient,
+        compute_manager_client: client.AlchemiscaleComputeManagerClient,
     ):
         raise NotImplementedError
