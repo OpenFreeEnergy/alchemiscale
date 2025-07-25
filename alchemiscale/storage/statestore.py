@@ -67,11 +67,7 @@ from .subgraph import (
 @lru_cache
 def get_n4js(settings: Neo4jStoreSettings):
     """Convenience function for getting a Neo4jStore directly from settings."""
-
-    graph = GraphDatabase.driver(
-        settings.NEO4J_URL, auth=(settings.NEO4J_USER, settings.NEO4J_PASS)
-    )
-    return Neo4jStore(graph, db_name=settings.NEO4J_DBNAME)
+    return Neo4jStore(settings)
 
 
 class Neo4JStoreError(Exception): ...
@@ -147,9 +143,18 @@ class Neo4jStore(AlchemiscaleStateStore):
         },
     }
 
-    def __init__(self, graph: Driver, db_name: str = "neo4j"):
-        self.graph: Driver = graph
-        self.db_name = db_name
+    def __init__(self, settings: Neo4jStoreSettings):
+        """Initialize Neo4jStore from settings.
+        
+        Parameters
+        ----------
+        settings : Neo4jStoreSettings
+            Configuration settings for Neo4j state store.
+        """
+        self.graph: Driver = GraphDatabase.driver(
+            settings.NEO4J_URL, auth=(settings.NEO4J_USER, settings.NEO4J_PASS)
+        )
+        self.db_name = settings.NEO4J_DBNAME
         self.gufe_nodes = weakref.WeakValueDictionary()
 
     @contextmanager
@@ -1197,7 +1202,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def set_network_strategy(
         self,
         network: ScopedKey,
-        strategy: GufeTokenizable | None,
+        strategy: Strategy | None,
         strategy_state: StrategyState | None = None,
     ) -> ScopedKey | None:
         """Set the compute Strategy for the given AlchemicalNetwork.
@@ -1224,76 +1229,46 @@ class Neo4jStore(AlchemiscaleStateStore):
                 "`network` ScopedKey does not correspond to an `AlchemicalNetwork`"
             )
 
-        if strategy is None:
-            # Remove strategy from network and clean up orphaned Strategy nodes
+        if strategy_state is None:
+            strategy_state = StrategyState()
+
+        with self.transaction() as tx:
+
+            # check if there is an existing Strategy for the network; if so, remove it
             q = """
-            MATCH (an:AlchemicalNetwork {_scoped_key: $network})-[r:PROGRESSES]->(s:Strategy)
+            MATCH (an:AlchemicalNetwork {_scoped_key: $network})<-[r:PROGRESSES]-(s)
             DELETE r
-            
+
             // Clean up Strategy node if it has no remaining PROGRESSES relationships
             WITH s
-            OPTIONAL MATCH (s)<-[:PROGRESSES]-()
+            OPTIONAL MATCH (s)-[:PROGRESSES]->()
             WITH s, count(*) as remaining_relationships
             WHERE remaining_relationships = 0
             DELETE s
             """
-            with self.transaction() as tx:
-                tx.run(q, network=str(network))
-            return None
 
-        # Create/update strategy and relationship
-        strategy_sk = self.assemble_scoped_key(strategy, network.scope)
-        
-        if strategy_state is None:
-            strategy_state = StrategyState()
-            
-        # First ensure the strategy exists
-        strategy_node = self._gufe_to_node(strategy, network.scope)
-        
-        q = """
-        MERGE (s:Strategy {_scoped_key: $strategy_sk})
-        SET s += $strategy_props
-        
-        WITH s
-        MATCH (an:AlchemicalNetwork {_scoped_key: $network})
-        
-        // Remove any existing PROGRESSES relationship and clean up orphaned Strategy
-        OPTIONAL MATCH (an)-[old_r:PROGRESSES]->(old_s:Strategy)
-        WHERE old_s is not s
-        DELETE old_r
-        WITH s, an, old_s
-        WHERE old_s IS NOT NULL
-        
-        // Clean up old Strategy node if it has no remaining PROGRESSES relationships
-        OPTIONAL MATCH (old_s)<-[:PROGRESSES]-()
-        WITH s, an, old_s, count(*) as remaining_relationships
-        WHERE old_s IS NOT NULL AND remaining_relationships = 0
-        DELETE old_s
-        
-        WITH s, an
-        // Create new PROGRESSES relationship with strategy state
-        CREATE (an)-[r:PROGRESSES]->(s)
-        SET r += $strategy_state
-        
-        RETURN s._scoped_key AS strategy_key
-        """
-        
-        strategy_props = strategy_node.get_properties()
-        strategy_state_props = strategy_state.to_dict()
-        
-        with self.transaction() as tx:
-            result = tx.run(
-                q,
-                strategy_sk=str(strategy_sk),
-                strategy_props=strategy_props,
-                network=str(network),
-                strategy_state=strategy_state_props,
-            )
-            record = result.single()
-            
-        return ScopedKey.from_str(record["strategy_key"]) if record else None
+            tx.run(q, network=str(network))
 
-    def get_network_strategy(self, network: ScopedKey) -> GufeTokenizable | None:
+            # exit early if we didn't want a Strategy for this network
+            if strategy is None:
+                return None
+            
+            # set new Strategy for network, with new relationship
+            network_node = self._get_node(network)
+            subgraph, strategy_node, scoped_key = self._keyed_chain_to_subgraph(
+                    KeyedChain.from_gufe(strategy), scope=network.scope)
+
+            subgraph = subgraph | Relationship.type("PROGRESSES")(
+                    strategy_node,
+                    network_node,
+                    **strategy_state.to_dict()
+                    )
+
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+
+        return scoped_key
+
+    def get_network_strategy(self, network: ScopedKey) -> Strategy | None:
         """Get the Strategy for the given AlchemicalNetwork.
         
         Parameters
@@ -1307,17 +1282,21 @@ class Neo4jStore(AlchemiscaleStateStore):
             Strategy object or None if no strategy is set
         """
         q = """
-        MATCH (an:AlchemicalNetwork {_scoped_key: $network})-[:PROGRESSES]->(s:Strategy)
+        MATCH (an:AlchemicalNetwork {_scoped_key: $network})<-[:PROGRESSES]-(s)
         RETURN s
         """
+
+        def _node_to_gufe(node):
+            return self._subgraph_to_gufe([node], node)[node]
         
         with self.transaction() as tx:
             result = tx.run(q, network=str(network))
             record = result.single()
             
         if record:
-            strategy_node = record["s"]
-            return self._node_to_gufe(strategy_node)
+            strategy_node = record_data_to_node(record["s"])
+            return _node_to_gufe(strategy_node)
+
         return None
 
     def get_network_strategy_state(self, network: ScopedKey) -> StrategyState | None:
@@ -1334,7 +1313,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             Strategy state or None if no strategy is set
         """
         q = """
-        MATCH (an:AlchemicalNetwork {_scoped_key: $network})-[r:PROGRESSES]->(:Strategy)
+        MATCH (an:AlchemicalNetwork {_scoped_key: $network})<-[r:PROGRESSES]-()
         RETURN properties(r) AS state_props
         """
         
@@ -1389,7 +1368,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 scope_filter = f"WHERE {' OR '.join(scope_conditions)}"
 
         q = f"""
-        MATCH (an:AlchemicalNetwork)-[r:PROGRESSES]->(s:Strategy)
+        MATCH (an:AlchemicalNetwork)<-[r:PROGRESSES]-(s)
         {scope_filter}
         
         // Filter out disabled and error strategies
@@ -1398,7 +1377,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         // Check if strategy is due for execution
         WITH an, s, r,
              coalesce(r.last_iteration, datetime('1970-01-01T00:00:00Z')) AS last_iter,
-             greatest($min_sleep_interval, r.sleep_interval) AS effective_sleep
+             CASE WHEN $min_sleep_interval > r.sleep_interval 
+                  THEN $min_sleep_interval 
+                  ELSE r.sleep_interval 
+             END AS effective_sleep
         WHERE datetime() >= last_iter + duration({{seconds: effective_sleep}})
         
         RETURN an._scoped_key AS network_sk, 
@@ -1438,7 +1420,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             True if update was successful, False if no strategy found
         """
         q = """
-        MATCH (an:AlchemicalNetwork {_scoped_key: $network})-[r:PROGRESSES]->(:Strategy)
+        MATCH (an:AlchemicalNetwork {_scoped_key: $network})<-[r:PROGRESSES]-()
         SET r += $strategy_state
         RETURN count(r) AS updated_count
         """

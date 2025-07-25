@@ -12,7 +12,7 @@ from uuid import uuid4
 import hashlib
 
 
-from pydantic import BaseModel, ConfigDict, PositiveInt
+from pydantic import BaseModel, ConfigDict, PositiveInt, field_validator
 from gufe.tokenization import GufeTokenizable, GufeKey
 
 from ..models import ScopedKey, Scope
@@ -492,8 +492,23 @@ class StrategyState(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+    @field_validator('last_iteration', mode='before')
+    @classmethod
+    def _convert_neo4j_datetime(cls, v):
+        """Convert neo4j DateTime objects to Python datetime objects."""
+        if v is not None and hasattr(v, 'to_native'):
+            # This is a neo4j DateTime object
+            return v.to_native()
+        return v
+
     def to_dict(self):
-        return self.dict()
+        dct = self.dict()
+
+        dct['mode'] = dct['mode'].value
+        dct['status'] = dct['status'].value
+        dct['task_scaling'] = dct['task_scaling'].value
+
+        return dct
 
     @classmethod
     def from_dict(cls, d):

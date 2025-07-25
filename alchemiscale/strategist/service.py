@@ -5,6 +5,7 @@
 """
 
 import logging
+import multiprocessing as mp
 import os
 import time
 import traceback
@@ -38,6 +39,33 @@ from .settings import StrategistSettings
 
 
 logger = logging.getLogger(__name__)
+
+
+def execute_strategy_worker(network_sk: ScopedKey, strategy_state: "StrategyState", settings: "StrategistSettings") -> "StrategyState":
+    """Standalone worker function for executing strategies in ProcessPoolExecutor.
+    
+    This function creates its own StrategistService instance to avoid serialization
+    issues with bound methods and maintains cache functionality per worker process.
+    
+    Parameters
+    ----------
+    network_sk : ScopedKey
+        The scoped key of the network to execute strategy for
+    strategy_state : StrategyState
+        The current state of the strategy
+    settings : StrategistSettings
+        Settings to instantiate the StrategistService
+        
+    Returns
+    -------
+    StrategyState
+        Updated strategy state after execution
+    """
+    # Create a fresh StrategistService instance for this worker
+    service = StrategistService(settings)
+    
+    # Execute the strategy using the service's method
+    return service._execute_strategy(network_sk, strategy_state)
 
 
 
@@ -364,6 +392,10 @@ class StrategistService:
     
     def cycle(self):
         """Perform one iteration of strategy execution."""
+
+        # avoid issues with forking processes, such as with pytest
+        ctx = mp.get_context("spawn")
+
         # Get strategies ready for execution
         ready_strategies = self.n4js.get_strategies_for_execution(
             scopes=self.scopes,
@@ -376,11 +408,11 @@ class StrategistService:
         
         logger.info(f"Executing {len(ready_strategies)} strategies")
         
-        # Execute strategies in parallel
-        with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-            # Submit all strategy executions
+        # Use ProcessPoolExecutor for parallel strategy execution
+        with ProcessPoolExecutor(max_workers=self.max_workers, mp_context=ctx) as executor:
+            # Submit all strategy executions using standalone worker function
             future_to_network = {
-                executor.submit(self._execute_strategy, network_sk, strategy_state): network_sk
+                executor.submit(execute_strategy_worker, network_sk, strategy_state, self.settings): network_sk
                 for network_sk, strategy_sk, strategy_state in ready_strategies
             }
             network_to_future = {value: key for key, value in future_to_network.items()}
@@ -421,8 +453,8 @@ class StrategistService:
                     for network_sk, strategy_sk, strategy_state in ready_strategies:
                         # Only submit strategies that aren't already running
                         if network_sk not in network_to_future:
-                            # Submit new strategy execution
-                            future = executor.submit(self._execute_strategy, network_sk, strategy_sk, strategy_state)
+                            # Submit new strategy execution using standalone worker function
+                            future = executor.submit(execute_strategy_worker, network_sk, strategy_state, self.settings)
                             future_to_network[future] = network_sk
                             network_to_future[network_sk] = future
                             logger.debug(f"Added new strategy execution for network {network_sk}")

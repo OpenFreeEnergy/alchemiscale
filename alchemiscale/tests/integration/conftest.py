@@ -20,7 +20,7 @@ from gufe.tests.test_protocol import DummyProtocol, BrokenProtocol
 from openfe_benchmarks import tyk2
 
 from alchemiscale.models import Scope
-from alchemiscale.settings import S3ObjectStoreSettings
+from alchemiscale.settings import S3ObjectStoreSettings, Neo4jStoreSettings
 from alchemiscale.storage.statestore import Neo4jStore
 from alchemiscale.storage.objectstore import get_s3os
 from alchemiscale.storage.models import ComputeServiceID
@@ -145,27 +145,30 @@ def uri(neo4j_service_and_uri):
     return uri
 
 
-# TODO: this should be pulling from the defined profile
-@fixture(scope="session")
-def graph(uri):
-    return GraphDatabase.driver(
-        uri,
-        auth=("neo4j", "password"),
-    )
-
-
 ## data
 ### below specific to alchemiscale
 
 
 @fixture(scope="module")
-def n4js(graph):
-    return Neo4jStore(graph)
+def n4js(uri):
+    settings = Neo4jStoreSettings(
+        NEO4J_URL=uri,
+        NEO4J_USER="neo4j",
+        NEO4J_PASS="password",
+        NEO4J_DBNAME="neo4j"
+    )
+    return Neo4jStore(settings)
 
 
 @fixture
-def n4js_fresh(graph):
-    n4js = Neo4jStore(graph)
+def n4js_fresh(uri):
+    settings = Neo4jStoreSettings(
+        NEO4J_URL=uri,
+        NEO4J_USER="neo4j",
+        NEO4J_PASS="password",
+        NEO4J_DBNAME="neo4j"
+    )
+    n4js = Neo4jStore(settings)
 
     n4js.reset()
     n4js.initialize()
@@ -233,7 +236,18 @@ def s3os_server(s3objectstore_settings):
     server = ThreadedMotoServer()
     server.start()
 
-    s3os = get_s3os(s3objectstore_settings, endpoint_url="http://127.0.0.1:5000")
+    # Create settings with endpoint URL for testing
+    test_settings = S3ObjectStoreSettings(
+        AWS_S3_BUCKET=s3objectstore_settings.AWS_S3_BUCKET,
+        AWS_S3_PREFIX=s3objectstore_settings.AWS_S3_PREFIX,
+        AWS_DEFAULT_REGION=s3objectstore_settings.AWS_DEFAULT_REGION,
+        AWS_ACCESS_KEY_ID=s3objectstore_settings.AWS_ACCESS_KEY_ID,
+        AWS_SECRET_ACCESS_KEY=s3objectstore_settings.AWS_SECRET_ACCESS_KEY,
+        AWS_SESSION_TOKEN=s3objectstore_settings.AWS_SESSION_TOKEN,
+        AWS_ENDPOINT_URL="http://127.0.0.1:5000"
+    )
+    
+    s3os = get_s3os(test_settings)
     s3os.initialize()
 
     yield s3os

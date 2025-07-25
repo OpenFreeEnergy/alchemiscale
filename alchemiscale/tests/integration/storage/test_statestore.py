@@ -946,6 +946,49 @@ class TestNeo4jStore(TestStateStore):
         assert set(graph.keys()) == set(task_sks)
         assert all([graph[t] == task_sks[0] for t in task_sks[1:13:4]])
 
+    def test_get_transformation_actioned_tasks(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk, taskhub_sk, _ = n4js.assemble_network(an, scope_test)
+        
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+        
+        # create tasks for the transformation
+        task_sks = n4js.create_tasks([transformation_sk] * 5)
+        
+        # initially, no tasks should be actioned
+        actioned_tasks = n4js.get_transformation_actioned_tasks(transformation_sk, taskhub_sk)
+        assert actioned_tasks == []
+        
+        # action 3 of 5 tasks
+        n4js.action_tasks(task_sks[:3], taskhub_sk)
+        
+        # should now get back the 3 actioned tasks
+        actioned_tasks = n4js.get_transformation_actioned_tasks(transformation_sk, taskhub_sk)
+        assert len(actioned_tasks) == 3
+        assert set(actioned_tasks) == set(task_sks[:3])
+        
+        # create a second network to get a second taskhub
+        an2 = an.copy_with_replacements(name=an.name + "_2")
+        network2_sk, taskhub2_sk, _ = n4js.assemble_network(an2, scope_test)
+        n4js.action_tasks(task_sks[3:], taskhub2_sk)
+        
+        # first taskhub should still only have 3 tasks
+        actioned_tasks = n4js.get_transformation_actioned_tasks(transformation_sk, taskhub_sk)
+        assert len(actioned_tasks) == 3
+        assert set(actioned_tasks) == set(task_sks[:3])
+        
+        # second taskhub should have 2 tasks
+        actioned_tasks2 = n4js.get_transformation_actioned_tasks(transformation_sk, taskhub2_sk)
+        assert len(actioned_tasks2) == 2
+        assert set(actioned_tasks2) == set(task_sks[3:])
+        
+        # test with different transformation - should get no results
+        transformation2 = list(an.edges)[1]
+        transformation2_sk = n4js.get_scoped_key(transformation2, scope_test)
+        actioned_tasks_diff = n4js.get_transformation_actioned_tasks(transformation2_sk, taskhub_sk)
+        assert actioned_tasks_diff == []
+
     def test_get_task_transformation(
         self,
         n4js: Neo4jStore,

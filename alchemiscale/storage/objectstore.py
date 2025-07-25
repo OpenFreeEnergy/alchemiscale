@@ -20,23 +20,9 @@ OBJECT_FILENAME = "obj.json.zst"
 
 
 @lru_cache
-def get_s3os(settings: S3ObjectStoreSettings, endpoint_url=None) -> "S3ObjectStore":
+def get_s3os(settings: S3ObjectStoreSettings) -> "S3ObjectStore":
     """Convenience function for getting an S3ObjectStore directly from settings."""
-
-    # create a boto3 Session and parameterize with keys
-    session = Session(
-        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-        aws_session_token=settings.AWS_SESSION_TOKEN,
-        region_name=settings.AWS_DEFAULT_REGION,
-    )
-
-    return S3ObjectStore(
-        session=session,
-        bucket=settings.AWS_S3_BUCKET,
-        prefix=settings.AWS_S3_PREFIX,
-        endpoint_url=endpoint_url,
-    )
+    return S3ObjectStore(settings)
 
 
 class S3ObjectStoreError(Exception): ...
@@ -45,13 +31,25 @@ class S3ObjectStoreError(Exception): ...
 class S3ObjectStore:
     """Object storage for use with AWS S3."""
 
-    def __init__(self, session: Session, bucket: str, prefix: str, endpoint_url=None):
-        """ """
-        self.session = session
-        self.resource = self.session.resource("s3", endpoint_url=endpoint_url)
+    def __init__(self, settings: S3ObjectStoreSettings):
+        """Initialize S3ObjectStore from settings.
+        
+        Parameters
+        ----------
+        settings : S3ObjectStoreSettings
+            Configuration settings for S3 object store.
+        """
+        # Create a boto3 Session from settings
+        self.session = Session(
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            aws_session_token=settings.AWS_SESSION_TOKEN,
+            region_name=settings.AWS_DEFAULT_REGION,
+        )
+        self.resource = self.session.resource("s3", endpoint_url=settings.AWS_ENDPOINT_URL)
 
-        self.bucket = bucket
-        self.prefix = prefix
+        self.bucket = settings.AWS_S3_BUCKET
+        self.prefix = settings.AWS_S3_PREFIX
 
     def initialize(self):
         """Initialize object store.

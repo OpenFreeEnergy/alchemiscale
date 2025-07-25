@@ -191,3 +191,13 @@ class TestTracebacks:
 
         assert tb_reconstructed.tracebacks == self.valid_entry
         tb_orig is tb_reconstructed
+
+
+class TestStrategyState:
+
+    def test_to_dict(self):
+        ...
+
+
+    def test_from_dict(self):
+        ...
