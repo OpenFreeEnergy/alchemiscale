@@ -65,8 +65,12 @@ def execute_strategy_worker(network_sk: ScopedKey, strategy_state: "StrategyStat
     service = StrategistService(settings)
     
     # Execute the strategy using the service's method
-    return service._execute_strategy(network_sk, strategy_state)
+    results = service._execute_strategy(network_sk, strategy_state)
 
+    # Close the service's database connection
+    service.close()
+
+    return results
 
 
 class StrategistService:
@@ -495,3 +499,9 @@ class StrategistService:
     def stop(self):
         """Stop the strategist service."""
         self._stop = True
+
+    def close(self):
+        """Close the Neo4j driver for this service instance.
+
+        """
+        self.n4js.close()

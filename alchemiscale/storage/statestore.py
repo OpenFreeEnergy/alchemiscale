@@ -151,6 +151,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         settings : Neo4jStoreSettings
             Configuration settings for Neo4j state store.
         """
+        self.settings = settings
+
         self.graph: Driver = GraphDatabase.driver(
             settings.NEO4J_URL, auth=(settings.NEO4J_USER, settings.NEO4J_PASS)
         )
@@ -184,6 +186,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         update_wrapper(inner, func)
 
         return inner
+
+    def close(self):
+        """Close the Neo4j driver for this instance.
+
+        """
+        self.graph.close()
 
     def execute_query(self, *args, **kwargs):
         kwargs.update({"database_": self.db_name})

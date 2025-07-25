@@ -39,6 +39,8 @@ class S3ObjectStore:
         settings : S3ObjectStoreSettings
             Configuration settings for S3 object store.
         """
+        self.settings = settings
+
         # Create a boto3 Session from settings
         self.session = Session(
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
