@@ -99,6 +99,15 @@ class ComputeManagerID(str):
     def from_manager_id(cls, manager_id: str):
         return cls(f"{manager_id}-{uuid4()}")
 
+    def to_dict(self):
+        return {"manager_id": self.manager_id, "uuid": self.uuid}
+
+    @classmethod
+    def from_dict(cls, dct):
+        manager_id = dct["manager_id"]
+        uuid = dct["uuid"]
+        return cls(manager_id + "-" + uuid)
+
     @property
     def manager_id(self) -> str:
         return self._manager_id
@@ -145,6 +154,9 @@ class ComputeManagerRegistration(BaseModel):
     @classmethod
     def from_dict(cls, dct):
         return cls(**dct_)
+
+    def to_compute_manager_id(self):
+        return ComputeManagerID("-".join([self.manager_id, self.uuid]))
 
 
 class TaskProvenance(BaseModel):

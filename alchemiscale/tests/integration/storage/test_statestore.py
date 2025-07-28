@@ -5,6 +5,7 @@ from functools import reduce
 from itertools import chain
 import operator
 from collections import defaultdict
+import uuid
 
 import pytest
 from gufe import AlchemicalNetwork
@@ -18,6 +19,10 @@ from alchemiscale.storage.models import (
     ProtocolDAGResultRef,
     TaskStatusEnum,
     NetworkStateEnum,
+    ComputeManagerID,
+    ComputeManagerRegistration,
+    ComputeManagerStatus,
+    ComputeManagerInstruction,
     ComputeServiceID,
     ComputeServiceRegistration,
 )
@@ -3396,3 +3401,226 @@ class TestNeo4jStore(TestStateStore):
         assert task_statuses[3] == TaskStatusEnum.complete
         assert task_statuses[4] == TaskStatusEnum.invalid
         assert task_statuses[5] == TaskStatusEnum.deleted
+
+    class TestComputeManager:
+
+        @staticmethod
+        def confirm_is_registered(
+            n4js: Neo4jStore, compute_manager_id: ComputeManagerID
+        ):
+            """Just check that the registration exists by manager_id and UUID."""
+            query = """
+            MATCH (cmr: ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid})
+            RETURN cmr.manager_id as manager_id, cmr.uuid as uuid
+            """
+
+            results = n4js.execute_query(query, **compute_manager_id.to_dict())
+
+            return True if results.records else False
+
+        @staticmethod
+        def confirm_registration_contents(
+            n4js: Neo4jStore, cmr: ComputeManagerRegistration
+        ):
+            """Confirm that database registration information is consistent with registration inputs."""
+            query = """
+            MATCH (cmr: ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid})
+            RETURN cmr
+            """
+
+            results = n4js.execute_query(query, **cmr.to_dict())
+
+            properties = results.records[0]["cmr"]._properties
+            properties["last_status_update"] = properties[
+                "last_status_update"
+            ].to_native()
+
+            return cmr.to_dict() == properties
+
+        @staticmethod
+        def create_compute_service(
+            n4js: Neo4jStore,
+            compute_manager_id: str,
+            creation_time=None,
+            failure_deltas=[],
+        ) -> ComputeServiceID:
+            creation_time = datetime.utcnow() or creation_time
+            failure_times = list(map(lambda td: creation_time + td, failure_deltas))
+
+            registration = ComputeServiceRegistration(
+                identifier=ComputeServiceID(f"compute-service-{uuid.uuid4()}"),
+                registered=creation_time,
+                heartbeat=creation_time,
+                failure_times=failure_times,
+                manager=compute_manager_id.manager_id,
+            )
+
+            compute_service_id = n4js.register_computeservice(registration)
+
+            return compute_service_id
+
+        @staticmethod
+        def compute_manager_registration_from_manager_id(manager_id: str):
+            compute_manager_id = ComputeManagerID.from_manager_id(manager_id)
+
+            now = datetime.utcnow()
+            return ComputeManagerRegistration(
+                manager_id=compute_manager_id.manager_id,
+                uuid=compute_manager_id.uuid,
+                saturation=0,
+                registered=now,
+                last_status_update=now,
+                status=ComputeManagerStatus.OK,
+                detail="",
+            )
+
+        def test_register(self, n4js: Neo4jStore):
+            cmr_1: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_manager_id("testmanager")
+            )
+            n4js.register_computemanager(cmr_1)
+            assert self.confirm_registration_contents(n4js, cmr_1)
+
+            # Attempt to create another compute manager with the same
+            # manager id and register it. Since once has already been
+            # registered, this will fail
+            cmr_2 = self.compute_manager_registration_from_manager_id("testmanager")
+
+            with pytest.raises(
+                ValueError,
+                match="ComputeManager with this manager_id is already registered",
+            ):
+                n4js.register_computemanager(cmr_2)
+
+            # after deregistering the first testmanager, we should be
+            # able to register the second one
+            n4js.deregister_computemanager(cmr_1.to_compute_manager_id())
+
+            n4js.register_computemanager(cmr_2)
+            assert self.confirm_registration_contents(n4js, cmr_2)
+
+            # attempting to reregister the first compute manager is
+            # now expected to fail in the same way as before
+            with pytest.raises(
+                ValueError,
+                match="ComputeManager with this manager_id is already registered",
+            ):
+                n4js.register_computemanager(cmr_1)
+
+        def test_deregister(self, n4js: Neo4jStore):
+            cmr: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_manager_id("testmanager")
+            )
+            compute_manager_id = cmr.to_compute_manager_id()
+            n4js.register_computemanager(cmr)
+            assert self.confirm_is_registered(n4js, compute_manager_id)
+
+            # deregistration of a non-ERRORED compute manager
+            # registration deletes the entry from the database
+            n4js.deregister_computemanager(compute_manager_id)
+            assert not self.confirm_is_registered(n4js, compute_manager_id)
+
+            # reregister and update the status to ERRORED, the
+            # registration will still be there
+            n4js.register_computemanager(cmr)
+            assert self.confirm_is_registered(n4js, compute_manager_id)
+
+            n4js.update_compute_manager_status(
+                compute_manager_id,
+                ComputeManagerStatus.ERRORED,
+                repr(RuntimeError("UnexpectedError")),
+            )
+            assert self.confirm_is_registered(n4js, compute_manager_id)
+
+        def test_clear_errored(self, n4js: Neo4jStore):
+            cmr: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_manager_id("testmanager")
+            )
+            compute_manager_id = cmr.to_compute_manager_id()
+            n4js.register_computemanager(cmr)
+            assert self.confirm_is_registered(n4js, compute_manager_id)
+
+            n4js.update_compute_manager_status(
+                compute_manager_id,
+                ComputeManagerStatus.ERRORED,
+                repr(RuntimeError("UnexpectedError")),
+            )
+            assert self.confirm_is_registered(n4js, compute_manager_id)
+
+            n4js.clear_errored_computemanager(compute_manager_id)
+            assert not self.confirm_is_registered(n4js, compute_manager_id)
+
+            # Attempt to clear the manager again, even though we know
+            # it's not present. This will raise a ValueError.
+            with pytest.raises(
+                ValueError,
+                match="Could not find an ERRORED compute manager with the provided manager_id and UUID",
+            ):
+                n4js.clear_errored_computemanager(compute_manager_id)
+
+        def test_get_instruction(self, n4js: Neo4jStore):
+            cmr: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_manager_id("testmanager")
+            )
+            compute_manager_id = cmr.to_compute_manager_id()
+            n4js.register_computemanager(cmr)
+
+            def get_instruction(forgive_seconds=-60, failures=2):
+                nonlocal n4js, compute_manager_id
+                now = datetime.utcnow()
+                instruction, instruction_data = n4js.get_computemanager_instruction(
+                    compute_manager_id,
+                    forgive_time=now + timedelta(seconds=forgive_seconds),
+                    max_failures=failures,
+                )
+                return instruction, instruction_data
+
+            # check that a compute manager with no registered compute
+            # services is given the OK instruction
+            instruction, data = get_instruction()
+            assert instruction == ComputeManagerInstruction.OK
+            assert data == {"compute_service_ids": [], "num_registered": 0}
+
+            # creating a failed a compute service with prior failures
+            # (3 failures, 30 seconds ago) triggers the SKIP
+            # instruction if the forgive time has not been reached,
+            # forgive time is 60 seconds ago
+            compute_service_id = self.create_compute_service(
+                n4js,
+                compute_manager_id,
+                creation_time=None,
+                failure_deltas=[timedelta(seconds=-30)] * 3,
+            )
+
+            instruction, data = get_instruction(forgive_seconds=-60)
+            assert instruction == ComputeManagerInstruction.SKIP
+            assert data == {}
+
+            # if we allow up to 3 failures, we should be allowed to grow
+            instruction, data = get_instruction(forgive_seconds=-60, failures=3)
+            assert instruction == ComputeManagerInstruction.OK
+            assert data == {
+                "compute_service_ids": [compute_service_id],
+                "num_registered": 1,
+            }
+
+            # check with the forgive time set to now and try again
+            instruction, data = get_instruction(forgive_seconds=0)
+            assert instruction == ComputeManagerInstruction.OK
+            assert data == {
+                "compute_service_ids": [compute_service_id],
+                "num_registered": 1,
+            }
+
+            n4js.deregister_computemanager(compute_manager_id)
+            instruction, data = get_instruction(forgive_seconds=0)
+            assert instruction == ComputeManagerInstruction.SHUTDOWN
+            assert data == {
+                "message": "no compute manager was found with the given manager id and UUID"
+            }
+
+        def test_update_status(self, n4js: Neo4jStore):
+            raise NotImplementedError
+
+        def test_expiration(self, n4js: Neo4jStore):
+            raise NotImplementedError
