@@ -1198,7 +1198,6 @@ async def set_network_strategy(
     {
         "strategy": {...},  // GUFE strategy object, or null to remove
         "max_tasks_per_transformation": 3,
-        "max_tasks_per_network": null,
         "task_scaling": "exponential", 
         "mode": "partial",
         "sleep_interval": 3600
@@ -1226,7 +1225,6 @@ async def set_network_strategy(
             strategy_state = StrategyState(
                 mode=body_.get("mode"),
                 max_tasks_per_transformation=body_.get("max_tasks_per_transformation"),
-                max_tasks_per_network=body_.get("max_tasks_per_network"),
                 task_scaling=body_.get("task_scaling"),
                 sleep_interval=body_.get("sleep_interval"),
             )

@@ -485,7 +485,6 @@ class StrategyState(BaseModel):
     last_iteration: datetime | None = None
     last_iteration_result_count: int = 0
     max_tasks_per_transformation: PositiveInt = 3
-    max_tasks_per_network: PositiveInt | None = None
     task_scaling: StrategyTaskScalingEnum = StrategyTaskScalingEnum.exponential
     exception: tuple[str, str] | None = None  # (exception_type, exception_message)
     traceback: str | None = None

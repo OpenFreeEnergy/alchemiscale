@@ -1179,7 +1179,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_transformation_results(
         self, transformation: ScopedKey
-    ) -> list[ProtocolDAGResultRef]:
+    ) -> list[ScopedKey]:
         # get all task result protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
         q = """
@@ -1193,7 +1193,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_transformation_failures(
         self, transformation: ScopedKey
-    ) -> list[ProtocolDAGResultRef]:
+    ) -> list[ScopedKey]:
         # get all task failure protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
         q = """

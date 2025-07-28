@@ -114,7 +114,6 @@ Basic Usage
         mode="full",  # or "partial" (default) or "disabled"
         task_scaling="linear",  # or "exponential" (default)
         max_tasks_per_transformation=5,
-        max_tasks_per_network=100,
         sleep_interval=300  # 5 minutes between strategy runs
     )
 
@@ -240,7 +239,6 @@ Strategy Selection
 Resource Management
 -------------------
 
-- **Set** ``max_tasks_per_network`` **to prevent runaway task creation**
 - **Use** ``linear`` **scaling** for predictable resource usage
 - **Monitor strategy iterations** to ensure reasonable execution frequency
 
@@ -295,7 +293,6 @@ Simple Connectivity Strategy
         strategy=ConnectivityStrategy(),
         mode="partial",  # Conservative mode
         max_tasks_per_transformation=3,
-        max_tasks_per_network=50
     )
 
 Uncertainty-Based Strategy

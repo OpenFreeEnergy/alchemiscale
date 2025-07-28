@@ -5,6 +5,7 @@
 
 import os
 from pathlib import Path
+import logging
 
 from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
@@ -29,6 +30,11 @@ from stratocaster.base import Strategy, StrategyResult, StrategySettings
 
 NEO4J_PROCESS = {}
 NEO4J_VERSION = os.getenv("NEO4J_VERSION", "")
+
+
+# suppress warnings from neo4j python driver
+neo4j_logger = logging.getLogger("neo4j")
+neo4j_logger.setLevel(logging.ERROR)
 
 
 class DeploymentProfile:
@@ -157,7 +163,11 @@ def n4js(uri):
         NEO4J_PASS="password",
         NEO4J_DBNAME="neo4j"
     )
-    return Neo4jStore(settings)
+    n4js = Neo4jStore(settings)
+
+    yield n4js
+
+    n4js.close()
 
 
 @fixture
@@ -173,7 +183,9 @@ def n4js_fresh(uri):
     n4js.reset()
     n4js.initialize()
 
-    return n4js
+    yield n4js
+    
+    n4js.close()
 
 
 @fixture
@@ -227,6 +239,7 @@ def s3objectstore_settings():
     os.environ["AWS_S3_BUCKET"] = "test-bucket"
     os.environ["AWS_S3_PREFIX"] = "test-prefix"
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    os.environ["AWS_ENDPOINT_URL"] = "http://127.0.0.1:5000"
 
     return S3ObjectStoreSettings()
 

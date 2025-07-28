@@ -695,7 +695,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         network: ScopedKey,
         strategy: GufeTokenizable | None,
         max_tasks_per_transformation: int = 3,
-        max_tasks_per_network: int | None = None,
         task_scaling: str = "exponential",
         mode: str = "partial",
         sleep_interval: int = 3600,
@@ -710,8 +709,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             Strategy object (GufeTokenizable) or None to remove strategy
         max_tasks_per_transformation
             Maximum number of actioned Tasks allowed on a Transformation at once
-        max_tasks_per_network
-            Maximum number of actioned Tasks allowed on the AlchemicalNetwork at once
         task_scaling
             How to translate weights into Task counts: "linear" or "exponential"
         mode
@@ -730,7 +727,6 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             data = {
                 "strategy": strategy_keyed_chain,
                 "max_tasks_per_transformation": max_tasks_per_transformation,
-                "max_tasks_per_network": max_tasks_per_network,
                 "task_scaling": task_scaling,
                 "mode": mode,
                 "sleep_interval": sleep_interval,

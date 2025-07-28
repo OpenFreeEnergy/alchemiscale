@@ -20,6 +20,7 @@ from alchemiscale.storage.models import (
 from alchemiscale.strategist.service import StrategistService
 from alchemiscale.strategist.settings import StrategistSettings
 from alchemiscale.settings import Neo4jStoreSettings, S3ObjectStoreSettings
+from alchemiscale.compression import compress_gufe_zstd
 from ..conftest import DummyStrategy
 
 
@@ -80,7 +81,6 @@ class TestStrategistService:
                 status=StrategyStatusEnum.awake,
                 mode=StrategyModeEnum.partial,
                 max_tasks_per_transformation=2,
-                max_tasks_per_network=10,
                 task_scaling=StrategyTaskScalingEnum.linear,
                 last_iteration=None,
                 last_iteration_result_count=0,
@@ -168,7 +168,6 @@ class TestStrategistService:
                 status=StrategyStatusEnum.awake,
                 mode=StrategyModeEnum.partial,
                 max_tasks_per_transformation=2,
-                max_tasks_per_network=10,
                 task_scaling=StrategyTaskScalingEnum.linear,
                 last_iteration=None,
                 last_iteration_result_count=0,
@@ -227,7 +226,6 @@ class TestStrategistService:
                 status=StrategyStatusEnum.awake,
                 mode=StrategyModeEnum.partial,
                 max_tasks_per_transformation=2,
-                max_tasks_per_network=10,
                 task_scaling=StrategyTaskScalingEnum.linear,
                 last_iteration=None,
                 last_iteration_result_count=0,
@@ -245,18 +243,31 @@ class TestStrategistService:
         assert updated_state.traceback is not None
         assert "Intentional test error" in updated_state.exception[1]
 
-    def test_cache_functionality(self, strategist_service, preloaded_network_with_strategy, protocoldagresults):
+    def test_cache_functionality(self, strategist_service, preloaded_network_with_strategy, protocoldagresults, transformation):
         """Test that caching works correctly."""
         data = preloaded_network_with_strategy
+
         network_sk = data['network_sk']
         transformations = data['transformation_sks']
+        task_sks = data['task_sks']
         n4js = data['n4js']
         s3os = data['s3os']
         
-        # Store some results in S3
-        tf_sk = transformations[0]
-        result_sk = s3os.store_protocoldagresult(protocoldagresults[0], tf_sk)
-        n4js.set_transformation_result(tf_sk, result_sk)
+        # Store some results in S3 using the transformation fixture that matches protocoldagresults
+        tf_sk = n4js.get_scoped_key(transformation, network_sk.scope)
+
+        protocoldagresult = protocoldagresults[0]
+
+        result_ref = s3os.push_protocoldagresult(
+            compress_gufe_zstd(protocoldagresult),
+            protocoldagresult.ok(),
+            protocoldagresult.key,
+            transformation=tf_sk,
+        )
+
+        # Create a task for this transformation since it may not have any
+        task_sk = n4js.create_task(tf_sk)
+        n4js.set_task_result(task_sk, result_ref)
         
         # Get protocol results (should cache them)
         results1 = strategist_service._get_protocol_results(network_sk)
@@ -286,7 +297,6 @@ class TestStrategistService:
         task_counts = strategist_service._weights_to_task_counts(
             weights,
             max_tasks_per_transformation=4,
-            max_tasks_per_network=None,
             task_scaling=StrategyTaskScalingEnum.linear,
         )
         
@@ -313,7 +323,6 @@ class TestStrategistService:
         task_counts = strategist_service._weights_to_task_counts(
             weights,
             max_tasks_per_transformation=4,
-            max_tasks_per_network=None,
             task_scaling=StrategyTaskScalingEnum.exponential,
         )
         
@@ -323,32 +332,6 @@ class TestStrategistService:
         
         assert task_counts[list(weights.keys())[0]] == 2  # 0.5 weight
         assert task_counts[list(weights.keys())[1]] == 4  # 1.0 weight (capped)
-
-    def test_max_tasks_per_network_scaling(self, strategist_service):
-        """Test that max_tasks_per_network scales down total tasks correctly."""
-        from alchemiscale.models import ScopedKey
-        
-        weights = {
-            ScopedKey.from_str("Transformation-test_org-test_campaign-test_project-abc123"): 1.0,
-            ScopedKey.from_str("Transformation-test_org-test_campaign-test_project-def456"): 1.0,
-            ScopedKey.from_str("Transformation-test_org-test_campaign-test_project-ghi789"): 1.0,
-        }
-        
-        task_counts = strategist_service._weights_to_task_counts(
-            weights,
-            max_tasks_per_transformation=4,
-            max_tasks_per_network=6,  # Less than 3 * 4 = 12
-            task_scaling=StrategyTaskScalingEnum.linear,
-        )
-        
-        # Should scale down: total would be 12, but max is 6
-        # Each should get 6/12 * 4 = 2 tasks
-        total_tasks = sum(task_counts.values())
-        assert total_tasks <= 6
-        
-        # Each transformation should get proportionally scaled tasks
-        for count in task_counts.values():
-            assert count <= 4  # Still respects individual max
 
     def test_service_stop_flag(self, strategist_service):
         """Test that service stop flag works correctly."""

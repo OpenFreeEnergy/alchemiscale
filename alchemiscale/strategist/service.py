@@ -20,7 +20,8 @@ import numpy as np
 from diskcache import Cache
 import zstandard as zstd
 
-from gufe import AlchemicalNetwork, ProtocolResult
+from gufe import AlchemicalNetwork, ProtocolResult, Transformation
+from gufe.tokenization import GufeKey
 from gufe.protocols import ProtocolDAGResult
 
 from ..models import Scope, ScopedKey
@@ -167,24 +168,31 @@ class StrategistService:
         
         return pdr
     
-    def _get_protocol_results(self, network_sk: ScopedKey) -> dict[ScopedKey, ProtocolResult|None]:
+    def _get_protocol_results(self, network_sk: ScopedKey) -> tuple[dict[ScopedKey, ProtocolResult|None], dict[ScopedKey, Transformation]]:
         """Get ProtocolResults for all transformations in a network.
         
         This method uses disk-based caching to avoid repeated expensive lookups.
         """
         results = {}
         transformations = self.n4js.get_network_transformations(network_sk)
+
+        # Build mapping between transformation objects and their scoped keys
+        sk_to_tf: dict[ScopedKey, Transformation] = {}
         
         for transformation_sk in transformations:
             # Get the transformation object
             transformation = self.n4js.get_gufe(transformation_sk)
+
+            sk_to_tf[transformation_sk] = transformation
             
             # Get successful ProtocolDAGResults for this transformation
-            result_refs = self.n4js.get_transformation_results(transformation_sk)
+            result_ref_sks = self.n4js.get_transformation_results(transformation_sk)
             
             # Collect all ProtocolDAGResults for this transformation
             pdrs = []
-            for result_ref in result_refs:
+            for result_ref_sk in result_ref_sks:
+                # Get the actual ProtocolDAGResultRef object from the ScopedKey
+                result_ref = self.n4js.get_gufe(result_ref_sk)
                 if result_ref.ok:
                     # Get ProtocolDAGResult with caching
                     pdr = self._get_protocoldagresult_cached(result_ref, transformation_sk)
@@ -197,23 +205,22 @@ class StrategistService:
             else:
                 results[transformation_sk] = None
             
-        return results
+        return results, sk_to_tf
     
     def _weights_to_task_counts(
         self, 
-        weights: dict[ScopedKey, float | None],
+        weights: dict[GufeKey, float | None],
         max_tasks_per_transformation: int,
-        max_tasks_per_network: int | None,
         task_scaling: StrategyTaskScalingEnum,
-    ) -> dict[ScopedKey, int]:
+    ) -> dict[GufeKey, int]:
         """Convert strategy weights to discrete task counts."""
         task_counts = {}
         
-        for transformation_sk, weight in weights.items():
+        for transformation_key, weight in weights.items():
             if weight is None or weight == 0:
-                task_counts[transformation_sk] = 0
+                task_counts[transformation_key] = 0
             elif weight == 1:
-                task_counts[transformation_sk] = max_tasks_per_transformation
+                task_counts[transformation_key] = max_tasks_per_transformation
             else:
                 if task_scaling == StrategyTaskScalingEnum.linear:
                     tasks = int(1 + weight * max_tasks_per_transformation)
@@ -222,16 +229,7 @@ class StrategistService:
                 else:
                     raise ValueError(f"Unknown task scaling: {task_scaling}")
                 
-                task_counts[transformation_sk] = min(tasks, max_tasks_per_transformation)
-        
-        # Scale down if total exceeds max_tasks_per_network
-        total_tasks = sum(task_counts.values())
-        if max_tasks_per_network is not None and total_tasks > max_tasks_per_network:
-            scale_factor = max_tasks_per_network / total_tasks
-            task_counts = {
-                sk: int(count * scale_factor) 
-                for sk, count in task_counts.items()
-            }
+                task_counts[transformation_key] = min(tasks, max_tasks_per_transformation)
         
         return task_counts
     
@@ -244,9 +242,9 @@ class StrategistService:
         try:
             # Check if strategy went dormant - count successful results
             current_result_count = len([
-                ref for transformation_sk in self.n4js.get_network_transformations(network_sk)
-                for ref in self.n4js.get_transformation_results(transformation_sk)
-                if ref.ok
+                ref_sk for transformation_sk in self.n4js.get_network_transformations(network_sk)
+                for ref_sk in self.n4js.get_transformation_results(transformation_sk)
+                if self.n4js.get_gufe(ref_sk).ok
             ])
             
             # If dormant, check if new results appeared
@@ -260,7 +258,9 @@ class StrategistService:
             
             # Get network and results
             network = self.n4js.get_gufe(network_sk)
-            protocol_results: dict[ScopedKey, ProtocolResult|None] = self._get_protocol_results(network_sk)
+            protocol_results, sk_to_tf  = self._get_protocol_results(network_sk)
+
+            transformation_results = {sk_to_tf[key].key: value for key, value in protocol_results.items()}
             
             # Get strategy object
             strategy = self.n4js.get_network_strategy(network_sk)
@@ -268,10 +268,8 @@ class StrategistService:
                 raise ValueError(f"Strategy not found for network {network_sk}")
             
             # Execute strategy to get weights
-            # Note: This requires the strategy to have a propose() method
-            # that takes AlchemicalNetwork and dict of ProtocolResults
-            strategy_result = strategy.propose(network, protocol_results)
-            weights = strategy_result.resolve()  # Get normalized weights
+            strategy_result = strategy.propose(network, transformation_results)
+            weights: dict[GufeKey, float] = strategy_result.resolve()  # Get normalized weights
             
             # Check if all weights are None (stop condition)
             if all(w is None for w in weights.values()):
@@ -290,24 +288,28 @@ class StrategistService:
                 return strategy_state
             
             # Set weights to None for transformations with errored tasks
-            transformations = self.n4js.get_network_transformations(network_sk)
-            for transformation_sk in transformations:
+            transformation_sks = self.n4js.get_network_transformations(network_sk)
+            for transformation_sk in sk_to_tf:
                 counts = self.n4js.get_transformation_status(transformation_sk)
                 if counts.get(TaskStatusEnum.error.value):
-                    weights[transformation_sk] = None
+                    weights[sk_to_tf[transformation_sk].key] = None
             
             # Convert weights to task counts
-            task_counts = self._weights_to_task_counts(
+            task_counts  = self._weights_to_task_counts(
                 weights,
                 strategy_state.max_tasks_per_transformation,
-                strategy_state.max_tasks_per_network,
                 strategy_state.task_scaling,
             )
-            
+
             taskhub_sk = self.n4js.get_taskhub(network_sk)
 
+            # Create reverse mapping from transformation gufe key to ScopedKey
+            tf_key_to_sk = {value.key: key for key, value in sk_to_tf.items()}
+
             # Set task counts for each transformation
-            for transformation_sk, target_count in task_counts.items():
+            for transformation_key, target_count in task_counts.items():
+
+                transformation_sk = tf_key_to_sk[transformation_key]
 
                 actioned_tasks = self.n4js.get_transformation_actioned_tasks(transformation_sk, taskhub_sk)
                 actioned_count = len(actioned_tasks)
@@ -378,7 +380,7 @@ class StrategistService:
             strategy_state.iterations += 1
             strategy_state.exception = None
             strategy_state.traceback = None
-            
+
             return strategy_state
             
         except Exception as e:
@@ -455,8 +457,10 @@ class StrategistService:
                     )
 
                     for network_sk, strategy_sk, strategy_state in ready_strategies:
-                        # Only submit strategies that aren't already running
-                        if network_sk not in network_to_future:
+                        # Only submit strategies that aren't already running AND haven't been recently executed
+                        if (network_sk not in network_to_future and 
+                            (strategy_state.last_iteration is None or 
+                             (datetime.utcnow() - strategy_state.last_iteration).total_seconds() >= self.sleep_interval)):
                             # Submit new strategy execution using standalone worker function
                             future = executor.submit(execute_strategy_worker, network_sk, strategy_state, self.settings)
                             future_to_network[future] = network_sk
