@@ -1184,7 +1184,7 @@ def get_task_failures(
 ### strategies
 
 
-@router.post("/networks/{network_scoped_key}/strategy")
+@router.post("/networks/{network_scoped_key}/strategy", response_model=ScopedKey)
 async def set_network_strategy(
     network_scoped_key: str,
     *,
@@ -1209,7 +1209,9 @@ async def set_network_strategy(
     # Handle request body with custom JSON decoder for GUFE objects
     body = await request.body()
     body_ = json.loads(body.decode("utf-8"), cls=JSON_HANDLER.decoder)
-    
+
+    print(body_)
+
     strategy_keyed_chain = body_.get("strategy")
     
     # Convert KeyedChain to GufeTokenizable if strategy is provided

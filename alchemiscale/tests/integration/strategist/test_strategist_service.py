@@ -43,7 +43,7 @@ class TestStrategistService:
     """Test the StrategistService integration with Neo4j and S3."""
 
     @pytest.fixture
-    def strategist_settings(self, tmpdir, s3objectstore_settings, uri):
+    def strategist_settings(self, tmpdir, s3objectstore_settings_endpoint, uri):
         """Settings for StrategistService tests."""
         return StrategistSettings(
             sleep_interval=1,
@@ -55,7 +55,7 @@ class TestStrategistService:
                 NEO4J_URL=uri,
                 NEO4J_USER='neo4j',
                 NEO4J_PASS='password'),
-            s3_settings=s3objectstore_settings
+            s3_settings=s3objectstore_settings_endpoint
         )
 
     @pytest.fixture
@@ -270,10 +270,10 @@ class TestStrategistService:
         n4js.set_task_result(task_sk, result_ref)
         
         # Get protocol results (should cache them)
-        results1 = strategist_service._get_protocol_results(network_sk)
+        results1, sk_to_tf1 = strategist_service._get_protocol_results(network_sk)
         
         # Get them again (should use cache)
-        results2 = strategist_service._get_protocol_results(network_sk)
+        results2, sk_to_tf2 = strategist_service._get_protocol_results(network_sk)
         
         # Should be the same
         assert len(results1) == len(results2)

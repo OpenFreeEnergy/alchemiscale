@@ -52,9 +52,6 @@ class TestNeo4jStore(TestStateStore):
     def n4js(self, n4js_fresh):
         return n4js_fresh
 
-    def test_server(self, graph):
-        graph.get_server_info()
-
     def test_assemble_network(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
 

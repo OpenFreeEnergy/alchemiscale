@@ -2697,6 +2697,9 @@ class TestTaskRestartPolicy:
         expected[self.default_patterns[-1]] = self.default_max_retries
         assert user_client.get_task_restart_patterns(network_scoped_key) == expected
 
+
+class TestNetworkStrategy:
+
     def test_set_network_strategy(
         self,
         scope_test,

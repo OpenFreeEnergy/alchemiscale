@@ -181,6 +181,7 @@ class StrategistService:
         
         for transformation_sk in transformations:
             # Get the transformation object
+            # TODO: wrap in on-disk caching
             transformation = self.n4js.get_gufe(transformation_sk)
 
             sk_to_tf[transformation_sk] = transformation
@@ -257,9 +258,11 @@ class StrategistService:
                     strategy_state.status = StrategyStatusEnum.awake
             
             # Get network and results
-            network = self.n4js.get_gufe(network_sk)
-            protocol_results, sk_to_tf  = self._get_protocol_results(network_sk)
 
+            # TODO: wrap in on-disk caching
+            network = self.n4js.get_gufe(network_sk)
+
+            protocol_results, sk_to_tf  = self._get_protocol_results(network_sk)
             transformation_results = {sk_to_tf[key].key: value for key, value in protocol_results.items()}
             
             # Get strategy object

@@ -161,7 +161,7 @@ class TestAPI:
     def test_set_network_strategy(self, n4js_preloaded, test_client, prepared_network):
         """Test setting and removing network strategy via API."""
         import json
-        from .conftest import DummyStrategy
+        from alchemiscale.tests.integration.conftest import DummyStrategy
         from gufe.tokenization import KeyedChain, JSON_HANDLER
         
         an2, sk = prepared_network
@@ -170,7 +170,12 @@ class TestAPI:
         strategy = DummyStrategy()
         strategy_data = KeyedChain.gufe_to_keyed_chain_rep(strategy)
         headers = {"Content-type": "application/json"}
-        data = json.dumps({"strategy": strategy_data}, cls=JSON_HANDLER.encoder)
+
+        data = json.dumps({"strategy": strategy_data,
+                           "max_tasks_per_transformation": 3,
+                           "task_scaling": 'linear',
+                           "mode": 'full',
+                           "sleep_interval": 600}, cls=JSON_HANDLER.encoder)
         
         response = test_client.post(f"/networks/{sk}/strategy", data=data, headers=headers)
         assert response.status_code == 200

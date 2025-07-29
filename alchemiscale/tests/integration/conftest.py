@@ -154,16 +154,21 @@ def uri(neo4j_service_and_uri):
 ## data
 ### below specific to alchemiscale
 
+@fixture(scope="module")
+def n4jstore_settings(uri):
+
+    os.environ["NEO4J_URL"] = uri
+    os.environ["NEO4J_USER"] = "neo4j"
+    os.environ["NEO4J_PASS"] = "password"
+    os.environ["NEO4J_DBNAME"] = "neo4j"
+
+    return Neo4jStoreSettings()
+
 
 @fixture(scope="module")
-def n4js(uri):
-    settings = Neo4jStoreSettings(
-        NEO4J_URL=uri,
-        NEO4J_USER="neo4j",
-        NEO4J_PASS="password",
-        NEO4J_DBNAME="neo4j"
-    )
-    n4js = Neo4jStore(settings)
+def n4js(n4jstore_settings):
+
+    n4js = Neo4jStore(n4jstore_settings)
 
     yield n4js
 
@@ -171,14 +176,8 @@ def n4js(uri):
 
 
 @fixture
-def n4js_fresh(uri):
-    settings = Neo4jStoreSettings(
-        NEO4J_URL=uri,
-        NEO4J_USER="neo4j",
-        NEO4J_PASS="password",
-        NEO4J_DBNAME="neo4j"
-    )
-    n4js = Neo4jStore(settings)
+def n4js_fresh(n4jstore_settings):
+    n4js = Neo4jStore(n4jstore_settings)
 
     n4js.reset()
     n4js.initialize()
@@ -239,28 +238,27 @@ def s3objectstore_settings():
     os.environ["AWS_S3_BUCKET"] = "test-bucket"
     os.environ["AWS_S3_PREFIX"] = "test-prefix"
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-    os.environ["AWS_ENDPOINT_URL"] = "http://127.0.0.1:5000"
 
     return S3ObjectStoreSettings()
 
 
 @fixture(scope="module")
-def s3os_server(s3objectstore_settings):
+def s3objectstore_settings_endpoint(s3objectstore_settings):
+
+    settings = s3objectstore_settings.model_dump()
+    settings['AWS_ENDPOINT_URL'] = "http://127.0.0.1:5000"
+
+    return S3ObjectStoreSettings(**settings)
+
+
+@fixture(scope="module")
+def s3os_server(s3objectstore_settings_endpoint):
+
     server = ThreadedMotoServer()
     server.start()
 
     # Create settings with endpoint URL for testing
-    test_settings = S3ObjectStoreSettings(
-        AWS_S3_BUCKET=s3objectstore_settings.AWS_S3_BUCKET,
-        AWS_S3_PREFIX=s3objectstore_settings.AWS_S3_PREFIX,
-        AWS_DEFAULT_REGION=s3objectstore_settings.AWS_DEFAULT_REGION,
-        AWS_ACCESS_KEY_ID=s3objectstore_settings.AWS_ACCESS_KEY_ID,
-        AWS_SECRET_ACCESS_KEY=s3objectstore_settings.AWS_SECRET_ACCESS_KEY,
-        AWS_SESSION_TOKEN=s3objectstore_settings.AWS_SESSION_TOKEN,
-        AWS_ENDPOINT_URL="http://127.0.0.1:5000"
-    )
-    
-    s3os = get_s3os(test_settings)
+    s3os = get_s3os(s3objectstore_settings_endpoint)
     s3os.initialize()
 
     yield s3os
@@ -278,6 +276,7 @@ def s3os_server_fresh(s3os_server):
 
 @fixture(scope="module")
 def s3os(s3objectstore_settings):
+
     with mock_aws():
         s3os = get_s3os(s3objectstore_settings)
         s3os.initialize()
