@@ -112,16 +112,18 @@ def register_computeservice(
     now = datetime.utcnow()
 
     if compute_manager_id:
-        manager_id = process_compute_manager_id_string(compute_manager_id).manager_id
+        manager_name = process_compute_manager_id_string(
+            compute_manager_id
+        ).manager_name
     else:
-        manager_id = None
+        manager_name = None
 
     csreg = ComputeServiceRegistration(
         identifier=ComputeServiceID(compute_service_id),
         registered=now,
         heartbeat=now,
         failure_times=[],
-        manager=manager_id,
+        manager_name=manager_name,
     )
 
     compute_service_id_ = n4js.register_computeservice(csreg)
@@ -434,7 +436,7 @@ def computemanager_register(
 
     now = datetime.utcnow()
     cm_registration = ComputeManagerRegistration(
-        manager_id=compute_manager_id.manager_id,
+        manager_name=compute_manager_id.manager_name,
         uuid=compute_manager_id.uuid,
         registered=now,
         last_status_update=now,

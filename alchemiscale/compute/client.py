@@ -202,11 +202,9 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         match instruction_data:
             case {
                 "instruction": "OK",
-                "num_registered": num_registered,
                 "compute_service_ids": ids,
             }:
                 return ComputeManagerInstruction.OK, {
-                    "num_registered": num_registered,
                     "compute_service_ids": ids,
                 }
             case {"instruction": "SKIP"}:

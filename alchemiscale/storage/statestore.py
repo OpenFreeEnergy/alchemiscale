@@ -1226,15 +1226,15 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             create_subgraph(tx, Subgraph() | node)
 
-            if compute_service_registration.manager:
+            if compute_service_registration.manager_name:
                 query = """
-                MATCH (cmr: ComputeManagerRegistration {manager_id: $manager_id}), (csr: ComputeServiceRegistration {manager: $manager_id, identifier: $identifier})
+                MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name}), (csr: ComputeServiceRegistration {manager_name: $manager_name, identifier: $identifier})
                 CREATE (cmr)-[rel:MANAGES]->(csr)
                 RETURN cmr, rel, csr
                 """
                 results = tx.run(
                     query,
-                    manager_id=compute_service_registration.manager,
+                    manager_name=compute_service_registration.manager_name,
                     identifier=compute_service_registration.identifier,
                 )
                 if not len(list(results)):
@@ -1379,14 +1379,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         self, compute_manager_id: ComputeManagerID
     ):
 
-        manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
+        manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
 
         query = """
-        MATCH (:ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid})-[:MANAGES]->(csr:ComputeServiceRegistration)
+        MATCH (:ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})-[:MANAGES]->(csr:ComputeServiceRegistration)
         RETURN csr.identifier as id
         """
 
-        results = self.execute_query(query, manager_id=manager_id, uuid=uuid)
+        results = self.execute_query(query, manager_name=manager_name, uuid=uuid)
 
         ids = []
         for record in results.records:
@@ -1396,20 +1396,20 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     # TODO: docstring
     def deregister_errored_computemanager(self, compute_manager_id: ComputeManagerID):
-        manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
+        manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
 
         query = """
-        MATCH (cmr:ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid})
+        MATCH (cmr:ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
         DETACH DELETE cmr
         RETURN
         """
 
-        self.execute_query(query, manager_id=manager_id, uuid=uuid)
+        self.execute_query(query, manager_name=manager_name, uuid=uuid)
 
     def deregister_computemanager(self, compute_manager_id: ComputeManagerID):
         """Remove the compute manager registration from the statestore.
 
-        Uses the manager_id and UUID from a ComputeManagerID to
+        Uses the manager_name and UUID from a ComputeManagerID to
         deregister a compute service's registration. First, the
         MANAGES relationship with compute services' registration are
         removed. After this, the compute manager registration node is
@@ -1419,13 +1419,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         Paramters
         ---------
         compute_manager_id
-            The compute manager ID string containing the manager_id and the UUID.
+            The compute manager ID string containing the manager_name and the UUID.
 
         """
-        manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
+        manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
 
         query = """
-        MATCH (cmr: ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid})
+        MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
         OPTIONAL MATCH (cmr)-[rel:MANAGES]->(:ComputeServiceRegistration)
         DELETE rel
         WITH cmr
@@ -1434,7 +1434,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         DELETE cmr
         """
 
-        results = self.execute_query(query, manager_id=manager_id, uuid=uuid)
+        results = self.execute_query(query, manager_name=manager_name, uuid=uuid)
 
     # TODO: docstring
     def register_computemanager(
@@ -1442,16 +1442,16 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> ComputeManagerID:
 
         query = """
-        MATCH (cmr: ComputeManagerRegistration {manager_id: $manager_id})
+        MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name})
         RETURN cmr
         """
 
         res = self.execute_query(
-            query, manager_id=compute_manager_registration.manager_id
+            query, manager_name=compute_manager_registration.manager_name
         )
         if res.records:
             raise ValueError(
-                "ComputeManager with this manager_id is already registered"
+                "ComputeManager with this manager_name is already registered"
             )
 
         node = Node(
@@ -1462,7 +1462,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             create_subgraph(tx, Subgraph() | node)
 
         identifier = (
-            compute_manager_registration.manager_id
+            compute_manager_registration.manager_name
             + "-"
             + compute_manager_registration.uuid
         )
@@ -1476,7 +1476,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         DETACH DELETE cmr
 
-        RETURN cmr.manager_id as id, cmr.uuid as uuid
+        RETURN cmr.manager_name as id, cmr.uuid as uuid
         """
 
         results = self.execute_query(query, expire_time=expire_time.isoformat())
@@ -1484,7 +1484,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         identities = set()
         for record in results:
             compute_manager_id = ComputeManagerID(
-                record["manager_id"] + "-" + record["uuid"]
+                record["manager_name"] + "-" + record["uuid"]
             )
             identities.add(compute_manager_id)
 
@@ -1493,7 +1493,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     # TODO: docstring
     def clear_errored_computemanager(self, compute_manager_id: ComputeManagerID):
         query = """
-        MATCH (cmr: ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid, status: "ERRORED"})
+        MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid, status: "ERRORED"})
         DELETE cmr
         RETURN cmr
         """
@@ -1502,7 +1502,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         if not results.records:
             raise ValueError(
-                "Could not find an ERRORED compute manager with the provided manager_id and UUID"
+                "Could not find an ERRORED compute manager with the provided manager_name and UUID"
             )
 
     # TODO: docstring
@@ -1513,19 +1513,19 @@ class Neo4jStore(AlchemiscaleStateStore):
         max_failures: int,
     ) -> tuple[ComputeManagerInstruction, dict]:
 
-        manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
+        manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
 
         query = """
-        MATCH (csm: ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid})
+        MATCH (csm: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
         OPTIONAL MATCH (csm)-[rel:MANAGES]->(csr: ComputeServiceRegistration)
         RETURN csm, csr.identifier as csr_id
         """
 
-        results = self.execute_query(query, manager_id=manager_id, uuid=uuid)
+        results = self.execute_query(query, manager_name=manager_name, uuid=uuid)
 
         # no compute manager was found the given name and UUID
         if len(results.records) == 0:
-            msg = "no compute manager was found with the given manager id and UUID"
+            msg = "no compute manager was found with the given manager name and UUID"
             return ComputeManagerInstruction.SHUTDOWN, {"message": msg}
 
         # TODO: very chatty, try and do this in a single query
@@ -1545,7 +1545,6 @@ class Neo4jStore(AlchemiscaleStateStore):
             csr_ids.append(ComputeServiceID(csr_id))
 
         return ComputeManagerInstruction.OK, {
-            "num_registered": len(csr_ids),
             "compute_service_ids": csr_ids,
         }
 
@@ -1558,17 +1557,32 @@ class Neo4jStore(AlchemiscaleStateStore):
     ):
         status = ComputeManagerStatus(status)
 
-        manager_id, uuid = compute_manager_id.manager_id, compute_manager_id.uuid
+        # check that detail is only provided for the ERRORED status
+        if detail and status == ComputeManagerStatus.OK:
+            raise ValueError(
+                f"detail should only be provided for the '{ComputeManagerStatus.ERRORED.value}' status"
+            )
+
+        if not detail and status == ComputeManagerStatus.ERRORED:
+            raise ValueError(
+                f"detail is required for the '{ComputeManagerStatus.ERRORED.value}' status"
+            )
+
+        manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
 
         query = """
-        MATCH (csm: ComputeManagerRegistration {manager_id: $manager_id, uuid: $uuid})
+        MATCH (csm: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
         SET csm.status = $status
         SET csm.detail = $detail
         RETURN csm
         """
 
         results = self.execute_query(
-            query, status=str(status), uuid=uuid, manager_id=manager_id, detail=detail
+            query,
+            status=status.value,
+            uuid=uuid,
+            manager_name=manager_name,
+            detail=detail,
         )
 
         if len(results.records) == 0:

@@ -28,7 +28,7 @@ class ComputeServiceRegistration(BaseModel):
     registered: datetime
     heartbeat: datetime
     failure_times: list[datetime] = []
-    manager: str | None = None
+    manager_name: str | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -67,7 +67,6 @@ class ComputeManagerInstruction(StrEnum):
 
 class ComputeManagerStatus(StrEnum):
     OK = "OK"
-    STALLED = "STALLED"
     ERRORED = "ERRORED"
 
 
@@ -81,13 +80,13 @@ class ComputeManagerID(str):
         if len(parts) != 6:
             # this currently only supports field-separated hex uuid4s
             raise ValueError(
-                "ComputeManagerID must have the form `{manager_id}-{uuid}` with a field-separated hex"
+                "ComputeManagerID must have the form `{manager_name}-{uuid}` with a field-separated hex"
             )
 
-        self._manager_id = parts[0]
+        self._manager_name = parts[0]
         self._uuid = "-".join(parts[1:])
 
-        if not self.manager_id.isalnum():
+        if not self.manager_name.isalnum():
             raise ValueError("ComputeManagerID only allows alpha-numeric names")
 
         try:
@@ -96,21 +95,21 @@ class ComputeManagerID(str):
             raise ValueError("Could not interpret the provided UUID.")
 
     @classmethod
-    def from_manager_id(cls, manager_id: str):
-        return cls(f"{manager_id}-{uuid4()}")
+    def new_from_manager_name(cls, manager_name: str):
+        return cls(f"{manager_name}-{uuid4()}")
 
     def to_dict(self):
-        return {"manager_id": self.manager_id, "uuid": self.uuid}
+        return {"manager_name": self.manager_name, "uuid": self.uuid}
 
     @classmethod
     def from_dict(cls, dct):
-        manager_id = dct["manager_id"]
+        manager_name = dct["manager_name"]
         uuid = dct["uuid"]
-        return cls(manager_id + "-" + uuid)
+        return cls(manager_name + "-" + uuid)
 
     @property
-    def manager_id(self) -> str:
-        return self._manager_id
+    def manager_name(self) -> str:
+        return self._manager_name
 
     @property
     def uuid(self) -> str:
@@ -119,7 +118,7 @@ class ComputeManagerID(str):
 
 class ComputeManagerRegistration(BaseModel):
 
-    manager_id: str
+    manager_name: str
     uuid: str
     last_status_update: datetime
     status: str
@@ -130,13 +129,13 @@ class ComputeManagerRegistration(BaseModel):
         return f"<ComputeManagerRegistration('{str(self)}')>"
 
     def __str__(self):
-        return "-".join([self.manager_id, self.uuid])
+        return "-".join([self.manager_name, self.uuid])
 
     @classmethod
     def from_now(cls, identifier: ComputeManagerID):
         now = datetime.utcnow()
         return cls(
-            manager_id=identifier.manager_id,
+            manager_name=identifier.manager_name,
             uuid=identifier.uuid,
             last_status_update=now,
             status=ComputeManagerStatus.OK,
@@ -146,7 +145,7 @@ class ComputeManagerRegistration(BaseModel):
 
     def to_dict(self):
         dct = self.dict()
-        dct["manager_id"] = str(self.manager_id)
+        dct["manager_name"] = str(self.manager_name)
         dct["uuid"] = str(self.uuid)
 
         return dct
@@ -156,7 +155,7 @@ class ComputeManagerRegistration(BaseModel):
         return cls(**dct_)
 
     def to_compute_manager_id(self):
-        return ComputeManagerID("-".join([self.manager_id, self.uuid]))
+        return ComputeManagerID("-".join([self.manager_name, self.uuid]))
 
 
 class TaskProvenance(BaseModel):
