@@ -3532,6 +3532,59 @@ class TestNeo4jStore(TestStateStore):
             )
             assert self.confirm_is_registered(n4js, compute_manager_id)
 
+        def test_registration_reclaims_services(self, n4js: Neo4jStore):
+
+            cmr: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_manager_name("testmanager")
+            )
+            compute_manager_id = cmr.to_compute_manager_id()
+            n4js.register_computemanager(cmr)
+
+            # attach a few compute services
+            for _ in range(3):
+                self.create_compute_service(n4js, compute_manager_id)
+
+            # get all CSR claiming to be managed by manager_name,
+            # along with any cmr that actually manages it
+            query = """
+            MATCH (csr: ComputeServiceRegistration {manager_name: $manager_name})
+            OPTIONAL MATCH (cmr: ComputeManagerRegistration)-[:MANAGES]->(csr)
+            RETURN csr, cmr
+            """
+
+            # check that all nodes exist
+            records = n4js.execute_query(
+                query, manager_name=compute_manager_id.manager_name
+            ).records
+
+            for record in records:
+                _csr, _cmr = record["csr"], record["cmr"]
+                assert _csr is not None and _cmr is not None
+
+            # remove the registration for the manager
+            n4js.deregister_computemanager(compute_manager_id)
+
+            # check that the manager is no longer managing the compute
+            # services, but that the services still exist
+            records = n4js.execute_query(
+                query, manager_name=compute_manager_id.manager_name
+            ).records
+
+            for record in records:
+                _csr, _cmr = record["csr"], record["cmr"]
+                assert _csr is not None and _cmr is None
+
+            # reregister to test that the compute services are reattached
+            n4js.register_computemanager(cmr)
+
+            records = n4js.execute_query(
+                query, manager_name=compute_manager_id.manager_name
+            ).records
+
+            for record in records:
+                _csr, _cmr = record["csr"], record["cmr"]
+                assert _csr is not None and _cmr is not None
+
         def test_clear_errored(self, n4js: Neo4jStore):
             cmr: ComputeManagerRegistration = (
                 self.compute_manager_registration_from_manager_name("testmanager")
@@ -3634,10 +3687,27 @@ class TestNeo4jStore(TestStateStore):
 
             n4js.register_computemanager(cmr)
 
+            def get_last_status_update_time():
+                query_get_last_update_time = """
+                MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
+                RETURN cmr
+                """
+
+                return (
+                    n4js.execute_query(
+                        query_get_last_update_time, **compute_manager_id.to_dict()
+                    )
+                    .records[0]["cmr"]["last_status_update"]
+                    .to_native()
+                )
+
             # updating with OK
+            previous_update_time = get_last_status_update_time()
             n4js.update_compute_manager_status(
                 compute_manager_id, ComputeManagerStatus.OK, detail=None
             )
+            assert previous_update_time < get_last_status_update_time()
+
             with pytest.raises(
                 ValueError,
                 match="detail should only be provided for the 'ERRORED' status",
@@ -3655,9 +3725,22 @@ class TestNeo4jStore(TestStateStore):
                 n4js.update_compute_manager_status(
                     compute_manager_id, ComputeManagerStatus.ERRORED, detail=None
                 )
+
+            previous_update_time = get_last_status_update_time()
             n4js.update_compute_manager_status(
                 compute_manager_id, ComputeManagerStatus.ERRORED, detail="Something"
             )
+            assert previous_update_time < get_last_status_update_time()
+
+            # check that status update time can be set manually, even
+            # so far as setting it in the past
+            previous_update_time = get_last_status_update_time()
+            n4js.update_compute_manager_status(
+                compute_manager_id,
+                ComputeManagerStatus.OK,
+                update_time=datetime.utcnow() + timedelta(minutes=-10),
+            )
+            assert previous_update_time > get_last_status_update_time()
 
         def test_expiration(self, n4js: Neo4jStore):
 
@@ -3667,4 +3750,36 @@ class TestNeo4jStore(TestStateStore):
             compute_manager_id = cmr.to_compute_manager_id()
             n4js.register_computemanager(cmr)
 
-            raise NotImplementedError
+            n4js.update_compute_manager_status(
+                compute_manager_id,
+                ComputeManagerStatus.OK,
+                update_time=datetime.utcnow() + timedelta(days=-1),
+            )
+
+            # attach a few compute services
+            for _ in range(3):
+                self.create_compute_service(n4js, compute_manager_id)
+
+            n4js.expire_computemanager_registrations(
+                datetime.utcnow() + timedelta(hours=-2)
+            )
+
+            # assert the manager is no longer registered
+            assert not self.confirm_is_registered(n4js, compute_manager_id)
+
+            # get all compute services and their possible managers
+            query = """
+            MATCH (csr: ComputeServiceRegistration {manager_name: $manager_name})
+            OPTIONAL MATCH (cmr: ComputeManagerRegistration)-[:MANAGES]->(csr)
+            RETURN csr, cmr
+            """
+
+            records = n4js.execute_query(
+                query, manager_name=compute_manager_id.manager_name
+            ).records
+
+            # check that the compute services still exist, even though
+            # the manager was removed
+            for record in records:
+                _csr, _cmr = record["csr"], record["cmr"]
+                assert _csr is not None and _cmr is None

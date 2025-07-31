@@ -1466,7 +1466,20 @@ class Neo4jStore(AlchemiscaleStateStore):
             + "-"
             + compute_manager_registration.uuid
         )
-        return identifier
+
+        reattach_compute_service_query = """
+        MATCH (csr: ComputeServiceRegistration {manager_name: $manager_name}),
+              (cmr: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
+        CREATE (cmr)-[rel:MANAGES]->(csr)
+        """
+
+        self.execute_query(
+            reattach_compute_service_query,
+            manager_name=compute_manager_registration.manager_name,
+            uuid=compute_manager_registration.uuid,
+        )
+
+        return ComputeManagerID(identifier)
 
     # TODO: docstring
     def expire_computemanager_registrations(self, expire_time: datetime):
@@ -1475,20 +1488,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         WHERE cmr.last_status_update < localdatetime($expire_time)
 
         DETACH DELETE cmr
-
-        RETURN cmr.manager_name as id, cmr.uuid as uuid
         """
 
         results = self.execute_query(query, expire_time=expire_time.isoformat())
-
-        identities = set()
-        for record in results:
-            compute_manager_id = ComputeManagerID(
-                record["manager_name"] + "-" + record["uuid"]
-            )
-            identities.add(compute_manager_id)
-
-        return identities
 
     # TODO: docstring
     def clear_errored_computemanager(self, compute_manager_id: ComputeManagerID):
@@ -1553,7 +1555,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         self,
         compute_manager_id: ComputeManagerID,
         status: ComputeManagerStatus,
-        detail: str,
+        detail: str | None = None,
+        update_time: datetime | None = None,
     ):
         status = ComputeManagerStatus(status)
 
@@ -1570,10 +1573,13 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
 
+        update_time = update_time or datetime.utcnow()
+
         query = """
         MATCH (csm: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
         SET csm.status = $status
         SET csm.detail = $detail
+        SET csm.last_status_update = localdatetime($update_time)
         RETURN csm
         """
 
@@ -1583,6 +1589,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             uuid=uuid,
             manager_name=manager_name,
             detail=detail,
+            update_time=update_time.isoformat(),
         )
 
         if len(results.records) == 0:
