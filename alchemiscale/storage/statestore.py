@@ -1342,6 +1342,38 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return compute_service_id
 
+    def compute_services_can_claim(
+        self,
+        compute_service_ids: list[ComputeServiceID],
+        forgive_time: datetime,
+        max_failures: int,
+    ) -> list[bool]:
+        """Check compute services are able to claim tasks.
+
+        Parameters
+        ----------
+        compute_service_ids
+            The compute services to validate.
+        forgive_time
+            The time cutoff used to filter failure time reports for the compute
+            services. Only entries occuring after this time are considered.
+        max_failures
+            The number of failures allowed to occur between ``forgive_time``
+            and now. Any value greater than this denies the claim request.
+        """
+        # get the number of failures that occured after `forgive_time`
+        query = """
+        UNWIND $compute_service_ids as compute_service_id
+        MATCH (cs:ComputeServiceRegistration {identifier: compute_service_id})
+        SET cs.failure_times = [entry IN cs.failure_times WHERE entry > localdatetime($forgive_time)]
+        RETURN size(cs.failure_times) as n_failures
+        """
+        results = self.execute_query(
+            query, compute_service_ids=compute_service_ids, forgive_time=forgive_time
+        )
+
+        return [record["n_failures"] <= max_failures for record in results.records]
+
     def compute_service_can_claim(
         self,
         compute_service_id: ComputeServiceID,
@@ -1361,16 +1393,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             The number of failures allowed to occur between ``forgive_time``
             and now. Any value greater than this denies the claim request.
         """
-        # get the number of failures that occured after `forgive_time`
-        query = """
-        MATCH (cs:ComputeServiceRegistration {identifier: $compute_service_id})
-        SET cs.failure_times = [entry IN cs.failure_times WHERE entry > localdatetime($forgive_time)]
-        RETURN size(cs.failure_times) as n_failures
-        """
-        results = self.execute_query(
-            query, compute_service_id=compute_service_id, forgive_time=forgive_time
-        )
-        return results.records[0]["n_failures"] <= max_failures
+        return self.compute_services_can_claim(
+            [compute_service_id], forgive_time, max_failures
+        )[0]
 
     ## compute manager
 
@@ -1621,22 +1646,17 @@ class Neo4jStore(AlchemiscaleStateStore):
             msg = "no compute manager was found with the given manager name and UUID"
             return ComputeManagerInstruction.SHUTDOWN, msg
 
-        # TODO: very chatty, try and do this in a single query
-        # this would require a new state store method that requests
-        # failure times in bulk
         csr_ids = []
         for record in results.records:
             # if the manager has managed services
             if csr_id := record["csr_id"]:
                 csr_ids.append(ComputeServiceID(csr_id))
-                # if the compute service is unable to claim tasks,
-                # issue SKIP
-                if not self.compute_service_can_claim(
-                    csr_id,
-                    forgive_time,
-                    max_failures,
-                ):
-                    return ComputeManagerInstruction.SKIP, None
+
+        if csr_ids:
+            if not all(
+                self.compute_services_can_claim(csr_ids, forgive_time, max_failures)
+            ):
+                return ComputeManagerInstruction.SKIP, None
 
         return ComputeManagerInstruction.OK, csr_ids
 
