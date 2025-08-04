@@ -44,6 +44,7 @@ from ..storage.models import (
     ComputeManagerRegistration,
     ComputeServiceRegistration,
     ComputeManagerStatus,
+    ComputeManagerInstruction,
 )
 from ..models import Scope, ScopedKey
 from ..security.models import (
@@ -468,12 +469,23 @@ def computemanager_get_instruction(
 ):
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
     now = datetime.utcnow()
-    instruction, payload = n4js.get_computemanager_instruction(
+    instruction, data = n4js.get_computemanager_instruction(
         compute_manager_id,
         now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
         settings.ALCHEMISCALE_COMPUTE_API_MAX_FAILURES,
     )
+
+    payload = {}
     payload["instruction"] = str(instruction)
+
+    match instruction:
+        case ComputeManagerInstruction.OK:
+            payload["compute_service_ids"] = data
+        case ComputeManagerInstruction.SKIP:
+            pass
+        case ComputeManagerInstruction.SHUTDOWN:
+            payload["message"] = data
+
     return payload
 
 

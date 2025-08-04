@@ -1528,7 +1528,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # no compute manager was found the given name and UUID
         if len(results.records) == 0:
             msg = "no compute manager was found with the given manager name and UUID"
-            return ComputeManagerInstruction.SHUTDOWN, {"message": msg}
+            return ComputeManagerInstruction.SHUTDOWN, msg
 
         # TODO: very chatty, try and do this in a single query
         # this would require a new state store method that requests
@@ -1541,14 +1541,12 @@ class Neo4jStore(AlchemiscaleStateStore):
                     forgive_time,
                     max_failures,
                 ):
-                    return ComputeManagerInstruction.SKIP, {}
+                    return ComputeManagerInstruction.SKIP, None
             else:
                 break
             csr_ids.append(ComputeServiceID(csr_id))
 
-        return ComputeManagerInstruction.OK, {
-            "compute_service_ids": csr_ids,
-        }
+        return ComputeManagerInstruction.OK, csr_ids
 
     # TODO: docstring
     def update_compute_manager_status(

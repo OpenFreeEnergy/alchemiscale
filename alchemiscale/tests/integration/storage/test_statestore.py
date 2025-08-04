@@ -3632,7 +3632,7 @@ class TestNeo4jStore(TestStateStore):
             # services is given the OK instruction
             instruction, data = get_instruction()
             assert instruction == ComputeManagerInstruction.OK
-            assert data == {"compute_service_ids": []}
+            assert data == []
 
             # creating a failed a compute service with prior failures
             # (3 failures, 30 seconds ago) triggers the SKIP
@@ -3647,28 +3647,25 @@ class TestNeo4jStore(TestStateStore):
 
             instruction, data = get_instruction(forgive_seconds=-60)
             assert instruction == ComputeManagerInstruction.SKIP
-            assert data == {}
+            assert data == None
 
             # if we allow up to 3 failures, we should be allowed to grow
             instruction, data = get_instruction(forgive_seconds=-60, failures=3)
             assert instruction == ComputeManagerInstruction.OK
-            assert data == {
-                "compute_service_ids": [compute_service_id],
-            }
+            assert data == [compute_service_id]
 
             # check with the forgive time set to now and try again
             instruction, data = get_instruction(forgive_seconds=0)
             assert instruction == ComputeManagerInstruction.OK
-            assert data == {
-                "compute_service_ids": [compute_service_id],
-            }
+            assert data == [compute_service_id]
 
             n4js.deregister_computemanager(compute_manager_id)
             instruction, data = get_instruction(forgive_seconds=0)
             assert instruction == ComputeManagerInstruction.SHUTDOWN
-            assert data == {
-                "message": "no compute manager was found with the given manager name and UUID"
-            }
+            assert (
+                data
+                == "no compute manager was found with the given manager name and UUID"
+            )
 
         def test_update_status(self, n4js: Neo4jStore):
 
