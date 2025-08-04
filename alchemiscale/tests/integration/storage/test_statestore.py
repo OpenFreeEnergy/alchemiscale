@@ -3739,6 +3739,12 @@ class TestNeo4jStore(TestStateStore):
             )
             assert previous_update_time > get_last_status_update_time()
 
+            with pytest.raises(
+                ValueError, match='"INVALID" is not a valid ComputeManagerStatus'
+            ):
+                # try updating with an invalid status
+                n4js.update_compute_manager_status(compute_manager_id, "INVALID")
+
         def test_expiration(self, n4js: Neo4jStore):
 
             cmr: ComputeManagerRegistration = (
@@ -3757,8 +3763,9 @@ class TestNeo4jStore(TestStateStore):
             for _ in range(3):
                 self.create_compute_service(n4js, compute_manager_id)
 
+            now = datetime.utcnow()
             n4js.expire_computemanager_registrations(
-                datetime.utcnow() + timedelta(hours=-2)
+                now + timedelta(hours=-2), now + timedelta(hours=-24)
             )
 
             # assert the manager is no longer registered
