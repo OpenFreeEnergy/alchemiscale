@@ -2,7 +2,11 @@ import pytest
 from uuid import uuid4
 from time import sleep
 
-from alchemiscale.storage.models import ComputeManagerID, ComputeManagerStatus, ComputeManagerInstruction
+from alchemiscale.storage.models import (
+    ComputeManagerID,
+    ComputeManagerStatus,
+    ComputeManagerInstruction,
+)
 from alchemiscale.compute.manager import ComputeManager, ComputeManagerSettings
 from alchemiscale.compute.client import AlchemiscaleComputeManagerClient
 

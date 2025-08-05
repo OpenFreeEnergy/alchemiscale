@@ -1575,6 +1575,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         compute_manager_id: ComputeManagerID,
         forgive_time: datetime,
         max_failures: int,
+        scopes: list[Scope],
     ) -> tuple[ComputeManagerInstruction, None, str, list[ComputeServiceID]]:
         """Return an instruction for a compute manager based on the contents of the statestore.
 
@@ -1600,6 +1601,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             allowed to claim a task. If any managed compute services
             have failues that exceed this value, the returned
             instruction will be SKIP.
+
+        scopes
+            The scopes to consider when determining available tasks.
 
         Returns
         -------
@@ -1658,9 +1662,26 @@ class Neo4jStore(AlchemiscaleStateStore):
             ):
                 return ComputeManagerInstruction.SKIP, {}
 
-        # TODO: get actual number of tasks
+        # determine how many tasks are available
+
+        num_tasks = 0
+        for scope in scopes:
+            params = {
+                "org": scope.org,
+                "campaign": scope.campaign,
+                "project": scope.project,
+                "waiting_status": TaskStatusEnum.waiting.value,
+            }
+            query = """
+            MATCH (task:Task {_org: $org, _campaign: $campaign, _project: $project, status: $waiting_status})
+            RETURN count(task) as num_tasks
+            """
+            result = self.execute_query(query, **params)
+            num_tasks += result.records[0]["num_tasks"]
+
         return ComputeManagerInstruction.OK, {
-            "compute_service_ids": csr_ids, "num_tasks": 0
+            "compute_service_ids": csr_ids,
+            "num_tasks": num_tasks,
         }
 
     def update_compute_manager_status(
@@ -1720,11 +1741,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
 
         query = """
-        MATCH (csm: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
-        SET csm.status = $status
-        SET csm.detail = $detail
-        SET csm.last_status_update = localdatetime($update_time)
-        RETURN csm
+        MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
+        SET cmr.status = $status
+        SET cmr.detail = $detail
+        SET cmr.last_status_update = localdatetime($update_time)
+        RETURN cmr
         """
 
         results = self.execute_query(

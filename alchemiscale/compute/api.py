@@ -465,13 +465,17 @@ def computemanager_get_instruction(
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     settings: ComputeAPISettings = Depends(get_base_api_settings),
+    scope: Scope = Depends(scope_params),
+    token: TokenData = Depends(get_token_data_depends),
 ):
+    query_scopes = validate_scopes_query(scope, token)
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
     now = datetime.utcnow()
     instruction, payload = n4js.get_computemanager_instruction(
         compute_manager_id,
         now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
         settings.ALCHEMISCALE_COMPUTE_API_MAX_FAILURES,
+        query_scopes,
     )
     payload["instruction"] = str(instruction)
     return payload

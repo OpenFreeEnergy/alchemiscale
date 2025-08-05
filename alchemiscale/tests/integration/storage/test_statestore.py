@@ -3611,7 +3611,7 @@ class TestNeo4jStore(TestStateStore):
             ):
                 n4js.clear_errored_computemanager(compute_manager_id)
 
-        def test_get_instruction(self, n4js: Neo4jStore):
+        def test_get_instruction(self, n4js: Neo4jStore, scope_test: Scope):
             cmr: ComputeManagerRegistration = (
                 self.compute_manager_registration_from_manager_name("testmanager")
             )
@@ -3625,6 +3625,7 @@ class TestNeo4jStore(TestStateStore):
                     compute_manager_id,
                     forgive_time=now + timedelta(seconds=forgive_seconds),
                     max_failures=failures,
+                    scopes=[scope_test],
                 )
                 return instruction, instruction_data
 
@@ -3653,14 +3654,16 @@ class TestNeo4jStore(TestStateStore):
             instruction, data = get_instruction(forgive_seconds=-60, failures=3)
             assert instruction == ComputeManagerInstruction.OK
             assert data == {
-                "compute_service_ids": [compute_service_id], "num_tasks": 0,
+                "compute_service_ids": [compute_service_id],
+                "num_tasks": 0,
             }
 
             # check with the forgive time set to now and try again
             instruction, data = get_instruction(forgive_seconds=0)
             assert instruction == ComputeManagerInstruction.OK
             assert data == {
-                "compute_service_ids": [compute_service_id], "num_tasks": 0,
+                "compute_service_ids": [compute_service_id],
+                "num_tasks": 0,
             }
 
             n4js.deregister_computemanager(compute_manager_id)
