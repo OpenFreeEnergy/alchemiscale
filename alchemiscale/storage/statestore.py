@@ -1708,13 +1708,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         # check that detail is only provided for the ERRORED status
         if detail and status == ComputeManagerStatus.OK:
             raise ValueError(
-                f"detail should only be provided for the '{ComputeManagerStatus.ERRORED.value}' status"
+                f"detail should only be provided for the '{ComputeManagerStatus.ERRORED}' status"
             )
 
         # details are required for the ERRORED status update
         if not detail and status == ComputeManagerStatus.ERRORED:
             raise ValueError(
-                f"detail is required for the '{ComputeManagerStatus.ERRORED.value}' status"
+                f"detail is required for the '{ComputeManagerStatus.ERRORED}' status"
             )
 
         manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
