@@ -6,10 +6,9 @@
 
 from abc import abstractmethod
 
-from ..storage.models import ComputeManagerID
+from ..storage.models import ComputeManagerID, ComputeManagerInstruction
 from .client import AlchemiscaleComputeManagerClient
 from .settings import ComputeManagerSettings
-from .models import ComputeManagerInstruction
 
 
 class ComputeManager:
@@ -25,7 +24,7 @@ class ComputeManager:
         self.client.register(self.compute_manager_id)
 
     def _deregister(self):
-        self.client.deregister(self.compute_client_id)
+        self.client.deregister(self.compute_manager_id)
 
     def request_instruction(self) -> ComputeManagerInstruction:
         instruction = self.client._post_resource(
