@@ -1644,7 +1644,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # no compute manager was found the given name and UUID, issue a SHUTDOWN
         if len(results.records) == 0:
             msg = "no compute manager was found with the given manager name and UUID"
-            return ComputeManagerInstruction.SHUTDOWN, msg
+            return ComputeManagerInstruction.SHUTDOWN, {"message": msg}
 
         csr_ids = []
         for record in results.records:
@@ -1656,9 +1656,12 @@ class Neo4jStore(AlchemiscaleStateStore):
             if not all(
                 self.compute_services_can_claim(csr_ids, forgive_time, max_failures)
             ):
-                return ComputeManagerInstruction.SKIP, None
+                return ComputeManagerInstruction.SKIP, {}
 
-        return ComputeManagerInstruction.OK, csr_ids
+        # TODO: get actual number of tasks
+        return ComputeManagerInstruction.OK, {
+            "compute_service_ids": csr_ids, "num_tasks": 0
+        }
 
     def update_compute_manager_status(
         self,

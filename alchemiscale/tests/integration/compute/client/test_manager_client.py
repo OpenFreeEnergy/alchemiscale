@@ -13,7 +13,7 @@ from alchemiscale.storage.models import (
 from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
 
 
-class TestComputeManager:
+class TestComputeManagerClient:
 
     def test_wrong_credential(
         self,
