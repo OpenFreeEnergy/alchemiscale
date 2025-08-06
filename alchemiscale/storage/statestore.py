@@ -1664,7 +1664,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         # determine how many tasks are available
 
-        num_tasks = 0
+        tasks = []
         for scope in scopes:
             params = {
                 "org": scope.org,
@@ -1673,15 +1673,15 @@ class Neo4jStore(AlchemiscaleStateStore):
                 "waiting_status": TaskStatusEnum.waiting.value,
             }
             query = """
-            MATCH (task:Task {_org: $org, _campaign: $campaign, _project: $project, status: $waiting_status})
-            RETURN count(task) as num_tasks
+            MATCH (task:Task {_org: $org, _campaign: $campaign, _project: $project, status: $waiting_status})<-[:ACTIONS]-(:TaskHub)
+            RETURN task.key as task
             """
             result = self.execute_query(query, **params)
-            num_tasks += result.records[0]["num_tasks"]
+            tasks += [record["task"] for record in result.records]
 
         return ComputeManagerInstruction.OK, {
             "compute_service_ids": csr_ids,
-            "num_tasks": num_tasks,
+            "num_tasks": len(set(tasks)),
         }
 
     def update_compute_manager_status(
