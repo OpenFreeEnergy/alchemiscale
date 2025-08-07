@@ -463,11 +463,12 @@ def computemanager_deregister(
 def computemanager_get_instruction(
     compute_manager_id,
     *,
-    scopes: list[Scope] = Body(),
+    scopes: list[Scope] = Body([], embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     settings: ComputeAPISettings = Depends(get_base_api_settings),
     token: TokenData = Depends(get_token_data_depends),
 ):
+    scopes = scopes or []
     scopes_reduced = minimize_scope_space(scopes)
     query_scopes = []
     for scope in scopes_reduced:

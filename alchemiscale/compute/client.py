@@ -196,7 +196,7 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
     ) -> tuple[ComputeManagerInstruction, dict]:
         instruction_data = self._post_resource(
             f"/computemanager/{compute_manager_id}/instruction",
-            {},
+            {"scopes": []},
         )
 
         match instruction_data:
