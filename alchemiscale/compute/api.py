@@ -104,7 +104,7 @@ def register_computeservice(
     compute_service_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    now = datetime.datetime.now(tz=None)
+    now = datetime.datetime.now(tz=datetime.UTC)
     csreg = ComputeServiceRegistration(
         identifier=ComputeServiceID(compute_service_id),
         registered=now,
@@ -135,7 +135,7 @@ def heartbeat_computeservice(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     settings: ComputeAPISettings = Depends(get_base_api_settings),
 ):
-    now = datetime.datetime.now(tz=None)
+    now = datetime.datetime.now(tz=datetime.UTC)
 
     # expire any stale registrations, along with their claims
     expire_delta = timedelta(
@@ -216,7 +216,7 @@ def claim_tasks(
 
     """
     # check if the compute service can claim tasks
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(tz=datetime.UTC)
     if not n4js.compute_service_can_claim(
         compute_service_id,
         now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
@@ -385,7 +385,7 @@ async def set_task_result(
         n4js.set_task_error(tasks=[task_sk])
 
         # report that the compute service experienced a failure
-        now = datetime.datetime.now(tz=None)
+        now = datetime.datetime.now(tz=datetime.UTC)
         n4js.log_failure_compute_service(compute_service_id, now)
         n4js.resolve_task_restarts(task_scoped_keys=[task_sk])
 
