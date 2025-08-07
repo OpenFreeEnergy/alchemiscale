@@ -1,7 +1,7 @@
 import pytest
 import json
 import os
-from datetime import datetime
+import datetime
 from time import sleep
 
 from gufe.tokenization import JSON_HANDLER
@@ -378,7 +378,7 @@ class TestComputeClient:
             obj_key=protocoldagresult.key,
             scope=tf_sk.scope,
             ok=protocoldagresult.ok(),
-            datetime_created=datetime.utcnow(),
+            datetime_created=datetime.datetime.now(tz=datetime.UTC),
             creator=None,
         )
 

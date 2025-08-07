@@ -6,7 +6,7 @@
 
 import abc
 import bisect
-from datetime import datetime
+import datetime
 from contextlib import contextmanager
 import json
 import re
@@ -115,7 +115,7 @@ CLAIM_QUERY = f"""
 
     // create CLAIMS relationship with given compute service
     MATCH (csreg:ComputeServiceRegistration {{identifier: $compute_service_id}})
-    CREATE (t)<-[cl:CLAIMS {{claimed: localdatetime($datetimestr)}}]-(csreg)
+    CREATE (t)<-[cl:CLAIMS {{claimed: datetime($datetimestr)}}]-(csreg)
 
     SET t.status = '{TaskStatusEnum.running.value}'
 
@@ -1255,13 +1255,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         return ComputeServiceID(identifier)
 
     def heartbeat_computeservice(
-        self, compute_service_id: ComputeServiceID, heartbeat: datetime
+        self, compute_service_id: ComputeServiceID, heartbeat: datetime.datetime
     ):
         """Update the heartbeat for the given ComputeServiceID."""
 
         q = f"""
         MATCH (n:ComputeServiceRegistration {{identifier: $compute_service_id}})
-        SET n.heartbeat = localdatetime('{heartbeat.isoformat()}')
+        SET n.heartbeat = datetime('{heartbeat.isoformat()}')
 
         """
         with self.transaction() as tx:
@@ -1269,11 +1269,11 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return compute_service_id
 
-    def expire_registrations(self, expire_time: datetime):
+    def expire_registrations(self, expire_time: datetime.datetime):
         """Remove all registrations with last heartbeat prior to the given `expire_time`."""
         q = f"""
         MATCH (n:ComputeServiceRegistration)
-        WHERE n.heartbeat < localdatetime('{expire_time.isoformat()}')
+        WHERE n.heartbeat < datetime('{expire_time.isoformat()}')
 
         WITH n
 
@@ -1298,7 +1298,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def log_failure_compute_service(
         self,
         compute_service_id: ComputeServiceID,
-        failure_time: datetime,
+        failure_time: datetime.datetime,
     ) -> ComputeServiceID:
         """Add a reported compute service failure to the database.
 
@@ -1311,7 +1311,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         q = """
         MATCH (n:ComputeServiceRegistration {identifier: $compute_service_id})
-        SET n.failure_times = [localdatetime($failure_time)] + n.failure_times
+        SET n.failure_times = [datetime($failure_time)] + n.failure_times
         """
 
         with self.transaction() as tx:
@@ -1326,7 +1326,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def compute_service_can_claim(
         self,
         compute_service_id: ComputeServiceID,
-        forgive_time: datetime,
+        forgive_time: datetime.datetime,
         max_failures: int,
     ) -> bool:
         """Check if a compute service is able to claim a ``Task``.
@@ -1345,7 +1345,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # get the number of failures that occured after `forgive_time`
         query = """
         MATCH (cs:ComputeServiceRegistration {identifier: $compute_service_id})
-        SET cs.failure_times = [entry IN cs.failure_times WHERE entry > localdatetime($forgive_time)]
+        SET cs.failure_times = [entry IN cs.failure_times WHERE entry > datetime($forgive_time)]
         RETURN size(cs.failure_times) as n_failures
         """
         results = self.execute_query(
@@ -2074,7 +2074,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 tx.run(
                     CLAIM_QUERY,
                     tasks_list=[str(task) for task in tasks if task is not None],
-                    datetimestr=str(datetime.utcnow().isoformat()),
+                    datetimestr=str(datetime.datetime.now(tz=datetime.UTC).isoformat()),
                     compute_service_id=str(compute_service_id),
                 )
 
