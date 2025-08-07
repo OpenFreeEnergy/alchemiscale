@@ -8,7 +8,8 @@ import json
 from datetime import datetime, timedelta
 import random
 
-from fastapi import FastAPI, APIRouter, Body, Depends, Request
+from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Request
+from fastapi import status as http_status
 from fastapi.middleware.gzip import GZipMiddleware
 from gufe.tokenization import JSON_HANDLER
 from gufe.protocols import ProtocolDAGResult
@@ -39,7 +40,10 @@ from ..storage.objectstore import S3ObjectStore
 from ..storage.models import (
     ProtocolDAGResultRef,
     ComputeServiceID,
+    ComputeManagerID,
+    ComputeManagerRegistration,
     ComputeServiceRegistration,
+    ComputeManagerStatus,
 )
 from ..models import Scope, ScopedKey
 from ..security.models import (
@@ -101,14 +105,25 @@ def list_scopes(
 @router.post("/computeservice/{compute_service_id}/register")
 def register_computeservice(
     compute_service_id,
+    *,
+    compute_manager_id: str | None = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     now = datetime.utcnow()
+
+    if compute_manager_id:
+        manager_name = process_compute_manager_id_string(
+            compute_manager_id
+        ).manager_name
+    else:
+        manager_name = None
+
     csreg = ComputeServiceRegistration(
         identifier=ComputeServiceID(compute_service_id),
         registered=now,
         heartbeat=now,
         failure_times=[],
+        manager_name=manager_name,
     )
 
     compute_service_id_ = n4js.register_computeservice(csreg)
@@ -389,6 +404,111 @@ async def set_task_result(
         n4js.resolve_task_restarts(task_scoped_keys=[task_sk])
 
     return result_sk
+
+
+def process_compute_manager_id_string(
+    compute_manager_id_string: str,
+) -> ComputeManagerID:
+    """Try creating a ComputeManagerID from a string representation. Raise HTTPException."""
+    try:
+        compute_manager_id = ComputeManagerID(compute_manager_id_string)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            details=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
+
+    return compute_manager_id
+
+
+@router.post("/computemanager/{compute_manager_id}/register")
+def computemanager_register(
+    compute_manager_id,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+
+    now = datetime.utcnow()
+    cm_registration = ComputeManagerRegistration(
+        manager_name=compute_manager_id.manager_name,
+        uuid=compute_manager_id.uuid,
+        registered=now,
+        last_status_update=now,
+        status=ComputeManagerStatus.OK,
+        detail="",
+        saturation=0,
+    )
+
+    compute_manager_id_ = n4js.register_computemanager(cm_registration)
+    return compute_manager_id_
+
+
+@router.post("/computemanager/{compute_manager_id}/deregister")
+def computemanager_deregister(
+    compute_manager_id,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+    n4js.deregister_computemanager(compute_manager_id)
+    return compute_manager_id
+
+
+@router.post("/computemanager/{compute_manager_id}/instruction")
+def computemanager_get_instruction(
+    compute_manager_id,
+    *,
+    scopes: list[Scope] = Body([], embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    scopes = scopes or []
+    scopes_reduced = minimize_scope_space(scopes)
+    query_scopes = []
+    for scope in scopes_reduced:
+        query_scopes.extend(validate_scopes_query(scope, token))
+
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+    now = datetime.utcnow()
+    instruction, payload = n4js.get_computemanager_instruction(
+        compute_manager_id,
+        now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
+        settings.ALCHEMISCALE_COMPUTE_API_MAX_FAILURES,
+        query_scopes,
+    )
+    payload["instruction"] = str(instruction)
+    return payload
+
+
+@router.post("/computemanager/{compute_manager_id}/status")
+def computemanager_update_status(
+    compute_manager_id,
+    *,
+    status: str = Body(),
+    detail: str | None = Body(None),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+    try:
+        n4js.update_compute_manager_status(compute_manager_id, status, detail)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            details=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            details=str(e),
+        )
+
+    return compute_manager_id
 
 
 ### add router

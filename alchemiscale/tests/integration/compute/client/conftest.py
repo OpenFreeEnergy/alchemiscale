@@ -70,3 +70,27 @@ def compute_client_wrong_credential(uvicorn_server, compute_identity):
         identifier=compute_identity["identifier"],
         key="wrong credential",
     )
+
+
+@pytest.fixture(scope="module")
+def compute_manager_client(
+    uvicorn_server,
+    compute_identity,
+    single_scoped_credentialed_compute,
+):
+    return client.AlchemiscaleComputeManagerClient(
+        api_url="http://127.0.0.1:8000/",
+        # use the identifier for the single-scoped user who should have access to some things
+        identifier=single_scoped_credentialed_compute.identifier,
+        # all the test users are based on compute_identity who use the same password
+        key=compute_identity["key"],
+    )
+
+
+@pytest.fixture(scope="module")
+def manager_client_wrong_credential(uvicorn_server, compute_identity):
+    return client.AlchemiscaleComputeManagerClient(
+        api_url="http://127.0.0.1:8000/",
+        identifier=compute_identity["identifier"],
+        key="wrong credential",
+    )

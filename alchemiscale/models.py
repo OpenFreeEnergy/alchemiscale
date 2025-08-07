@@ -5,6 +5,7 @@
 """
 
 from typing import Any
+from enum import StrEnum
 from pydantic import BaseModel, field_validator, model_validator, ConfigDict
 from gufe.tokenization import GufeKey
 from re import fullmatch
