@@ -1674,7 +1674,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             }
             query = """
             MATCH (task:Task {_org: $org, _campaign: $campaign, _project: $project, status: $waiting_status})<-[:ACTIONS]-(:TaskHub)
-            RETURN task.key as task
+            RETURN task._gufe_key as task
             """
             result = self.execute_query(query, **params)
             tasks += [record["task"] for record in result.records]

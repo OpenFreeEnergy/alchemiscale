@@ -3611,7 +3611,9 @@ class TestNeo4jStore(TestStateStore):
             ):
                 n4js.clear_errored_computemanager(compute_manager_id)
 
-        def test_get_instruction(self, n4js: Neo4jStore, scope_test: Scope):
+        def test_get_instruction(
+            self, n4js: Neo4jStore, scope_test: Scope, network_tyk2: AlchemicalNetwork
+        ):
             cmr: ComputeManagerRegistration = (
                 self.compute_manager_registration_from_manager_name("testmanager")
             )
@@ -3666,6 +3668,23 @@ class TestNeo4jStore(TestStateStore):
                 "num_tasks": 0,
             }
 
+            # Check the number of claimable tasks
+            an = network_tyk2
+            network_sk, taskhub_sk, _ = n4js.assemble_network(an, scope_test)
+            transformation = list(an.edges)[0]
+            transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+            task_sks = n4js.create_tasks([transformation_sk] * 5)
+            n4js.action_tasks(task_sks, taskhub_sk)
+
+            instruction, data = get_instruction(forgive_seconds=0)
+
+            assert data == {
+                "compute_service_ids": [compute_service_id],
+                "num_tasks": 5,
+            }
+
+            # an unregistered compute service is instructed to shutdown
             n4js.deregister_computemanager(compute_manager_id)
             instruction, data = get_instruction(forgive_seconds=0)
             assert instruction == ComputeManagerInstruction.SHUTDOWN
