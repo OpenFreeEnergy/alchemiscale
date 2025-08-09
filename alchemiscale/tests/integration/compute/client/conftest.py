@@ -15,7 +15,7 @@ from alchemiscale.tests.integration.utils import running_service
 
 
 @pytest.fixture(scope="module")
-def compute_api(s3os_server):
+def compute_api(n4jstore_settings, s3os_server):
     def get_s3os_override():
         return s3os_server
 

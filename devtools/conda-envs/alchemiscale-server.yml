@@ -18,6 +18,7 @@ dependencies:
   - zstandard
   - diskcache
   - libsqlite<3.49  # newer versions cause diskcache to fail
+  - stratocaster
 
   ## state store
   - neo4j-python-driver

@@ -43,6 +43,7 @@ class S3ObjectStoreSettings(FrozenSettings):
     AWS_S3_BUCKET: str
     AWS_S3_PREFIX: str
     AWS_DEFAULT_REGION: str
+    AWS_ENDPOINT_URL: str | None = None
 
 
 class JWTSettings(FrozenSettings):

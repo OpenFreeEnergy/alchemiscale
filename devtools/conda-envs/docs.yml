@@ -12,3 +12,4 @@ dependencies:
   - sphinx-notfound-page
   - gufe=1.3.0
   - py2neo
+  - stratocaster
