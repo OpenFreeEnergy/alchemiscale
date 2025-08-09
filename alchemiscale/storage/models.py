@@ -484,7 +484,7 @@ class StrategyState(BaseModel):
     status: StrategyStatusEnum = StrategyStatusEnum.awake
     iterations: int = 0
     sleep_interval: PositiveInt = 3600  # seconds
-    last_iteration: datetime | None = None
+    last_iteration: datetime.datetime | None = None
     last_iteration_result_count: int = 0
     max_tasks_per_transformation: PositiveInt = 3
     task_scaling: StrategyTaskScalingEnum = StrategyTaskScalingEnum.exponential

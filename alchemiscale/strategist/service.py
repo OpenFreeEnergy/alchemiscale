@@ -10,7 +10,7 @@ import os
 import time
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from datetime import datetime
+import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -308,7 +308,7 @@ class StrategistService:
                         self.n4js.cancel_tasks(task_sks, taskhub_sk, tx=tx)
 
                 strategy_state.last_iteration_result_count = current_result_count
-                strategy_state.last_iteration = datetime.utcnow()
+                strategy_state.last_iteration = datetime.datetime.now(tz=datetime.UTC)
                 strategy_state.iterations += 1
                 return strategy_state
 
@@ -414,7 +414,7 @@ class StrategistService:
                     self.n4js.cancel_tasks(tasks_to_cancel, taskhub_sk)
 
             # Update strategy state
-            strategy_state.last_iteration = datetime.utcnow()
+            strategy_state.last_iteration = datetime.datetime.now(tz=datetime.UTC)
             strategy_state.last_iteration_result_count = current_result_count
             strategy_state.iterations += 1
             strategy_state.exception = None
@@ -426,7 +426,7 @@ class StrategistService:
             # Strategy execution failed
             logger.exception(f"Strategy execution failed for network {network_sk}")
 
-            strategy_state.last_iteration = datetime.utcnow()
+            strategy_state.last_iteration = datetime.datetime.now(tz=datetime.UTC)
             strategy_state.last_iteration_result_count = current_result_count
             strategy_state.status = StrategyStatusEnum.error
             strategy_state.exception = (e.__class__.__qualname__, str(e))
@@ -512,7 +512,8 @@ class StrategistService:
                         if network_sk not in network_to_future and (
                             strategy_state.last_iteration is None
                             or (
-                                datetime.utcnow() - strategy_state.last_iteration
+                                datetime.datetime.now(tz=datetime.UTC)
+                                - strategy_state.last_iteration
                             ).total_seconds()
                             >= self.sleep_interval
                         ):
