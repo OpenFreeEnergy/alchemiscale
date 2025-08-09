@@ -33,7 +33,7 @@ class S3ObjectStore:
 
     def __init__(self, settings: S3ObjectStoreSettings):
         """Initialize S3ObjectStore from settings.
-        
+
         Parameters
         ----------
         settings : S3ObjectStoreSettings
@@ -48,7 +48,9 @@ class S3ObjectStore:
             aws_session_token=settings.AWS_SESSION_TOKEN,
             region_name=settings.AWS_DEFAULT_REGION,
         )
-        self.resource = self.session.resource("s3", endpoint_url=settings.AWS_ENDPOINT_URL)
+        self.resource = self.session.resource(
+            "s3", endpoint_url=settings.AWS_ENDPOINT_URL
+        )
 
         self.bucket = settings.AWS_S3_BUCKET
         self.prefix = settings.AWS_S3_PREFIX

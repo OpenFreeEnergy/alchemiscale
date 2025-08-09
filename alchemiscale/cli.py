@@ -526,7 +526,7 @@ def scope(func):
 def strategist(config_file):
     """Start the strategist service for executing strategies on networks."""
     from alchemiscale.models import Scope
-    from alchemiscale.strategist.service import StrategistService  
+    from alchemiscale.strategist.service import StrategistService
     from alchemiscale.strategist.settings import StrategistSettings
 
     params = yaml.safe_load(config_file)

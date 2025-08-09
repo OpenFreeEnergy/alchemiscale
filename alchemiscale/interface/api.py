@@ -1189,12 +1189,12 @@ async def set_network_strategy(
     token: TokenData = Depends(get_token_data_depends),
 ):
     """Set a Strategy for the given AlchemicalNetwork.
-    
+
     Expected request body:
     {
         "strategy": {...},  // GUFE strategy object, or null to remove
         "max_tasks_per_transformation": 3,
-        "task_scaling": "exponential", 
+        "task_scaling": "exponential",
         "mode": "partial",
         "sleep_interval": 3600
     }
@@ -1216,11 +1216,11 @@ async def set_network_strategy(
         else:
             strategy = None
     except Exception as e:
-            raise HTTPException(
-                status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Invalid input for strategy",
-            )
-    
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid input for strategy",
+        )
+
     if strategy is not None:
         # Create strategy state from body parameters
         try:
@@ -1235,7 +1235,7 @@ async def set_network_strategy(
                 status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Invalid strategy configuration: {e}",
             )
-        
+
         strategy_sk = n4js.set_network_strategy(sk, strategy, strategy_state)
         return str(strategy_sk) if strategy_sk else None
     else:
@@ -1254,14 +1254,14 @@ def get_network_strategy(
     """Get the Strategy for the given AlchemicalNetwork."""
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
-    
+
     strategy = n4js.get_network_strategy(sk)
     if strategy is None:
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"No strategy found for network '{network_scoped_key}'",
         )
-    
+
     return GufeJSONResponse(strategy)
 
 
@@ -1275,14 +1275,14 @@ def get_network_strategy_state(
     """Get the StrategyState for the given AlchemicalNetwork."""
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
-    
+
     strategy_state = n4js.get_network_strategy_state(sk)
     if strategy_state is None:
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"No strategy found for network '{network_scoped_key}'",
         )
-    
+
     return strategy_state.to_dict()
 
 
@@ -1296,14 +1296,14 @@ def get_network_strategy_status(
     """Get the status of the Strategy for the given AlchemicalNetwork."""
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
-    
+
     strategy_state = n4js.get_network_strategy_state(sk)
     if strategy_state is None:
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"No strategy found for network '{network_scoped_key}'",
         )
-    
+
     return strategy_state.status.value
 
 
@@ -1317,26 +1317,26 @@ def set_network_strategy_awake(
     """Set the Strategy status to 'awake' for the given AlchemicalNetwork."""
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
-    
+
     strategy_state = n4js.get_network_strategy_state(sk)
     if strategy_state is None:
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"No strategy found for network '{network_scoped_key}'",
         )
-    
+
     # Update strategy state to awake and clear error info
     strategy_state.status = "awake"
     strategy_state.exception = None
     strategy_state.traceback = None
-    
+
     success = n4js.update_strategy_state(sk, strategy_state)
     if not success:
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update strategy state",
         )
-    
+
     return {"status": "awake"}
 
 

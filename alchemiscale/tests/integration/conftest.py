@@ -154,6 +154,7 @@ def uri(neo4j_service_and_uri):
 ## data
 ### below specific to alchemiscale
 
+
 @fixture(scope="module")
 def n4jstore_settings(uri):
 
@@ -183,7 +184,7 @@ def n4js_fresh(n4jstore_settings):
     n4js.initialize()
 
     yield n4js
-    
+
     n4js.close()
 
 
@@ -246,7 +247,7 @@ def s3objectstore_settings():
 def s3objectstore_settings_endpoint(s3objectstore_settings):
 
     settings = s3objectstore_settings.model_dump()
-    settings['AWS_ENDPOINT_URL'] = "http://127.0.0.1:5000"
+    settings["AWS_ENDPOINT_URL"] = "http://127.0.0.1:5000"
 
     return S3ObjectStoreSettings(**settings)
 
@@ -302,23 +303,24 @@ class DummyProtocolC(DummyProtocol):
 
 class DummyStrategySettings(StrategySettings):
     """Settings for DummyStrategy."""
+
     pass
 
 
 class DummyStrategy(Strategy):
     """Test strategy for integration tests."""
-    
+
     _settings_cls = DummyStrategySettings
-    
+
     def __init__(self, settings=None):
         if settings is None:
             settings = self._default_settings()
         super().__init__(settings)
-    
+
     @classmethod
     def _default_settings(cls):
         return DummyStrategySettings()
-    
+
     def _propose(self, alchemical_network, protocol_results):
         """Simple strategy that returns equal weights for all transformations."""
         weights = {}

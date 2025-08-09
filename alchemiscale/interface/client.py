@@ -705,7 +705,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         ----------
         network
             ScopedKey of the AlchemicalNetwork
-        strategy  
+        strategy
             Strategy object (GufeTokenizable) or None to remove strategy
         max_tasks_per_transformation
             Maximum number of actioned Tasks allowed on a Transformation at once
@@ -734,7 +734,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         else:
             # Remove strategy
             data = {"strategy": None}
-        
+
         result = self._post_resource(f"/networks/{network}/strategy", data)
         return ScopedKey.from_str(result) if result else None
 
@@ -774,7 +774,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         Raises
         ------
-        AlchemiscaleClientError  
+        AlchemiscaleClientError
             If no strategy is found for the network
         """
         state_dict = self._get_resource(f"/networks/{network}/strategy/state")

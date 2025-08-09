@@ -100,7 +100,9 @@ def scope_consistent_token_data_depends_override(scope_test):
 
 
 @pytest.fixture
-def user_api_no_auth(n4js_preloaded, s3os, scope_consistent_token_data_depends_override):
+def user_api_no_auth(
+    n4js_preloaded, s3os, scope_consistent_token_data_depends_override
+):
     def get_s3os_override():
         return s3os
 

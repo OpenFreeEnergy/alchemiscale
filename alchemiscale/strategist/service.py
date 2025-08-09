@@ -42,12 +42,16 @@ from .settings import StrategistSettings
 logger = logging.getLogger(__name__)
 
 
-def execute_strategy_worker(network_sk: ScopedKey, strategy_state: "StrategyState", settings: "StrategistSettings") -> "StrategyState":
+def execute_strategy_worker(
+    network_sk: ScopedKey,
+    strategy_state: "StrategyState",
+    settings: "StrategistSettings",
+) -> "StrategyState":
     """Standalone worker function for executing strategies in ProcessPoolExecutor.
-    
+
     This function creates its own StrategistService instance to avoid serialization
     issues with bound methods and maintains cache functionality per worker process.
-    
+
     Parameters
     ----------
     network_sk : ScopedKey
@@ -56,7 +60,7 @@ def execute_strategy_worker(network_sk: ScopedKey, strategy_state: "StrategyStat
         The current state of the strategy
     settings : StrategistSettings
         Settings to instantiate the StrategistService
-        
+
     Returns
     -------
     StrategyState
@@ -64,7 +68,7 @@ def execute_strategy_worker(network_sk: ScopedKey, strategy_state: "StrategyStat
     """
     # Create a fresh StrategistService instance for this worker
     service = StrategistService(settings)
-    
+
     # Execute the strategy using the service's method
     results = service._execute_strategy(network_sk, strategy_state)
 
@@ -76,7 +80,7 @@ def execute_strategy_worker(network_sk: ScopedKey, strategy_state: "StrategyStat
 
 class StrategistService:
     """Service for executing strategies on AlchemicalNetworks.
-    
+
     This service runs in an infinite loop, periodically:
     1. Querying for strategies ready for execution
     2. Executing strategies in parallel using ProcessPoolExecutor
@@ -84,31 +88,31 @@ class StrategistService:
     4. Creating/cancelling tasks as needed
     5. Updating strategy state
     """
-    
+
     @staticmethod
     def _determine_cache_dir(cache_directory: Path | str | None = None) -> Path:
         """Determine the cache directory path following XDG conventions."""
         if cache_directory is not None:
             return Path(cache_directory)
-        
+
         # Use XDG_CACHE_HOME if set, otherwise default to ~/.cache
         if xdg_cache_home := os.environ.get("XDG_CACHE_HOME"):
             cache_base = Path(xdg_cache_home)
         else:
             cache_base = Path.home() / ".cache"
-        
+
         return cache_base / "alchemiscale-strategist"
-    
+
     def __init__(self, settings: StrategistSettings):
         self.settings = settings
         self.sleep_interval = settings.sleep_interval
         self.max_workers = settings.max_workers
         self.scopes = settings.scopes or [Scope()]
-        
+
         # Initialize storage components
         self.n4js = get_n4js(settings.neo4j_settings or Neo4jStoreSettings())
         self.s3os = get_s3os(settings.s3_settings or S3ObjectStoreSettings())
-        
+
         # Initialize disk-based cache
         self._cache_enabled = settings.use_local_cache
         if self._cache_enabled:
@@ -121,56 +125,61 @@ class StrategistService:
             )
         else:
             self._cache = None
-        
+
         self._stop = False
-        
-    def _get_protocoldagresult_cached(self, result_ref, transformation_sk: ScopedKey) -> ProtocolDAGResult:
+
+    def _get_protocoldagresult_cached(
+        self, result_ref, transformation_sk: ScopedKey
+    ) -> ProtocolDAGResult:
         """Get ProtocolDAGResult with disk caching."""
         cache_key = str(result_ref.obj_key)
-        
+
         if self._cache_enabled:
             try:
                 if cached_content := self._cache.get(cache_key, None):
                     return decompress_gufe_zstd(cached_content)
             except zstd.ZstdError:
                 # Handle decompression errors by removing corrupted cache entry
-                warnings.warn(f"Error decompressing cached ProtocolDAGResult {cache_key}, "
-                             "deleting entry and retrieving new content.")
+                warnings.warn(
+                    f"Error decompressing cached ProtocolDAGResult {cache_key}, "
+                    "deleting entry and retrieving new content."
+                )
                 self._cache.delete(cache_key)
-        
+
         # Retrieve from object store using s3os.pull_protocoldagresult
         try:
             pdr_bytes = self.s3os.pull_protocoldagresult(
                 ScopedKey(gufe_key=result_ref.obj_key, **result_ref.scope.dict()),
                 transformation_sk,
-                ok=result_ref.ok
+                ok=result_ref.ok,
             )
         except Exception:
             # Fallback to location-based retrieval
             pdr_bytes = self.s3os.pull_protocoldagresult(
-                location=result_ref.location,
-                ok=result_ref.ok
+                location=result_ref.location, ok=result_ref.ok
             )
-        
+
         # Decompress the raw bytes to get ProtocolDAGResult
         try:
             pdr = decompress_gufe_zstd(pdr_bytes)
         except zstd.ZstdError:
             # Fallback to JSON deserialization for uncompressed data
             pdr = json_to_gufe(pdr_bytes.decode("utf-8"))
-        
+
         if self._cache_enabled:
             try:
-                # Cache the already compressed bytes directly 
+                # Cache the already compressed bytes directly
                 self._cache.set(cache_key, pdr_bytes)
             except Exception as e:
                 warnings.warn(f"Failed to cache ProtocolDAGResult {cache_key}: {e}")
-        
+
         return pdr
-    
-    def _get_protocol_results(self, network_sk: ScopedKey) -> tuple[dict[ScopedKey, ProtocolResult|None], dict[ScopedKey, Transformation]]:
+
+    def _get_protocol_results(
+        self, network_sk: ScopedKey
+    ) -> tuple[dict[ScopedKey, ProtocolResult | None], dict[ScopedKey, Transformation]]:
         """Get ProtocolResults for all transformations in a network.
-        
+
         This method uses disk-based caching to avoid repeated expensive lookups.
         """
         results = {}
@@ -178,17 +187,17 @@ class StrategistService:
 
         # Build mapping between transformation objects and their scoped keys
         sk_to_tf: dict[ScopedKey, Transformation] = {}
-        
+
         for transformation_sk in transformations:
             # Get the transformation object
             # TODO: wrap in on-disk caching
             transformation = self.n4js.get_gufe(transformation_sk)
 
             sk_to_tf[transformation_sk] = transformation
-            
+
             # Get successful ProtocolDAGResults for this transformation
             result_ref_sks = self.n4js.get_transformation_results(transformation_sk)
-            
+
             # Collect all ProtocolDAGResults for this transformation
             pdrs = []
             for result_ref_sk in result_ref_sks:
@@ -196,27 +205,29 @@ class StrategistService:
                 result_ref = self.n4js.get_gufe(result_ref_sk)
                 if result_ref.ok:
                     # Get ProtocolDAGResult with caching
-                    pdr = self._get_protocoldagresult_cached(result_ref, transformation_sk)
+                    pdr = self._get_protocoldagresult_cached(
+                        result_ref, transformation_sk
+                    )
                     pdrs.append(pdr)
-            
+
             # Use transformation.gather() to get ProtocolResult from ProtocolDAGResults
             if len(pdrs) != 0:
                 protocol_result = transformation.gather(pdrs)
                 results[transformation_sk] = protocol_result
             else:
                 results[transformation_sk] = None
-            
+
         return results, sk_to_tf
-    
+
     def _weights_to_task_counts(
-        self, 
+        self,
         weights: dict[GufeKey, float | None],
         max_tasks_per_transformation: int,
         task_scaling: StrategyTaskScalingEnum,
     ) -> dict[GufeKey, int]:
         """Convert strategy weights to discrete task counts."""
         task_counts = {}
-        
+
         for transformation_key, weight in weights.items():
             if weight is None or weight == 0:
                 task_counts[transformation_key] = 0
@@ -229,25 +240,32 @@ class StrategistService:
                     tasks = int((1 + max_tasks_per_transformation) ** weight)
                 else:
                     raise ValueError(f"Unknown task scaling: {task_scaling}")
-                
-                task_counts[transformation_key] = min(tasks, max_tasks_per_transformation)
-        
+
+                task_counts[transformation_key] = min(
+                    tasks, max_tasks_per_transformation
+                )
+
         return task_counts
-    
+
     def _execute_strategy(
-        self, 
-        network_sk: ScopedKey, 
-        strategy_state: StrategyState
+        self, network_sk: ScopedKey, strategy_state: StrategyState
     ) -> StrategyState:
         """Execute a single strategy and return updated state."""
         try:
             # Check if strategy went dormant - count successful results
-            current_result_count = len([
-                ref_sk for transformation_sk in self.n4js.get_network_transformations(network_sk)
-                for ref_sk in self.n4js.get_transformation_results(transformation_sk)
-                if self.n4js.get_gufe(ref_sk).ok
-            ])
-            
+            current_result_count = len(
+                [
+                    ref_sk
+                    for transformation_sk in self.n4js.get_network_transformations(
+                        network_sk
+                    )
+                    for ref_sk in self.n4js.get_transformation_results(
+                        transformation_sk
+                    )
+                    if self.n4js.get_gufe(ref_sk).ok
+                ]
+            )
+
             # If dormant, check if new results appeared
             if strategy_state.status == StrategyStatusEnum.dormant:
                 if current_result_count == strategy_state.last_iteration_result_count:
@@ -256,49 +274,53 @@ class StrategistService:
                 else:
                     # New results appeared, wake up
                     strategy_state.status = StrategyStatusEnum.awake
-            
+
             # Get network and results
 
             # TODO: wrap in on-disk caching
             network = self.n4js.get_gufe(network_sk)
 
-            protocol_results, sk_to_tf  = self._get_protocol_results(network_sk)
-            transformation_results = {sk_to_tf[key].key: value for key, value in protocol_results.items()}
-            
+            protocol_results, sk_to_tf = self._get_protocol_results(network_sk)
+            transformation_results = {
+                sk_to_tf[key].key: value for key, value in protocol_results.items()
+            }
+
             # Get strategy object
             strategy = self.n4js.get_network_strategy(network_sk)
             if strategy is None:
                 raise ValueError(f"Strategy not found for network {network_sk}")
-            
+
             # Execute strategy to get weights
             strategy_result = strategy.propose(network, transformation_results)
-            weights: dict[GufeKey, float] = strategy_result.resolve()  # Get normalized weights
-            
+            weights: dict[GufeKey, float] = (
+                strategy_result.resolve()
+            )  # Get normalized weights
+
             # Check if all weights are None (stop condition)
             if all(w is None for w in weights.values()):
                 strategy_state.status = StrategyStatusEnum.dormant
-                
+
                 # If in full mode, cancel all actioned tasks
                 if strategy_state.mode == StrategyModeEnum.full:
                     taskhub_sk = self.n4js.get_taskhub(network_sk)
                     with self.n4js.transaction() as tx:
                         task_sks = self.n4js.get_taskhub_tasks(taskhub_sk, tx=tx)
                         self.n4js.cancel_tasks(task_sks, taskhub_sk, tx=tx)
-                
+
                 strategy_state.last_iteration_result_count = current_result_count
                 strategy_state.last_iteration = datetime.utcnow()
                 strategy_state.iterations += 1
                 return strategy_state
-            
+
             # Set weights to None for transformations with errored tasks
             transformation_sks = self.n4js.get_network_transformations(network_sk)
             for transformation_sk in sk_to_tf:
                 counts = self.n4js.get_transformation_status(transformation_sk)
                 if counts.get(TaskStatusEnum.error.value):
                     weights[sk_to_tf[transformation_sk].key] = None
-            
+
             # Convert weights to task counts
-            task_counts  = self._weights_to_task_counts(
+            task_counts = self._weights_to_task_counts(
                 weights,
                 strategy_state.max_tasks_per_transformation,
                 strategy_state.task_scaling,
@@ -314,59 +336,73 @@ class StrategistService:
 
                 transformation_sk = tf_key_to_sk[transformation_key]
 
-                actioned_tasks = self.n4js.get_transformation_actioned_tasks(transformation_sk, taskhub_sk)
+                actioned_tasks = self.n4js.get_transformation_actioned_tasks(
+                    transformation_sk, taskhub_sk
+                )
                 actioned_count = len(actioned_tasks)
-                
+
                 if target_count > actioned_count:
                     # Action additional tasks, creating them as necessary
                     required = target_count - actioned_count
                     tasks_to_action = []
 
                     # Get existing actionable tasks for the transformation
-                    transformation_tasks = self.n4js.get_transformation_tasks(transformation_sk)
+                    transformation_tasks = self.n4js.get_transformation_tasks(
+                        transformation_sk
+                    )
                     actionable_tasks_status = {
-                        task_sk: status for task_sk, status in zip(transformation_tasks, self.n4js.get_task_status(transformation_tasks))
-                        if status in [TaskStatusEnum.waiting, TaskStatusEnum.running] and task_sk not in actioned_tasks
+                        task_sk: status
+                        for task_sk, status in zip(
+                            transformation_tasks,
+                            self.n4js.get_task_status(transformation_tasks),
+                        )
+                        if status in [TaskStatusEnum.waiting, TaskStatusEnum.running]
+                        and task_sk not in actioned_tasks
                     }
 
                     # Add actionable tasks not already actioned, starting with those that are already running
                     for task_sk in actionable_tasks_status:
-                        status =  actionable_tasks_status[task_sk]
+                        status = actionable_tasks_status[task_sk]
                         if status == TaskStatusEnum.running:
                             tasks_to_action.append(task_sk)
                             if len(tasks_to_action) >= required:
                                 break
-                        
+
                     # If we still need more, add actionable tasks that are waiting
                     if len(tasks_to_action) < required:
                         for task_sk in actionable_tasks_status:
-                            status =  actionable_tasks_status[task_sk]
+                            status = actionable_tasks_status[task_sk]
                             if status == TaskStatusEnum.waiting:
                                 tasks_to_action.append(task_sk)
                                 if len(tasks_to_action) >= required:
                                     break
 
-                    # Create new tasks if needed 
+                    # Create new tasks if needed
                     if len(tasks_to_action) < required:
-                        new_tasks = self.n4js.create_tasks([transformation_sk] * (required - len(tasks_to_action)))
+                        new_tasks = self.n4js.create_tasks(
+                            [transformation_sk] * (required - len(tasks_to_action))
+                        )
                         tasks_to_action.extend(new_tasks)
 
                     self.n4js.action_tasks(tasks_to_action, taskhub_sk)
-                        
-                elif target_count < actioned_count and strategy_state.mode == StrategyModeEnum.full:
+
+                elif (
+                    target_count < actioned_count
+                    and strategy_state.mode == StrategyModeEnum.full
+                ):
                     # Cancel excess tasks
                     excess = actioned_count - target_count
                     tasks_to_cancel = []
 
                     actioned_status = self.n4js.get_task_status(actioned_tasks)
-                    
+
                     # First cancel waiting tasks
                     for task_sk, status in zip(actioned_tasks, actioned_status):
                         if status == TaskStatusEnum.waiting:
                             tasks_to_cancel.append(task_sk)
                             if len(tasks_to_cancel) >= excess:
                                 break
-                    
+
                     # Then cancel running tasks if needed
                     if len(tasks_to_cancel) < excess:
                         for task_sk, status in zip(actioned_tasks, actioned_status):
@@ -374,9 +410,9 @@ class StrategistService:
                                 tasks_to_cancel.append(task_sk)
                                 if len(tasks_to_cancel) >= excess:
                                     break
-                    
+
                     self.n4js.cancel_tasks(tasks_to_cancel, taskhub_sk)
-            
+
             # Update strategy state
             strategy_state.last_iteration = datetime.utcnow()
             strategy_state.last_iteration_result_count = current_result_count
@@ -385,20 +421,20 @@ class StrategistService:
             strategy_state.traceback = None
 
             return strategy_state
-            
+
         except Exception as e:
             # Strategy execution failed
             logger.exception(f"Strategy execution failed for network {network_sk}")
-            
+
             strategy_state.last_iteration = datetime.utcnow()
             strategy_state.last_iteration_result_count = current_result_count
             strategy_state.status = StrategyStatusEnum.error
             strategy_state.exception = (e.__class__.__qualname__, str(e))
             strategy_state.traceback = traceback.format_exc()
             strategy_state.iterations += 1
-            
+
             return strategy_state
-    
+
     def cycle(self):
         """Perform one iteration of strategy execution."""
 
@@ -407,21 +443,24 @@ class StrategistService:
 
         # Get strategies ready for execution
         ready_strategies = self.n4js.get_strategies_for_execution(
-            scopes=self.scopes,
-            min_sleep_interval=self.sleep_interval
+            scopes=self.scopes, min_sleep_interval=self.sleep_interval
         )
-        
+
         if not ready_strategies:
             logger.debug("No strategies ready for execution")
             return
-        
+
         logger.info(f"Executing {len(ready_strategies)} strategies")
-        
+
         # Use ProcessPoolExecutor for parallel strategy execution
-        with ProcessPoolExecutor(max_workers=self.max_workers, mp_context=ctx) as executor:
+        with ProcessPoolExecutor(
+            max_workers=self.max_workers, mp_context=ctx
+        ) as executor:
             # Submit all strategy executions using standalone worker function
             future_to_network = {
-                executor.submit(execute_strategy_worker, network_sk, strategy_state, self.settings): network_sk
+                executor.submit(
+                    execute_strategy_worker, network_sk, strategy_state, self.settings
+                ): network_sk
                 for network_sk, strategy_sk, strategy_state in ready_strategies
             }
             network_to_future = {value: key for key, value in future_to_network.items()}
@@ -429,20 +468,30 @@ class StrategistService:
             while future_to_network and not self._stop:
                 # Collect results and update database
                 try:
-                    for future in as_completed(list(future_to_network.keys()), timeout=self.sleep_interval):
+                    for future in as_completed(
+                        list(future_to_network.keys()), timeout=self.sleep_interval
+                    ):
                         network_sk = future_to_network[future]
                         try:
                             updated_state = future.result()
-                            
+
                             # Update strategy state in database
-                            success = self.n4js.update_strategy_state(network_sk, updated_state)
+                            success = self.n4js.update_strategy_state(
+                                network_sk, updated_state
+                            )
                             if not success:
-                                logger.error(f"Failed to update strategy state for network {network_sk}")
+                                logger.error(
+                                    f"Failed to update strategy state for network {network_sk}"
+                                )
                             else:
-                                logger.debug(f"Updated strategy state for network {network_sk}")
-                                
+                                logger.debug(
+                                    f"Updated strategy state for network {network_sk}"
+                                )
+
                         except Exception as e:
-                            logger.exception(f"Strategy execution failed for network {network_sk}: {e}")
+                            logger.exception(
+                                f"Strategy execution failed for network {network_sk}: {e}"
+                            )
 
                         future_to_network.pop(future)
                         network_to_future.pop(network_sk)
@@ -451,64 +500,72 @@ class StrategistService:
                     # Check if we should stop before adding new strategies
                     if self._stop:
                         break
-                        
+
                     # if we ran out of time waiting for strategies to finish, check for new ones
                     # and continue
                     ready_strategies = self.n4js.get_strategies_for_execution(
-                        scopes=self.scopes,
-                        min_sleep_interval=self.sleep_interval
+                        scopes=self.scopes, min_sleep_interval=self.sleep_interval
                     )
 
                     for network_sk, strategy_sk, strategy_state in ready_strategies:
                         # Only submit strategies that aren't already running AND haven't been recently executed
-                        if (network_sk not in network_to_future and 
-                            (strategy_state.last_iteration is None or 
-                             (datetime.utcnow() - strategy_state.last_iteration).total_seconds() >= self.sleep_interval)):
+                        if network_sk not in network_to_future and (
+                            strategy_state.last_iteration is None
+                            or (
+                                datetime.utcnow() - strategy_state.last_iteration
+                            ).total_seconds()
+                            >= self.sleep_interval
+                        ):
                             # Submit new strategy execution using standalone worker function
-                            future = executor.submit(execute_strategy_worker, network_sk, strategy_state, self.settings)
+                            future = executor.submit(
+                                execute_strategy_worker,
+                                network_sk,
+                                strategy_state,
+                                self.settings,
+                            )
                             future_to_network[future] = network_sk
                             network_to_future[network_sk] = future
-                            logger.debug(f"Added new strategy execution for network {network_sk}")
+                            logger.debug(
+                                f"Added new strategy execution for network {network_sk}"
+                            )
 
     def start(self):
         """Start the Strategist service."""
 
         logger.info("Starting Strategist service")
         self._stop = True
-        
+
         try:
             while not self._stop:
                 start_time = time.time()
-                
+
                 try:
                     self.cycle()
                 except Exception as e:
                     logger.exception(f"Iteration failed: {e}")
-                
+
                 # Check if we should stop before sleeping
                 if self._stop:
                     break
-                
+
                 # Sleep for remaining time
                 elapsed = time.time() - start_time
                 remaining_sleep = max(0, self.sleep_interval - elapsed)
-                
+
                 if remaining_sleep > 0:
                     logger.debug(f"Sleeping for {remaining_sleep:.1f} seconds")
                     time.sleep(remaining_sleep)
-                    
+
         except KeyboardInterrupt:
             logger.info("Received interrupt signal")
         finally:
             self._stop = True
             logger.info("Strategist service stopped")
-    
+
     def stop(self):
         """Stop the strategist service."""
         self._stop = True
 
     def close(self):
-        """Close the Neo4j driver for this service instance.
-
-        """
+        """Close the Neo4j driver for this service instance."""
         self.n4js.close()

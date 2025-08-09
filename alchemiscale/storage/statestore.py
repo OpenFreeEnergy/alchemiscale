@@ -145,7 +145,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def __init__(self, settings: Neo4jStoreSettings):
         """Initialize Neo4jStore from settings.
-        
+
         Parameters
         ----------
         settings : Neo4jStoreSettings
@@ -188,9 +188,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         return inner
 
     def close(self):
-        """Close the Neo4j driver for this instance.
-
-        """
+        """Close the Neo4j driver for this instance."""
         self.graph.close()
 
     def execute_query(self, *args, **kwargs):
@@ -1177,9 +1175,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return [ScopedKey.from_str(sk) for sk in sks]
 
-    def get_transformation_results(
-        self, transformation: ScopedKey
-    ) -> list[ScopedKey]:
+    def get_transformation_results(self, transformation: ScopedKey) -> list[ScopedKey]:
         # get all task result protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
         q = """
@@ -1191,9 +1187,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         return self._get_protocoldagresultrefs(q, transformation)
 
-    def get_transformation_failures(
-        self, transformation: ScopedKey
-    ) -> list[ScopedKey]:
+    def get_transformation_failures(self, transformation: ScopedKey) -> list[ScopedKey]:
         # get all task failure protocoldagresultrefs corresponding to given transformation
         # returned in no particular order
         q = """
@@ -1214,10 +1208,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         strategy_state: StrategyState | None = None,
     ) -> ScopedKey | None:
         """Set the compute Strategy for the given AlchemicalNetwork.
-        
+
         If strategy is None, removes the strategy from the network and cleans up
         orphaned Strategy nodes.
-        
+
         Parameters
         ----------
         network
@@ -1226,7 +1220,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             Strategy object (GufeTokenizable) or None to remove strategy
         strategy_state
             Initial strategy state, if None uses defaults
-            
+
         Returns
         -------
         ScopedKey
@@ -1260,17 +1254,16 @@ class Neo4jStore(AlchemiscaleStateStore):
             # exit early if we didn't want a Strategy for this network
             if strategy is None:
                 return None
-            
+
             # set new Strategy for network, with new relationship
             network_node = self._get_node(network)
             subgraph, strategy_node, scoped_key = self._keyed_chain_to_subgraph(
-                    KeyedChain.from_gufe(strategy), scope=network.scope)
+                KeyedChain.from_gufe(strategy), scope=network.scope
+            )
 
             subgraph = subgraph | Relationship.type("PROGRESSES")(
-                    strategy_node,
-                    network_node,
-                    **strategy_state.to_dict()
-                    )
+                strategy_node, network_node, **strategy_state.to_dict()
+            )
 
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
@@ -1278,12 +1271,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_network_strategy(self, network: ScopedKey) -> Strategy | None:
         """Get the Strategy for the given AlchemicalNetwork.
-        
+
         Parameters
         ----------
         network
             ScopedKey of the AlchemicalNetwork
-            
+
         Returns
         -------
         GufeTokenizable | None
@@ -1296,11 +1289,11 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         def _node_to_gufe(node):
             return self._subgraph_to_gufe([node], node)[node]
-        
+
         with self.transaction() as tx:
             result = tx.run(q, network=str(network))
             record = result.single()
-            
+
         if record:
             strategy_node = record_data_to_node(record["s"])
             return _node_to_gufe(strategy_node)
@@ -1309,12 +1302,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def get_network_strategy_state(self, network: ScopedKey) -> StrategyState | None:
         """Get the StrategyState for the given AlchemicalNetwork.
-        
+
         Parameters
         ----------
         network
             ScopedKey of the AlchemicalNetwork
-            
+
         Returns
         -------
         StrategyState | None
@@ -1324,35 +1317,33 @@ class Neo4jStore(AlchemiscaleStateStore):
         MATCH (an:AlchemicalNetwork {_scoped_key: $network})<-[r:PROGRESSES]-()
         RETURN properties(r) AS state_props
         """
-        
+
         with self.transaction() as tx:
             result = tx.run(q, network=str(network))
             record = result.single()
-            
+
         if record:
             state_props = record["state_props"]
             return StrategyState.from_dict(state_props)
         return None
 
     def get_strategies_for_execution(
-        self, 
-        scopes: list[Scope] | None = None,
-        min_sleep_interval: int = 0
+        self, scopes: list[Scope] | None = None, min_sleep_interval: int = 0
     ) -> list[tuple[ScopedKey, ScopedKey, StrategyState]]:
         """Get strategies that are ready for execution by the Strategist service.
-        
+
         Returns strategies that are:
         - Not disabled
         - Not in error status
         - Due for execution based on sleep interval
-        
+
         Parameters
         ----------
         scopes
             List of scopes to filter by, if None returns all scopes
         min_sleep_interval
             Minimum sleep interval enforced by Strategist service
-            
+
         Returns
         -------
         list[tuple[ScopedKey, ScopedKey, StrategyState]]
@@ -1371,7 +1362,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     conditions.append(f"an._project = '{scope.project}'")
                 if conditions:
                     scope_conditions.append(f"({' AND '.join(conditions)})")
-            
+
             if scope_conditions:
                 scope_filter = f"WHERE {' OR '.join(scope_conditions)}"
 
@@ -1395,7 +1386,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                s._scoped_key AS strategy_sk,
                properties(r) AS state_props
         """
-        
+
         results = []
         with self.transaction() as tx:
             result = tx.run(q, min_sleep_interval=min_sleep_interval)
@@ -1405,23 +1396,21 @@ class Neo4jStore(AlchemiscaleStateStore):
                 state_props = record["state_props"]
                 strategy_state = StrategyState.from_dict(state_props)
                 results.append((network_sk, strategy_sk, strategy_state))
-                
+
         return results
 
     def update_strategy_state(
-        self, 
-        network: ScopedKey, 
-        strategy_state: StrategyState
+        self, network: ScopedKey, strategy_state: StrategyState
     ) -> bool:
         """Update the StrategyState for the given AlchemicalNetwork.
-        
+
         Parameters
         ----------
         network
             ScopedKey of the AlchemicalNetwork
         strategy_state
             Updated strategy state
-            
+
         Returns
         -------
         bool
@@ -1432,17 +1421,15 @@ class Neo4jStore(AlchemiscaleStateStore):
         SET r += $strategy_state
         RETURN count(r) AS updated_count
         """
-        
+
         strategy_state_props = strategy_state.to_dict()
-        
+
         with self.transaction() as tx:
             result = tx.run(
-                q, 
-                network=str(network), 
-                strategy_state=strategy_state_props
+                q, network=str(network), strategy_state=strategy_state_props
             )
             record = result.single()
-            
+
         return record["updated_count"] > 0 if record else False
 
     def register_computeservice(
@@ -2121,7 +2108,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     @chainable
     def get_taskhub_tasks(
-        self, taskhub: ScopedKey, return_gufe=False, 
+        self,
+        taskhub: ScopedKey,
+        return_gufe=False,
         tx=None,
     ) -> list[ScopedKey] | dict[ScopedKey, Task]:
         """Get a list of Tasks on the TaskHub."""
@@ -2669,7 +2658,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                 taskhub=str(taskhub),
             ).to_eager_result()
 
-        return [ScopedKey.from_str(record["task._scoped_key"]) for record in results.records]
+        return [
+            ScopedKey.from_str(record["task._scoped_key"]) for record in results.records
+        ]
 
     def get_task_transformation(
         self,

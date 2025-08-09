@@ -477,7 +477,7 @@ class StrategyTaskScalingEnum(Enum):
 
 class StrategyState(BaseModel):
     """State information for a Strategy on an AlchemicalNetwork."""
-    
+
     mode: StrategyModeEnum = StrategyModeEnum.partial
     status: StrategyStatusEnum = StrategyStatusEnum.awake
     iterations: int = 0
@@ -489,14 +489,13 @@ class StrategyState(BaseModel):
     exception: tuple[str, str] | None = None  # (exception_type, exception_message)
     traceback: str | None = None
 
-    model_config = ConfigDict(arbitrary_types_allowed=True,
-                              validate_assignment=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
-    @field_validator('last_iteration', mode='before')
+    @field_validator("last_iteration", mode="before")
     @classmethod
     def _convert_neo4j_datetime(cls, v):
         """Convert neo4j DateTime objects to Python datetime objects."""
-        if v is not None and hasattr(v, 'to_native'):
+        if v is not None and hasattr(v, "to_native"):
             # This is a neo4j DateTime object
             return v.to_native()
         return v
@@ -504,9 +503,9 @@ class StrategyState(BaseModel):
     def to_dict(self):
         dct = self.dict()
 
-        dct['mode'] = dct['mode'].value
-        dct['status'] = dct['status'].value
-        dct['task_scaling'] = dct['task_scaling'].value
+        dct["mode"] = dct["mode"].value
+        dct["status"] = dct["status"].value
+        dct["task_scaling"] = dct["task_scaling"].value
 
         return dct
 
