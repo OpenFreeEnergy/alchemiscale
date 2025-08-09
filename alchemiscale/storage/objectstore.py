@@ -5,7 +5,7 @@
 """
 
 import os
-from datetime import datetime
+import datetime
 from boto3.session import Session
 from functools import lru_cache
 
@@ -239,7 +239,7 @@ class S3ObjectStore:
             obj_key=protocoldagresult_gufekey,
             scope=transformation.scope,
             ok=ok,
-            datetime_created=datetime.utcnow(),
+            datetime_created=datetime.datetime.now(tz=datetime.UTC),
             creator=creator,
         )
 

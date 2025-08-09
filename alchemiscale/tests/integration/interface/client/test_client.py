@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+import datetime
 from time import sleep
 import os
 from pathlib import Path
@@ -2212,7 +2212,7 @@ class TestClient:
             obj_key=protocoldagresult.key,
             scope=transformation_sk.scope,
             ok=ok,
-            datetime_created=datetime.utcnow(),
+            datetime_created=datetime.datetime.now(tz=datetime.UTC),
             creator=None,
         )
         n4js.set_task_result(
