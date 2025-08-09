@@ -19,6 +19,7 @@ dependencies:
   - zstandard
   - diskcache
   - libsqlite<3.49  # newer versions cause diskcache to fail
+  - stratocaster
 
   # openmm protocols
   - feflow=0.1.3
