@@ -25,9 +25,9 @@ class ComputeServiceRegistration(BaseModel):
     """Registration for AlchemiscaleComputeService instances."""
 
     identifier: ComputeServiceID
-    registered: datetime
-    heartbeat: datetime
-    failure_times: list[datetime] = []
+    registered: datetime.datetime
+    heartbeat: datetime.datetime
+    failure_times: list[datetime.datetime] = []
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -60,8 +60,8 @@ class ComputeServiceRegistration(BaseModel):
 
 class TaskProvenance(BaseModel):
     computeserviceid: ComputeServiceID
-    datetime_start: datetime
-    datetime_end: datetime
+    datetime_start: datetime.datetime
+    datetime_end: datetime.datetime
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
