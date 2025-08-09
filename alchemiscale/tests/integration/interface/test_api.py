@@ -175,9 +175,6 @@ class TestAPI:
             {
                 "strategy": strategy_data,
                 "max_tasks_per_transformation": 3,
-                "task_scaling": "linear",
-                "mode": "full",
-                "sleep_interval": 600,
             },
             cls=JSON_HANDLER.encoder,
         )
@@ -242,8 +239,6 @@ class TestAPI:
         data = json.dumps(
             {
                 "strategy": strategy_data,
-                "max_tasks_per_transformation": 3,
-                "task_scaling": "linear",
                 "mode": "full",
                 "sleep_interval": 600,
             },

@@ -1207,7 +1207,7 @@ async def set_network_strategy(
     body_ = json.loads(body.decode("utf-8"), cls=JSON_HANDLER.decoder)
 
     try:
-        strategy_keyed_chain = body_["strategy"]
+        strategy_keyed_chain = body_.pop("strategy")
 
         # Convert KeyedChain to GufeTokenizable if strategy is provided
         if strategy_keyed_chain is not None:
@@ -1224,12 +1224,7 @@ async def set_network_strategy(
     if strategy is not None:
         # Create strategy state from body parameters
         try:
-            strategy_state = StrategyState(
-                mode=body_.get("mode"),
-                max_tasks_per_transformation=body_.get("max_tasks_per_transformation"),
-                task_scaling=body_.get("task_scaling"),
-                sleep_interval=body_.get("sleep_interval"),
-            )
+            strategy_state = StrategyState(**body_)
         except ValidationError as e:
             raise HTTPException(
                 status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
