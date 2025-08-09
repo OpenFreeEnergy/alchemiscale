@@ -394,10 +394,6 @@ def get_chemicalsystem(
 ### compute
 
 
-@router.post("/networks/{scoped_key}/strategy")
-def set_strategy(scoped_key: str, *, strategy: dict = Body(...), scope: Scope): ...
-
-
 @router.post("/transformations/{transformation_scoped_key}/tasks")
 def create_tasks(
     transformation_scoped_key,
@@ -1184,9 +1180,9 @@ def get_task_failures(
 ### strategies
 
 
-@router.post("/networks/{network_scoped_key}/strategy", response_model=ScopedKey)
+@router.post("/networks/{network_scoped_key}/strategy")
 async def set_network_strategy(
-    network_scoped_key: str,
+    network_scoped_key,
     *,
     request: Request,
     n4js: Neo4jStore = Depends(get_n4js_depends),
@@ -1210,16 +1206,20 @@ async def set_network_strategy(
     body = await request.body()
     body_ = json.loads(body.decode("utf-8"), cls=JSON_HANDLER.decoder)
 
-    print(body_)
+    try:
+        strategy_keyed_chain = body_["strategy"]
 
-    strategy_keyed_chain = body_.get("strategy")
-    
-    # Convert KeyedChain to GufeTokenizable if strategy is provided
-    if strategy_keyed_chain is not None:
-        strategy_kc = KeyedChain(strategy_keyed_chain)
-        strategy = strategy_kc.to_gufe()
-    else:
-        strategy = None
+        # Convert KeyedChain to GufeTokenizable if strategy is provided
+        if strategy_keyed_chain is not None:
+            strategy_kc = KeyedChain(strategy_keyed_chain)
+            strategy = strategy_kc.to_gufe()
+        else:
+            strategy = None
+    except Exception as e:
+            raise HTTPException(
+                status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid input for strategy",
+            )
     
     if strategy is not None:
         # Create strategy state from body parameters
@@ -1244,8 +1244,7 @@ async def set_network_strategy(
         return None
 
 
-
-@router.get("/networks/{network_scoped_key}/strategy", response_class=GufeJSONResponse)
+@router.get("/networks/{network_scoped_key}/strategy")
 def get_network_strategy(
     network_scoped_key: str,
     *,
@@ -1263,7 +1262,7 @@ def get_network_strategy(
             detail=f"No strategy found for network '{network_scoped_key}'",
         )
     
-    return strategy
+    return GufeJSONResponse(strategy)
 
 
 @router.get("/networks/{network_scoped_key}/strategy/state")

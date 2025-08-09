@@ -756,10 +756,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         AlchemiscaleClientError
             If no strategy is found for the network
         """
-        def _get_strategy():
-            return self._get_resource(f"/networks/{network}/strategy")
-        
-        return self._get_keyed_chain_resource(network, _get_strategy)
+        keyed_chain = self._get_resource(f"/networks/{network}/strategy")
+        return GufeTokenizable.from_keyed_chain(keyed_chain)
 
     def get_network_strategy_state(self, network: ScopedKey) -> StrategyState:
         """Get the StrategyState for the given AlchemicalNetwork.

@@ -188,8 +188,9 @@ class TestAPI:
         # Test getting strategy via API
         response = test_client.get(f"/networks/{sk}/strategy")
         assert response.status_code == 200
-        retrieved_data = response.json()
-        retrieved_strategy = KeyedChain.keyed_chain_rep_to_gufe(retrieved_data)
+        retrieved_strategy= KeyedChain(
+            json.loads(response.text, cls=JSON_HANDLER.decoder)
+        ).to_gufe()
         assert type(retrieved_strategy) == DummyStrategy
         assert retrieved_strategy == strategy
         
@@ -227,7 +228,11 @@ class TestAPI:
         strategy = DummyStrategy()
         strategy_data = KeyedChain.gufe_to_keyed_chain_rep(strategy)
         headers = {"Content-type": "application/json"}
-        data = json.dumps({"strategy": strategy_data}, cls=JSON_HANDLER.encoder)
+        data = json.dumps({"strategy": strategy_data,
+                           "max_tasks_per_transformation": 3,
+                           "task_scaling": 'linear',
+                           "mode": 'full',
+                           "sleep_interval": 600}, cls=JSON_HANDLER.encoder)
         
         response = test_client.post(f"/networks/{sk}/strategy", data=data, headers=headers)
         assert response.status_code == 200

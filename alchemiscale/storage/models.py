@@ -489,7 +489,8 @@ class StrategyState(BaseModel):
     exception: tuple[str, str] | None = None  # (exception_type, exception_message)
     traceback: str | None = None
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True,
+                              validate_assignment=True)
 
     @field_validator('last_iteration', mode='before')
     @classmethod
