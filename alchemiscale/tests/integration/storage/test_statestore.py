@@ -3704,7 +3704,10 @@ class TestNeo4jStore(TestStateStore):
                 ValueError, match=f"No record for ComputeManager: {compute_manager_id}"
             ):
                 n4js.update_compute_manager_status(
-                    compute_manager_id, ComputeManagerStatus.OK, detail=None
+                    compute_manager_id,
+                    ComputeManagerStatus.OK,
+                    detail=None,
+                    saturation=0,
                 )
 
             n4js.register_computemanager(cmr)
@@ -3726,7 +3729,10 @@ class TestNeo4jStore(TestStateStore):
             # updating with OK
             previous_update_time = get_last_status_update_time()
             n4js.update_compute_manager_status(
-                compute_manager_id, ComputeManagerStatus.OK, detail=None
+                compute_manager_id,
+                ComputeManagerStatus.OK,
+                detail=None,
+                saturation=0,
             )
             assert previous_update_time < get_last_status_update_time()
 
@@ -3738,6 +3744,7 @@ class TestNeo4jStore(TestStateStore):
                     compute_manager_id,
                     ComputeManagerStatus.OK,
                     detail="Needless detail",
+                    saturation=0,
                 )
 
             # updating with ERRORED
@@ -3761,6 +3768,7 @@ class TestNeo4jStore(TestStateStore):
                 compute_manager_id,
                 ComputeManagerStatus.OK,
                 update_time=datetime.utcnow() + timedelta(minutes=-10),
+                saturation=0,
             )
             assert previous_update_time > get_last_status_update_time()
 
@@ -3782,6 +3790,7 @@ class TestNeo4jStore(TestStateStore):
                 compute_manager_id,
                 ComputeManagerStatus.OK,
                 update_time=datetime.utcnow() + timedelta(days=-1),
+                saturation=0,
             )
 
             # attach a few compute services

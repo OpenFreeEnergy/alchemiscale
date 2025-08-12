@@ -1689,6 +1689,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         compute_manager_id: ComputeManagerID,
         status: ComputeManagerStatus,
         detail: str | None = None,
+        saturation: float | None = None,
         update_time: datetime | None = None,
     ):
         """Update the status of a compute manager.
@@ -1726,17 +1727,29 @@ class Neo4jStore(AlchemiscaleStateStore):
         except ValueError:
             raise ValueError(f'"{status}" is not a valid ComputeManagerStatus')
 
-        # check that detail is only provided for the ERRORED status
-        if detail and status == ComputeManagerStatus.OK:
-            raise ValueError(
-                f"detail should only be provided for the '{ComputeManagerStatus.ERRORED}' status"
-            )
-
-        # details are required for the ERRORED status update
-        if not detail and status == ComputeManagerStatus.ERRORED:
-            raise ValueError(
-                f"detail is required for the '{ComputeManagerStatus.ERRORED}' status"
-            )
+        match status:
+            case ComputeManagerStatus.OK:
+                # OK requires saturation
+                if saturation is None:
+                    raise ValueError(
+                        f"saturation is required for the '{ComputeManagerStatus.OK}' status"
+                    )
+                # OK disallows detail
+                if detail:
+                    raise ValueError(
+                        f"detail should only be provided for the '{ComputeManagerStatus.ERRORED}' status"
+                    )
+            case ComputeManagerStatus.ERRORED:
+                # ERRORED disallows saturation
+                if saturation is not None:
+                    raise ValueError(
+                        f"saturation should only be provided for the '{ComputeManagerStatus.OK}' status"
+                    )
+                # ERRORED requires detail
+                if not detail:
+                    raise ValueError(
+                        f"detail is required for the '{ComputeManagerStatus.ERRORED}' status"
+                    )
 
         manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
 

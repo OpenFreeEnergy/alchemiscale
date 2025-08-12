@@ -492,11 +492,14 @@ def computemanager_update_status(
     *,
     status: str = Body(),
     detail: str | None = Body(None),
+    saturation: float | None = Body(None),
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
     try:
-        n4js.update_compute_manager_status(compute_manager_id, status, detail)
+        n4js.update_compute_manager_status(
+            compute_manager_id, status, detail, saturation
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
