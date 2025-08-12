@@ -3712,30 +3712,29 @@ class TestNeo4jStore(TestStateStore):
 
             n4js.register_computemanager(cmr)
 
-            def get_last_status_update_time():
-                query_get_last_update_time = """
+            def get_registration():
+                query_get_registration = """
                 MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
                 RETURN cmr
                 """
+                return n4js.execute_query(
+                        query_get_registration, **compute_manager_id.to_dict()
+                    ).records[0]["cmr"]
 
-                return (
-                    n4js.execute_query(
-                        query_get_last_update_time, **compute_manager_id.to_dict()
-                    )
-                    .records[0]["cmr"]["last_status_update"]
-                    .to_native()
-                )
+            def get_last_status_update_time():
+                return get_registration()["last_status_update"].to_native()
 
-            # updating with OK
+            # updating with OK and test saturation is set correctly
             previous_update_time = get_last_status_update_time()
             n4js.update_compute_manager_status(
                 compute_manager_id,
                 ComputeManagerStatus.OK,
-                detail=None,
-                saturation=0,
+                saturation=0.25,
             )
             assert previous_update_time < get_last_status_update_time()
+            assert get_registration()["saturation"] == 0.25
 
+            # if a detail is provided for OK, a ValueError is raised
             with pytest.raises(
                 ValueError,
                 match="detail should only be provided for the 'ERRORED' status",
@@ -3747,19 +3746,11 @@ class TestNeo4jStore(TestStateStore):
                     saturation=0,
                 )
 
-            # updating with ERRORED
+            # test omission of saturation with OK
             with pytest.raises(
-                ValueError, match="detail is required for the 'ERRORED' status"
+                    ValueError, match="saturation is required for the 'OK' status"
             ):
-                n4js.update_compute_manager_status(
-                    compute_manager_id, ComputeManagerStatus.ERRORED, detail=None
-                )
-
-            previous_update_time = get_last_status_update_time()
-            n4js.update_compute_manager_status(
-                compute_manager_id, ComputeManagerStatus.ERRORED, detail="Something"
-            )
-            assert previous_update_time < get_last_status_update_time()
+                n4js.update_compute_manager_status(compute_manager_id, ComputeManagerStatus.OK)
 
             # check that status update time can be set manually, even
             # so far as setting it in the past
@@ -3772,11 +3763,33 @@ class TestNeo4jStore(TestStateStore):
             )
             assert previous_update_time > get_last_status_update_time()
 
+            # updating with ERRORED and test detail is set correctly
+            previous_update_time = get_last_status_update_time()
+            n4js.update_compute_manager_status(
+                compute_manager_id, ComputeManagerStatus.ERRORED, detail="Something"
+            )
+            assert previous_update_time < get_last_status_update_time()
+
+            # if a detail is not provided for ERRORED, a ValueError is raised
+            with pytest.raises(
+                ValueError, match="detail is required for the 'ERRORED' status"
+            ):
+                n4js.update_compute_manager_status(
+                    compute_manager_id, ComputeManagerStatus.ERRORED, detail=None
+                )
+
+            # try setting a nonsense status
             with pytest.raises(
                 ValueError, match='"INVALID" is not a valid ComputeManagerStatus'
             ):
                 # try updating with an invalid status
                 n4js.update_compute_manager_status(compute_manager_id, "INVALID")
+
+            for invalid_saturation in [-1, 1.01]:
+                with pytest.raises(
+                        ValueError, match="saturation must be between 0 and 1"
+                ):
+                    n4js.update_compute_manager_status(compute_manager_id, ComputeManagerStatus.OK, saturation=invalid_saturation)
 
         def test_expiration(self, n4js: Neo4jStore):
 

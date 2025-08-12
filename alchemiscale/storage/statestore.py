@@ -1727,6 +1727,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         except ValueError:
             raise ValueError(f'"{status}" is not a valid ComputeManagerStatus')
 
+        # only match to invalid states
         match status:
             case ComputeManagerStatus.OK:
                 # OK requires saturation
@@ -1753,10 +1754,15 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
 
+        if saturation is not None:
+            if not 0 <= saturation <=1:
+                raise ValueError("saturation must be between 0 and 1")
+
         query = """
         MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
         SET cmr.status = $status
         SET cmr.detail = $detail
+        SET cmr.saturation = $saturation
         SET cmr.last_status_update = localdatetime($update_time)
         RETURN cmr
         """
@@ -1767,6 +1773,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             uuid=uuid,
             manager_name=manager_name,
             detail=detail,
+            saturation=saturation,
             update_time=(update_time or datetime.utcnow()).isoformat(),
         )
 
