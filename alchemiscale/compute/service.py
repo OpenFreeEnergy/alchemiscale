@@ -73,6 +73,7 @@ class SynchronousComputeService:
 
         self.api_url = self.settings.api_url
         self.name = self.settings.name
+        self.compute_manager_id = self.settings.compute_manager_id
         self.sleep_interval = self.settings.sleep_interval
         self.deep_sleep_interval = self.settings.deep_sleep_interval
         self.heartbeat_interval = self.settings.heartbeat_interval
@@ -135,7 +136,7 @@ class SynchronousComputeService:
 
     def _register(self):
         """Register this compute service with the compute API."""
-        self.client.register(self.compute_service_id)
+        self.client.register(self.compute_service_id, self.settings.compute_manager_id)
 
     def _deregister(self):
         """Deregister this compute service with the compute API."""
