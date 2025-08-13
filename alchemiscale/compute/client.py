@@ -182,8 +182,9 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         compute_manager_id: ComputeManagerID,
         status: ComputeManagerStatus,
         detail: str | None = None,
+        saturation: float | None = None,
     ) -> ComputeManagerID:
-        payload = {"detail": detail, "status": str(status)}
+        payload = {"detail": detail, "saturation": saturation, "status": str(status)}
         res = self._post_resource(
             f"/computemanager/{compute_manager_id}/status",
             payload,
