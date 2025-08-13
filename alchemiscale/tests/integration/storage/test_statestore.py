@@ -3718,8 +3718,8 @@ class TestNeo4jStore(TestStateStore):
                 RETURN cmr
                 """
                 return n4js.execute_query(
-                        query_get_registration, **compute_manager_id.to_dict()
-                    ).records[0]["cmr"]
+                    query_get_registration, **compute_manager_id.to_dict()
+                ).records[0]["cmr"]
 
             def get_last_status_update_time():
                 return get_registration()["last_status_update"].to_native()
@@ -3748,9 +3748,11 @@ class TestNeo4jStore(TestStateStore):
 
             # test omission of saturation with OK
             with pytest.raises(
-                    ValueError, match="saturation is required for the 'OK' status"
+                ValueError, match="saturation is required for the 'OK' status"
             ):
-                n4js.update_compute_manager_status(compute_manager_id, ComputeManagerStatus.OK)
+                n4js.update_compute_manager_status(
+                    compute_manager_id, ComputeManagerStatus.OK
+                )
 
             # check that status update time can be set manually, even
             # so far as setting it in the past
@@ -3787,9 +3789,13 @@ class TestNeo4jStore(TestStateStore):
 
             for invalid_saturation in [-1, 1.01]:
                 with pytest.raises(
-                        ValueError, match="saturation must be between 0 and 1"
+                    ValueError, match="saturation must be between 0 and 1"
                 ):
-                    n4js.update_compute_manager_status(compute_manager_id, ComputeManagerStatus.OK, saturation=invalid_saturation)
+                    n4js.update_compute_manager_status(
+                        compute_manager_id,
+                        ComputeManagerStatus.OK,
+                        saturation=invalid_saturation,
+                    )
 
         def test_expiration(self, n4js: Neo4jStore):
 

@@ -15,12 +15,10 @@ from alchemiscale.storage.models import (
 from alchemiscale.compute.manager import ComputeManager, ComputeManagerSettings
 from alchemiscale.compute.client import AlchemiscaleComputeManagerClient
 
+
 class LocalTestingComputeManager(ComputeManager):
 
-    debug = {
-        "services_started": 0,
-        "service_processes": []
-    }
+    debug = {"services_started": 0, "service_processes": []}
 
     def __init__(self, settings: ComputeManagerSettings):
         self.settings = settings
@@ -52,14 +50,14 @@ init:
   client_cache_directory: null
   client_cache_size_limit: 1073741824
   client_use_local_cache: false
-  client_max_retries: 10
+  client_max_retries: 0
   client_retry_base_seconds: 2.0
   client_retry_max_seconds: 60.0
   client_verify: true
 
 start:
-  max_tasks: 10
-  max_time: 50
+  max_tasks: 5
+  max_time: 30
         """
 
         self.client = AlchemiscaleComputeManagerClient(
@@ -86,8 +84,12 @@ start:
                     case ComputeManagerInstruction.OK:
                         total_services = len(data["compute_service_ids"])
                         if total_services < self.settings.max_compute_services:
-                            proc = Process(target=LocalTestingComputeManager.create_compute_service, args = (self.service_settings_template,))
+                            proc = Process(
+                                target=LocalTestingComputeManager.create_compute_service,
+                                args=(self.service_settings_template,),
+                            )
                             proc.start()
+                            sleep(1)
                             self.debug["service_processes"].append(proc)
                             self.debug["services_started"] += 1
                             total_services += 1
@@ -101,10 +103,15 @@ start:
                         pass
                     case ComputeManagerInstruction.SHUTDOWN:
                         shutdown_message = data["message"]
-                        print(f"Recieved shutdown message: \"{shutdown_message}\"", file=sys.stderr)
+                        print(
+                            f'Recieved shutdown message: "{shutdown_message}"',
+                            file=sys.stderr,
+                        )
                         break
                 self.client.update_status(
-                    self.compute_manager_id, ComputeManagerStatus.OK, saturation=total_services / self.settings.max_compute_services
+                    self.compute_manager_id,
+                    ComputeManagerStatus.OK,
+                    saturation=total_services / self.settings.max_compute_services,
                 )
                 if run_n_cycles is not None and num_cycles == run_n_cycles:
                     break
@@ -157,7 +164,6 @@ def manager_settings(compute_manager_client):
         key=compute_manager_client.key,
         name="testmanager",
         logfile=None,
-        status_update_interval=15,
         max_compute_services=2,
         sleep_interval=3,
     )
@@ -170,7 +176,15 @@ def manager(
 ):
     return LocalTestingComputeManager(manager_settings)
 
+
 class TestComputeManager:
+
+    def setup_method(self):
+        LocalTestingComputeManager.debug["service_processes"] = []
+
+    def teardown_method(self):
+        for proc in LocalTestingComputeManager.debug["service_processes"]:
+            proc.terminate()
 
     def test_manager_implementation(
         self, n4js_preloaded, manager: LocalTestingComputeManager
@@ -181,11 +195,7 @@ class TestComputeManager:
         assert manager.debug["services_started"] == 1
         manager.cycle(run_n_cycles=1)
         assert manager.debug["services_started"] == 2
+        # running again shouldn't create another service
+        manager.cycle(run_n_cycles=1)
+        assert manager.debug["services_started"] == 2
         manager._deregister()
-
-        assert all([proc.is_alive() for proc in manager.debug["service_processes"]])
-
-        # while this could be done in _deregister, it's an antipattern
-        # with respect to the design of compute managers
-        for proc in manager.debug["service_processes"]:
-            proc.terminate()

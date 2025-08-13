@@ -27,13 +27,15 @@ class ComputeServiceSettings(BaseModel):
             "resources, e.g. different hosts or HPC clusters."
         ),
     )
-    compute_manager_id: str | None = Field(
-        None,
-        description=(
-            "The ID of the autoscaling compute manager responsible for the creation "
-            "of this compute service. Default is None."
+    compute_manager_id: str | None = (
+        Field(
+            None,
+            description=(
+                "The ID of the autoscaling compute manager responsible for the creation "
+                "of this compute service. Default is None."
+            ),
         ),
-    ),
+    )
     shared_basedir: Path = Field(
         ..., description="Filesystem path to use for `ProtocolDAG` `shared` space."
     )
@@ -124,7 +126,6 @@ class ComputeServiceSettings(BaseModel):
 
 
 class ComputeManagerSettings(BaseModel):
-
     api_url: str | None = Field(
         ..., description="URL of the compute API to manager services for."
     )
@@ -140,10 +141,6 @@ class ComputeManagerSettings(BaseModel):
             "The name to give this compute manager. This value should be distinct from all"
             "other compute managers."
         ),
-    )
-
-    status_update_interval: int = Field(
-        ..., description="Time in seconds to send a status update to the compute API."
     )
     logfile: Path | None = Field(..., description="File path to write logs to.")
     max_compute_services: int = Field(

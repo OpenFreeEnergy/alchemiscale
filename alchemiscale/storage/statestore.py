@@ -1755,7 +1755,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
 
         if saturation is not None:
-            if not 0 <= saturation <=1:
+            if not 0 <= saturation <= 1:
                 raise ValueError("saturation must be between 0 and 1")
 
         query = """

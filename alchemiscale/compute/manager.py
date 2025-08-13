@@ -14,7 +14,6 @@ from .settings import ComputeManagerSettings
 class ComputeManager:
 
     compute_manager_id: ComputeManagerID
-    status_update_interval: int
     sleep_interval: int
     client: AlchemiscaleComputeManagerClient
     service_settings_template: bytes
