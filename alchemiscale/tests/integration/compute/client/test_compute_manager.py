@@ -44,7 +44,7 @@ init:
   scopes:
     - '*-*-*'
   protocols: null
-  claim_limit: 1
+  claim_limit: 2
   loglevel: 'WARN'
   logfile: null
   client_cache_directory: null
@@ -56,7 +56,7 @@ init:
   client_verify: true
 
 start:
-  max_tasks: 5
+  max_tasks: 2
   max_time: 30
         """
 
@@ -83,7 +83,11 @@ start:
                 match instruction:
                     case ComputeManagerInstruction.OK:
                         total_services = len(data["compute_service_ids"])
-                        if total_services < self.settings.max_compute_services:
+                        num_tasks = data["num_tasks"]
+                        if (
+                            total_services < self.settings.max_compute_services
+                            and num_tasks > 0
+                        ):
                             proc = Process(
                                 target=LocalTestingComputeManager.create_compute_service,
                                 args=(self.service_settings_template,),
@@ -94,17 +98,11 @@ start:
                             self.debug["services_started"] += 1
                             total_services += 1
                     case ComputeManagerInstruction.SKIP:
-                        # TODO: SKIP should return compute service
-                        # IDs, otherwise we can't update the
-                        # saturation. Alternatively, we can allow
-                        # updating the OK status without providing a
-                        # saturation.
-                        total_services = 0
-                        pass
+                        total_services = len(data["compute_service_ids"])
                     case ComputeManagerInstruction.SHUTDOWN:
                         shutdown_message = data["message"]
                         print(
-                            f'Recieved shutdown message: "{shutdown_message}"',
+                            f'Received shutdown message: "{shutdown_message}"',
                             file=sys.stderr,
                         )
                         break
@@ -187,15 +185,32 @@ class TestComputeManager:
             proc.terminate()
 
     def test_manager_implementation(
-        self, n4js_preloaded, manager: LocalTestingComputeManager
+        self,
+        n4js_preloaded,
+        manager: LocalTestingComputeManager,
+        network_tyk2,
+        scope_test,
     ):
+        network_sk, taskhub_sk, _ = n4js_preloaded.assemble_network(
+            network_tyk2, scope_test
+        )
+        get_num_unclaimed_tasks = lambda: len(
+            n4js_preloaded.get_taskhub_unclaimed_tasks(taskhub_sk)
+        )
+
+        assert get_num_unclaimed_tasks() == 3
+
         manager._register()
-        assert manager.debug["services_started"] == 0
+
+        # the first service will claim 2 of the tasks
         manager.cycle(run_n_cycles=1)
         assert manager.debug["services_started"] == 1
+        sleep(1)
+        assert get_num_unclaimed_tasks() == 1
+
         manager.cycle(run_n_cycles=1)
-        assert manager.debug["services_started"] == 2
-        # running again shouldn't create another service
-        manager.cycle(run_n_cycles=1)
-        assert manager.debug["services_started"] == 2
+        assert manager.debug["services_started"] == 1
+        sleep(1)
+        assert get_num_unclaimed_tasks() == 0
+
         manager._deregister()

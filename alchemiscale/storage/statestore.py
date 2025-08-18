@@ -1581,8 +1581,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         This method returns one of three instructions along with supporting data:
 
-        1. "OK" with a list of ComputeServiceIDs
-        2. "SKIP" with a None
+        1. "OK" with a list of ComputeServiceIDs and the number of available tasks
+        2. "SKIP" with a list of ComputeServiceIDs
         3. "SHUTDOWN" with an error message
 
         Parameters
@@ -1660,10 +1660,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             if not all(
                 self.compute_services_can_claim(csr_ids, forgive_time, max_failures)
             ):
-                return ComputeManagerInstruction.SKIP, {}
+                return ComputeManagerInstruction.SKIP, {"compute_service_ids": csr_ids}
 
         # determine how many tasks are available
-
         tasks = []
         for scope in scopes:
             params = {

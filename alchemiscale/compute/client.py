@@ -204,12 +204,14 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
             case {
                 "instruction": "OK",
                 "compute_service_ids": ids,
+                "num_tasks": num_tasks,
             }:
                 return ComputeManagerInstruction.OK, {
                     "compute_service_ids": ids,
+                    "num_tasks": num_tasks,
                 }
-            case {"instruction": "SKIP"}:
-                return ComputeManagerInstruction.SKIP, {}
+            case {"instruction": "SKIP", "compute_service_ids": csr_ids}:
+                return ComputeManagerInstruction.SKIP, {"compute_service_ids": ids}
             case {"instruction": "SHUTDOWN", "message": message}:
                 return ComputeManagerInstruction.SHUTDOWN, {"message": message}
             case _:

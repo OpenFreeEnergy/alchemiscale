@@ -468,7 +468,7 @@ def computemanager_get_instruction(
     settings: ComputeAPISettings = Depends(get_base_api_settings),
     token: TokenData = Depends(get_token_data_depends),
 ):
-    scopes = scopes or []
+    scopes = scopes or [Scope.from_str("*-*-*")]
     scopes_reduced = minimize_scope_space(scopes)
     query_scopes = []
     for scope in scopes_reduced:
