@@ -6,7 +6,7 @@
 
 from abc import abstractmethod
 from copy import copy
-from datetime import datetime
+import datetime
 from enum import Enum
 from uuid import uuid4
 import hashlib
@@ -25,9 +25,9 @@ class ComputeServiceRegistration(BaseModel):
     """Registration for AlchemiscaleComputeService instances."""
 
     identifier: ComputeServiceID
-    registered: datetime
-    heartbeat: datetime
-    failure_times: list[datetime] = []
+    registered: datetime.datetime
+    heartbeat: datetime.datetime
+    failure_times: list[datetime.datetime] = []
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -39,7 +39,7 @@ class ComputeServiceRegistration(BaseModel):
 
     @classmethod
     def from_now(cls, identifier: ComputeServiceID):
-        now = datetime.utcnow()
+        now = datetime.datetime.now(tz=datetime.UTC)
         return cls(
             identifier=identifier, registered=now, heartbeat=now, failure_times=[]
         )
@@ -60,8 +60,8 @@ class ComputeServiceRegistration(BaseModel):
 
 class TaskProvenance(BaseModel):
     computeserviceid: ComputeServiceID
-    datetime_start: datetime
-    datetime_end: datetime
+    datetime_start: datetime.datetime
+    datetime_end: datetime.datetime
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -96,7 +96,7 @@ class Task(GufeTokenizable):
     status: TaskStatusEnum
     priority: int
     claim: str | None
-    datetime_created: datetime | None
+    datetime_created: datetime.datetime | None
     creator: str | None
     extends: str | None
 
@@ -105,7 +105,7 @@ class Task(GufeTokenizable):
         *,
         status: str | TaskStatusEnum = TaskStatusEnum.waiting,
         priority: int = 10,
-        datetime_created: datetime | None = None,
+        datetime_created: datetime.datetime | None = None,
         creator: str | None = None,
         extends: str | None = None,
         claim: str | None = None,
@@ -118,7 +118,9 @@ class Task(GufeTokenizable):
         self.priority = priority
 
         self.datetime_created = (
-            datetime_created if datetime_created is not None else datetime.utcnow()
+            datetime_created
+            if datetime_created is not None
+            else datetime.datetime.now(tz=datetime.UTC)
         )
 
         self.creator = creator
@@ -422,7 +424,7 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         obj_key: GufeKey,
         scope: Scope,
         ok: bool,
-        datetime_created: datetime | None = None,
+        datetime_created: datetime.datetime | None = None,
         creator: str | None = None,
     ):
         self.location = location
@@ -450,7 +452,7 @@ class ProtocolDAGResultRef(ObjectStoreRef):
     def _from_dict(cls, d):
         d_ = copy(d)
         d_["datetime_created"] = (
-            datetime.fromisoformat(d["datetime_created"])
+            datetime.datetime.fromisoformat(d["datetime_created"])
             if d.get("received") is not None
             else None
         )

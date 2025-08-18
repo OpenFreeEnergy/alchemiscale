@@ -6,7 +6,8 @@ import contextlib
 import os
 import traceback
 import multiprocessing
-from datetime import datetime, timedelta
+import datetime
+from datetime import timedelta
 
 import yaml
 
@@ -223,9 +224,9 @@ def test_compute_synchronous(
                 else:
                     break
 
-            assert csreg.records[0]["csreg"][
-                "registered"
-            ] > datetime.utcnow() - timedelta(seconds=30)
+            assert csreg.records[0]["csreg"]["registered"] > datetime.datetime.now(
+                tz=datetime.UTC
+            ) - timedelta(seconds=30)
 
             proc.terminate()
             proc.join()

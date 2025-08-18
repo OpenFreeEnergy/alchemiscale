@@ -171,7 +171,7 @@ class TestSynchronousComputeService:
         # create blocking failures
         query = """
         MATCH (cs:ComputeServiceRegistration {identifier: $compute_service_id})
-        SET cs.failure_times = [localdatetime()] + cs.failure_times
+        SET cs.failure_times = [datetime()] + cs.failure_times
         """
 
         for _ in range(4):
