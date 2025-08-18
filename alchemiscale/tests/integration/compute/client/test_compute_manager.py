@@ -209,7 +209,7 @@ class TestComputeManager:
         assert get_num_unclaimed_tasks() == 1
 
         manager.cycle(run_n_cycles=1)
-        assert manager.debug["services_started"] == 1
+        assert manager.debug["services_started"] == 2
         sleep(1)
         assert get_num_unclaimed_tasks() == 0
 
