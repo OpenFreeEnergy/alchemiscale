@@ -266,10 +266,13 @@ To develop new features, fix bugs, and advance the ``alchemiscale`` codebase, yo
     $ git clone git@github.com:OpenFreeEnergy/alchemiscale.git
     $ cd alchemiscale
 
-2. Create a conda environment for running the test suite, preferrably with `mamba`_, and activate it::
+2. Create a conda environment for running the test suite, preferably with `mamba`_, and activate it::
 
     $ mamba env create -n <environment-name> -f devtools/conda-envs/test.yml
     $ conda activate <environment-name>
+
+    .. note:
+    To run integration tests, you will need to have ``docker`` installed and executable without ``sudo``. See `Manage Docker as non root-user`_ for more information.
 
 3. Perform an editable install of the ``alchemiscale`` source tree::
 
@@ -296,3 +299,4 @@ Please be patient, and understand that it may take some time (weeks, even months
 .. _mamba: https://github.com/conda-forge/miniforge#mambaforge
 .. _known issues with developing on Mac: https://github.com/OpenFreeEnergy/alchemiscale/issues/92
 .. _GitHub CLI: https://cli.github.com/
+.. _Manage Docker as non-root user: https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user
