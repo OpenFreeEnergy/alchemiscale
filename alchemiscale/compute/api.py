@@ -5,7 +5,8 @@
 """
 
 import json
-from datetime import datetime, timedelta
+import datetime
+from datetime import timedelta
 import random
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Request
@@ -109,8 +110,7 @@ def register_computeservice(
     compute_manager_id: str | None = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    now = datetime.utcnow()
-
+    now = datetime.datetime.now(tz=datetime.UTC)
     if compute_manager_id:
         manager_name = process_compute_manager_id_string(
             compute_manager_id
@@ -149,7 +149,7 @@ def heartbeat_computeservice(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     settings: ComputeAPISettings = Depends(get_base_api_settings),
 ):
-    now = datetime.utcnow()
+    now = datetime.datetime.now(tz=datetime.UTC)
 
     # expire any stale registrations, along with their claims
     expire_delta = timedelta(
@@ -230,7 +230,7 @@ def claim_tasks(
 
     """
     # check if the compute service can claim tasks
-    now = datetime.now()
+    now = datetime.datetime.now(tz=datetime.UTC)
     if not n4js.compute_service_can_claim(
         compute_service_id,
         now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
@@ -399,7 +399,7 @@ async def set_task_result(
         n4js.set_task_error(tasks=[task_sk])
 
         # report that the compute service experienced a failure
-        now = datetime.utcnow()
+        now = datetime.datetime.now(tz=datetime.UTC)
         n4js.log_failure_compute_service(compute_service_id, now)
         n4js.resolve_task_restarts(task_scoped_keys=[task_sk])
 
@@ -434,7 +434,7 @@ def computemanager_register(
 
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
 
-    now = datetime.utcnow()
+    now = datetime.datetime.now(tz=datetime.UTC)
     cm_registration = ComputeManagerRegistration(
         manager_name=compute_manager_id.manager_name,
         uuid=compute_manager_id.uuid,
@@ -475,7 +475,7 @@ def computemanager_get_instruction(
         query_scopes.extend(validate_scopes_query(scope, token))
 
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
-    now = datetime.utcnow()
+    now = datetime.datetime.now(tz=datetime.UTC)
     instruction, payload = n4js.get_computemanager_instruction(
         compute_manager_id,
         now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),

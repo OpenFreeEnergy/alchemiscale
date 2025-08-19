@@ -181,6 +181,7 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         self,
         compute_manager_id: ComputeManagerID,
         status: ComputeManagerStatus,
+        *,
         detail: str | None = None,
         saturation: float | None = None,
     ) -> ComputeManagerID:
@@ -210,7 +211,7 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
                     "compute_service_ids": ids,
                     "num_tasks": num_tasks,
                 }
-            case {"instruction": "SKIP", "compute_service_ids": csr_ids}:
+            case {"instruction": "SKIP", "compute_service_ids": ids}:
                 return ComputeManagerInstruction.SKIP, {"compute_service_ids": ids}
             case {"instruction": "SHUTDOWN", "message": message}:
                 return ComputeManagerInstruction.SHUTDOWN, {"message": message}

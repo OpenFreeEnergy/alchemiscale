@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 
 from gufe.protocols import ProtocolUnitFailure
 
@@ -58,7 +58,7 @@ def complete_tasks(
     for task in tasks:
         ok_pdrr = ProtocolDAGResultRef(
             ok=True,
-            datetime_created=datetime.utcnow(),
+            datetime_created=datetime.datetime.now(tz=datetime.UTC),
             obj_key=task.gufe_key,
             scope=task.scope,
         )
@@ -78,7 +78,7 @@ def fail_task(
 
     not_ok_pdrr = ProtocolDAGResultRef(
         ok=False,
-        datetime_created=datetime.utcnow(),
+        datetime_created=datetime.datetime.now(tz=datetime.UTC),
         obj_key=task.gufe_key,
         scope=task.scope,
     )

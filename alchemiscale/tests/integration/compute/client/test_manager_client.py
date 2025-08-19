@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 from time import sleep
 
 import pytest
@@ -90,11 +90,8 @@ class TestComputeManagerClient:
             compute_manager_id
         )
 
-        assert instruction == ComputeManagerInstruction.OK, (instruction, payload)
-        assert payload == {"compute_service_ids": []}, (
-            instruction,
-            payload,
-        )
+        assert instruction == ComputeManagerInstruction.OK
+        assert payload == {"compute_service_ids": [], "num_tasks": 3}
 
         # mock the creation of a compute service
         _compute_service_id = compute_client.register(
@@ -108,6 +105,7 @@ class TestComputeManagerClient:
         assert instruction == ComputeManagerInstruction.OK, (instruction, payload)
         assert payload == {
             "compute_service_ids": [_compute_service_id],
+            "num_tasks": 3,
         }, (instruction, payload)
 
         # add in many failures to trigger a SKIP instruction on next request
@@ -115,10 +113,10 @@ class TestComputeManagerClient:
         add_fake_failures_query = """
         UNWIND $failure_times AS failure_time
         MATCH (csr: ComputeServiceRegistration {identifier: $compute_service_id})
-        SET csr.failure_times = localdatetime(failure_time) + csr.failure_times
+        SET csr.failure_times = datetime(failure_time) + csr.failure_times
         """
 
-        failure_times = [datetime.utcnow()] * 4
+        failure_times = [datetime.datetime.now(tz=datetime.UTC)] * 4
         n4js_preloaded.execute_query(
             add_fake_failures_query,
             compute_service_id=compute_service_id,
@@ -130,7 +128,7 @@ class TestComputeManagerClient:
         )
 
         assert instruction == ComputeManagerInstruction.SKIP, (instruction, payload)
-        assert payload == {}, (instruction, payload)
+        assert payload == {"compute_service_ids": [_compute_service_id]}
 
         # change the UUID associated with the stored manager to simulate usurping
 
@@ -173,7 +171,9 @@ class TestComputeManagerClient:
 
         # status: OK
         returned_id = compute_manager_client.update_status(
-            compute_manager_id, ComputeManagerStatus.OK
+            compute_manager_id,
+            ComputeManagerStatus.OK,
+            saturation=0,
         )
 
         assert returned_id == compute_manager_id
@@ -188,7 +188,7 @@ class TestComputeManagerClient:
         returned_id = compute_manager_client.update_status(
             compute_manager_id,
             ComputeManagerStatus.ERRORED,
-            repr(exception),
+            detail=repr(exception),
         )
 
         assert returned_id == compute_manager_id

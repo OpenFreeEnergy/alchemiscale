@@ -27,13 +27,11 @@ class ComputeServiceSettings(BaseModel):
             "resources, e.g. different hosts or HPC clusters."
         ),
     )
-    compute_manager_id: str | None = (
-        Field(
-            None,
-            description=(
-                "The ID of the autoscaling compute manager responsible for the creation "
-                "of this compute service. Default is None."
-            ),
+    compute_manager_id: str | None = Field(
+        None,
+        description=(
+            "The ID of the autoscaling compute manager responsible for the creation "
+            "of this compute service. Default is None."
         ),
     )
     shared_basedir: Path = Field(

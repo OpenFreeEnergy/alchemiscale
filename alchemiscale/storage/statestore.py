@@ -6,7 +6,7 @@
 
 import abc
 import bisect
-from datetime import datetime
+import datetime
 from contextlib import contextmanager
 import json
 import re
@@ -120,7 +120,7 @@ CLAIM_QUERY = f"""
 
     // create CLAIMS relationship with given compute service
     MATCH (csreg:ComputeServiceRegistration {{identifier: $compute_service_id}})
-    CREATE (t)<-[cl:CLAIMS {{claimed: localdatetime($datetimestr)}}]-(csreg)
+    CREATE (t)<-[cl:CLAIMS {{claimed: datetime($datetimestr)}}]-(csreg)
 
     SET t.status = '{TaskStatusEnum.running.value}'
 
@@ -1274,13 +1274,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         return ComputeServiceID(identifier)
 
     def heartbeat_computeservice(
-        self, compute_service_id: ComputeServiceID, heartbeat: datetime
+        self, compute_service_id: ComputeServiceID, heartbeat: datetime.datetime
     ):
         """Update the heartbeat for the given ComputeServiceID."""
 
         q = f"""
         MATCH (n:ComputeServiceRegistration {{identifier: $compute_service_id}})
-        SET n.heartbeat = localdatetime('{heartbeat.isoformat()}')
+        SET n.heartbeat = datetime('{heartbeat.isoformat()}')
 
         """
         with self.transaction() as tx:
@@ -1288,11 +1288,11 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return compute_service_id
 
-    def expire_registrations(self, expire_time: datetime):
+    def expire_registrations(self, expire_time: datetime.datetime):
         """Remove all registrations with last heartbeat prior to the given `expire_time`."""
         q = f"""
         MATCH (n:ComputeServiceRegistration)
-        WHERE n.heartbeat < localdatetime('{expire_time.isoformat()}')
+        WHERE n.heartbeat < datetime('{expire_time.isoformat()}')
 
         WITH n
 
@@ -1317,7 +1317,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def log_failure_compute_service(
         self,
         compute_service_id: ComputeServiceID,
-        failure_time: datetime,
+        failure_time: datetime.datetime,
     ) -> ComputeServiceID:
         """Add a reported compute service failure to the database.
 
@@ -1330,7 +1330,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         q = """
         MATCH (n:ComputeServiceRegistration {identifier: $compute_service_id})
-        SET n.failure_times = [localdatetime($failure_time)] + n.failure_times
+        SET n.failure_times = [datetime($failure_time)] + n.failure_times
         """
 
         with self.transaction() as tx:
@@ -1345,7 +1345,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def compute_services_can_claim(
         self,
         compute_service_ids: list[ComputeServiceID],
-        forgive_time: datetime,
+        forgive_time: datetime.datetime,
         max_failures: int,
     ) -> list[bool]:
         """Check compute services are able to claim tasks.
@@ -1365,7 +1365,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         query = """
         UNWIND $compute_service_ids as compute_service_id
         MATCH (cs:ComputeServiceRegistration {identifier: compute_service_id})
-        SET cs.failure_times = [entry IN cs.failure_times WHERE entry > localdatetime($forgive_time)]
+        SET cs.failure_times = [entry IN cs.failure_times WHERE entry > datetime($forgive_time)]
         RETURN size(cs.failure_times) as n_failures
         """
         results = self.execute_query(
@@ -1377,7 +1377,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def compute_service_can_claim(
         self,
         compute_service_id: ComputeServiceID,
-        forgive_time: datetime,
+        forgive_time: datetime.datetime,
         max_failures: int,
     ) -> bool:
         """Check if a compute service is able to claim a ``Task``.
@@ -1499,7 +1499,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         return compute_manager_id
 
     def expire_computemanager_registrations(
-        self, expire_time_ok: datetime, expire_time_errored: datetime
+        self, expire_time_ok: datetime.datetime, expire_time_errored: datetime.datetime
     ):
         """Remove expired compute managers from the statestore.
 
@@ -1525,9 +1525,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         # their status and detach delete them.
         query = """
         MATCH (cmr:ComputeManagerRegistration) WHERE
-        (cmr.last_status_update < localdatetime($expire_time_ok) AND cmr.status = $ok_status)
+        (cmr.last_status_update < datetime($expire_time_ok) AND cmr.status = $ok_status)
         OR
-        (cmr.last_status_update < localdatetime($expire_time_errored) AND cmr.status = $errored_status)
+        (cmr.last_status_update < datetime($expire_time_errored) AND cmr.status = $errored_status)
         DETACH DELETE cmr
         """
 
@@ -1573,7 +1573,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_computemanager_instruction(
         self,
         compute_manager_id: ComputeManagerID,
-        forgive_time: datetime,
+        forgive_time: datetime.datetime,
         max_failures: int,
         scopes: list[Scope],
     ) -> tuple[ComputeManagerInstruction, None, str, list[ComputeServiceID]]:
@@ -1689,7 +1689,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         status: ComputeManagerStatus,
         detail: str | None = None,
         saturation: float | None = None,
-        update_time: datetime | None = None,
+        update_time: datetime.datetime | None = None,
     ):
         """Update the status of a compute manager.
 
@@ -1762,7 +1762,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         SET cmr.status = $status
         SET cmr.detail = $detail
         SET cmr.saturation = $saturation
-        SET cmr.last_status_update = localdatetime($update_time)
+        SET cmr.last_status_update = datetime($update_time)
         RETURN cmr
         """
 
@@ -1773,7 +1773,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             manager_name=manager_name,
             detail=detail,
             saturation=saturation,
-            update_time=(update_time or datetime.utcnow()).isoformat(),
+            update_time=(
+                update_time or datetime.datetime.now(tz=datetime.UTC)
+            ).isoformat(),
         )
 
         if len(results.records) == 0:
@@ -2501,7 +2503,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 tx.run(
                     CLAIM_QUERY,
                     tasks_list=[str(task) for task in tasks if task is not None],
-                    datetimestr=str(datetime.utcnow().isoformat()),
+                    datetimestr=str(datetime.datetime.now(tz=datetime.UTC).isoformat()),
                     compute_service_id=str(compute_service_id),
                 )
 

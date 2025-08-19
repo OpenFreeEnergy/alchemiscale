@@ -4,7 +4,7 @@
 
 """
 
-from datetime import datetime
+import datetime
 
 from pydantic import BaseModel, field_validator
 
@@ -23,7 +23,7 @@ class TokenData(BaseModel):
 
 class CredentialedEntity(BaseModel):
     hashed_key: str
-    expires: datetime | None = None
+    expires: datetime.datetime | None = None
 
 
 class ScopedIdentity(BaseModel):

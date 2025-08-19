@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta
+import datetime
+from datetime import timedelta
 import random
 from pathlib import Path
 from functools import reduce
@@ -578,7 +579,7 @@ class TestNeo4jStore(TestStateStore):
     ### compute
 
     def test_register_computeservice(self, n4js, compute_service_id):
-        now = datetime.utcnow()
+        now = datetime.datetime.now(tz=datetime.UTC)
         registration = ComputeServiceRegistration(
             identifier=compute_service_id,
             registered=now,
@@ -604,7 +605,7 @@ class TestNeo4jStore(TestStateStore):
         assert int(csreg["heartbeat"].to_native().timestamp()) == int(now.timestamp())
 
     def test_deregister_computeservice(self, n4js, compute_service_id):
-        now = datetime.utcnow()
+        now = datetime.datetime.now(tz=datetime.UTC)
         registration = ComputeServiceRegistration(
             identifier=compute_service_id,
             registered=now,
@@ -627,7 +628,7 @@ class TestNeo4jStore(TestStateStore):
         assert not csreg.records
 
     def test_heartbeat_computeservice(self, n4js, compute_service_id):
-        now = datetime.utcnow()
+        now = datetime.datetime.now(tz=datetime.UTC)
         registration = ComputeServiceRegistration(
             identifier=compute_service_id,
             registered=now,
@@ -656,7 +657,7 @@ class TestNeo4jStore(TestStateStore):
         )
 
     def test_expire_registrations(self, n4js, compute_service_id):
-        now = datetime.utcnow()
+        now = datetime.datetime.now(tz=datetime.UTC)
         yesterday = now - timedelta(days=1)
         an_hour_ago = now - timedelta(hours=1)
         registration = ComputeServiceRegistration(
@@ -683,7 +684,7 @@ class TestNeo4jStore(TestStateStore):
         assert compute_service_id in identities
 
     def test_log_failure_computeservice(self, n4js, compute_service_id):
-        now = datetime.utcnow()
+        now = datetime.datetime.now(tz=datetime.UTC)
         registration = ComputeServiceRegistration(
             identifier=compute_service_id,
             registered=now,
@@ -711,7 +712,7 @@ class TestNeo4jStore(TestStateStore):
         assert 6 == results.records[0]["n_failures"]
 
     def test_compute_service_can_claim(self, n4js, compute_service_id):
-        now = datetime.utcnow()
+        now = datetime.datetime.now(tz=datetime.UTC)
         registration = ComputeServiceRegistration(
             identifier=compute_service_id,
             registered=now,
@@ -3444,7 +3445,7 @@ class TestNeo4jStore(TestStateStore):
             creation_time=None,
             failure_deltas=[],
         ) -> ComputeServiceID:
-            creation_time = datetime.utcnow() or creation_time
+            creation_time = datetime.datetime.now(tz=datetime.UTC) or creation_time
             failure_times = list(map(lambda td: creation_time + td, failure_deltas))
 
             registration = ComputeServiceRegistration(
@@ -3463,7 +3464,7 @@ class TestNeo4jStore(TestStateStore):
         def compute_manager_registration_from_manager_name(manager_name: str):
             compute_manager_id = ComputeManagerID.new_from_manager_name(manager_name)
 
-            now = datetime.utcnow()
+            now = datetime.datetime.now(tz=datetime.UTC)
             return ComputeManagerRegistration(
                 manager_name=compute_manager_id.manager_name,
                 uuid=compute_manager_id.uuid,
@@ -3622,7 +3623,7 @@ class TestNeo4jStore(TestStateStore):
 
             def get_instruction(forgive_seconds=-60, failures=2):
                 nonlocal n4js, compute_manager_id
-                now = datetime.utcnow()
+                now = datetime.datetime.now(tz=datetime.UTC)
                 instruction, instruction_data = n4js.get_computemanager_instruction(
                     compute_manager_id,
                     forgive_time=now + timedelta(seconds=forgive_seconds),
@@ -3650,7 +3651,7 @@ class TestNeo4jStore(TestStateStore):
 
             instruction, data = get_instruction(forgive_seconds=-60)
             assert instruction == ComputeManagerInstruction.SKIP
-            assert data == {}
+            assert data == {"compute_service_ids": [compute_service_id]}
 
             # if we allow up to 3 failures, we should be allowed to grow
             instruction, data = get_instruction(forgive_seconds=-60, failures=3)
@@ -3760,7 +3761,8 @@ class TestNeo4jStore(TestStateStore):
             n4js.update_compute_manager_status(
                 compute_manager_id,
                 ComputeManagerStatus.OK,
-                update_time=datetime.utcnow() + timedelta(minutes=-10),
+                update_time=datetime.datetime.now(tz=datetime.UTC)
+                + timedelta(minutes=-10),
                 saturation=0,
             )
             assert previous_update_time > get_last_status_update_time()
@@ -3808,7 +3810,7 @@ class TestNeo4jStore(TestStateStore):
             n4js.update_compute_manager_status(
                 compute_manager_id,
                 ComputeManagerStatus.OK,
-                update_time=datetime.utcnow() + timedelta(days=-1),
+                update_time=datetime.datetime.now(tz=datetime.UTC) + timedelta(days=-1),
                 saturation=0,
             )
 
@@ -3816,7 +3818,7 @@ class TestNeo4jStore(TestStateStore):
             for _ in range(3):
                 self.create_compute_service(n4js, compute_manager_id)
 
-            now = datetime.utcnow()
+            now = datetime.datetime.now(tz=datetime.UTC)
             n4js.expire_computemanager_registrations(
                 now + timedelta(hours=-2), now + timedelta(hours=-24)
             )
