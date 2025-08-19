@@ -91,7 +91,7 @@ class ComputeManagerID(str):
 
         try:
             UUID(self.uuid)
-        except Exception:
+        except ValueError:
             raise ValueError("Could not interpret the provided UUID.")
 
     @classmethod
@@ -130,18 +130,6 @@ class ComputeManagerRegistration(BaseModel):
 
     def __str__(self):
         return "-".join([self.manager_name, self.uuid])
-
-    @classmethod
-    def from_now(cls, identifier: ComputeManagerID):
-        now = datetime.datetime.now(tz=datetime.UTC)
-        return cls(
-            manager_name=identifier.manager_name,
-            uuid=identifier.uuid,
-            last_status_update=now,
-            status=ComputeManagerStatus.OK,
-            detail="",
-            saturation=0,
-        )
 
     def to_dict(self):
         dct = self.dict()

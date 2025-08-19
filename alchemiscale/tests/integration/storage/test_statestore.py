@@ -3445,7 +3445,7 @@ class TestNeo4jStore(TestStateStore):
             creation_time=None,
             failure_deltas=[],
         ) -> ComputeServiceID:
-            creation_time = datetime.datetime.now(tz=datetime.UTC) or creation_time
+            creation_time = creation_time or datetime.datetime.now(tz=datetime.UTC)
             failure_times = list(map(lambda td: creation_time + td, failure_deltas))
 
             registration = ComputeServiceRegistration(
