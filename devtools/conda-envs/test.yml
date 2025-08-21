@@ -9,7 +9,6 @@ dependencies:
   # alchemiscale dependencies
   - gufe=1.6.0
   - openfe=1.6.0
-  - openff-toolkit=0.17.0
   - pydantic >2
   - pydantic-settings
   - async-lru
