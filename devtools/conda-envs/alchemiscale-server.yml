@@ -43,7 +43,6 @@ dependencies:
   # additional pins
   - openmm=8.1.2
   - openmmforcefields>=0.14.2
-  - openff-units=0.2.2
 
   # deployment
   - curl         # used in healthchecks for API services

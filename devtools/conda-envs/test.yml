@@ -39,7 +39,7 @@ dependencies:
   - cryptography
 
   # openmm protocols
-  - feflow>=0.1.3
+  - feflow>=0.1.4
 
   ## cli
   - click
