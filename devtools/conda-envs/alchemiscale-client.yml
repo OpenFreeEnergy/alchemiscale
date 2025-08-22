@@ -30,7 +30,6 @@ dependencies:
   # additional pins
   - openmm=8.2.0
   - openmmforcefields>=0.14.2
-  - openff-units=0.2.2
 
   - pip:
     - git+https://github.com/OpenFreeEnergy/alchemiscale.git@v0.6.2
