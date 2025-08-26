@@ -494,11 +494,21 @@ def computemanager_update_status(
     detail: str | None = Body(None),
     saturation: float | None = Body(None),
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
 ):
+    expire_seconds = settings.ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS
+    expire_seconds_errored = (
+        settings.ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERRORED
+    )
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
     try:
         n4js.update_compute_manager_status(
             compute_manager_id, status, detail, saturation
+        )
+        now = datetime.datetime.now(tz=datetime.UTC)
+        n4js.expire_computemanager_registrations(
+            now + timedelta(seconds=-expire_seconds),
+            now + timedelta(seconds=-expire_seconds_errored),
         )
     except ValueError as e:
         raise HTTPException(
