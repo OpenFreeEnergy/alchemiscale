@@ -35,10 +35,7 @@ class LocalTestingComputeManager(ComputeManager):
         time.sleep(2)
 
     @staticmethod
-    def _create_compute_service(settings, compute_manager_id, exception_to_raise):
-
-        if exception_to_raise:
-            raise exception_to_raise
+    def _create_compute_service(settings, compute_manager_id):
 
         from alchemiscale.models import Scope
         from alchemiscale.compute.service import SynchronousComputeService
