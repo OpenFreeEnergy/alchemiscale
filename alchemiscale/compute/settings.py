@@ -148,3 +148,7 @@ class ComputeManagerSettings(BaseModel):
     sleep_interval: int = Field(
         1800, description="Time in seconds to wait for another instruction."
     )
+    loglevel: str = Field(
+        "WARN",
+        description="The loglevel at which to report; see the :mod:`logging` docs for available levels.",
+    )
