@@ -68,12 +68,12 @@ class ComputeManager:
             while True:
                 self.cycle()
                 count += 1
-                if max_cycles and count > max_cycles:
+                if max_cycles and count >= max_cycles:
                     break
                 time.sleep(self.settings.sleep_interval)
         except Exception as e:
             self.client.update_status(
-                self.compute_manager_id, ComputeManagerStatus.ERRORED, repr(e)
+                self.compute_manager_id, ComputeManagerStatus.ERRORED, detail=repr(e)
             )
             raise e
         except KeyboardInterrupt:
@@ -93,6 +93,7 @@ class ComputeManager:
                 ):
                     self.create_compute_service()
                     total_services += 1
+                    self.logger.info(f"Created a new compute service")
             case ComputeManagerInstruction.SKIP:
                 total_services = len(data["compute_service_ids"])
             case ComputeManagerInstruction.SHUTDOWN:

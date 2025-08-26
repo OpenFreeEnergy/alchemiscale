@@ -1,5 +1,6 @@
 from uuid import uuid4
-from time import sleep
+import logging
+import time
 import sys
 import signal
 
@@ -19,8 +20,26 @@ from alchemiscale.compute.client import AlchemiscaleComputeManagerClient
 class LocalTestingComputeManager(ComputeManager):
 
     service_processes = []
+    exception = None
 
     def create_compute_service(self):
+        if exception := LocalTestingComputeManager.exception:
+            raise exception
+
+        proc = Process(
+            target=LocalTestingComputeManager._create_compute_service,
+            args=(self.settings, self.compute_manager_id),
+        )
+        proc.start()
+        LocalTestingComputeManager.service_processes.append(proc)
+        time.sleep(2)
+
+    @staticmethod
+    def _create_compute_service(settings, compute_manager_id, exception_to_raise):
+
+        if exception_to_raise:
+            raise exception_to_raise
+
         from alchemiscale.models import Scope
         from alchemiscale.compute.service import SynchronousComputeService
         from alchemiscale.compute.settings import ComputeServiceSettings
@@ -29,11 +48,11 @@ class LocalTestingComputeManager(ComputeManager):
         config_template = f"""
 ---
 init:
-  api_url: {self.settings.api_url}
-  identifier: {self.settings.identifier}
-  key: {self.settings.key}
+  api_url: {settings.api_url}
+  identifier: {settings.identifier}
+  key: {settings.key}
   name: testservice
-  compute_manager_id: {self.compute_manager_id}
+  compute_manager_id: {compute_manager_id}
   shared_basedir: "./shared"
   scratch_basedir: "./scratch"
   keep_shared: False
@@ -57,7 +76,7 @@ init:
 
 start:
   max_tasks: 2
-  max_time: 30
+  max_time: 10
         """
 
         params = yaml.safe_load(config_template)
@@ -112,6 +131,7 @@ class TestComputeManager:
 
     def setup_method(self):
         LocalTestingComputeManager.service_processes = []
+        LocalTestingComputeManager.exception = None
 
     def teardown_method(self):
         for proc in LocalTestingComputeManager.service_processes:
@@ -133,4 +153,53 @@ class TestComputeManager:
 
         assert get_num_unclaimed_tasks() == 3
 
+        # first cycle should pick up 2 tasks with one compute service
         manager.start(max_cycles=1)
+        assert get_num_unclaimed_tasks() == 1
+        assert len(LocalTestingComputeManager.service_processes) == 1
+
+        # second cycle should pick up last task with an additional compute service
+        manager.start(max_cycles=1)
+        assert get_num_unclaimed_tasks() == 0
+        assert len(LocalTestingComputeManager.service_processes) == 2
+
+        # an additional cycle should not create another service
+        manager.start(max_cycles=1)
+        assert get_num_unclaimed_tasks() == 0
+        assert len(LocalTestingComputeManager.service_processes) == 2
+
+    def test_manager_runtime_failure(
+        self,
+        n4js_preloaded,
+        manager: LocalTestingComputeManager,
+        network_tyk2,
+        scope_test,
+    ):
+        LocalTestingComputeManager.exception = RuntimeError(
+            "Unexpected failure in manager"
+        )
+
+        with pytest.raises(RuntimeError):
+            manager.start(max_cycles=1)
+
+        query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
+        record = n4js_preloaded.execute_query(query).records[0]["cmr"]
+        assert record["status"] == ComputeManagerStatus.ERRORED
+        assert record["detail"] == "RuntimeError('Unexpected failure in manager')"
+
+    def test_manager_keyboard_interrupt(
+        self,
+        n4js_preloaded,
+        manager: LocalTestingComputeManager,
+        network_tyk2,
+        scope_test,
+        caplog,
+    ):
+        caplog.set_level(logging.INFO, logger=manager.logger.name)
+        LocalTestingComputeManager.exception = KeyboardInterrupt
+
+        manager.start(max_cycles=1)
+        query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
+        assert not n4js_preloaded.execute_query(query).records
+
+        assert "Caught SIGINT/Keyboard interrupt" in caplog.text
