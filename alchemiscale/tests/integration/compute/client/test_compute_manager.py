@@ -27,7 +27,7 @@ class LocalTestingComputeManager(ComputeManager):
     service_max_time = None
     service_max_tasks = None
 
-    def create_compute_service(self):
+    def create_compute_services(self, data):
         if exception := LocalTestingComputeManager.exception:
             raise exception
 
@@ -38,6 +38,7 @@ class LocalTestingComputeManager(ComputeManager):
         proc.start()
         LocalTestingComputeManager.service_processes.append(proc)
         time.sleep(2)
+        return 1
 
     @staticmethod
     def _create_compute_service(settings, compute_manager_id):

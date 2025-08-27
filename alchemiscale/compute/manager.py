@@ -81,6 +81,14 @@ class ComputeManager:
         finally:
             self._deregister()
 
+    @abstractmethod
+    def create_compute_services(self, data) -> int:
+        """Method responsible for creating compute services based on
+        data returned with an OK ComputeManagerInstruction. This must
+        return the number of compute services started.
+        """
+        raise NotImplementedError
+
     def cycle(self):
         instruction, data = self.client.get_instruction(self.compute_manager_id)
         match instruction:
@@ -91,9 +99,14 @@ class ComputeManager:
                     total_services < self.settings.max_compute_services
                     and num_tasks > 0
                 ):
-                    self.create_compute_service()
-                    total_services += 1
-                    self.logger.info(f"Created a new compute service")
+                    new_services = self.create_compute_services(data)
+                    total_services += new_services
+                    if new_services:
+                        self.logger.info(
+                            f"Created {new_services} new compute service(s)"
+                        )
+                    else:
+                        self.logger.info(f"No new compute services created")
             case ComputeManagerInstruction.SKIP:
                 total_services = len(data["compute_service_ids"])
                 self.logger.info(f"Received skip instruction")
