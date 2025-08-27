@@ -1,3 +1,4 @@
+import datetime
 from uuid import uuid4
 import logging
 import time
@@ -5,6 +6,8 @@ import sys
 import signal
 
 from multiprocessing import Process
+
+from neo4j.time import DateTime
 
 import pytest
 
@@ -21,6 +24,8 @@ class LocalTestingComputeManager(ComputeManager):
 
     service_processes = []
     exception = None
+    service_max_time = None
+    service_max_tasks = None
 
     def create_compute_service(self):
         if exception := LocalTestingComputeManager.exception:
@@ -72,9 +77,9 @@ init:
   client_verify: true
 
 start:
-  max_tasks: 2
-  max_time: 10
-        """
+  max_tasks: {LocalTestingComputeManager.service_max_tasks or 2}
+  max_time: {LocalTestingComputeManager.service_max_time or 10}
+"""
 
         params = yaml.safe_load(config_template)
 
@@ -129,6 +134,8 @@ class TestComputeManager:
     def setup_method(self):
         LocalTestingComputeManager.service_processes = []
         LocalTestingComputeManager.exception = None
+        LocalTestingComputeManager.service_max_time = None
+        LocalTestingComputeManager.service_max_tasks = None
 
     def teardown_method(self):
         for proc in LocalTestingComputeManager.service_processes:
@@ -165,7 +172,7 @@ class TestComputeManager:
         assert get_num_unclaimed_tasks() == 0
         assert len(LocalTestingComputeManager.service_processes) == 2
 
-    def test_manager_runtime_failure(
+    def test_runtime_failure(
         self,
         n4js_preloaded,
         manager: LocalTestingComputeManager,
@@ -200,3 +207,43 @@ class TestComputeManager:
         assert not n4js_preloaded.execute_query(query).records
 
         assert "Caught SIGINT/Keyboard interrupt" in caplog.text
+
+    def test_skip_instruction(
+        self, n4js_preloaded, manager: LocalTestingComputeManager, caplog
+    ):
+        caplog.set_level(logging.INFO, logger=manager.logger.name)
+        # ensure long lived service
+        LocalTestingComputeManager.service_max_tasks = 10
+        manager._register()
+        manager.cycle()
+
+        failure_times = [datetime.datetime.now(tz=datetime.UTC)] * 10
+
+        query = """
+        MATCH (csr:ComputeServiceRegistration)
+        SET csr.failure_times = $failure_times
+        RETURN csr
+        """
+        results = n4js_preloaded.execute_query(query, failure_times=failure_times)
+
+        manager.cycle()
+
+        assert "Received skip instruction" in caplog.text
+        manager._deregister()
+
+    def test_shutdown_instruction(
+        self, n4js_preloaded, manager: LocalTestingComputeManager, caplog
+    ):
+        caplog.set_level(logging.INFO, logger=manager.logger.name)
+        manager._register()
+
+        new_uuid = str(uuid4())
+
+        query = """MATCH (cmr:ComputeManagerRegistration)
+        SET cmr.uuid = $new_uuid
+        """
+
+        n4js_preloaded.execute_query(query, new_uuid=new_uuid)
+        manager.cycle()
+
+        assert "Received shutdown message" in caplog.text

@@ -38,6 +38,7 @@ class ComputeManager:
         logger = logging.getLogger("AlchemiscaleComputeManager")
         logger.setLevel(self.settings.loglevel)
 
+        extra = {"compute_manager_id": self.compute_manager_id}
         formatter = logging.Formatter(
             "[%(asctime)s] [%(compute_manager_id)s] [%(levelname)s] %(message)s"
         )
@@ -52,7 +53,6 @@ class ComputeManager:
             fh.setFormatter(formatter)
             logger.addHandler(fh)
 
-        extra = {"compute_manager_id": self.compute_manager_id}
         self.logger = logging.LoggerAdapter(logger, extra)
 
     def _register(self):
@@ -96,9 +96,11 @@ class ComputeManager:
                     self.logger.info(f"Created a new compute service")
             case ComputeManagerInstruction.SKIP:
                 total_services = len(data["compute_service_ids"])
+                self.logger.info(f"Received skip instruction")
             case ComputeManagerInstruction.SHUTDOWN:
                 shutdown_message = data["message"]
                 self.logger.info(f'Received shutdown message: "{shutdown_message}"')
+                return
         self.client.update_status(
             self.compute_manager_id,
             ComputeManagerStatus.OK,
