@@ -58,7 +58,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
             taskhubs = []
 
         for scope in scopes:
-            params = dict(return_gufe=return_gufe, **scope.dict())
+            params = dict(return_gufe=return_gufe, **scope.to_dict())
             if return_gufe:
                 taskhubs.update(self._query_resource("/taskhubs", params=params))
             else:

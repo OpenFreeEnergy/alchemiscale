@@ -357,7 +357,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                         node[key] = value
 
             node["_gufe_key"] = str(gufe_key)
-            node["_scoped_key"] = str(ScopedKey(gufe_key=str(gufe_key), **scope.dict()))
+            node["_scoped_key"] = str(
+                ScopedKey(gufe_key=str(gufe_key), **scope.to_dict())
+            )
             node.update(
                 {
                     "_org": scope.org,
@@ -374,7 +376,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             add_previous_node(gufe_key, node)
 
         subgraph = Subgraph(None, relationships)
-        scoped_key = ScopedKey(gufe_key=node["_gufe_key"], **scope.dict())
+        scoped_key = ScopedKey(gufe_key=node["_gufe_key"], **scope.to_dict())
         return subgraph, node, scoped_key
 
     def _subgraph_to_gufe(
@@ -3410,7 +3412,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         then this will overwrite its properties, including credential.
 
         """
-        node = Node("CredentialedEntity", entity.__class__.__name__, **entity.dict())
+        node = Node("CredentialedEntity", entity.__class__.__name__, **entity.to_dict())
 
         with self.transaction() as tx:
             merge_subgraph(
