@@ -45,7 +45,7 @@ class ComputeServiceRegistration(BaseModel):
         )
 
     def to_dict(self):
-        dct = self.dict()
+        dct = self.model_dump()
         dct["identifier"] = str(self.identifier)
 
         return dct

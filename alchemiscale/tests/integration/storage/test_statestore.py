@@ -420,7 +420,7 @@ class TestNeo4jStore(TestStateStore):
             case _:
                 raise ValueError('Expected "Transformation" or "NonTransformation"')
 
-        tf_sk = ScopedKey(gufe_key=_transformation.key, **scope_test.dict())
+        tf_sk = ScopedKey(gufe_key=_transformation.key, **scope_test.to_dict())
         cs_sks = n4js.get_transformation_chemicalsystems(tf_sk)
 
         if transformation_class_name == "Transformation":
@@ -438,7 +438,7 @@ class TestNeo4jStore(TestStateStore):
         an = network_tyk2
         n4js.assemble_network(an, scope_test)
 
-        cs_sk = ScopedKey(gufe_key=chemicalsystem.key, **scope_test.dict())
+        cs_sk = ScopedKey(gufe_key=chemicalsystem.key, **scope_test.to_dict())
 
         tf_sks = n4js.get_chemicalsystem_transformations(cs_sk)
 
