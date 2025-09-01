@@ -82,7 +82,7 @@ class ComputeManager:
             self._deregister()
 
     @abstractmethod
-    def create_compute_services(self, data) -> int:
+    def create_compute_services(self, data: dict) -> int:
         """Method responsible for creating compute services based on
         data returned with an OK ComputeManagerInstruction. This must
         return the number of compute services started.

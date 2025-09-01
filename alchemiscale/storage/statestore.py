@@ -1228,7 +1228,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             if compute_service_registration.manager_name:
                 query = """
-                MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name}), (csr: ComputeServiceRegistration {manager_name: $manager_name, identifier: $identifier})
+                MATCH (cmr:ComputeManagerRegistration {manager_name: $manager_name}),
+                      (csr:ComputeServiceRegistration {manager_name: $manager_name,
+                                                       identifier: $identifier})
                 CREATE (cmr)-[rel:MANAGES]->(csr)
                 RETURN cmr, rel, csr
                 """
@@ -1399,36 +1401,6 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## compute manager
 
-    def deregister_computemanager(self, compute_manager_id: ComputeManagerID):
-        """Remove the compute manager registration from the statestore.
-
-        Uses the manager_name and UUID from a ComputeManagerID to
-        deregister a compute service's registration. First, the
-        MANAGES relationship with compute services' registration are
-        removed. After this, the compute manager registration node is
-        removed as long as the registration does not have the ERRORED
-        status.
-
-        Paramters
-        ---------
-        compute_manager_id
-            The compute manager ID string containing the manager_name and the UUID.
-
-        """
-        manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
-
-        query = """
-        MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
-        OPTIONAL MATCH (cmr)-[rel:MANAGES]->(:ComputeServiceRegistration)
-        DELETE rel
-        WITH cmr
-        MATCH (cmr)
-        WHERE cmr.status <> "ERRORED"
-        DELETE cmr
-        """
-
-        self.execute_query(query, manager_name=manager_name, uuid=uuid)
-
     def register_computemanager(
         self, compute_manager_registration: ComputeManagerRegistration
     ) -> ComputeManagerID:
@@ -1457,7 +1429,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             # first check if a compute manager with the given name is
             # already registered
             query = """
-            MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name})
+            MATCH (cmr:ComputeManagerRegistration {manager_name: $manager_name})
             RETURN cmr
             """
 
@@ -1479,8 +1451,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             # check for orphaned compute services that were previously
             # managed by a manager with the same name; reattach if found
             reattach_compute_service_query = """
-            MATCH (csr: ComputeServiceRegistration {manager_name: $manager_name}),
-                  (cmr: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
+            MATCH (csr:ComputeServiceRegistration {manager_name: $manager_name}),
+                  (cmr:ComputeManagerRegistration {manager_name: $manager_name,
+                                                    uuid: $uuid})
             CREATE (cmr)-[rel:MANAGES]->(csr)
             """
 
@@ -1498,6 +1471,36 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return compute_manager_id
 
+    def deregister_computemanager(self, compute_manager_id: ComputeManagerID):
+        """Remove the compute manager registration from the statestore.
+
+        Uses the manager_name and UUID from a ComputeManagerID to
+        deregister a compute manager's registration. First, the
+        MANAGES relationship with compute services' registration are
+        removed. After this, the compute manager registration node is
+        removed as long as the registration does not have the ERRORED
+        status.
+
+        Paramters
+        ---------
+        compute_manager_id
+            The compute manager ID string containing the manager_name and the UUID.
+
+        """
+        manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid
+
+        query = """
+        MATCH (cmr:ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
+        OPTIONAL MATCH (cmr)-[rel:MANAGES]->(:ComputeServiceRegistration)
+        DELETE rel
+        WITH cmr
+        MATCH (cmr)
+        WHERE cmr.status <> "ERRORED"
+        DELETE cmr
+        """
+
+        self.execute_query(query, manager_name=manager_name, uuid=uuid)
+
     def expire_computemanager_registrations(
         self, expire_time_ok: datetime.datetime, expire_time_errored: datetime.datetime
     ):
@@ -1510,24 +1513,25 @@ class Neo4jStore(AlchemiscaleStateStore):
         Parameters
         ----------
         expire_time_ok
-            The expiration time for "OK" compute managers. Managers
-            without a last update time more recent than the expiration
-            cutoff will be removed.
+            The expiration time for "OK" compute managers. Managers with a last
+            update time earlier than the expiration cutoff will be removed.
 
         expire_time_errored
-            The expiration time for "ERRORED" compute
-            managers. Managers without a last update time more recent
-            than the expiration cutoff will be removed.
+            The expiration time for "ERRORED" compute managers. Managers
+            with a last update time earlier than the expiration cutoff will be
+            removed.
 
         """
 
         # Match all expired ComputeManagerRegistration nodes based on
         # their status and detach delete them.
         query = """
-        MATCH (cmr:ComputeManagerRegistration) WHERE
-        (cmr.last_status_update < datetime($expire_time_ok) AND cmr.status = $ok_status)
-        OR
-        (cmr.last_status_update < datetime($expire_time_errored) AND cmr.status = $errored_status)
+        MATCH (cmr:ComputeManagerRegistration)
+        WHERE (cmr.last_status_update < datetime($expire_time_ok) AND
+               cmr.status = $ok_status)
+              OR
+              (cmr.last_status_update < datetime($expire_time_errored) AND
+               cmr.status = $errored_status)
         DETACH DELETE cmr
         """
 
@@ -1595,7 +1599,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     The time at which a failure from a compute service is
                     considered forgiven.
 
-        o        max_failures
+                 max_failures
                     The number of failures a compute service is allowed to
                     have (before the forgive time) before it is no longer
                     allowed to claim a task. If any managed compute services
@@ -1621,25 +1625,26 @@ class Neo4jStore(AlchemiscaleStateStore):
         #
         # With no managed services:
         # +--------------+-----------+
-        # | csm          | csr_id    +
+        # | csm          | csr_id    |
         # +--------------+-----------+
-        # | <manager_id> + None      |
+        # | <manager_id> | None      |
         # +--------------+-----------+
         #
         # With N (one or more) managed services
         # +--------------+------------------------+
-        # | csm          | csr_id                 +
+        # | csm          | csr_id                 |
         # +--------------+------------------------+
-        # | <manager_id> + <ComputeServiceID-1>   |
-        # | <manager_id> + <ComputeServiceID-2>   |
-        # | <manager_id> + <ComputeServiceID-...> |
-        # | <manager_id> + <ComputeServiceID-N-1> |
-        # | <manager_id> + <ComputeServiceID-N>   |
+        # | <manager_id> | <ComputeServiceID-1>   |
+        # | <manager_id> | <ComputeServiceID-2>   |
+        # | <manager_id> | <ComputeServiceID-...> |
+        # | <manager_id> | <ComputeServiceID-N-1> |
+        # | <manager_id> | <ComputeServiceID-N>   |
         # +--------------+------------------------+
 
         query = """
-        MATCH (csm: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
-        OPTIONAL MATCH (csm)-[rel:MANAGES]->(csr: ComputeServiceRegistration)
+        MATCH (csm:ComputeManagerRegistration {manager_name: $manager_name,
+                                                uuid: $uuid})
+        OPTIONAL MATCH (csm)-[rel:MANAGES]->(csr:ComputeServiceRegistration)
         RETURN csm, csr.identifier as csr_id
         """
 
@@ -1672,7 +1677,11 @@ class Neo4jStore(AlchemiscaleStateStore):
                 "waiting_status": TaskStatusEnum.waiting.value,
             }
             query = """
-            MATCH (task:Task {_org: $org, _campaign: $campaign, _project: $project, status: $waiting_status})<-[:ACTIONS]-(:TaskHub)
+            MATCH (task:Task {_org: $org,
+                              _campaign: $campaign,
+                              _project: $project,
+                              status: $waiting_status}),
+                  (task)<-[:ACTIONS]-(:TaskHub)
             RETURN task._gufe_key as task
             """
             result = self.execute_query(query, **params)
@@ -1726,7 +1735,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         except ValueError:
             raise ValueError(f'"{status}" is not a valid ComputeManagerStatus')
 
-        # only match to invalid states
+        # only match to valid states
         match status:
             case ComputeManagerStatus.OK:
                 # OK requires saturation
@@ -1768,9 +1777,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         results = self.execute_query(
             query,
-            status=status.value,
             uuid=uuid,
             manager_name=manager_name,
+            status=status.value,
             detail=detail,
             saturation=saturation,
             update_time=(

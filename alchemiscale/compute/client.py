@@ -177,22 +177,6 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         )
         return ComputeManagerID(res)
 
-    def update_status(
-        self,
-        compute_manager_id: ComputeManagerID,
-        status: ComputeManagerStatus,
-        *,
-        detail: str | None = None,
-        saturation: float | None = None,
-    ) -> ComputeManagerID:
-        payload = {"detail": detail, "saturation": saturation, "status": str(status)}
-        res = self._post_resource(
-            f"/computemanager/{compute_manager_id}/status",
-            payload,
-        )
-
-        return ComputeManagerID(res)
-
     def get_instruction(
         self, compute_manager_id: ComputeManagerID
     ) -> tuple[ComputeManagerInstruction, dict]:
@@ -219,3 +203,19 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
                 raise self._exception(
                     f"Received unknown instruction pattern: {instruction_data}"
                 )
+
+    def update_status(
+        self,
+        compute_manager_id: ComputeManagerID,
+        status: ComputeManagerStatus,
+        *,
+        detail: str | None = None,
+        saturation: float | None = None,
+    ) -> ComputeManagerID:
+        payload = {"detail": detail, "saturation": saturation, "status": str(status)}
+        res = self._post_resource(
+            f"/computemanager/{compute_manager_id}/status",
+            payload,
+        )
+
+        return ComputeManagerID(res)

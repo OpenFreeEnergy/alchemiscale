@@ -125,7 +125,7 @@ class ComputeServiceSettings(BaseModel):
 
 class ComputeManagerSettings(BaseModel):
     api_url: str | None = Field(
-        ..., description="URL of the compute API to manager services for."
+        ..., description="URL of the compute API to manage compute services for."
     )
     identifier: str | None = Field(
         ..., description="Identifier for the compute identity used for authentication."
@@ -146,7 +146,7 @@ class ComputeManagerSettings(BaseModel):
         description="Maximum number of compute services the manager is allowed to have running at a time.",
     )
     sleep_interval: int = Field(
-        1800, description="Time in seconds to wait for another instruction."
+        1800, description="Time in seconds to sleep before requesting another instruction."
     )
     loglevel: str = Field(
         "WARN",
