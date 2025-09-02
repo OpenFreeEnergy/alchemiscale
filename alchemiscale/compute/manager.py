@@ -22,7 +22,7 @@ class ComputeManager:
     compute_manager_id: ComputeManagerID
     client: AlchemiscaleComputeManagerClient
     service_settings_template: bytes
-    manager_settings: ComputeManagerSettings
+    settings: ComputeManagerSettings
 
     def __init__(self, settings: ComputeManagerSettings):
         self.settings = settings
@@ -74,7 +74,7 @@ class ComputeManager:
                 time.sleep(self.settings.sleep_interval)
         except Exception as e:
             self.client.update_status(
-                self.compute_manager_id, ComputeManagerStatus.ERRORED, detail=repr(e)
+                self.compute_manager_id, ComputeManagerStatus.ERROR, detail=repr(e)
             )
             raise e
         except KeyboardInterrupt:

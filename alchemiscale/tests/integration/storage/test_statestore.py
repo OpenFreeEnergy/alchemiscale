@@ -3516,19 +3516,19 @@ class TestNeo4jStore(TestStateStore):
             n4js.register_computemanager(cmr)
             assert self.confirm_is_registered(n4js, compute_manager_id)
 
-            # deregistration of a non-ERRORED compute manager
+            # deregistration of a non-ERROR compute manager
             # registration deletes the entry from the database
             n4js.deregister_computemanager(compute_manager_id)
             assert not self.confirm_is_registered(n4js, compute_manager_id)
 
-            # reregister and update the status to ERRORED, the
+            # reregister and update the status to ERROR, the
             # registration will still be there
             n4js.register_computemanager(cmr)
             assert self.confirm_is_registered(n4js, compute_manager_id)
 
             n4js.update_compute_manager_status(
                 compute_manager_id,
-                ComputeManagerStatus.ERRORED,
+                ComputeManagerStatus.ERROR,
                 repr(RuntimeError("UnexpectedError")),
             )
             assert self.confirm_is_registered(n4js, compute_manager_id)
@@ -3596,7 +3596,7 @@ class TestNeo4jStore(TestStateStore):
 
             n4js.update_compute_manager_status(
                 compute_manager_id,
-                ComputeManagerStatus.ERRORED,
+                ComputeManagerStatus.ERROR,
                 repr(RuntimeError("UnexpectedError")),
             )
             assert self.confirm_is_registered(n4js, compute_manager_id)
@@ -3608,7 +3608,7 @@ class TestNeo4jStore(TestStateStore):
             # it's not present. This will raise a ValueError.
             with pytest.raises(
                 ValueError,
-                match="Could not find an ERRORED compute manager with the provided manager_name and UUID",
+                match="Could not find an ERROR compute manager with the provided manager_name and UUID",
             ):
                 n4js.clear_errored_computemanager(compute_manager_id)
 
@@ -3738,7 +3738,7 @@ class TestNeo4jStore(TestStateStore):
             # if a detail is provided for OK, a ValueError is raised
             with pytest.raises(
                 ValueError,
-                match="detail should only be provided for the 'ERRORED' status",
+                match="detail should only be provided for the 'ERROR' status",
             ):
                 n4js.update_compute_manager_status(
                     compute_manager_id,
@@ -3767,19 +3767,19 @@ class TestNeo4jStore(TestStateStore):
             )
             assert previous_update_time > get_last_status_update_time()
 
-            # updating with ERRORED and test detail is set correctly
+            # updating with ERROR and test detail is set correctly
             previous_update_time = get_last_status_update_time()
             n4js.update_compute_manager_status(
-                compute_manager_id, ComputeManagerStatus.ERRORED, detail="Something"
+                compute_manager_id, ComputeManagerStatus.ERROR, detail="Something"
             )
             assert previous_update_time < get_last_status_update_time()
 
-            # if a detail is not provided for ERRORED, a ValueError is raised
+            # if a detail is not provided for ERROR, a ValueError is raised
             with pytest.raises(
-                ValueError, match="detail is required for the 'ERRORED' status"
+                ValueError, match="detail is required for the 'ERROR' status"
             ):
                 n4js.update_compute_manager_status(
-                    compute_manager_id, ComputeManagerStatus.ERRORED, detail=None
+                    compute_manager_id, ComputeManagerStatus.ERROR, detail=None
                 )
 
             # try setting a nonsense status

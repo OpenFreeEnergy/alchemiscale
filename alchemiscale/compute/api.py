@@ -498,7 +498,7 @@ def update_status_computemanager(
 ):
     expire_seconds = settings.ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS
     expire_seconds_errored = (
-        settings.ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERRORED
+        settings.ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR
     )
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
     try:

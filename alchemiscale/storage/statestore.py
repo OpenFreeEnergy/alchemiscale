@@ -1478,7 +1478,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         deregister a compute manager's registration. First, the
         MANAGES relationship with compute services' registration are
         removed. After this, the compute manager registration node is
-        removed as long as the registration does not have the ERRORED
+        removed as long as the registration does not have the ERROR
         status.
 
         Paramters
@@ -1495,7 +1495,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         DELETE rel
         WITH cmr
         MATCH (cmr)
-        WHERE cmr.status <> "ERRORED"
+        WHERE cmr.status <> "ERROR"
         DELETE cmr
         """
 
@@ -1517,7 +1517,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             update time earlier than the expiration cutoff will be removed.
 
         expire_time_errored
-            The expiration time for "ERRORED" compute managers. Managers
+            The expiration time for "ERROR" compute managers. Managers
             with a last update time earlier than the expiration cutoff will be
             removed.
 
@@ -1537,7 +1537,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         params = {
             "ok_status": ComputeManagerStatus.OK.value,
-            "errored_status": ComputeManagerStatus.ERRORED.value,
+            "error_status": ComputeManagerStatus.ERROR.value,
             "expire_time_ok": expire_time_ok.isoformat(),
             "expire_time_errored": expire_time_errored.isoformat(),
         }
@@ -1545,7 +1545,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         results = self.execute_query(query, **params)
 
     def clear_errored_computemanager(self, compute_manager_id: ComputeManagerID):
-        """Remove a compute manager with an ERRORED status.
+        """Remove a compute manager with an ERROR status.
 
         Parameters
         ----------
@@ -1556,7 +1556,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         Raises
         ------
         ValueError
-            Raised when the ERRORED compute manager cannot be found in the database
+            Raised when the ERROR compute manager cannot be found in the database
         """
 
         query = """
@@ -1566,12 +1566,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         results = self.execute_query(
-            query, status=ComputeManagerStatus.ERRORED, **compute_manager_id.to_dict()
+            query, status=ComputeManagerStatus.ERROR, **compute_manager_id.to_dict()
         )
 
         if not results.records:
             raise ValueError(
-                "Could not find an ERRORED compute manager with the provided manager_name and UUID"
+                "Could not find an ERROR compute manager with the provided manager_name and UUID"
             )
 
     def get_computemanager_instruction(
@@ -1715,13 +1715,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         status
             An instance of the ComputeManagerStatus string
             enumeration, whose supported values are "OK" and
-            "ERRORED".
+            "ERROR".
 
         detail
             A message to be included with the status update. This is
-            only allowed and required by the ERRORED status. This
+            only allowed and required by the ERROR status. This
             message should indicate to administrators why the compute
-            manager entered the ERRORED status.
+            manager entered the ERROR status.
 
         update_time
             The time to set as the last status update time in the
@@ -1746,18 +1746,18 @@ class Neo4jStore(AlchemiscaleStateStore):
                 # OK disallows detail
                 if detail:
                     raise ValueError(
-                        f"detail should only be provided for the '{ComputeManagerStatus.ERRORED}' status"
+                        f"detail should only be provided for the '{ComputeManagerStatus.ERROR}' status"
                     )
-            case ComputeManagerStatus.ERRORED:
-                # ERRORED disallows saturation
+            case ComputeManagerStatus.ERROR:
+                # ERROR disallows saturation
                 if saturation is not None:
                     raise ValueError(
                         f"saturation should only be provided for the '{ComputeManagerStatus.OK}' status"
                     )
-                # ERRORED requires detail
+                # ERROR requires detail
                 if not detail:
                     raise ValueError(
-                        f"detail is required for the '{ComputeManagerStatus.ERRORED}' status"
+                        f"detail is required for the '{ComputeManagerStatus.ERROR}' status"
                     )
 
         manager_name, uuid = compute_manager_id.manager_name, compute_manager_id.uuid

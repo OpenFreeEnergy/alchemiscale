@@ -214,7 +214,7 @@ In the case of the OK or the SKIP instruction, a manager is expected to provide 
 The status can either be:
 
 1. ``OK``: the manager is working as expected, requires a saturation value (ratio of active services to the maximum number of services allowed by the manager)
-2. ``ERRORED``: the manager experienced an error and will shut down locally, requires a detail string explaining why the ``ERRORED`` state was entered
+2. ``ERROR``: the manager experienced an error and will shut down locally, requires a detail string explaining why the ``ERROR`` state was entered
 
 Currently, these supporting data are only used by administrators for introspection, though this might change in the future.
 

@@ -189,7 +189,7 @@ class TestComputeManager:
 
         query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
         record = n4js_preloaded.execute_query(query).records[0]["cmr"]
-        assert record["status"] == ComputeManagerStatus.ERRORED
+        assert record["status"] == ComputeManagerStatus.ERROR
         assert record["detail"] == "RuntimeError('Unexpected failure in manager')"
 
     def test_manager_keyboard_interrupt(

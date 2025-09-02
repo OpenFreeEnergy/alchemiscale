@@ -182,12 +182,12 @@ class TestComputeManagerClient:
         record = results.records[0]
         assert record["status"] == "OK" and record["detail"] is None
 
-        # status: ERRORED
+        # status: ERROR
         exception = RuntimeError("UnexpectedError")
 
         returned_id = compute_manager_client.update_status(
             compute_manager_id,
-            ComputeManagerStatus.ERRORED,
+            ComputeManagerStatus.ERROR,
             detail=repr(exception),
         )
 
@@ -195,4 +195,4 @@ class TestComputeManagerClient:
 
         results = n4js_preloaded.execute_query(query, params)
         record = results.records[0]
-        assert record["status"] == "ERRORED" and record["detail"] == repr(exception)
+        assert record["status"] == "ERROR" and record["detail"] == repr(exception)

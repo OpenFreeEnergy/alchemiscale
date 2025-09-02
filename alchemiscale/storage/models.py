@@ -67,7 +67,7 @@ class ComputeManagerInstruction(StrEnum):
 
 class ComputeManagerStatus(StrEnum):
     OK = "OK"
-    ERRORED = "ERRORED"
+    ERROR = "ERROR"
 
 
 class ComputeManagerID(str):
