@@ -427,7 +427,7 @@ def process_compute_manager_id_string(
 
 
 @router.post("/computemanager/{compute_manager_id}/register")
-def computemanager_register(
+def register_computemanager(
     compute_manager_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
@@ -450,7 +450,7 @@ def computemanager_register(
 
 
 @router.post("/computemanager/{compute_manager_id}/deregister")
-def computemanager_deregister(
+def deregister_computemanager(
     compute_manager_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
@@ -460,7 +460,7 @@ def computemanager_deregister(
 
 
 @router.post("/computemanager/{compute_manager_id}/instruction")
-def computemanager_get_instruction(
+def get_instruction_computemanager(
     compute_manager_id,
     *,
     scopes: list[Scope] = Body([], embed=True),
@@ -487,7 +487,7 @@ def computemanager_get_instruction(
 
 
 @router.post("/computemanager/{compute_manager_id}/status")
-def computemanager_update_status(
+def update_status_computemanager(
     compute_manager_id,
     *,
     status: str = Body(),
