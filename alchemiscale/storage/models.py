@@ -72,9 +72,8 @@ class ComputeManagerStatus(StrEnum):
 
 class ComputeManagerID(str):
 
-    def __init__(self, value):
-        super().__init__()
-
+    def __init__(self, _value):
+        # don't need to process _value, handled by str.__new__
         parts = self.split("-")
 
         if len(parts) != 6:
@@ -132,15 +131,11 @@ class ComputeManagerRegistration(BaseModel):
         return "-".join([self.manager_name, self.uuid])
 
     def to_dict(self):
-        dct = self.dict()
-        dct["manager_name"] = str(self.manager_name)
-        dct["uuid"] = str(self.uuid)
-
-        return dct
+        return self.model_dump()
 
     @classmethod
     def from_dict(cls, dct):
-        return cls(**dct_)
+        return cls(**dct)
 
     def to_compute_manager_id(self):
         return ComputeManagerID("-".join([self.manager_name, self.uuid]))

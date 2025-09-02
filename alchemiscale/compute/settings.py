@@ -146,7 +146,8 @@ class ComputeManagerSettings(BaseModel):
         description="Maximum number of compute services the manager is allowed to have running at a time.",
     )
     sleep_interval: int = Field(
-        1800, description="Time in seconds to sleep before requesting another instruction."
+        1800,
+        description="Time in seconds to sleep before requesting another instruction.",
     )
     loglevel: str = Field(
         "WARN",

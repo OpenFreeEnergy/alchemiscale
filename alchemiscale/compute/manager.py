@@ -63,9 +63,10 @@ class ComputeManager:
 
     def start(self, max_cycles: int | None = None):
         self._register()
+        self._stop = False
         try:
             count = 0
-            while True:
+            while not self._stop:
                 self.cycle()
                 count += 1
                 if max_cycles and count >= max_cycles:
@@ -113,13 +114,10 @@ class ComputeManager:
             case ComputeManagerInstruction.SHUTDOWN:
                 shutdown_message = data["message"]
                 self.logger.info(f'Received shutdown message: "{shutdown_message}"')
+                self._stop = True
                 return
         self.client.update_status(
             self.compute_manager_id,
             ComputeManagerStatus.OK,
             saturation=total_services / self.settings.max_compute_services,
         )
-
-    @abstractmethod
-    def create_compute_service(self):
-        raise NotImplementedError

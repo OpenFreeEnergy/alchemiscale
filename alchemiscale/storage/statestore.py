@@ -1583,37 +1583,37 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> tuple[ComputeManagerInstruction, dict]:
         """Return an instruction for a compute manager based on the contents of the statestore.
 
-                This method returns one of three instructions along with supporting data:
+        This method returns one of three instructions along with supporting data:
 
-                1. "OK" with a list of ComputeServiceIDs and the number of available tasks
-                2. "SKIP" with a list of ComputeServiceIDs
-                3. "SHUTDOWN" with an error message
+        1. "OK" with a list of ComputeServiceIDs and the number of available tasks
+        2. "SKIP" with a list of ComputeServiceIDs
+        3. "SHUTDOWN" with an error message
 
-                Parameters
-                ----------
-                compute_manager_id
-                    The compute manager ID string containing the manager_name
-                    and the UUID.
+        Parameters
+        ----------
+        compute_manager_id
+            The compute manager ID string containing the manager_name
+            and the UUID.
 
-                forgive_time
-                    The time at which a failure from a compute service is
-                    considered forgiven.
+        forgive_time
+            The time at which a failure from a compute service is
+            considered forgiven.
 
-                 max_failures
-                    The number of failures a compute service is allowed to
-                    have (before the forgive time) before it is no longer
-                    allowed to claim a task. If any managed compute services
-                    have failues that exceed this value, the returned
-                    instruction will be SKIP.
+         max_failures
+            The number of failures a compute service is allowed to
+            have (before the forgive time) before it is no longer
+            allowed to claim a task. If any managed compute services
+            have failues that exceed this value, the returned
+            instruction will be SKIP.
 
-                scopes
-                    The scopes to consider when determining available tasks.
+        scopes
+            The scopes to consider when determining available tasks.
 
-                Returns
-                -------
-                A tuple with whose first value is the instruction enumeration
-                and whose second value is data associated with that
-                instruction.
+        Returns
+        -------
+        A tuple with whose first value is the instruction enumeration
+        and whose second value is data associated with that
+        instruction.
 
         """
 
