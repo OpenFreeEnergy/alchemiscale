@@ -327,7 +327,7 @@ def retrieve_task_transformation(
 
     if protocoldagresultref_sk:
         protocoldagresultref = n4js.get_gufe(protocoldagresultref_sk)
-        pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.dict())
+        pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.to_dict())
 
         # we keep this as a string to avoid useless deserialization/reserialization here
         try:

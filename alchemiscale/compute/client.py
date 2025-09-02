@@ -72,7 +72,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
             taskhubs = []
 
         for scope in scopes:
-            params = dict(return_gufe=return_gufe, **scope.dict())
+            params = dict(return_gufe=return_gufe, **scope.to_dict())
             if return_gufe:
                 taskhubs.update(self._query_resource("/taskhubs", params=params))
             else:
@@ -104,7 +104,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
     ):
         """Claim Tasks from TaskHubs within a list of Scopes."""
         data = dict(
-            scopes=[scope.dict() for scope in scopes],
+            scopes=[scope.to_dict() for scope in scopes],
             compute_service_id=str(compute_service_id),
             count=count,
             protocols=protocols,

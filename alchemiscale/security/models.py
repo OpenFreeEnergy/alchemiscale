@@ -25,6 +25,9 @@ class CredentialedEntity(BaseModel):
     hashed_key: str
     expires: datetime.datetime | None = None
 
+    def to_dict(self):
+        return self.model_dump()
+
 
 class ScopedIdentity(BaseModel):
     identifier: str
