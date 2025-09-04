@@ -225,8 +225,7 @@ class TestComputeManager:
         SET csr.failure_times = $failure_times
         RETURN csr
         """
-        results = n4js_preloaded.execute_query(query, failure_times=failure_times)
-
+        n4js_preloaded.execute_query(query, failure_times=failure_times)
         manager.cycle()
 
         assert "Received skip instruction" in caplog.text

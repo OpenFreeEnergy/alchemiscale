@@ -26,14 +26,14 @@ class ComputeManager:
 
     def __init__(self, settings: ComputeManagerSettings):
         self.settings = settings
-        self.compute_manager_id = ComputeManagerID.new_from_manager_name(
-            self.settings.name
-        )
+        self.compute_manager_id = ComputeManagerID.new_from_name(self.settings.name)
         self.client = AlchemiscaleComputeManagerClient(
             api_url=self.settings.api_url,
             identifier=self.settings.identifier,
             key=self.settings.key,
         )
+
+        self._stop = False
 
         logger = logging.getLogger("AlchemiscaleComputeManager")
         logger.setLevel(self.settings.loglevel)
@@ -66,8 +66,7 @@ class ComputeManager:
         self._stop = False
         try:
             count = 0
-            while not self._stop:
-                self.cycle()
+            while self.cycle():
                 count += 1
                 if max_cycles and count >= max_cycles:
                     break
@@ -90,7 +89,14 @@ class ComputeManager:
         """
         raise NotImplementedError
 
-    def cycle(self):
+    def stop(self):
+        self._stop = True
+
+    def cycle(self) -> bool:
+
+        if self._stop:
+            return False
+
         instruction, data = self.client.get_instruction(self.compute_manager_id)
         match instruction:
             case ComputeManagerInstruction.OK:
@@ -107,17 +113,17 @@ class ComputeManager:
                             f"Created {new_services} new compute service(s)"
                         )
                     else:
-                        self.logger.info(f"No new compute services created")
+                        self.logger.info("No new compute services created")
             case ComputeManagerInstruction.SKIP:
                 total_services = len(data["compute_service_ids"])
-                self.logger.info(f"Received skip instruction")
+                self.logger.info("Received skip instruction")
             case ComputeManagerInstruction.SHUTDOWN:
                 shutdown_message = data["message"]
                 self.logger.info(f'Received shutdown message: "{shutdown_message}"')
-                self._stop = True
-                return
+                return False
         self.client.update_status(
             self.compute_manager_id,
             ComputeManagerStatus.OK,
             saturation=total_services / self.settings.max_compute_services,
         )
+        return True

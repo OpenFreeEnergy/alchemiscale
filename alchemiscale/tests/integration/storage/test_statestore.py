@@ -3409,10 +3409,10 @@ class TestNeo4jStore(TestStateStore):
         def confirm_is_registered(
             n4js: Neo4jStore, compute_manager_id: ComputeManagerID
         ):
-            """Just check that the registration exists by manager_name and UUID."""
+            """Just check that the registration exists by name and UUID."""
             query = """
-            MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
-            RETURN cmr.manager_name as manager_name, cmr.uuid as uuid
+            MATCH (cmr: ComputeManagerRegistration {name: $name, uuid: $uuid})
+            RETURN cmr.name as name, cmr.uuid as uuid
             """
 
             results = n4js.execute_query(query, **compute_manager_id.to_dict())
@@ -3425,7 +3425,7 @@ class TestNeo4jStore(TestStateStore):
         ):
             """Confirm that database registration information is consistent with registration inputs."""
             query = """
-            MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
+            MATCH (cmr: ComputeManagerRegistration {name: $name, uuid: $uuid})
             RETURN cmr
             """
 
@@ -3453,7 +3453,7 @@ class TestNeo4jStore(TestStateStore):
                 registered=creation_time,
                 heartbeat=creation_time,
                 failure_times=failure_times,
-                manager_name=compute_manager_id.manager_name,
+                manager_name=compute_manager_id.name,
             )
 
             compute_service_id = n4js.register_computeservice(registration)
@@ -3461,12 +3461,12 @@ class TestNeo4jStore(TestStateStore):
             return compute_service_id
 
         @staticmethod
-        def compute_manager_registration_from_manager_name(manager_name: str):
-            compute_manager_id = ComputeManagerID.new_from_manager_name(manager_name)
+        def compute_manager_registration_from_name(name: str):
+            compute_manager_id = ComputeManagerID.new_from_name(name)
 
             now = datetime.datetime.now(tz=datetime.UTC)
             return ComputeManagerRegistration(
-                manager_name=compute_manager_id.manager_name,
+                name=compute_manager_id.name,
                 uuid=compute_manager_id.uuid,
                 saturation=0,
                 registered=now,
@@ -3477,7 +3477,7 @@ class TestNeo4jStore(TestStateStore):
 
         def test_register(self, n4js: Neo4jStore):
             cmr_1: ComputeManagerRegistration = (
-                self.compute_manager_registration_from_manager_name("testmanager")
+                self.compute_manager_registration_from_name("testmanager")
             )
             n4js.register_computemanager(cmr_1)
             assert self.confirm_registration_contents(n4js, cmr_1)
@@ -3485,11 +3485,11 @@ class TestNeo4jStore(TestStateStore):
             # Attempt to create another compute manager with the same
             # manager id and register it. Since once has already been
             # registered, this will fail
-            cmr_2 = self.compute_manager_registration_from_manager_name("testmanager")
+            cmr_2 = self.compute_manager_registration_from_name("testmanager")
 
             with pytest.raises(
                 ValueError,
-                match="ComputeManager with this manager_name is already registered",
+                match="ComputeManager with this name is already registered",
             ):
                 n4js.register_computemanager(cmr_2)
 
@@ -3504,13 +3504,13 @@ class TestNeo4jStore(TestStateStore):
             # now expected to fail in the same way as before
             with pytest.raises(
                 ValueError,
-                match="ComputeManager with this manager_name is already registered",
+                match="ComputeManager with this name is already registered",
             ):
                 n4js.register_computemanager(cmr_1)
 
         def test_deregister(self, n4js: Neo4jStore):
             cmr: ComputeManagerRegistration = (
-                self.compute_manager_registration_from_manager_name("testmanager")
+                self.compute_manager_registration_from_name("testmanager")
             )
             compute_manager_id = cmr.to_compute_manager_id()
             n4js.register_computemanager(cmr)
@@ -3536,7 +3536,7 @@ class TestNeo4jStore(TestStateStore):
         def test_registration_reclaims_services(self, n4js: Neo4jStore):
 
             cmr: ComputeManagerRegistration = (
-                self.compute_manager_registration_from_manager_name("testmanager")
+                self.compute_manager_registration_from_name("testmanager")
             )
             compute_manager_id = cmr.to_compute_manager_id()
             n4js.register_computemanager(cmr)
@@ -3545,7 +3545,7 @@ class TestNeo4jStore(TestStateStore):
             for _ in range(3):
                 self.create_compute_service(n4js, compute_manager_id)
 
-            # get all CSR claiming to be managed by manager_name,
+            # get all CSR claiming to be managed by name,
             # along with any cmr that actually manages it
             query = """
             MATCH (csr: ComputeServiceRegistration {manager_name: $manager_name})
@@ -3555,7 +3555,7 @@ class TestNeo4jStore(TestStateStore):
 
             # check that all nodes exist
             records = n4js.execute_query(
-                query, manager_name=compute_manager_id.manager_name
+                query, manager_name=compute_manager_id.name
             ).records
 
             for record in records:
@@ -3568,7 +3568,7 @@ class TestNeo4jStore(TestStateStore):
             # check that the manager is no longer managing the compute
             # services, but that the services still exist
             records = n4js.execute_query(
-                query, manager_name=compute_manager_id.manager_name
+                query, manager_name=compute_manager_id.name
             ).records
 
             for record in records:
@@ -3579,7 +3579,7 @@ class TestNeo4jStore(TestStateStore):
             n4js.register_computemanager(cmr)
 
             records = n4js.execute_query(
-                query, manager_name=compute_manager_id.manager_name
+                query, manager_name=compute_manager_id.name
             ).records
 
             for record in records:
@@ -3588,7 +3588,7 @@ class TestNeo4jStore(TestStateStore):
 
         def test_clear_errored(self, n4js: Neo4jStore):
             cmr: ComputeManagerRegistration = (
-                self.compute_manager_registration_from_manager_name("testmanager")
+                self.compute_manager_registration_from_name("testmanager")
             )
             compute_manager_id = cmr.to_compute_manager_id()
             n4js.register_computemanager(cmr)
@@ -3608,7 +3608,7 @@ class TestNeo4jStore(TestStateStore):
             # it's not present. This will raise a ValueError.
             with pytest.raises(
                 ValueError,
-                match="Could not find an ERROR compute manager with the provided manager_name and UUID",
+                match="Could not find an ERROR compute manager with the provided name and UUID",
             ):
                 n4js.clear_errored_computemanager(compute_manager_id)
 
@@ -3616,7 +3616,7 @@ class TestNeo4jStore(TestStateStore):
             self, n4js: Neo4jStore, scope_test: Scope, network_tyk2: AlchemicalNetwork
         ):
             cmr: ComputeManagerRegistration = (
-                self.compute_manager_registration_from_manager_name("testmanager")
+                self.compute_manager_registration_from_name("testmanager")
             )
             compute_manager_id = cmr.to_compute_manager_id()
             n4js.register_computemanager(cmr)
@@ -3696,7 +3696,7 @@ class TestNeo4jStore(TestStateStore):
         def test_update_status(self, n4js: Neo4jStore):
 
             cmr: ComputeManagerRegistration = (
-                self.compute_manager_registration_from_manager_name("testmanager")
+                self.compute_manager_registration_from_name("testmanager")
             )
             compute_manager_id = cmr.to_compute_manager_id()
 
@@ -3715,7 +3715,7 @@ class TestNeo4jStore(TestStateStore):
 
             def get_registration():
                 query_get_registration = """
-                MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name, uuid: $uuid})
+                MATCH (cmr: ComputeManagerRegistration {name: $name, uuid: $uuid})
                 RETURN cmr
                 """
                 return n4js.execute_query(
@@ -3802,7 +3802,7 @@ class TestNeo4jStore(TestStateStore):
         def test_expiration(self, n4js: Neo4jStore):
 
             cmr: ComputeManagerRegistration = (
-                self.compute_manager_registration_from_manager_name("testmanager")
+                self.compute_manager_registration_from_name("testmanager")
             )
             compute_manager_id = cmr.to_compute_manager_id()
             n4js.register_computemanager(cmr)
@@ -3834,7 +3834,7 @@ class TestNeo4jStore(TestStateStore):
             """
 
             records = n4js.execute_query(
-                query, manager_name=compute_manager_id.manager_name
+                query, manager_name=compute_manager_id.name
             ).records
 
             # check that the compute services still exist, even though

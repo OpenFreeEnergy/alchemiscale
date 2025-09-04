@@ -198,10 +198,10 @@ class TestTracebacks:
 
 class TestComputeManagerID:
 
-    manager_name = "testmanager"
+    name = "testmanager"
 
     def test_to_from_dict(self):
-        manager_id = ComputeManagerID.new_from_manager_name(self.manager_name)
+        manager_id = ComputeManagerID.new_from_name(self.name)
         dct_form = manager_id.to_dict()
         assert ComputeManagerID.from_dict(dct_form) == manager_id
 
@@ -210,19 +210,19 @@ class TestComputeManagerID:
         manager_uuid = str(int(uuid4()))
 
         with pytest.raises(ValueError, match="ComputeManagerID must have the form"):
-            manager_id = ComputeManagerID(self.manager_name + "-" + manager_uuid)
+            manager_id = ComputeManagerID(self.name + "-" + manager_uuid)
 
     def test_broken_uuid(self):
         original = "676b919a-a206-4f24-9134-3cb326ad127b"
         manager_uuid = "Z" + original
 
         with pytest.raises(ValueError, match="Could not interpret the provided UUID"):
-            manager_id = ComputeManagerID(self.manager_name + "-" + manager_uuid)
+            manager_id = ComputeManagerID(self.name + "-" + manager_uuid)
 
-    def test_bad_manager_name(self):
-        manager_name = "test_manager"
+    def test_bad_name(self):
+        name = "test_manager"
 
         with pytest.raises(
             ValueError, match="ComputeManagerID only allows alpha-numeric names"
         ):
-            ComputeManagerID.new_from_manager_name(manager_name)
+            ComputeManagerID.new_from_name(name)

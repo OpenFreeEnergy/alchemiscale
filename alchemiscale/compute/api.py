@@ -112,9 +112,7 @@ def register_computeservice(
 ):
     now = datetime.datetime.now(tz=datetime.UTC)
     if compute_manager_id:
-        manager_name = process_compute_manager_id_string(
-            compute_manager_id
-        ).manager_name
+        manager_name = process_compute_manager_id_string(compute_manager_id).name
     else:
         manager_name = None
 
@@ -126,7 +124,13 @@ def register_computeservice(
         manager_name=manager_name,
     )
 
-    compute_service_id_ = n4js.register_computeservice(csreg)
+    try:
+        compute_service_id_ = n4js.register_computeservice(csreg)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
 
     return compute_service_id_
 
@@ -412,15 +416,10 @@ def process_compute_manager_id_string(
     """Try creating a ComputeManagerID from a string representation. Raise HTTPException."""
     try:
         compute_manager_id = ComputeManagerID(compute_manager_id_string)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            details=str(e),
-        )
     except Exception as e:
         raise HTTPException(
-            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            details=str(e),
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
         )
 
     return compute_manager_id
@@ -436,7 +435,7 @@ def register_computemanager(
 
     now = datetime.datetime.now(tz=datetime.UTC)
     cm_registration = ComputeManagerRegistration(
-        manager_name=compute_manager_id.manager_name,
+        name=compute_manager_id.name,
         uuid=compute_manager_id.uuid,
         registered=now,
         last_status_update=now,
@@ -445,7 +444,14 @@ def register_computemanager(
         saturation=0,
     )
 
-    compute_manager_id_ = n4js.register_computemanager(cm_registration)
+    try:
+        compute_manager_id_ = n4js.register_computemanager(cm_registration)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
     return compute_manager_id_
 
 
@@ -513,12 +519,12 @@ def update_status_computemanager(
     except ValueError as e:
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
-            details=str(e),
+            detail=str(e),
         )
     except Exception as e:
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            details=str(e),
+            detail=str(e),
         )
 
     return compute_manager_id

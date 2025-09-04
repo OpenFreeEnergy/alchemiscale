@@ -79,13 +79,13 @@ class ComputeManagerID(str):
         if len(parts) != 6:
             # this currently only supports field-separated hex uuid4s
             raise ValueError(
-                "ComputeManagerID must have the form `{manager_name}-{uuid}` with a field-separated hex"
+                "ComputeManagerID must have the form `{name}-{uuid}` with a field-separated hex"
             )
 
-        self._manager_name = parts[0]
+        self._name = parts[0]
         self._uuid = "-".join(parts[1:])
 
-        if not self.manager_name.isalnum():
+        if not self.name.isalnum():
             raise ValueError("ComputeManagerID only allows alpha-numeric names")
 
         try:
@@ -94,21 +94,21 @@ class ComputeManagerID(str):
             raise ValueError("Could not interpret the provided UUID.")
 
     @classmethod
-    def new_from_manager_name(cls, manager_name: str):
-        return cls(f"{manager_name}-{uuid4()}")
+    def new_from_name(cls, name: str):
+        return cls(f"{name}-{uuid4()}")
 
     def to_dict(self):
-        return {"manager_name": self.manager_name, "uuid": self.uuid}
+        return {"name": self.name, "uuid": self.uuid}
 
     @classmethod
     def from_dict(cls, dct):
-        manager_name = dct["manager_name"]
+        name = dct["name"]
         uuid = dct["uuid"]
-        return cls(manager_name + "-" + uuid)
+        return cls(name + "-" + uuid)
 
     @property
-    def manager_name(self) -> str:
-        return self._manager_name
+    def name(self) -> str:
+        return self._name
 
     @property
     def uuid(self) -> str:
@@ -117,18 +117,19 @@ class ComputeManagerID(str):
 
 class ComputeManagerRegistration(BaseModel):
 
-    manager_name: str
+    name: str
     uuid: str
     last_status_update: datetime.datetime
     status: str
     detail: str
     saturation: float
+    registered: datetime.datetime
 
     def __repr__(self):  # pragma: no cover
         return f"<ComputeManagerRegistration('{str(self)}')>"
 
     def __str__(self):
-        return "-".join([self.manager_name, self.uuid])
+        return "-".join([self.name, self.uuid])
 
     def to_dict(self):
         return self.model_dump()
@@ -138,7 +139,7 @@ class ComputeManagerRegistration(BaseModel):
         return cls(**dct)
 
     def to_compute_manager_id(self):
-        return ComputeManagerID("-".join([self.manager_name, self.uuid]))
+        return ComputeManagerID("-".join([self.name, self.uuid]))
 
 
 class TaskProvenance(BaseModel):

@@ -60,7 +60,7 @@ class TestComputeManagerClient:
         n4js_preloaded,
         compute_manager_client: client.AlchemiscaleComputeManagerClient,
     ):
-        compute_manager_id = ComputeManagerID.new_from_manager_name("testmanager")
+        compute_manager_id = ComputeManagerID.new_from_name("testmanager")
         returned_id = compute_manager_client.register(compute_manager_id)
 
         assert compute_manager_id == returned_id
@@ -70,7 +70,7 @@ class TestComputeManagerClient:
         n4js_preloaded,
         compute_manager_client: client.AlchemiscaleComputeManagerClient,
     ):
-        compute_manager_id = ComputeManagerID.new_from_manager_name("testmanager")
+        compute_manager_id = ComputeManagerID.new_from_name("testmanager")
         compute_manager_client.register(compute_manager_id)
         returned_id = compute_manager_client.deregister(compute_manager_id)
         assert compute_manager_id == returned_id
@@ -82,7 +82,7 @@ class TestComputeManagerClient:
         compute_service_id: ComputeServiceID,
         compute_manager_client: client.AlchemiscaleComputeManagerClient,
     ):
-        compute_manager_id = ComputeManagerID.new_from_manager_name("testmanager")
+        compute_manager_id = ComputeManagerID.new_from_name("testmanager")
         compute_manager_client.register(compute_manager_id)
 
         # no compute services being managed
@@ -133,14 +133,14 @@ class TestComputeManagerClient:
         # change the UUID associated with the stored manager to simulate usurping
 
         usurp_query = """
-        MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name})
+        MATCH (cmr: ComputeManagerRegistration {name: $name})
         SET cmr.uuid = $new_uuid
         """
         from uuid import uuid4
 
         new_uuid = uuid4()
         params = {
-            "manager_name": compute_manager_id.manager_name,
+            "name": compute_manager_id.name,
             "new_uuid": str(new_uuid),
         }
         n4js_preloaded.execute_query(usurp_query, params)
@@ -159,15 +159,15 @@ class TestComputeManagerClient:
         n4js_preloaded,
         compute_manager_client: client.AlchemiscaleComputeManagerClient,
     ):
-        compute_manager_id = ComputeManagerID.new_from_manager_name("testmanager")
+        compute_manager_id = ComputeManagerID.new_from_name("testmanager")
         compute_manager_client.register(compute_manager_id)
 
         query = """
-        MATCH (cmr: ComputeManagerRegistration {manager_name: $manager_name})
+        MATCH (cmr: ComputeManagerRegistration {name: $name})
         RETURN cmr.status AS status, cmr.detail as detail
         """
 
-        params = {"manager_name": compute_manager_id.manager_name}
+        params = {"name": compute_manager_id.name}
 
         # status: OK
         returned_id = compute_manager_client.update_status(
