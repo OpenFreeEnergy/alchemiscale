@@ -513,8 +513,8 @@ def update_status_computemanager(
         )
         now = datetime.datetime.now(tz=datetime.UTC)
         n4js.expire_computemanager_registrations(
-            now + timedelta(seconds=-expire_seconds),
-            now + timedelta(seconds=-expire_seconds_errored),
+            now - timedelta(seconds=expire_seconds),
+            now - timedelta(seconds=expire_seconds_errored),
         )
     except ValueError as e:
         raise HTTPException(

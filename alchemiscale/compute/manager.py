@@ -62,16 +62,22 @@ class ComputeManager:
         self.client.deregister(self.compute_manager_id)
 
     def start(self, max_cycles: int | None = None):
+        self.logger.info(f"Starting up compute manager '{self.settings.name}'")
         self._register()
+        self.logger.info(f"Registered compute manager '{self.compute_manager_id}'")
         self._stop = False
         try:
             count = 0
+            self.logger.info("Starting main loop")
             while self.cycle():
                 count += 1
                 if max_cycles and count >= max_cycles:
+                    self.logger.info("Reached maximum number of cycles")
                     break
                 time.sleep(self.settings.sleep_interval)
         except Exception as e:
+            self.logger.error(f"Unknown exception raised: '{str(e)}'")
+            self.logger.info(f"Updating manager status to 'ERROR'")
             self.client.update_status(
                 self.compute_manager_id, ComputeManagerStatus.ERROR, detail=repr(e)
             )
@@ -79,7 +85,9 @@ class ComputeManager:
         except KeyboardInterrupt:
             self.logger.info("Caught SIGINT/Keyboard interrupt.")
         finally:
+            self.logger.info(f"Deregistering '{self.compute_manager_id}'")
             self._deregister()
+            self.logger.info(f"Deregistration successful")
 
     @abstractmethod
     def create_compute_services(self, data: dict) -> int:
@@ -97,7 +105,9 @@ class ComputeManager:
         if self._stop:
             return False
 
+        self.logger.info(f"Requesting instruction from '{self.client.api_url}'")
         instruction, data = self.client.get_instruction(self.compute_manager_id)
+        self.logger.info(f"Recieved instruction '{instruction}'")
         match instruction:
             case ComputeManagerInstruction.OK:
                 total_services = len(data["compute_service_ids"])
@@ -121,6 +131,7 @@ class ComputeManager:
                 shutdown_message = data["message"]
                 self.logger.info(f'Received shutdown message: "{shutdown_message}"')
                 return False
+        self.logger.info(f"Updating manager status at '{self.client.api_url}'")
         self.client.update_status(
             self.compute_manager_id,
             ComputeManagerStatus.OK,

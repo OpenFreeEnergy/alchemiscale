@@ -1489,12 +1489,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         query = """
         MATCH (cmr:ComputeManagerRegistration {name: $name, uuid: $uuid})
-        OPTIONAL MATCH (cmr)-[rel:MANAGES]->(:ComputeServiceRegistration)
-        DELETE rel
-        WITH cmr
-        MATCH (cmr)
         WHERE cmr.status <> "ERROR"
-        DELETE cmr
+        DETACH DELETE cmr
         """
 
         self.execute_query(query, name=name, uuid=uuid)
