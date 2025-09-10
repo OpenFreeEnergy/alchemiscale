@@ -10,6 +10,9 @@ import zstandard as zstd
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
 
+from fastapi.exceptions import HTTPException
+from fastapi import status as http_status
+
 from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
@@ -168,8 +171,15 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
     _exception = AlchemiscaleComputeManagerClientError
 
     def register(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
-        res = self._post_resource(f"/computemanager/{compute_manager_id}/register", {})
-        return ComputeManagerID(res)
+        try:
+            res = self._post_resource(f"/computemanager/{compute_manager_id}/register", {})
+            return ComputeManagerID(res)
+        except HTTPException as e:
+            match e.status_code:
+                case http_status.HTTP_422_UNPROCESSABLE_ENTITY:
+                    raise self._exception(e.detail)
+                case _:
+                    raise e
 
     def deregister(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
         res = self._post_resource(

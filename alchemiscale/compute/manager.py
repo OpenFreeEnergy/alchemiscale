@@ -13,7 +13,7 @@ from ..storage.models import (
     ComputeManagerInstruction,
     ComputeManagerStatus,
 )
-from .client import AlchemiscaleComputeManagerClient
+from .client import AlchemiscaleComputeManagerClient, AlchemiscaleComputeManagerClientError
 from .settings import ComputeManagerSettings
 
 
@@ -56,7 +56,11 @@ class ComputeManager:
         self.logger = logging.LoggerAdapter(logger, extra)
 
     def _register(self):
-        self.client.register(self.compute_manager_id)
+        try:
+            self.client.register(self.compute_manager_id)
+        except AlchemiscaleComputeManagerClientError as e:
+            self.logger.fatal(f"Registration failed: '{e.detail}'")
+            raise e
 
     def _deregister(self):
         self.client.deregister(self.compute_manager_id)
