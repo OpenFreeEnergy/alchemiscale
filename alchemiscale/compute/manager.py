@@ -138,3 +138,12 @@ class ComputeManager:
             saturation=total_services / self.settings.max_compute_services,
         )
         return True
+
+    def clear_error(self):
+        try:
+            self.logger.info(f"Clearing '{self.settings.name}' with the ERROR status")
+            self.client.clear_error(self.settings.name)
+        except ValueError:
+            self.logger.info(
+                f"Could not clear '{self.settings.name}', no such compute manager with the ERROR status"
+            )

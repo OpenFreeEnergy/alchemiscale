@@ -192,6 +192,29 @@ class TestComputeManager:
         assert record["status"] == ComputeManagerStatus.ERROR
         assert record["detail"] == "RuntimeError('Unexpected failure in manager')"
 
+    def test_clear_error(
+        self,
+        n4js_preloaded,
+        manager: LocalTestingComputeManager,
+        network_tyk2,
+        scope_test,
+    ):
+        LocalTestingComputeManager.exception = RuntimeError(
+            "Unexpected failure in manager"
+        )
+
+        with pytest.raises(RuntimeError):
+            manager.start(max_cycles=1)
+
+        query = """
+        MATCH (cmr:ComputeManagerRegistration {status: "ERROR"})
+        RETURN cmr
+        """
+
+        assert n4js_preloaded.execute_query(query).records
+        manager.clear_error()
+        assert not n4js_preloaded.execute_query(query).records
+
     def test_manager_keyboard_interrupt(
         self,
         n4js_preloaded,

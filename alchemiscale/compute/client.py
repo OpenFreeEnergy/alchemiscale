@@ -219,3 +219,9 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         )
 
         return ComputeManagerID(res)
+
+    def clear_error(self, compute_manager_name: str):
+        res = self._post_resource(
+            f"/computemanager/{compute_manager_name}/clear_error",
+            {},
+        )

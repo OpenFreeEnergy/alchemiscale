@@ -1538,7 +1538,23 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         results = self.execute_query(query, **params)
 
-    def clear_errored_computemanager(self, compute_manager_id: ComputeManagerID):
+    @chainable
+    def get_compute_manager_id(self, name: str, tx=None):
+        query = """
+        MATCH (cmr:ComputeManagerRegistration {name: $name})
+        RETURN cmr.uuid AS uuid
+        """
+        records = tx.run(query, name=name).to_eager_result().records
+        if not records:
+            return None
+        result = records[0]
+        uuid = result["uuid"]
+        return ComputeManagerID(f"{name}-{uuid}")
+
+    @chainable
+    def clear_errored_computemanager(
+        self, compute_manager_id: ComputeManagerID, tx=None
+    ):
         """Remove a compute manager with an ERROR status.
 
         Parameters
@@ -1560,9 +1576,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN cmr
         """
 
-        results = self.execute_query(
+        results = tx.run(
             query, status=ComputeManagerStatus.ERROR, **compute_manager_id.to_dict()
-        )
+        ).to_eager_result()
 
         if not results.records:
             raise ValueError(

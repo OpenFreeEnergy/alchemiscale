@@ -530,6 +530,22 @@ def update_status_computemanager(
     return compute_manager_id
 
 
+@router.post("/computemanager/{compute_manager_name}/clear_error")
+def clear_error_computemanager(
+    compute_manager_name: str,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
+):
+    if not compute_manager_name.isalnum():
+        raise ValueError("Provided manager name is not alphanumeric")
+
+    with n4js.transaction() as tx:
+        compute_manager_id = n4js.get_compute_manager_id(
+            name=compute_manager_name, tx=tx
+        )
+        n4js.clear_errored_computemanager(compute_manager_id, tx=tx)
+
+
 ### add router
 
 app.include_router(router)
