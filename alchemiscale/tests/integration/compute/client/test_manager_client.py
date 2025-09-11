@@ -87,7 +87,7 @@ class TestComputeManagerClient:
 
         # no compute services being managed
         instruction, payload = compute_manager_client.get_instruction(
-            compute_manager_id
+            [], compute_manager_id
         )
 
         assert instruction == ComputeManagerInstruction.OK
@@ -99,7 +99,7 @@ class TestComputeManagerClient:
         )
 
         instruction, payload = compute_manager_client.get_instruction(
-            compute_manager_id
+            [], compute_manager_id
         )
 
         assert instruction == ComputeManagerInstruction.OK, (instruction, payload)
@@ -124,7 +124,7 @@ class TestComputeManagerClient:
         )
 
         instruction, payload = compute_manager_client.get_instruction(
-            compute_manager_id
+            [], compute_manager_id
         )
 
         assert instruction == ComputeManagerInstruction.SKIP, (instruction, payload)
@@ -146,7 +146,7 @@ class TestComputeManagerClient:
         n4js_preloaded.execute_query(usurp_query, params)
 
         instruction, payload = compute_manager_client.get_instruction(
-            compute_manager_id
+            [], compute_manager_id
         )
 
         assert instruction == ComputeManagerInstruction.SHUTDOWN, (instruction, payload)

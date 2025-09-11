@@ -172,7 +172,9 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
 
     def register(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
         try:
-            res = self._post_resource(f"/computemanager/{compute_manager_id}/register", {})
+            res = self._post_resource(
+                f"/computemanager/{compute_manager_id}/register", {}
+            )
             return ComputeManagerID(res)
         except HTTPException as e:
             match e.status_code:
@@ -188,11 +190,13 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         return ComputeManagerID(res)
 
     def get_instruction(
-        self, compute_manager_id: ComputeManagerID
+        self,
+        scopes: list[Scope],
+        compute_manager_id: ComputeManagerID,
     ) -> tuple[ComputeManagerInstruction, dict]:
         instruction_data = self._post_resource(
             f"/computemanager/{compute_manager_id}/instruction",
-            {"scopes": []},
+            {"scopes": [scope.to_dict() for scope in scopes]},
         )
 
         match instruction_data:

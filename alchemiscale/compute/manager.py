@@ -110,7 +110,9 @@ class ComputeManager:
             return False
 
         self.logger.info(f"Requesting instruction from '{self.client.api_url}'")
-        instruction, data = self.client.get_instruction(self.compute_manager_id)
+        instruction, data = self.client.get_instruction(
+            self.service_settings.scopes or [], self.compute_manager_id
+        )
         self.logger.info(f"Recieved instruction '{instruction}'")
         match instruction:
             case ComputeManagerInstruction.OK:
