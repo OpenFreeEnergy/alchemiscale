@@ -124,15 +124,6 @@ class ComputeServiceSettings(BaseModel):
 
 
 class ComputeManagerSettings(BaseModel):
-    api_url: str | None = Field(
-        ..., description="URL of the compute API to manage compute services for."
-    )
-    identifier: str | None = Field(
-        ..., description="Identifier for the compute identity used for authentication."
-    )
-    key: str | None = Field(
-        ..., description="Credential for the compute identity used for authentication."
-    )
     name: str = Field(
         ...,
         description=(

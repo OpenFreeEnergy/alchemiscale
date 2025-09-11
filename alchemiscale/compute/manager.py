@@ -13,24 +13,31 @@ from ..storage.models import (
     ComputeManagerInstruction,
     ComputeManagerStatus,
 )
-from .client import AlchemiscaleComputeManagerClient, AlchemiscaleComputeManagerClientError
-from .settings import ComputeManagerSettings
+from .client import (
+    AlchemiscaleComputeManagerClient,
+    AlchemiscaleComputeManagerClientError,
+)
+from .settings import ComputeManagerSettings, ComputeServiceSettings
 
 
 class ComputeManager:
 
     compute_manager_id: ComputeManagerID
     client: AlchemiscaleComputeManagerClient
-    service_settings_template: bytes
+    service_settings: ComputeServiceSettings
     settings: ComputeManagerSettings
 
-    def __init__(self, settings: ComputeManagerSettings):
+    def __init__(
+        self, settings: ComputeManagerSettings, service_settings: ComputeServiceSettings
+    ):
         self.settings = settings
         self.compute_manager_id = ComputeManagerID.new_from_name(self.settings.name)
+        self.service_settings = service_settings
+        self.service_settings.compute_manager_id = self.compute_manager_id
         self.client = AlchemiscaleComputeManagerClient(
-            api_url=self.settings.api_url,
-            identifier=self.settings.identifier,
-            key=self.settings.key,
+            api_url=self.service_settings.api_url,
+            identifier=self.service_settings.identifier,
+            key=self.service_settings.key,
         )
 
         self._stop = False

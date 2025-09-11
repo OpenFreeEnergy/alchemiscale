@@ -11,12 +11,15 @@ from neo4j.time import DateTime
 
 import pytest
 
+from alchemiscale.models import Scope
+
 from alchemiscale.storage.models import (
     ComputeManagerID,
     ComputeManagerStatus,
     ComputeManagerInstruction,
 )
 from alchemiscale.compute.manager import ComputeManager, ComputeManagerSettings
+from alchemiscale.compute.settings import ComputeManagerSettings, ComputeServiceSettings
 from alchemiscale.compute.client import AlchemiscaleComputeManagerClient
 
 
@@ -31,9 +34,14 @@ class LocalTestingComputeManager(ComputeManager):
         if exception := LocalTestingComputeManager.exception:
             raise exception
 
+        params_start = {
+            "max_time": self.service_max_time or 10,
+            "max_tasks": self.service_max_tasks or 2,
+        }
+
         proc = Process(
             target=LocalTestingComputeManager._create_compute_service,
-            args=(self.settings, self.compute_manager_id),
+            args=(self.service_settings, params_start),
         )
         proc.start()
         LocalTestingComputeManager.service_processes.append(proc)
@@ -41,58 +49,11 @@ class LocalTestingComputeManager(ComputeManager):
         return 1
 
     @staticmethod
-    def _create_compute_service(settings, compute_manager_id):
+    def _create_compute_service(service_settings, params_start):
 
-        from alchemiscale.models import Scope
         from alchemiscale.compute.service import SynchronousComputeService
-        from alchemiscale.compute.settings import ComputeServiceSettings
-        import yaml
 
-        config_template = f"""
----
-init:
-  api_url: {settings.api_url}
-  identifier: {settings.identifier}
-  key: {settings.key}
-  name: testservice
-  compute_manager_id: {compute_manager_id}
-  shared_basedir: "./shared"
-  scratch_basedir: "./scratch"
-  keep_shared: False
-  keep_scratch: False
-  n_retries: 1
-  sleep_interval: 30
-  heartbeat_interval: 300
-  scopes:
-    - '*-*-*'
-  protocols: null
-  claim_limit: 2
-  loglevel: 'WARN'
-  logfile: null
-  client_cache_directory: null
-  client_cache_size_limit: 1073741824
-  client_use_local_cache: false
-  client_max_retries: 0
-  client_retry_base_seconds: 2.0
-  client_retry_max_seconds: 60.0
-  client_verify: true
-
-start:
-  max_tasks: {LocalTestingComputeManager.service_max_tasks or 2}
-  max_time: {LocalTestingComputeManager.service_max_time or 10}
-"""
-
-        params = yaml.safe_load(config_template)
-
-        params_init = params.get("init", {})
-        params_start = params.get("start", {})
-
-        if "scopes" in params_init:
-            params_init["scopes"] = [
-                Scope.from_str(scope) for scope in params_init["scopes"]
-            ]
-
-        service = SynchronousComputeService(ComputeServiceSettings(**params_init))
+        service = SynchronousComputeService(service_settings)
 
         # add signal handling
         for signame in {"SIGHUP", "SIGINT", "SIGTERM"}:
@@ -110,11 +71,8 @@ start:
 
 
 @pytest.fixture()
-def manager_settings(compute_manager_client):
+def manager_settings():
     return ComputeManagerSettings(
-        api_url=compute_manager_client.api_url,
-        identifier=compute_manager_client.identifier,
-        key=compute_manager_client.key,
         name="testmanager",
         logfile=None,
         max_compute_services=2,
@@ -123,11 +81,26 @@ def manager_settings(compute_manager_client):
 
 
 @pytest.fixture()
+def service_settings(compute_identity, single_scoped_credentialed_compute):
+    return ComputeServiceSettings(
+        name="testservice",
+        api_url="http://127.0.0.1:8000/",
+        identifier=single_scoped_credentialed_compute.identifier,
+        key=compute_identity["key"],
+        shared_basedir="./shared",
+        scratch_basedir="./scratch",
+        claim_limit=2,
+    )
+
+
+@pytest.fixture()
 def manager(
     manager_settings,
+    service_settings,
     tmpdir,
+    uvicorn_server,
 ):
-    return LocalTestingComputeManager(manager_settings)
+    return LocalTestingComputeManager(manager_settings, service_settings)
 
 
 class TestComputeManager:
