@@ -521,11 +521,6 @@ def update_status_computemanager(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
-    except Exception as e:
-        raise HTTPException(
-            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        )
 
     return compute_manager_id
 
