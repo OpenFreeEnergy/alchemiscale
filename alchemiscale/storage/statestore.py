@@ -32,6 +32,10 @@ from neo4j import Transaction, GraphDatabase, Driver
 from .models import (
     ComputeServiceID,
     ComputeServiceRegistration,
+    ComputeManagerRegistration,
+    ComputeManagerInstruction,
+    ComputeManagerStatus,
+    ComputeManagerID,
     NetworkMark,
     NetworkStateEnum,
     ProtocolDAGResultRef,
@@ -41,6 +45,7 @@ from .models import (
     TaskStatusEnum,
     Tracebacks,
 )
+
 from ..strategies import Strategy
 from ..models import Scope, ScopedKey
 from .cypher import cypher_or
@@ -1223,6 +1228,22 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             create_subgraph(tx, Subgraph() | node)
 
+            if compute_service_registration.manager_name:
+                query = """
+                MATCH (cmr:ComputeManagerRegistration {name: $manager_name}),
+                      (csr:ComputeServiceRegistration {manager_name: $manager_name,
+                                                       identifier: $identifier})
+                CREATE (cmr)-[rel:MANAGES]->(csr)
+                RETURN cmr, rel, csr
+                """
+                results = tx.run(
+                    query,
+                    manager_name=compute_service_registration.manager_name,
+                    identifier=compute_service_registration.identifier,
+                )
+                if not len(list(results)):
+                    raise ValueError("Could not find ComputeManagerRegistration")
+
         return compute_service_registration.identifier
 
     def deregister_computeservice(self, compute_service_id: ComputeServiceID):
@@ -1325,6 +1346,38 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return compute_service_id
 
+    def compute_services_can_claim(
+        self,
+        compute_service_ids: list[ComputeServiceID],
+        forgive_time: datetime.datetime,
+        max_failures: int,
+    ) -> list[bool]:
+        """Check compute services are able to claim tasks.
+
+        Parameters
+        ----------
+        compute_service_ids
+            The compute services to validate.
+        forgive_time
+            The time cutoff used to filter failure time reports for the compute
+            services. Only entries occuring after this time are considered.
+        max_failures
+            The number of failures allowed to occur between ``forgive_time``
+            and now. Any value greater than this denies the claim request.
+        """
+        # get the number of failures that occured after `forgive_time`
+        query = """
+        UNWIND $compute_service_ids as compute_service_id
+        MATCH (cs:ComputeServiceRegistration {identifier: compute_service_id})
+        SET cs.failure_times = [entry IN cs.failure_times WHERE entry > datetime($forgive_time)]
+        RETURN size(cs.failure_times) as n_failures
+        """
+        results = self.execute_query(
+            query, compute_service_ids=compute_service_ids, forgive_time=forgive_time
+        )
+
+        return [record["n_failures"] <= max_failures for record in results.records]
+
     def compute_service_can_claim(
         self,
         compute_service_id: ComputeServiceID,
@@ -1344,16 +1397,410 @@ class Neo4jStore(AlchemiscaleStateStore):
             The number of failures allowed to occur between ``forgive_time``
             and now. Any value greater than this denies the claim request.
         """
-        # get the number of failures that occured after `forgive_time`
-        query = """
-        MATCH (cs:ComputeServiceRegistration {identifier: $compute_service_id})
-        SET cs.failure_times = [entry IN cs.failure_times WHERE entry > datetime($forgive_time)]
-        RETURN size(cs.failure_times) as n_failures
+        return self.compute_services_can_claim(
+            [compute_service_id], forgive_time, max_failures
+        )[0]
+
+    ## compute manager
+
+    def register_computemanager(
+        self, compute_manager_registration: ComputeManagerRegistration
+    ) -> ComputeManagerID:
+        """Register a compute manager with the statestore.
+
+        Parameters
+        ----------
+        compute_manager_registration
+            The compute manager registration.
+
+        Returns
+        -------
+        compute_manager_id
+            The compute manager ID string containing the name and the
+            UUID.
+
+        Raises
+        ------
+        ValueError
+            Raised when a compute manager is already registered with
+            the provided name.
+
         """
-        results = self.execute_query(
-            query, compute_service_id=compute_service_id, forgive_time=forgive_time
+        with self.transaction() as tx:
+
+            # first check if a compute manager with the given name is
+            # already registered
+            query = """
+            MATCH (cmr:ComputeManagerRegistration {name: $name})
+            RETURN cmr
+            """
+
+            res = tx.run(query, name=compute_manager_registration.name)
+
+            if res.to_eager_result().records:
+                raise ValueError("ComputeManager with this name is already registered")
+
+            # create the registrattion for the manager and merge it into
+            # the database
+            node = Node(
+                "ComputeManagerRegistration", **compute_manager_registration.to_dict()
+            )
+
+            create_subgraph(tx, Subgraph() | node)
+
+            # check for orphaned compute services that were previously
+            # managed by a manager with the same name; reattach if found
+            reattach_compute_service_query = """
+            MATCH (csr:ComputeServiceRegistration {manager_name: $manager_name}),
+                  (cmr:ComputeManagerRegistration {name: $manager_name,
+                                                   uuid: $uuid})
+            CREATE (cmr)-[rel:MANAGES]->(csr)
+            """
+
+            tx.run(
+                reattach_compute_service_query,
+                manager_name=compute_manager_registration.name,
+                uuid=compute_manager_registration.uuid,
+            )
+
+        compute_manager_id = ComputeManagerID(
+            compute_manager_registration.name + "-" + compute_manager_registration.uuid
         )
-        return results.records[0]["n_failures"] <= max_failures
+
+        return compute_manager_id
+
+    def deregister_computemanager(self, compute_manager_id: ComputeManagerID):
+        """Remove the compute manager registration from the statestore.
+
+        Uses the name and UUID from a ComputeManagerID to deregister a
+        compute manager's registration. First, the MANAGES
+        relationship with compute services' registration are
+        removed. After this, the compute manager registration node is
+        removed as long as the registration does not have the ERROR
+        status.
+
+        Parameters
+        ----------
+        compute_manager_id
+            The compute manager ID string containing the name and the UUID.
+
+        """
+        name, uuid = compute_manager_id.name, compute_manager_id.uuid
+
+        query = """
+        MATCH (cmr:ComputeManagerRegistration {name: $name, uuid: $uuid})
+        WHERE cmr.status <> "ERROR"
+        DETACH DELETE cmr
+        """
+
+        self.execute_query(query, name=name, uuid=uuid)
+
+    def expire_computemanager_registrations(
+        self, expire_time_ok: datetime.datetime, expire_time_error: datetime.datetime
+    ):
+        """Remove expired compute managers from the statestore.
+
+        This method checks the status of compute managers and removes
+        those that have expired based on their last status update
+        time.
+
+        Parameters
+        ----------
+        expire_time_ok
+            The expiration time for "OK" compute managers. Managers with a last
+            update time earlier than the expiration cutoff will be removed.
+
+        expire_time_error
+            The expiration time for "ERROR" compute managers. Managers
+            with a last update time earlier than the expiration cutoff will be
+            removed.
+
+        """
+
+        # Match all expired ComputeManagerRegistration nodes based on
+        # their status and detach delete them.
+        query = """
+        MATCH (cmr:ComputeManagerRegistration)
+        WHERE (cmr.last_status_update < datetime($expire_time_ok) AND
+               cmr.status = $ok_status)
+              OR
+              (cmr.last_status_update < datetime($expire_time_error) AND
+               cmr.status = $error_status)
+        DETACH DELETE cmr
+        """
+
+        params = {
+            "ok_status": ComputeManagerStatus.OK.value,
+            "error_status": ComputeManagerStatus.ERROR.value,
+            "expire_time_ok": expire_time_ok.isoformat(),
+            "expire_time_error": expire_time_error.isoformat(),
+        }
+
+        results = self.execute_query(query, **params)
+
+    @chainable
+    def get_compute_manager_id(self, name: str, tx=None):
+        query = """
+        MATCH (cmr:ComputeManagerRegistration {name: $name})
+        RETURN cmr.uuid AS uuid
+        """
+        records = tx.run(query, name=name).to_eager_result().records
+        if not records:
+            return None
+        result = records[0]
+        uuid = result["uuid"]
+        return ComputeManagerID(f"{name}-{uuid}")
+
+    @chainable
+    def clear_errored_computemanager(
+        self, compute_manager_id: ComputeManagerID, tx=None
+    ):
+        """Remove a compute manager with an ERROR status.
+
+        Parameters
+        ----------
+        compute_manager_id
+            The compute manager ID string containing the name and the
+            UUID.
+
+        Raises
+        ------
+        ValueError
+            Raised when the ERROR compute manager cannot be found in
+            the database
+        """
+
+        query = """
+        MATCH (cmr:ComputeManagerRegistration {name: $name, uuid: $uuid, status: $status})
+        DETACH DELETE cmr
+        RETURN cmr
+        """
+
+        results = tx.run(
+            query, status=ComputeManagerStatus.ERROR, **compute_manager_id.to_dict()
+        ).to_eager_result()
+
+        if not results.records:
+            raise ValueError(
+                "Could not find an ERROR compute manager with the provided name and UUID"
+            )
+
+    def get_computemanager_instruction(
+        self,
+        compute_manager_id: ComputeManagerID,
+        forgive_time: datetime.datetime,
+        max_failures: int,
+        scopes: list[Scope],
+    ) -> tuple[ComputeManagerInstruction, dict]:
+        """Return an instruction for a compute manager based on the contents of the statestore.
+
+        This method returns one of three instructions along with supporting data:
+
+        1. "OK" with a list of ComputeServiceIDs and the number of available tasks
+        2. "SKIP" with a list of ComputeServiceIDs
+        3. "SHUTDOWN" with an error message
+
+        Parameters
+        ----------
+        compute_manager_id
+            The compute manager ID string containing the name and the
+            UUID.
+
+        forgive_time
+            The time at which a failure from a compute service is
+            considered forgiven.
+
+         max_failures
+            The number of failures a compute service is allowed to
+            have (before the forgive time) before it is no longer
+            allowed to claim a task. If any managed compute services
+            have failues that exceed this value, the returned
+            instruction will be SKIP.
+
+        scopes
+            The scopes to consider when determining available tasks.
+
+        Returns
+        -------
+        A tuple with whose first value is the instruction enumeration
+        and whose second value is data associated with that
+        instruction.
+
+        """
+
+        name, uuid = compute_manager_id.name, compute_manager_id.uuid
+
+        # get the target compute manager along with any compute
+        # services it might manage. Expected structure of output when
+        # a manager is found:
+        #
+        # With no managed services:
+        # +--------------+-----------+
+        # | csm          | csr_id    |
+        # +--------------+-----------+
+        # | <manager_id> | None      |
+        # +--------------+-----------+
+        #
+        # With N (one or more) managed services
+        # +--------------+------------------------+
+        # | csm          | csr_id                 |
+        # +--------------+------------------------+
+        # | <manager_id> | <ComputeServiceID-1>   |
+        # | <manager_id> | <ComputeServiceID-2>   |
+        # | <manager_id> | <ComputeServiceID-...> |
+        # | <manager_id> | <ComputeServiceID-N-1> |
+        # | <manager_id> | <ComputeServiceID-N>   |
+        # +--------------+------------------------+
+
+        query = """
+        MATCH (csm:ComputeManagerRegistration {name: $name,
+                                               uuid: $uuid})
+        OPTIONAL MATCH (csm)-[rel:MANAGES]->(csr:ComputeServiceRegistration)
+        RETURN csm, csr.identifier as csr_id
+        """
+
+        results = self.execute_query(query, name=name, uuid=uuid)
+
+        # no compute manager was found the given name and UUID, issue a SHUTDOWN
+        if len(results.records) == 0:
+            msg = "no compute manager was found with the given manager name and UUID"
+            return ComputeManagerInstruction.SHUTDOWN, {"message": msg}
+
+        csr_ids = []
+        for record in results.records:
+            # if the manager has managed services
+            if csr_id := record["csr_id"]:
+                csr_ids.append(ComputeServiceID(csr_id))
+
+        if csr_ids:
+            if not all(
+                self.compute_services_can_claim(csr_ids, forgive_time, max_failures)
+            ):
+                return ComputeManagerInstruction.SKIP, {"compute_service_ids": csr_ids}
+
+        # determine how many tasks are available
+        tasks = []
+        for scope in scopes:
+            params = {
+                "org": scope.org,
+                "campaign": scope.campaign,
+                "project": scope.project,
+                "waiting_status": TaskStatusEnum.waiting.value,
+            }
+            query = """
+            MATCH (task:Task {_org: $org,
+                              _campaign: $campaign,
+                              _project: $project,
+                              status: $waiting_status}),
+                  (task)<-[:ACTIONS]-(:TaskHub)
+            RETURN task._gufe_key as task
+            """
+            result = self.execute_query(query, **params)
+            tasks += [record["task"] for record in result.records]
+
+        return ComputeManagerInstruction.OK, {
+            "compute_service_ids": csr_ids,
+            "num_tasks": len(set(tasks)),
+        }
+
+    def update_compute_manager_status(
+        self,
+        compute_manager_id: ComputeManagerID,
+        status: ComputeManagerStatus,
+        detail: str | None = None,
+        saturation: float | None = None,
+        update_time: datetime.datetime | None = None,
+    ):
+        """Update the status of a compute manager.
+
+        Statuses can either be passed in as strings or instances of
+        the ComputeManagerStatus enumeration, though the latter is
+        safer and preferred.
+
+        Parameters
+        ----------
+        compute_manager_id
+            The compute manager ID string containing the name and the
+            UUID.
+
+        status
+            An instance of the ComputeManagerStatus string
+            enumeration, whose supported values are "OK" and
+            "ERROR".
+
+        detail
+            A message to be included with the status update. This is
+            only allowed and required by the ERROR status. This
+            message should indicate to administrators why the compute
+            manager entered the ERROR status.
+
+        update_time
+            The time to set as the last status update time in the
+            database. Defaults to None, which will use the current
+            time when updating.
+
+        """
+        # validate the status string/enum
+        try:
+            status = ComputeManagerStatus(status)
+        except ValueError:
+            raise ValueError(f'"{status}" is not a valid ComputeManagerStatus')
+
+        # only match to valid states
+        match status:
+            case ComputeManagerStatus.OK:
+                # OK requires saturation
+                if saturation is None:
+                    raise ValueError(
+                        f"saturation is required for the '{ComputeManagerStatus.OK}' status"
+                    )
+                # OK disallows detail
+                if detail:
+                    raise ValueError(
+                        f"detail should only be provided for the '{ComputeManagerStatus.ERROR}' status"
+                    )
+            case ComputeManagerStatus.ERROR:
+                # ERROR disallows saturation
+                if saturation is not None:
+                    raise ValueError(
+                        f"saturation should only be provided for the '{ComputeManagerStatus.OK}' status"
+                    )
+                # ERROR requires detail
+                if not detail:
+                    raise ValueError(
+                        f"detail is required for the '{ComputeManagerStatus.ERROR}' status"
+                    )
+
+        name, uuid = compute_manager_id.name, compute_manager_id.uuid
+
+        if saturation is not None:
+            if not 0 <= saturation <= 1:
+                raise ValueError("saturation must be between 0 and 1")
+
+        query = """
+        MATCH (cmr: ComputeManagerRegistration {name: $name, uuid: $uuid})
+        SET cmr.status = $status
+        SET cmr.detail = $detail
+        SET cmr.saturation = $saturation
+        SET cmr.last_status_update = datetime($update_time)
+        RETURN cmr
+        """
+
+        results = self.execute_query(
+            query,
+            uuid=uuid,
+            name=name,
+            status=status.value,
+            detail=detail,
+            saturation=saturation,
+            update_time=(
+                update_time or datetime.datetime.now(tz=datetime.UTC)
+            ).isoformat(),
+        )
+
+        if len(results.records) == 0:
+            msg = f"No record for ComputeManager: {compute_manager_id}"
+            raise ValueError(msg)
 
     ## task hubs
 

@@ -7,8 +7,8 @@
 from abc import abstractmethod
 from copy import copy
 import datetime
-from enum import Enum
-from uuid import uuid4
+from enum import Enum, StrEnum
+from uuid import uuid4, UUID
 import hashlib
 
 
@@ -28,6 +28,7 @@ class ComputeServiceRegistration(BaseModel):
     registered: datetime.datetime
     heartbeat: datetime.datetime
     failure_times: list[datetime.datetime] = []
+    manager_name: str | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -56,6 +57,89 @@ class ComputeServiceRegistration(BaseModel):
         dct_["identifier"] = ComputeServiceID(dct_["identifier"])
 
         return cls(**dct_)
+
+
+class ComputeManagerInstruction(StrEnum):
+    OK = "OK"
+    SKIP = "SKIP"
+    SHUTDOWN = "SHUTDOWN"
+
+
+class ComputeManagerStatus(StrEnum):
+    OK = "OK"
+    ERROR = "ERROR"
+
+
+class ComputeManagerID(str):
+
+    def __init__(self, _value):
+        # don't need to process _value, handled by str.__new__
+        parts = self.split("-")
+
+        if len(parts) != 6:
+            # this currently only supports field-separated hex uuid4s
+            raise ValueError(
+                "ComputeManagerID must have the form `{name}-{uuid}` with a field-separated hex"
+            )
+
+        self._name = parts[0]
+        self._uuid = "-".join(parts[1:])
+
+        if not self.name.isalnum():
+            raise ValueError("ComputeManagerID only allows alpha-numeric names")
+
+        try:
+            UUID(self.uuid)
+        except ValueError:
+            raise ValueError("Could not interpret the provided UUID.")
+
+    @classmethod
+    def new_from_name(cls, name: str):
+        return cls(f"{name}-{uuid4()}")
+
+    def to_dict(self):
+        return {"name": self.name, "uuid": self.uuid}
+
+    @classmethod
+    def from_dict(cls, dct):
+        name = dct["name"]
+        uuid = dct["uuid"]
+        return cls(name + "-" + uuid)
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def uuid(self) -> str:
+        return self._uuid
+
+
+class ComputeManagerRegistration(BaseModel):
+
+    name: str
+    uuid: str
+    last_status_update: datetime.datetime
+    status: str
+    detail: str
+    saturation: float
+    registered: datetime.datetime
+
+    def __repr__(self):  # pragma: no cover
+        return f"<ComputeManagerRegistration('{str(self)}')>"
+
+    def __str__(self):
+        return "-".join([self.name, self.uuid])
+
+    def to_dict(self):
+        return self.model_dump()
+
+    @classmethod
+    def from_dict(cls, dct):
+        return cls(**dct)
+
+    def to_compute_manager_id(self):
+        return ComputeManagerID("-".join([self.name, self.uuid]))
 
 
 class TaskProvenance(BaseModel):

@@ -197,6 +197,31 @@ To scale up the number of compute services on the cluster, increase ``replicas``
 
 A more complete example of this type of deployment can be found in `alchemiscale-k8s`_.
 
+****************
+Compute managers
+****************
+
+Compute manager are dedicated services responsible for creating new compute services in response to the workload present on the statestore.
+These services are designed to loosely manage compute services and are assumed to be unable to communicate with their created services by default.
+This requires that created compute services are short-lived and deregister themselves appropriately.
+Information of existing services and current workload is reported to the manager through an instruction request through the compute API. Managers expect one of three instructions from the alchemiscale:
+
+1. ``OK``: the manager may allocate compute resources
+2. ``SKIP``: the manager should take no action
+3. ``SHUTDOWN``: the manager should shut down
+
+In the case of the OK or the SKIP instruction, a manager is expected to provide a status update to the compute API.
+The status can either be:
+
+1. ``OK``: the manager is working as expected, requires a saturation value (ratio of active services to the maximum number of services allowed by the manager)
+2. ``ERROR``: the manager experienced an error and will shut down locally, requires a detail string explaining why the ``ERROR`` state was entered
+
+Currently, these supporting data are only used by administrators for introspection, though this might change in the future.
+
+Creating a compute manager
+==========================
+
+``alchemiscale`` provides a base class for creating a custom compute manager and, in the simplest case, only require defining how a compute service is created on a target compute platform.
 
 .. _Deployment: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
 .. _alchemiscale-k8s: https://github.com/datryllic/alchemiscale-k8s/tree/main/compute
