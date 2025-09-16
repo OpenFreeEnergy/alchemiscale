@@ -529,7 +529,6 @@ def update_status_computemanager(
 def clear_error_computemanager(
     compute_manager_name: str,
     n4js: Neo4jStore = Depends(get_n4js_depends),
-    settings: ComputeAPISettings = Depends(get_base_api_settings),
 ):
     if not compute_manager_name.isalnum():
         raise ValueError("Provided manager name is not alphanumeric")
