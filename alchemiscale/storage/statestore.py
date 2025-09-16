@@ -861,6 +861,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         raise NotImplementedError
 
+    def merge_networks(self, networks: list[ScopedKey], scope: Scope) -> ScopedKey:
+        raise NotImplementedError
+
     def get_network_state(self, networks: list[ScopedKey]) -> list[str | None]:
         """Get the states of a group of networks.
 
