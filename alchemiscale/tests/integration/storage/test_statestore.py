@@ -6,6 +6,7 @@ from functools import reduce
 from itertools import chain
 import operator
 from collections import defaultdict
+import uuid
 
 import pytest
 from gufe import AlchemicalNetwork
@@ -19,6 +20,10 @@ from alchemiscale.storage.models import (
     ProtocolDAGResultRef,
     TaskStatusEnum,
     NetworkStateEnum,
+    ComputeManagerID,
+    ComputeManagerRegistration,
+    ComputeManagerStatus,
+    ComputeManagerInstruction,
     ComputeServiceID,
     ComputeServiceRegistration,
     StrategyState,
@@ -420,7 +425,7 @@ class TestNeo4jStore(TestStateStore):
             case _:
                 raise ValueError('Expected "Transformation" or "NonTransformation"')
 
-        tf_sk = ScopedKey(gufe_key=_transformation.key, **scope_test.dict())
+        tf_sk = ScopedKey(gufe_key=_transformation.key, **scope_test.to_dict())
         cs_sks = n4js.get_transformation_chemicalsystems(tf_sk)
 
         if transformation_class_name == "Transformation":
@@ -438,7 +443,7 @@ class TestNeo4jStore(TestStateStore):
         an = network_tyk2
         n4js.assemble_network(an, scope_test)
 
-        cs_sk = ScopedKey(gufe_key=chemicalsystem.key, **scope_test.dict())
+        cs_sk = ScopedKey(gufe_key=chemicalsystem.key, **scope_test.to_dict())
 
         tf_sks = n4js.get_chemicalsystem_transformations(cs_sk)
 
@@ -3451,155 +3456,595 @@ class TestNeo4jStore(TestStateStore):
         assert task_statuses[4] == TaskStatusEnum.invalid
         assert task_statuses[5] == TaskStatusEnum.deleted
 
-    ### Strategy tests
+    class TestStrategy:
 
-    def test_set_network_strategy(
-        self,
-        n4js: Neo4jStore,
-        network_tyk2,
-        scope_test,
-    ):
-        """Test setting and removing network strategies."""
-        an = network_tyk2
-        network_sk = n4js.assemble_network(an, scope_test)[0]
+        def test_set_network_strategy(
+            self,
+            n4js: Neo4jStore,
+            network_tyk2,
+            scope_test,
+        ):
+            """Test setting and removing network strategies."""
+            an = network_tyk2
+            network_sk = n4js.assemble_network(an, scope_test)[0]
 
-        # Create a test strategy
-        strategy = DummyStrategy()
-        strategy_state = StrategyState(
-            mode=StrategyModeEnum.partial,
-            status=StrategyStatusEnum.awake,
-            max_tasks_per_transformation=5,
-        )
+            # Create a test strategy
+            strategy = DummyStrategy()
+            strategy_state = StrategyState(
+                mode=StrategyModeEnum.partial,
+                status=StrategyStatusEnum.awake,
+                max_tasks_per_transformation=5,
+            )
 
-        # Set the strategy
-        strategy_sk = n4js.set_network_strategy(network_sk, strategy, strategy_state)
-        assert strategy_sk is not None
+            # Set the strategy
+            strategy_sk = n4js.set_network_strategy(network_sk, strategy, strategy_state)
+            assert strategy_sk is not None
 
-        # Verify strategy was set
-        retrieved_strategy = n4js.get_network_strategy(network_sk)
-        assert retrieved_strategy is not None
-        assert retrieved_strategy == strategy
-        assert retrieved_strategy is strategy
+            # Verify strategy was set
+            retrieved_strategy = n4js.get_network_strategy(network_sk)
+            assert retrieved_strategy is not None
+            assert retrieved_strategy == strategy
+            assert retrieved_strategy is strategy
 
-        # Verify strategy state was set
-        retrieved_state = n4js.get_network_strategy_state(network_sk)
-        assert retrieved_state is not None
-        assert retrieved_state.mode == StrategyModeEnum.partial
-        assert retrieved_state.status == StrategyStatusEnum.awake
-        assert retrieved_state.max_tasks_per_transformation == 5
+            # Verify strategy state was set
+            retrieved_state = n4js.get_network_strategy_state(network_sk)
+            assert retrieved_state is not None
+            assert retrieved_state.mode == StrategyModeEnum.partial
+            assert retrieved_state.status == StrategyStatusEnum.awake
+            assert retrieved_state.max_tasks_per_transformation == 5
 
-        # Remove the strategy
-        result = n4js.set_network_strategy(network_sk, None)
-        assert result is None
+            # Remove the strategy
+            result = n4js.set_network_strategy(network_sk, None)
+            assert result is None
 
-        # Verify strategy was removed
-        assert n4js.get_network_strategy(network_sk) is None
-        assert n4js.get_network_strategy_state(network_sk) is None
+            # Verify strategy was removed
+            assert n4js.get_network_strategy(network_sk) is None
+            assert n4js.get_network_strategy_state(network_sk) is None
 
-    def test_update_strategy_state(
-        self,
-        n4js: Neo4jStore,
-        network_tyk2,
-        scope_test,
-    ):
-        """Test updating strategy state."""
-        an = network_tyk2
-        network_sk = n4js.assemble_network(an, scope_test)[0]
+        def test_update_strategy_state(
+            self,
+            n4js: Neo4jStore,
+            network_tyk2,
+            scope_test,
+        ):
+            """Test updating strategy state."""
+            an = network_tyk2
+            network_sk = n4js.assemble_network(an, scope_test)[0]
 
-        # Create and set a strategy
-        strategy = DummyStrategy()
-        strategy_state = StrategyState(
-            mode=StrategyModeEnum.partial, status=StrategyStatusEnum.awake
-        )
-        n4js.set_network_strategy(network_sk, strategy, strategy_state)
-
-        # Update the strategy state
-        new_state = StrategyState(
-            mode=StrategyModeEnum.full,
-            status=StrategyStatusEnum.dormant,
-            iterations=5,
-            last_iteration_result_count=10,
-        )
-        n4js.update_strategy_state(network_sk, new_state)
-
-        # Verify state was updated
-        retrieved_state = n4js.get_network_strategy_state(network_sk)
-        assert retrieved_state.mode == StrategyModeEnum.full
-        assert retrieved_state.status == StrategyStatusEnum.dormant
-        assert retrieved_state.iterations == 5
-        assert retrieved_state.last_iteration_result_count == 10
-
-    def test_get_strategies_for_execution_filtering(
-        self,
-        n4js: Neo4jStore,
-        network_tyk2,
-        scope_test,
-    ):
-        """Test that get_strategies_for_execution correctly filters strategies."""
-        an = network_tyk2
-
-        # Create 4 networks with different strategy states
-        networks = []
-        for i in range(4):
-            network_copy = an.copy_with_replacements(name=f"{an.name}_{i}")
-            network_sk = n4js.assemble_network(network_copy, scope_test)[0]
-            networks.append(network_sk)
-
-        strategy = DummyStrategy()
-
-        # Network 0: awake + partial (should be returned)
-        n4js.set_network_strategy(
-            networks[0],
-            strategy,
-            StrategyState(
+            # Create and set a strategy
+            strategy = DummyStrategy()
+            strategy_state = StrategyState(
                 mode=StrategyModeEnum.partial, status=StrategyStatusEnum.awake
-            ),
-        )
+            )
+            n4js.set_network_strategy(network_sk, strategy, strategy_state)
 
-        # Network 1: dormant + full (should be returned)
-        n4js.set_network_strategy(
-            networks[1],
-            strategy,
-            StrategyState(
-                mode=StrategyModeEnum.full, status=StrategyStatusEnum.dormant
-            ),
-        )
+            # Update the strategy state
+            new_state = StrategyState(
+                mode=StrategyModeEnum.full,
+                status=StrategyStatusEnum.dormant,
+                iterations=5,
+                last_iteration_result_count=10,
+            )
+            n4js.update_strategy_state(network_sk, new_state)
 
-        # Network 2: awake + disabled (should NOT be returned)
-        n4js.set_network_strategy(
-            networks[2],
-            strategy,
-            StrategyState(
-                mode=StrategyModeEnum.disabled, status=StrategyStatusEnum.awake
-            ),
-        )
+            # Verify state was updated
+            retrieved_state = n4js.get_network_strategy_state(network_sk)
+            assert retrieved_state.mode == StrategyModeEnum.full
+            assert retrieved_state.status == StrategyStatusEnum.dormant
+            assert retrieved_state.iterations == 5
+            assert retrieved_state.last_iteration_result_count == 10
 
-        # Network 3: error + partial (should NOT be returned)
-        n4js.set_network_strategy(
-            networks[3],
-            strategy,
-            StrategyState(
-                mode=StrategyModeEnum.partial, status=StrategyStatusEnum.error
-            ),
-        )
+        def test_get_strategies_for_execution_filtering(
+            self,
+            n4js: Neo4jStore,
+            network_tyk2,
+            scope_test,
+        ):
+            """Test that get_strategies_for_execution correctly filters strategies."""
+            an = network_tyk2
 
-        # Get strategies for execution
-        strategies = n4js.get_strategies_for_execution()
+            # Create 4 networks with different strategy states
+            networks = []
+            for i in range(4):
+                network_copy = an.copy_with_replacements(name=f"{an.name}_{i}")
+                network_sk = n4js.assemble_network(network_copy, scope_test)[0]
+                networks.append(network_sk)
 
-        # Should return exactly 2 strategies (awake+partial and dormant+full)
-        assert len(strategies) == 2
+            strategy = DummyStrategy()
 
-        # Extract network keys from returned strategies
-        returned_network_keys = {s[0] for s in strategies}
-        expected_network_keys = {networks[0], networks[1]}
+            # Network 0: awake + partial (should be returned)
+            n4js.set_network_strategy(
+                networks[0],
+                strategy,
+                StrategyState(
+                    mode=StrategyModeEnum.partial, status=StrategyStatusEnum.awake
+                ),
+            )
 
-        assert returned_network_keys == expected_network_keys
+            # Network 1: dormant + full (should be returned)
+            n4js.set_network_strategy(
+                networks[1],
+                strategy,
+                StrategyState(
+                    mode=StrategyModeEnum.full, status=StrategyStatusEnum.dormant
+                ),
+            )
 
-        # Verify the returned strategies have correct states
-        for network_sk, strategy_obj, strategy_state in strategies:
-            if network_sk == networks[0]:
-                assert strategy_state.mode == StrategyModeEnum.partial
-                assert strategy_state.status == StrategyStatusEnum.awake
-            elif network_sk == networks[1]:
-                assert strategy_state.mode == StrategyModeEnum.full
-                assert strategy_state.status == StrategyStatusEnum.dormant
+            # Network 2: awake + disabled (should NOT be returned)
+            n4js.set_network_strategy(
+                networks[2],
+                strategy,
+                StrategyState(
+                    mode=StrategyModeEnum.disabled, status=StrategyStatusEnum.awake
+                ),
+            )
+
+            # Network 3: error + partial (should NOT be returned)
+            n4js.set_network_strategy(
+                networks[3],
+                strategy,
+                StrategyState(
+                    mode=StrategyModeEnum.partial, status=StrategyStatusEnum.error
+                ),
+            )
+
+            # Get strategies for execution
+            strategies = n4js.get_strategies_for_execution()
+
+            # Should return exactly 2 strategies (awake+partial and dormant+full)
+            assert len(strategies) == 2
+
+            # Extract network keys from returned strategies
+            returned_network_keys = {s[0] for s in strategies}
+            expected_network_keys = {networks[0], networks[1]}
+
+            assert returned_network_keys == expected_network_keys
+
+            # Verify the returned strategies have correct states
+            for network_sk, strategy_obj, strategy_state in strategies:
+                if network_sk == networks[0]:
+                    assert strategy_state.mode == StrategyModeEnum.partial
+                    assert strategy_state.status == StrategyStatusEnum.awake
+                elif network_sk == networks[1]:
+                    assert strategy_state.mode == StrategyModeEnum.full
+                    assert strategy_state.status == StrategyStatusEnum.dormant
+
+    class TestComputeManager:
+
+        @staticmethod
+        def confirm_is_registered(
+            n4js: Neo4jStore, compute_manager_id: ComputeManagerID
+        ):
+            """Just check that the registration exists by name and UUID."""
+            query = """
+            MATCH (cmr: ComputeManagerRegistration {name: $name, uuid: $uuid})
+            RETURN cmr.name as name, cmr.uuid as uuid
+            """
+
+            results = n4js.execute_query(query, **compute_manager_id.to_dict())
+
+            return True if results.records else False
+
+        @staticmethod
+        def confirm_registration_contents(
+            n4js: Neo4jStore, cmr: ComputeManagerRegistration
+        ):
+            """Confirm that database registration information is consistent with registration inputs."""
+            query = """
+            MATCH (cmr: ComputeManagerRegistration {name: $name, uuid: $uuid})
+            RETURN cmr
+            """
+
+            results = n4js.execute_query(query, **cmr.to_dict())
+
+            properties = results.records[0]["cmr"]._properties
+            properties["last_status_update"] = properties[
+                "last_status_update"
+            ].to_native()
+
+            return cmr.to_dict() == properties
+
+        @staticmethod
+        def create_compute_service(
+            n4js: Neo4jStore,
+            compute_manager_id: str,
+            creation_time=None,
+            failure_deltas=[],
+        ) -> ComputeServiceID:
+            creation_time = creation_time or datetime.datetime.now(tz=datetime.UTC)
+            failure_times = list(map(lambda td: creation_time + td, failure_deltas))
+
+            registration = ComputeServiceRegistration(
+                identifier=ComputeServiceID(f"compute-service-{uuid.uuid4()}"),
+                registered=creation_time,
+                heartbeat=creation_time,
+                failure_times=failure_times,
+                manager_name=compute_manager_id.name,
+            )
+
+            compute_service_id = n4js.register_computeservice(registration)
+
+            return compute_service_id
+
+        @staticmethod
+        def compute_manager_registration_from_name(name: str):
+            compute_manager_id = ComputeManagerID.new_from_name(name)
+
+            now = datetime.datetime.now(tz=datetime.UTC)
+            return ComputeManagerRegistration(
+                name=compute_manager_id.name,
+                uuid=compute_manager_id.uuid,
+                saturation=0,
+                registered=now,
+                last_status_update=now,
+                status=ComputeManagerStatus.OK,
+                detail="",
+            )
+
+        def test_register(self, n4js: Neo4jStore):
+            cmr_1: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_name("testmanager")
+            )
+            n4js.register_computemanager(cmr_1)
+            assert self.confirm_registration_contents(n4js, cmr_1)
+
+            # Attempt to create another compute manager with the same
+            # manager id and register it. Since once has already been
+            # registered, this will fail
+            cmr_2 = self.compute_manager_registration_from_name("testmanager")
+
+            with pytest.raises(
+                ValueError,
+                match="ComputeManager with this name is already registered",
+            ):
+                n4js.register_computemanager(cmr_2)
+
+            # after deregistering the first testmanager, we should be
+            # able to register the second one
+            n4js.deregister_computemanager(cmr_1.to_compute_manager_id())
+
+            n4js.register_computemanager(cmr_2)
+            assert self.confirm_registration_contents(n4js, cmr_2)
+
+            # attempting to reregister the first compute manager is
+            # now expected to fail in the same way as before
+            with pytest.raises(
+                ValueError,
+                match="ComputeManager with this name is already registered",
+            ):
+                n4js.register_computemanager(cmr_1)
+
+        def test_deregister(self, n4js: Neo4jStore):
+            cmr: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_name("testmanager")
+            )
+            compute_manager_id = cmr.to_compute_manager_id()
+            n4js.register_computemanager(cmr)
+            assert self.confirm_is_registered(n4js, compute_manager_id)
+
+            # deregistration of a non-ERROR compute manager
+            # registration deletes the entry from the database
+            n4js.deregister_computemanager(compute_manager_id)
+            assert not self.confirm_is_registered(n4js, compute_manager_id)
+
+            # reregister and update the status to ERROR, the
+            # registration will still be there
+            n4js.register_computemanager(cmr)
+            assert self.confirm_is_registered(n4js, compute_manager_id)
+
+            n4js.update_compute_manager_status(
+                compute_manager_id,
+                ComputeManagerStatus.ERROR,
+                repr(RuntimeError("UnexpectedError")),
+            )
+            assert self.confirm_is_registered(n4js, compute_manager_id)
+
+        def test_registration_reclaims_services(self, n4js: Neo4jStore):
+
+            cmr: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_name("testmanager")
+            )
+            compute_manager_id = cmr.to_compute_manager_id()
+            n4js.register_computemanager(cmr)
+
+            # attach a few compute services
+            for _ in range(3):
+                self.create_compute_service(n4js, compute_manager_id)
+
+            # get all CSR claiming to be managed by name,
+            # along with any cmr that actually manages it
+            query = """
+            MATCH (csr: ComputeServiceRegistration {manager_name: $manager_name})
+            OPTIONAL MATCH (cmr: ComputeManagerRegistration)-[:MANAGES]->(csr)
+            RETURN csr, cmr
+            """
+
+            # check that all nodes exist
+            records = n4js.execute_query(
+                query, manager_name=compute_manager_id.name
+            ).records
+
+            for record in records:
+                _csr, _cmr = record["csr"], record["cmr"]
+                assert _csr is not None and _cmr is not None
+
+            # remove the registration for the manager
+            n4js.deregister_computemanager(compute_manager_id)
+
+            # check that the manager is no longer managing the compute
+            # services, but that the services still exist
+            records = n4js.execute_query(
+                query, manager_name=compute_manager_id.name
+            ).records
+
+            for record in records:
+                _csr, _cmr = record["csr"], record["cmr"]
+                assert _csr is not None and _cmr is None
+
+            # reregister to test that the compute services are reattached
+            n4js.register_computemanager(cmr)
+
+            records = n4js.execute_query(
+                query, manager_name=compute_manager_id.name
+            ).records
+
+            for record in records:
+                _csr, _cmr = record["csr"], record["cmr"]
+                assert _csr is not None and _cmr is not None
+
+        def test_clear_errored(self, n4js: Neo4jStore):
+            cmr: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_name("testmanager")
+            )
+            compute_manager_id = cmr.to_compute_manager_id()
+            n4js.register_computemanager(cmr)
+            assert self.confirm_is_registered(n4js, compute_manager_id)
+
+            n4js.update_compute_manager_status(
+                compute_manager_id,
+                ComputeManagerStatus.ERROR,
+                repr(RuntimeError("UnexpectedError")),
+            )
+            assert self.confirm_is_registered(n4js, compute_manager_id)
+
+            n4js.clear_errored_computemanager(compute_manager_id)
+            assert not self.confirm_is_registered(n4js, compute_manager_id)
+
+            # Attempt to clear the manager again, even though we know
+            # it's not present. This will raise a ValueError.
+            with pytest.raises(
+                ValueError,
+                match="Could not find an ERROR compute manager with the provided name and UUID",
+            ):
+                n4js.clear_errored_computemanager(compute_manager_id)
+
+        def test_get_instruction(
+            self, n4js: Neo4jStore, scope_test: Scope, network_tyk2: AlchemicalNetwork
+        ):
+            cmr: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_name("testmanager")
+            )
+            compute_manager_id = cmr.to_compute_manager_id()
+            n4js.register_computemanager(cmr)
+
+            def get_instruction(forgive_seconds=-60, failures=2):
+                nonlocal n4js, compute_manager_id
+                now = datetime.datetime.now(tz=datetime.UTC)
+                instruction, instruction_data = n4js.get_computemanager_instruction(
+                    compute_manager_id,
+                    forgive_time=now + timedelta(seconds=forgive_seconds),
+                    max_failures=failures,
+                    scopes=[scope_test],
+                )
+                return instruction, instruction_data
+
+            # check that a compute manager with no registered compute
+            # services is given the OK instruction
+            instruction, data = get_instruction()
+            assert instruction == ComputeManagerInstruction.OK
+            assert data == {"compute_service_ids": [], "num_tasks": 0}
+
+            # creating a failed a compute service with prior failures
+            # (3 failures, 30 seconds ago) triggers the SKIP
+            # instruction if the forgive time has not been reached,
+            # forgive time is 60 seconds ago
+            compute_service_id = self.create_compute_service(
+                n4js,
+                compute_manager_id,
+                creation_time=None,
+                failure_deltas=[timedelta(seconds=-30)] * 3,
+            )
+
+            instruction, data = get_instruction(forgive_seconds=-60)
+            assert instruction == ComputeManagerInstruction.SKIP
+            assert data == {"compute_service_ids": [compute_service_id]}
+
+            # if we allow up to 3 failures, we should be allowed to grow
+            instruction, data = get_instruction(forgive_seconds=-60, failures=3)
+            assert instruction == ComputeManagerInstruction.OK
+            assert data == {
+                "compute_service_ids": [compute_service_id],
+                "num_tasks": 0,
+            }
+
+            # check with the forgive time set to now and try again
+            instruction, data = get_instruction(forgive_seconds=0)
+            assert instruction == ComputeManagerInstruction.OK
+            assert data == {
+                "compute_service_ids": [compute_service_id],
+                "num_tasks": 0,
+            }
+
+            # Check the number of claimable tasks
+            an = network_tyk2
+            network_sk, taskhub_sk, _ = n4js.assemble_network(an, scope_test)
+            transformation = list(an.edges)[0]
+            transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+            task_sks = n4js.create_tasks([transformation_sk] * 5)
+            n4js.action_tasks(task_sks, taskhub_sk)
+
+            instruction, data = get_instruction(forgive_seconds=0)
+
+            assert data == {
+                "compute_service_ids": [compute_service_id],
+                "num_tasks": 5,
+            }
+
+            # an unregistered compute service is instructed to shutdown
+            n4js.deregister_computemanager(compute_manager_id)
+            instruction, data = get_instruction(forgive_seconds=0)
+            assert instruction == ComputeManagerInstruction.SHUTDOWN
+            assert data == {
+                "message": "no compute manager was found with the given manager name and UUID"
+            }
+
+        def test_update_status(self, n4js: Neo4jStore):
+
+            cmr: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_name("testmanager")
+            )
+            compute_manager_id = cmr.to_compute_manager_id()
+
+            # attempt to update the status before registering
+            with pytest.raises(
+                ValueError, match=f"No record for ComputeManager: {compute_manager_id}"
+            ):
+                n4js.update_compute_manager_status(
+                    compute_manager_id,
+                    ComputeManagerStatus.OK,
+                    detail=None,
+                    saturation=0,
+                )
+
+            n4js.register_computemanager(cmr)
+
+            def get_registration():
+                query_get_registration = """
+                MATCH (cmr: ComputeManagerRegistration {name: $name, uuid: $uuid})
+                RETURN cmr
+                """
+                return n4js.execute_query(
+                    query_get_registration, **compute_manager_id.to_dict()
+                ).records[0]["cmr"]
+
+            def get_last_status_update_time():
+                return get_registration()["last_status_update"].to_native()
+
+            # updating with OK and test saturation is set correctly
+            previous_update_time = get_last_status_update_time()
+            n4js.update_compute_manager_status(
+                compute_manager_id,
+                ComputeManagerStatus.OK,
+                saturation=0.25,
+            )
+            assert previous_update_time < get_last_status_update_time()
+            assert get_registration()["saturation"] == 0.25
+
+            # if a detail is provided for OK, a ValueError is raised
+            with pytest.raises(
+                ValueError,
+                match="detail should only be provided for the 'ERROR' status",
+            ):
+                n4js.update_compute_manager_status(
+                    compute_manager_id,
+                    ComputeManagerStatus.OK,
+                    detail="Needless detail",
+                    saturation=0,
+                )
+
+            # test omission of saturation with OK
+            with pytest.raises(
+                ValueError, match="saturation is required for the 'OK' status"
+            ):
+                n4js.update_compute_manager_status(
+                    compute_manager_id, ComputeManagerStatus.OK
+                )
+
+            # check that status update time can be set manually, even
+            # so far as setting it in the past
+            previous_update_time = get_last_status_update_time()
+            n4js.update_compute_manager_status(
+                compute_manager_id,
+                ComputeManagerStatus.OK,
+                update_time=datetime.datetime.now(tz=datetime.UTC)
+                + timedelta(minutes=-10),
+                saturation=0,
+            )
+            assert previous_update_time > get_last_status_update_time()
+
+            # updating with ERROR and test detail is set correctly
+            previous_update_time = get_last_status_update_time()
+            n4js.update_compute_manager_status(
+                compute_manager_id, ComputeManagerStatus.ERROR, detail="Something"
+            )
+            assert previous_update_time < get_last_status_update_time()
+
+            # if a detail is not provided for ERROR, a ValueError is raised
+            with pytest.raises(
+                ValueError, match="detail is required for the 'ERROR' status"
+            ):
+                n4js.update_compute_manager_status(
+                    compute_manager_id, ComputeManagerStatus.ERROR, detail=None
+                )
+
+            # try setting a nonsense status
+            with pytest.raises(
+                ValueError, match='"INVALID" is not a valid ComputeManagerStatus'
+            ):
+                # try updating with an invalid status
+                n4js.update_compute_manager_status(compute_manager_id, "INVALID")
+
+            for invalid_saturation in [-1, 1.01]:
+                with pytest.raises(
+                    ValueError, match="saturation must be between 0 and 1"
+                ):
+                    n4js.update_compute_manager_status(
+                        compute_manager_id,
+                        ComputeManagerStatus.OK,
+                        saturation=invalid_saturation,
+                    )
+
+        def test_expiration(self, n4js: Neo4jStore):
+
+            cmr: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_name("testmanager")
+            )
+            compute_manager_id = cmr.to_compute_manager_id()
+            n4js.register_computemanager(cmr)
+
+            n4js.update_compute_manager_status(
+                compute_manager_id,
+                ComputeManagerStatus.OK,
+                update_time=datetime.datetime.now(tz=datetime.UTC) + timedelta(days=-1),
+                saturation=0,
+            )
+
+            # attach a few compute services
+            for _ in range(3):
+                self.create_compute_service(n4js, compute_manager_id)
+
+            now = datetime.datetime.now(tz=datetime.UTC)
+            n4js.expire_computemanager_registrations(
+                now + timedelta(hours=-2), now + timedelta(hours=-24)
+            )
+
+            # assert the manager is no longer registered
+            assert not self.confirm_is_registered(n4js, compute_manager_id)
+
+            # get all compute services and their possible managers
+            query = """
+            MATCH (csr: ComputeServiceRegistration {manager_name: $manager_name})
+            OPTIONAL MATCH (cmr: ComputeManagerRegistration)-[:MANAGES]->(csr)
+            RETURN csr, cmr
+            """
+
+            records = n4js.execute_query(
+                query, manager_name=compute_manager_id.name
+            ).records
+
+            # check that the compute services still exist, even though
+            # the manager was removed
+            for record in records:
+                _csr, _cmr = record["csr"], record["cmr"]
+                assert _csr is not None and _cmr is None

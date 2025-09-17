@@ -15,7 +15,7 @@ def pre_load_payload(network, scope, name="incomplete 2"):
     headers = {"Content-type": "application/json"}
     data = dict(
         network=KeyedChain.gufe_to_keyed_chain_rep(new_network),
-        scope=scope.dict(),
+        scope=scope.to_dict(),
         state="active",
     )
     jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)

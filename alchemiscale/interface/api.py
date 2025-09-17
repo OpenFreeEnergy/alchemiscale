@@ -1133,7 +1133,7 @@ def get_protocoldagresult(
             detail=str(e),
         )
 
-    pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.dict())
+    pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.to_dict())
 
     # we leave each ProtocolDAGResult in string form to avoid
     # deserializing/reserializing here; just passing through to client

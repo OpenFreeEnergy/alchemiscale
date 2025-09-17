@@ -27,6 +27,13 @@ class ComputeServiceSettings(BaseModel):
             "resources, e.g. different hosts or HPC clusters."
         ),
     )
+    compute_manager_id: str | None = Field(
+        None,
+        description=(
+            "The ID of the autoscaling compute manager responsible for the creation "
+            "of this compute service. Default is None."
+        ),
+    )
     shared_basedir: Path = Field(
         ..., description="Filesystem path to use for `ProtocolDAG` `shared` space."
     )
@@ -113,4 +120,27 @@ class ComputeServiceSettings(BaseModel):
     client_verify: bool = Field(
         True,
         description="Whether to verify SSL certificate presented by the API server.",
+    )
+
+
+class ComputeManagerSettings(BaseModel):
+    name: str = Field(
+        ...,
+        description=(
+            "The name to give this compute manager. This value should be distinct from all"
+            "other compute managers."
+        ),
+    )
+    logfile: Path | None = Field(..., description="File path to write logs to.")
+    max_compute_services: int = Field(
+        ...,
+        description="Maximum number of compute services the manager is allowed to have running at a time.",
+    )
+    sleep_interval: int = Field(
+        1800,
+        description="Time in seconds to sleep before requesting another instruction.",
+    )
+    loglevel: str = Field(
+        "WARN",
+        description="The loglevel at which to report; see the :mod:`logging` docs for available levels.",
     )
