@@ -52,7 +52,6 @@ from .models import (
     Tracebacks,
 )
 
-from ..strategies import Strategy
 from ..models import Scope, ScopedKey
 from .cypher import cypher_or
 
