@@ -1435,9 +1435,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         strategy_state_props = strategy_state.to_dict()
 
         with self.transaction() as tx:
-            records = tx.run(q,
-                             network=str(network),
-                             strategy_state=strategy_state_props).to_eager_result().records
+            records = (
+                tx.run(q, network=str(network), strategy_state=strategy_state_props)
+                .to_eager_result()
+                .records
+            )
 
         if not records:
             return None

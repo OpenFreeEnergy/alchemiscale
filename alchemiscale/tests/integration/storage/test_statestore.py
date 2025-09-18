@@ -3477,7 +3477,9 @@ class TestNeo4jStore(TestStateStore):
             )
 
             # Set the strategy
-            strategy_sk = n4js.set_network_strategy(network_sk, strategy, strategy_state)
+            strategy_sk = n4js.set_network_strategy(
+                network_sk, strategy, strategy_state
+            )
             assert strategy_sk is not None
 
             # Verify strategy was set
