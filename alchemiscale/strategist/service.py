@@ -255,9 +255,7 @@ class StrategistService:
                 for transformation_sk in self.n4js.get_network_transformations(
                     network_sk
                 )
-                for ref_sk in self.n4js.get_transformation_results(
-                    transformation_sk
-                )
+                for ref_sk in self.n4js.get_transformation_results(transformation_sk)
                 if self.n4js.get_gufe(ref_sk).ok
             ]
         )
@@ -266,7 +264,7 @@ class StrategistService:
         self, strategy_state: StrategyState, current_result_count: int
     ) -> tuple[bool, StrategyState]:
         """Check if strategy is dormant and handle accordingly.
-        
+
         Returns:
             (should_continue, updated_strategy_state)
         """
@@ -281,10 +279,10 @@ class StrategistService:
         return True, strategy_state
 
     def _execute_strategy_logic(
-        self, 
-        network_sk: ScopedKey, 
+        self,
+        network_sk: ScopedKey,
         protocol_results: dict[ScopedKey, ProtocolResult | None],
-        sk_to_tf: dict[ScopedKey, Transformation]
+        sk_to_tf: dict[ScopedKey, Transformation],
     ) -> dict[GufeKey, float]:
         """Execute strategy logic to get transformation weights."""
         # Get network
@@ -306,7 +304,10 @@ class StrategistService:
         return strategy_result.resolve()  # Get normalized weights
 
     def _handle_dormant_strategy(
-        self, strategy_state: StrategyState, network_sk: ScopedKey, current_result_count: int
+        self,
+        strategy_state: StrategyState,
+        network_sk: ScopedKey,
+        current_result_count: int,
     ) -> StrategyState:
         """Handle strategy going dormant (all weights are None)."""
         strategy_state.status = StrategyStatusEnum.dormant
@@ -465,7 +466,11 @@ class StrategistService:
             if target_count > actioned_count:
                 # Action additional tasks, creating them as necessary
                 self._action_additional_tasks(
-                    transformation_sk, taskhub_sk, target_count, actioned_count, actioned_tasks
+                    transformation_sk,
+                    taskhub_sk,
+                    target_count,
+                    actioned_count,
+                    actioned_tasks,
                 )
 
             elif (
@@ -474,7 +479,11 @@ class StrategistService:
             ):
                 # Cancel excess tasks
                 self._cancel_excess_tasks(
-                    transformation_sk, taskhub_sk, target_count, actioned_count, actioned_tasks
+                    transformation_sk,
+                    taskhub_sk,
+                    target_count,
+                    actioned_count,
+                    actioned_tasks,
                 )
 
     def _update_strategy_state_success(
@@ -489,7 +498,10 @@ class StrategistService:
         return strategy_state
 
     def _update_strategy_state_error(
-        self, strategy_state: StrategyState, current_result_count: int, exception: Exception
+        self,
+        strategy_state: StrategyState,
+        current_result_count: int,
+        exception: Exception,
     ) -> StrategyState:
         """Update strategy state after execution error."""
         strategy_state.last_iteration = datetime.datetime.now(tz=datetime.UTC)
@@ -505,7 +517,7 @@ class StrategistService:
     ) -> StrategyState:
         """Execute a single strategy and return updated state."""
         current_result_count = 0
-        
+
         try:
             # Check if strategy went dormant - count successful results
             current_result_count = self._count_successful_results(network_sk)
@@ -521,7 +533,9 @@ class StrategistService:
             protocol_results, sk_to_tf = self._get_protocol_results(network_sk)
 
             # Execute strategy logic to get weights
-            weights = self._execute_strategy_logic(network_sk, protocol_results, sk_to_tf)
+            weights = self._execute_strategy_logic(
+                network_sk, protocol_results, sk_to_tf
+            )
 
             # Check if all weights are None (stop condition)
             if all(w is None for w in weights.values()):
@@ -543,7 +557,9 @@ class StrategistService:
             self._apply_task_counts(task_counts, sk_to_tf, network_sk, strategy_state)
 
             # Update strategy state for successful execution
-            return self._update_strategy_state_success(strategy_state, current_result_count)
+            return self._update_strategy_state_success(
+                strategy_state, current_result_count
+            )
 
         except Exception as e:
             # Strategy execution failed
