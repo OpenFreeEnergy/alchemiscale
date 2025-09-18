@@ -544,19 +544,19 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         return super()._from_dict(d_)
 
 
-class StrategyModeEnum(Enum):
+class StrategyModeEnum(StrEnum):
     full = "full"
     partial = "partial"
     disabled = "disabled"
 
 
-class StrategyStatusEnum(Enum):
+class StrategyStatusEnum(StrEnum):
     awake = "awake"
     dormant = "dormant"
     error = "error"
 
 
-class StrategyTaskScalingEnum(Enum):
+class StrategyTaskScalingEnum(StrEnum):
     linear = "linear"
     exponential = "exponential"
 

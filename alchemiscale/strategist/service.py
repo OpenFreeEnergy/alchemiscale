@@ -44,8 +44,8 @@ logger = logging.getLogger(__name__)
 
 def execute_strategy_worker(
     network_sk: ScopedKey,
-    strategy_state: "StrategyState",
-    settings: "StrategistSettings",
+    strategy_state: StrategyState,
+    settings: StrategistSettings,
 ) -> "StrategyState":
     """Standalone worker function for executing strategies in ProcessPoolExecutor.
 
