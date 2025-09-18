@@ -1218,7 +1218,7 @@ async def set_network_strategy(
     except Exception as e:
         raise HTTPException(
             status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid input for strategy",
+            detail=str(e),
         )
 
     if strategy is not None:
@@ -1228,11 +1228,18 @@ async def set_network_strategy(
         except ValidationError as e:
             raise HTTPException(
                 status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Invalid strategy configuration: {e}",
+                detail=str(e),
             )
 
-        strategy_sk = n4js.set_network_strategy(sk, strategy, strategy_state)
-        return str(strategy_sk) if strategy_sk else None
+        try:
+            strategy_sk = n4js.set_network_strategy(sk, strategy, strategy_state)
+        except ValueError:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
+
+        return str(strategy_sk) if strategy_sk is not None else None
     else:
         # Remove strategy
         n4js.set_network_strategy(sk, None)
@@ -1251,13 +1258,7 @@ def get_network_strategy(
     validate_scopes(sk.scope, token)
 
     strategy = n4js.get_network_strategy(sk)
-    if strategy is None:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"No strategy found for network '{network_scoped_key}'",
-        )
-
-    return GufeJSONResponse(strategy)
+    return GufeJSONResponse(strategy) if strategy is not None else None
 
 
 @router.get("/networks/{network_scoped_key}/strategy/state")
@@ -1272,13 +1273,8 @@ def get_network_strategy_state(
     validate_scopes(sk.scope, token)
 
     strategy_state = n4js.get_network_strategy_state(sk)
-    if strategy_state is None:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"No strategy found for network '{network_scoped_key}'",
-        )
 
-    return strategy_state.to_dict()
+    return strategy_state.to_dict() if strategy_state is not None else None
 
 
 @router.get("/networks/{network_scoped_key}/strategy/status")
@@ -1293,13 +1289,8 @@ def get_network_strategy_status(
     validate_scopes(sk.scope, token)
 
     strategy_state = n4js.get_network_strategy_state(sk)
-    if strategy_state is None:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"No strategy found for network '{network_scoped_key}'",
-        )
 
-    return strategy_state.status.value
+    return strategy_state.status.value if strategy_state is not None else None
 
 
 @router.post("/networks/{network_scoped_key}/strategy/awake")
@@ -1314,25 +1305,18 @@ def set_network_strategy_awake(
     validate_scopes(sk.scope, token)
 
     strategy_state = n4js.get_network_strategy_state(sk)
+
     if strategy_state is None:
-        raise HTTPException(
-            status_code=http_status.HTTP_404_NOT_FOUND,
-            detail=f"No strategy found for network '{network_scoped_key}'",
-        )
+        return
 
     # Update strategy state to awake and clear error info
     strategy_state.status = "awake"
     strategy_state.exception = None
     strategy_state.traceback = None
 
-    success = n4js.update_strategy_state(sk, strategy_state)
-    if not success:
-        raise HTTPException(
-            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update strategy state",
-        )
+    updated = n4js.update_strategy_state(sk, strategy_state)
 
-    return {"status": "awake"}
+    return str(updated) if updated is not None else None
 
 
 ### add router

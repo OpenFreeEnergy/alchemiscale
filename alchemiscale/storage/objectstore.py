@@ -19,7 +19,6 @@ from ..settings import S3ObjectStoreSettings
 OBJECT_FILENAME = "obj.json.zst"
 
 
-@lru_cache
 def get_s3os(settings: S3ObjectStoreSettings) -> "S3ObjectStore":
     """Convenience function for getting an S3ObjectStore directly from settings."""
     return S3ObjectStore(settings)

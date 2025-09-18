@@ -70,7 +70,6 @@ from .subgraph import (
 )
 
 
-@lru_cache
 def get_n4js(settings: Neo4jStoreSettings):
     """Convenience function for getting a Neo4jStore directly from settings."""
     return Neo4jStore(settings)
@@ -1217,22 +1216,22 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> ScopedKey | None:
         """Set the compute Strategy for the given AlchemicalNetwork.
 
-        If strategy is None, removes the strategy from the network and cleans up
-        orphaned Strategy nodes.
+        If `strategy` is ``None``, removes the strategy from the network and
+        cleans up orphaned `Strategy` nodes.
 
         Parameters
         ----------
         network
-            ScopedKey of the AlchemicalNetwork
+            ScopedKey of the AlchemicalNetwork.
         strategy
-            Strategy object (GufeTokenizable) or None to remove strategy
+            Strategy object (GufeTokenizable) or None to remove strategy.
         strategy_state
-            Initial strategy state, if None uses defaults
+            Initial strategy state, if None uses defaults.
 
         Returns
         -------
         ScopedKey
-            ScopedKey of the Strategy that was set, or None if strategy was removed
+            ScopedKey of the Strategy that was set, or None if strategy was removed.
         """
         if network.qualname != "AlchemicalNetwork":
             raise ValueError(
@@ -1283,12 +1282,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         Parameters
         ----------
         network
-            ScopedKey of the AlchemicalNetwork
+            ScopedKey of the AlchemicalNetwork.
 
         Returns
         -------
         GufeTokenizable | None
-            Strategy object or None if no strategy is set
+            Strategy object or None if no strategy is set.
         """
         q = """
         MATCH (an:AlchemicalNetwork {_scoped_key: $network})<-[:PROGRESSES]-(s)
@@ -1314,12 +1313,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         Parameters
         ----------
         network
-            ScopedKey of the AlchemicalNetwork
+            ScopedKey of the AlchemicalNetwork.
 
         Returns
         -------
         StrategyState | None
-            Strategy state or None if no strategy is set
+            Strategy state or None if no strategy is set.
         """
         q = """
         MATCH (an:AlchemicalNetwork {_scoped_key: $network})<-[r:PROGRESSES]-()
@@ -1409,36 +1408,41 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def update_strategy_state(
         self, network: ScopedKey, strategy_state: StrategyState
-    ) -> bool:
+    ) -> ScopedKey | None:
         """Update the StrategyState for the given AlchemicalNetwork.
 
         Parameters
         ----------
         network
-            ScopedKey of the AlchemicalNetwork
+            ScopedKey of the AlchemicalNetwork.
         strategy_state
-            Updated strategy state
+            Updated strategy state.
 
         Returns
         -------
-        bool
-            True if update was successful, False if no strategy found
+        ScopedKey | None
+            The ScopedKey of the AlchemicalNetwork if StrategyState
+            successfully updated; ``None`` otherwise.
+
         """
+
         q = """
         MATCH (an:AlchemicalNetwork {_scoped_key: $network})<-[r:PROGRESSES]-()
-        SET r += $strategy_state
-        RETURN count(r) AS updated_count
+        SET r = $strategy_state
+        RETURN r
         """
 
         strategy_state_props = strategy_state.to_dict()
 
         with self.transaction() as tx:
-            result = tx.run(
-                q, network=str(network), strategy_state=strategy_state_props
-            )
-            record = result.single()
+            records = tx.run(q,
+                             network=str(network),
+                             strategy_state=strategy_state_props).to_eager_result().records
 
-        return record["updated_count"] > 0 if record else False
+        if not records:
+            return None
+
+        return network
 
     def register_computeservice(
         self, compute_service_registration: ComputeServiceRegistration
