@@ -2696,3 +2696,90 @@ class TestTaskRestartPolicy:
         expected = {pattern: 1 for pattern in self.default_patterns[:2]}
         expected[self.default_patterns[-1]] = self.default_max_retries
         assert user_client.get_task_restart_patterns(network_scoped_key) == expected
+
+
+class TestNetworkStrategy:
+
+    def test_set_network_strategy(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        """Test setting and removing network strategy via client."""
+        from alchemiscale.tests.integration.conftest import DummyStrategy
+
+        network_scoped_key = user_client.get_scoped_key(network_tyk2, scope_test)
+        strategy = DummyStrategy()
+
+        # Test setting strategy
+        user_client.set_network_strategy(network_scoped_key, strategy)
+
+        # Verify strategy was set
+        retrieved_strategy = user_client.get_network_strategy(network_scoped_key)
+        assert retrieved_strategy is not None
+        assert type(retrieved_strategy) == DummyStrategy
+        assert retrieved_strategy == strategy
+
+        # Test removing strategy
+        user_client.set_network_strategy(network_scoped_key, None)
+
+        assert user_client.get_network_strategy(network_scoped_key) is None
+
+    def test_get_network_strategy_state(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        """Test getting network strategy state via client."""
+        from alchemiscale.tests.integration.conftest import DummyStrategy
+        from alchemiscale.storage.models import StrategyState, StrategyStatusEnum
+
+        network_scoped_key = user_client.get_scoped_key(network_tyk2, scope_test)
+        strategy = DummyStrategy()
+
+        # Set strategy first
+        user_client.set_network_strategy(network_scoped_key, strategy)
+
+        # Get strategy state
+        state = user_client.get_network_strategy_state(network_scoped_key)
+        assert isinstance(state, StrategyState)
+        assert state.status == StrategyStatusEnum.awake
+        assert state.iterations >= 0
+
+        # Test getting just the status
+        status = user_client.get_network_strategy_status(network_scoped_key)
+        assert status == "awake"
+
+    def test_set_network_strategy_awake(
+        self,
+        scope_test,
+        n4js_preloaded,
+        network_tyk2,
+        user_client: client.AlchemiscaleClient,
+    ):
+        """Test waking up dormant network strategies via client."""
+        from alchemiscale.tests.integration.conftest import DummyStrategy
+        from alchemiscale.storage.models import StrategyState, StrategyStatusEnum
+
+        network_scoped_key = user_client.get_scoped_key(network_tyk2, scope_test)
+        strategy = DummyStrategy()
+
+        # Set strategy first
+        user_client.set_network_strategy(network_scoped_key, strategy)
+
+        # Put it into dormant state via database
+        state = StrategyState(status=StrategyStatusEnum.dormant, iterations=3)
+        n4js_preloaded.update_strategy_state(network_scoped_key, state)
+
+        # Verify it's dormant
+        assert user_client.get_network_strategy_status(network_scoped_key) == "dormant"
+
+        # Wake it up
+        user_client.set_network_strategy_awake(network_scoped_key)
+
+        # Verify it's now awake
+        assert user_client.get_network_strategy_status(network_scoped_key) == "awake"

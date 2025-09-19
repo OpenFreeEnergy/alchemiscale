@@ -26,6 +26,9 @@ from alchemiscale.storage.models import (
     ComputeManagerInstruction,
     ComputeServiceID,
     ComputeServiceRegistration,
+    StrategyState,
+    StrategyModeEnum,
+    StrategyStatusEnum,
 )
 from alchemiscale.models import Scope, ScopedKey
 from alchemiscale.security.models import (
@@ -42,7 +45,7 @@ from alchemiscale.tests.integration.storage.utils import (
     tasks_are_not_actioned_on_taskhub,
     tasks_are_waiting,
 )
-from ..conftest import DummyProtocolA, DummyProtocolB, DummyProtocolC
+from ..conftest import DummyProtocolA, DummyProtocolB, DummyProtocolC, DummyStrategy
 
 
 class TestStateStore: ...
@@ -54,9 +57,6 @@ class TestNeo4jStore(TestStateStore):
     @pytest.fixture
     def n4js(self, n4js_fresh):
         return n4js_fresh
-
-    def test_server(self, graph):
-        graph.get_server_info()
 
     def test_assemble_network(self, n4js, network_tyk2, scope_test):
         an = network_tyk2
@@ -948,6 +948,59 @@ class TestNeo4jStore(TestStateStore):
         assert len(graph) == len(task_sks)
         assert set(graph.keys()) == set(task_sks)
         assert all([graph[t] == task_sks[0] for t in task_sks[1:13:4]])
+
+    def test_get_transformation_actioned_tasks(self, n4js, network_tyk2, scope_test):
+        an = network_tyk2
+        network_sk, taskhub_sk, _ = n4js.assemble_network(an, scope_test)
+
+        transformation = list(an.edges)[0]
+        transformation_sk = n4js.get_scoped_key(transformation, scope_test)
+
+        # create tasks for the transformation
+        task_sks = n4js.create_tasks([transformation_sk] * 5)
+
+        # initially, no tasks should be actioned
+        actioned_tasks = n4js.get_transformation_actioned_tasks(
+            transformation_sk, taskhub_sk
+        )
+        assert actioned_tasks == []
+
+        # action 3 of 5 tasks
+        n4js.action_tasks(task_sks[:3], taskhub_sk)
+
+        # should now get back the 3 actioned tasks
+        actioned_tasks = n4js.get_transformation_actioned_tasks(
+            transformation_sk, taskhub_sk
+        )
+        assert len(actioned_tasks) == 3
+        assert set(actioned_tasks) == set(task_sks[:3])
+
+        # create a second network to get a second taskhub
+        an2 = an.copy_with_replacements(name=an.name + "_2")
+        network2_sk, taskhub2_sk, _ = n4js.assemble_network(an2, scope_test)
+        n4js.action_tasks(task_sks[3:], taskhub2_sk)
+
+        # first taskhub should still only have 3 tasks
+        actioned_tasks = n4js.get_transformation_actioned_tasks(
+            transformation_sk, taskhub_sk
+        )
+        assert len(actioned_tasks) == 3
+        assert set(actioned_tasks) == set(task_sks[:3])
+
+        # second taskhub should have 2 tasks
+        actioned_tasks2 = n4js.get_transformation_actioned_tasks(
+            transformation_sk, taskhub2_sk
+        )
+        assert len(actioned_tasks2) == 2
+        assert set(actioned_tasks2) == set(task_sks[3:])
+
+        # test with different transformation - should get no results
+        transformation2 = list(an.edges)[1]
+        transformation2_sk = n4js.get_scoped_key(transformation2, scope_test)
+        actioned_tasks_diff = n4js.get_transformation_actioned_tasks(
+            transformation2_sk, taskhub_sk
+        )
+        assert actioned_tasks_diff == []
 
     def test_get_task_transformation(
         self,
@@ -3402,6 +3455,161 @@ class TestNeo4jStore(TestStateStore):
         assert task_statuses[3] == TaskStatusEnum.complete
         assert task_statuses[4] == TaskStatusEnum.invalid
         assert task_statuses[5] == TaskStatusEnum.deleted
+
+    class TestStrategy:
+
+        def test_set_network_strategy(
+            self,
+            n4js: Neo4jStore,
+            network_tyk2,
+            scope_test,
+        ):
+            """Test setting and removing network strategies."""
+            an = network_tyk2
+            network_sk = n4js.assemble_network(an, scope_test)[0]
+
+            # Create a test strategy
+            strategy = DummyStrategy()
+            strategy_state = StrategyState(
+                mode=StrategyModeEnum.partial,
+                status=StrategyStatusEnum.awake,
+                max_tasks_per_transformation=5,
+            )
+
+            # Set the strategy
+            strategy_sk = n4js.set_network_strategy(
+                network_sk, strategy, strategy_state
+            )
+            assert strategy_sk is not None
+
+            # Verify strategy was set
+            retrieved_strategy = n4js.get_network_strategy(network_sk)
+            assert retrieved_strategy is not None
+            assert retrieved_strategy == strategy
+            assert retrieved_strategy is strategy
+
+            # Verify strategy state was set
+            retrieved_state = n4js.get_network_strategy_state(network_sk)
+            assert retrieved_state is not None
+            assert retrieved_state.mode == StrategyModeEnum.partial
+            assert retrieved_state.status == StrategyStatusEnum.awake
+            assert retrieved_state.max_tasks_per_transformation == 5
+
+            # Remove the strategy
+            result = n4js.set_network_strategy(network_sk, None)
+            assert result is None
+
+            # Verify strategy was removed
+            assert n4js.get_network_strategy(network_sk) is None
+            assert n4js.get_network_strategy_state(network_sk) is None
+
+        def test_update_strategy_state(
+            self,
+            n4js: Neo4jStore,
+            network_tyk2,
+            scope_test,
+        ):
+            """Test updating strategy state."""
+            an = network_tyk2
+            network_sk = n4js.assemble_network(an, scope_test)[0]
+
+            # Create and set a strategy
+            strategy = DummyStrategy()
+            strategy_state = StrategyState(
+                mode=StrategyModeEnum.partial, status=StrategyStatusEnum.awake
+            )
+            n4js.set_network_strategy(network_sk, strategy, strategy_state)
+
+            # Update the strategy state
+            new_state = StrategyState(
+                mode=StrategyModeEnum.full,
+                status=StrategyStatusEnum.dormant,
+                iterations=5,
+                last_iteration_result_count=10,
+            )
+            n4js.update_strategy_state(network_sk, new_state)
+
+            # Verify state was updated
+            retrieved_state = n4js.get_network_strategy_state(network_sk)
+            assert retrieved_state.mode == StrategyModeEnum.full
+            assert retrieved_state.status == StrategyStatusEnum.dormant
+            assert retrieved_state.iterations == 5
+            assert retrieved_state.last_iteration_result_count == 10
+
+        def test_get_strategies_for_execution_filtering(
+            self,
+            n4js: Neo4jStore,
+            network_tyk2,
+            scope_test,
+        ):
+            """Test that get_strategies_for_execution correctly filters strategies."""
+            an = network_tyk2
+
+            # Create 4 networks with different strategy states
+            networks = []
+            for i in range(4):
+                network_copy = an.copy_with_replacements(name=f"{an.name}_{i}")
+                network_sk = n4js.assemble_network(network_copy, scope_test)[0]
+                networks.append(network_sk)
+
+            strategy = DummyStrategy()
+
+            # Network 0: awake + partial (should be returned)
+            n4js.set_network_strategy(
+                networks[0],
+                strategy,
+                StrategyState(
+                    mode=StrategyModeEnum.partial, status=StrategyStatusEnum.awake
+                ),
+            )
+
+            # Network 1: dormant + full (should be returned)
+            n4js.set_network_strategy(
+                networks[1],
+                strategy,
+                StrategyState(
+                    mode=StrategyModeEnum.full, status=StrategyStatusEnum.dormant
+                ),
+            )
+
+            # Network 2: awake + disabled (should NOT be returned)
+            n4js.set_network_strategy(
+                networks[2],
+                strategy,
+                StrategyState(
+                    mode=StrategyModeEnum.disabled, status=StrategyStatusEnum.awake
+                ),
+            )
+
+            # Network 3: error + partial (should NOT be returned)
+            n4js.set_network_strategy(
+                networks[3],
+                strategy,
+                StrategyState(
+                    mode=StrategyModeEnum.partial, status=StrategyStatusEnum.error
+                ),
+            )
+
+            # Get strategies for execution
+            strategies = n4js.get_strategies_for_execution()
+
+            # Should return exactly 2 strategies (awake+partial and dormant+full)
+            assert len(strategies) == 2
+
+            # Extract network keys from returned strategies
+            returned_network_keys = {s[0] for s in strategies}
+            expected_network_keys = {networks[0], networks[1]}
+
+            assert returned_network_keys == expected_network_keys
+
+            # Verify the returned strategies have correct states
+            for network_sk, strategy_obj, strategy_state in strategies:
+                if network_sk == networks[0]:
+                    assert strategy_state.mode == StrategyModeEnum.partial
+                    assert strategy_state.status == StrategyStatusEnum.awake
+                elif network_sk == networks[1]:
+                    assert strategy_state.mode == StrategyModeEnum.full
+                    assert strategy_state.status == StrategyStatusEnum.dormant
 
     class TestComputeManager:
 

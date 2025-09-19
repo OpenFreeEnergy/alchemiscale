@@ -3,6 +3,10 @@ import json
 import zstandard as zstd
 
 
+def json_to_gufe(jsondata):
+    return GufeTokenizable.from_dict(json.loads(jsondata, cls=JSON_HANDLER.decoder))
+
+
 def compress_keyed_chain_zstd(keyed_chain: list[tuple[str, dict]]) -> bytes:
     """Compress a keyed chain using zstandard compression.
 

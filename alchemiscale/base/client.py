@@ -24,10 +24,7 @@ import httpx
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from ..models import ScopedKey
-
-
-def json_to_gufe(jsondata):
-    return GufeTokenizable.from_dict(json.loads(jsondata, cls=JSON_HANDLER.decoder))
+from ..compression import json_to_gufe
 
 
 class AlchemiscaleBaseClientError(Exception):
