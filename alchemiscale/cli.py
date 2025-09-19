@@ -532,9 +532,7 @@ def strategist(config_file):
     params = yaml.safe_load(config_file)
 
     if "scopes" in params:
-        params["scopes"] = [
-            Scope.from_str(scope) for scope in params["scopes"]
-        ]
+        params["scopes"] = [Scope.from_str(scope) for scope in params["scopes"]]
 
     service = StrategistService(StrategistSettings(**params))
 

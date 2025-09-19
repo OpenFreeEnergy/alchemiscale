@@ -304,6 +304,7 @@ class DummyProtocolC(DummyProtocol):
 
 class DummyStrategySettings(StrategySettings):
     """Settings for DummyStrategy."""
+
     ...
 
 
