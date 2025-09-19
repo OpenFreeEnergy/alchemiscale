@@ -1,8 +1,8 @@
-.. _strategy-guide:
+.. _strategy-automation:
 
-##################################
-Using Strategies with alchemiscale
-##################################
+####################################
+Automating Execution with a Strategy
+####################################
 
 Overview
 ========
