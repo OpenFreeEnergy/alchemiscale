@@ -80,18 +80,16 @@ Basic Usage
 .. code-block:: python
 
     from alchemiscale import AlchemiscaleClient
-    from stratocaster.strategies import UncertaintyStrategy
+    from stratocaster.strategies import ConnectivityStrategy
 
     client = AlchemiscaleClient('https://your-server.com', 'your-token')
 
     # Create your AlchemicalNetwork
     network = create_your_network()  # Your network creation logic
+    scope = Scope('my-org', 'my-campaign', 'my-project')
 
-    # Submit with a strategy
-    network_sk = client.create_network(
-        network=network, 
-        strategy=UncertaintyStrategy(target_uncertainty=0.5)  # Target 0.5 kcal/mol uncertainty
-    )
+    # Submit your network
+    network_sk = client.create_network(network, scope)
 
 2. Configure Strategy Settings
 ------------------------------
@@ -174,57 +172,6 @@ If you're running your own strategist service:
       - org: "my-org"
         campaign: "my-campaign"
 
-Custom Strategy Development
----------------------------
-
-.. code-block:: python
-
-    from stratocaster.base import Strategy, StrategyResult
-    from stratocaster.base.models import StrategySettings
-    from gufe import AlchemicalNetwork, ProtocolResult
-    from gufe.tokenization import GufeKey
-    from pydantic import Field
-
-    class MyCustomStrategySettings(StrategySettings):
-        uncertainty_threshold: float = Field(
-            default=0.5, 
-            description="Uncertainty threshold in kcal/mol"
-        )
-
-    class MyCustomStrategy(Strategy):
-        _settings_cls = MyCustomStrategySettings
-        
-        def _propose(
-            self, 
-            network: AlchemicalNetwork,
-            protocol_results: dict[GufeKey, ProtocolResult]
-        ) -> StrategyResult:
-            # Your strategy logic here
-            settings = self.settings
-            weights = {}
-            
-            for state_a, state_b in network.graph.edges():
-                # Get the transformation key from the edge
-                transformation_key = network.graph.get_edge_data(state_a, state_b)[0]["object"].key
-                
-                # Analyze results for this transformation
-                result = protocol_results.get(transformation_key)
-                
-                if result is None:
-                    # No results yet - high priority
-                    weights[transformation_key] = 1.0
-                elif result.uncertainty > settings.uncertainty_threshold:
-                    # Needs more work - medium priority  
-                    weights[transformation_key] = 0.5
-                else:
-                    # Sufficient results - no priority
-                    weights[transformation_key] = None
-                    
-            return StrategyResult(weights)
-        
-        @classmethod
-        def _default_settings(cls) -> StrategySettings:
-            return MyCustomStrategySettings()
 
 Best Practices
 ==============
@@ -233,7 +180,7 @@ Strategy Selection
 ------------------
 
 - **Use simple strategies first** (e.g., connectivity-based)
-- **Test with** ``additive`` **mode** before using ``full`` mode
+- **Test with** ``partial`` **mode** before using ``full`` mode
 - **Choose appropriate** ``max_tasks_per_transformation`` **based on your compute resources**
 
 Resource Management
@@ -262,7 +209,7 @@ Strategy Not Running
 Unexpected Task Behavior
 ------------------------
 
-- Review strategy mode (``additive`` vs ``full``)
+- Review strategy mode (``partial`` vs ``full``)
 - Check ``max_tasks_per_transformation`` and scaling settings
 - Examine strategy weights and transformation status
 
@@ -276,52 +223,32 @@ Performance Issues
 Examples
 ========
 
-Simple Connectivity Strategy
------------------------------
+Connectivity Strategy
+---------------------
 
 .. code-block:: python
 
+   my_network: AlchemicalNetwork
+   my_scope: Scope
+
     # Prioritize poorly connected transformations
-    network_sk = client.create_network(
-        network=my_network,
-        strategy=ConnectivityStrategy()
-    )
+    network_sk = client.create_network(my_network, my_scope)
+
+    strategy = ConnectivityStrategy(ConnectivityStrategy.default_settings()
 
     # Use conservative settings
     client.set_network_strategy(
-        network=network_sk,
-        strategy=ConnectivityStrategy(),
-        mode="partial",  # Conservative mode
+        network_sk,
+        strategy,
+        mode="partial",  # doesn't ever cancel tasks
         max_tasks_per_transformation=3,
     )
 
-Uncertainty-Based Strategy
----------------------------
-
-.. code-block:: python
-
-    from stratocaster.strategies import UncertaintyStrategy
-    from openff.units import unit
-
-    # Create strategy that targets transformations with uncertainty > 0.3 kcal/mol
-    uncertainty_strategy = UncertaintyStrategy(
-        target_uncertainty=0.3 * unit.kilocalorie_per_mole,  # Target 0.3 kcal/mol uncertainty
-        min_samples=5,                                       # Require at least 5 samples before considering uncertainty
-        max_uncertainty_cap=3.0 * unit.kilocalorie_per_mole, # Ignore transformations with uncertainty > 3.0 (likely problematic)
-        max_samples=15                                       # Hard limit: stop after 15 samples regardless of uncertainty
-    )
-
-    # Submit network with uncertainty-based prioritization
-    network_sk = client.create_network(
-        network=my_network,
-        strategy=uncertainty_strategy
-    )
-
-    # Use with aggressive resource reallocation
+    # Or use more aggressive resource reallocation
     client.set_network_strategy(
-        network=network_sk,
-        strategy=uncertainty_strategy,
-        mode="full",  # Allow task cancellation
-        task_scaling="exponential",
+        network_sk,
+        strategy,
+        mode="full",  # allows for task cancellation
+        task_scaling="linear",
         max_tasks_per_transformation=10
     )
