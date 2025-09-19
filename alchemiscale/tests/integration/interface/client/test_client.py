@@ -2725,12 +2725,7 @@ class TestNetworkStrategy:
         # Test removing strategy
         user_client.set_network_strategy(network_scoped_key, None)
 
-        # Verify strategy was removed
-        with pytest.raises(
-            AlchemiscaleClientError,
-            match=r"Status Code 404 : Not Found : No strategy found for network",
-        ):
-            user_client.get_network_strategy(network_scoped_key)
+        assert user_client.get_network_strategy(network_scoped_key) is None
 
     def test_get_network_strategy_state(
         self,

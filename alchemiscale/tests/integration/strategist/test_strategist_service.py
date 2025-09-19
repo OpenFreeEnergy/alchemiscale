@@ -275,6 +275,9 @@ class TestStrategistService:
         n4js = data["n4js"]
         s3os = data["s3os"]
 
+        strategist_service._cache.clear()
+        strategist_service._cache.stats(reset=True)
+
         # Store some results in S3 using the transformation fixture that matches protocoldagresults
         tf_sk = n4js.get_scoped_key(transformation, network_sk.scope)
 
@@ -294,16 +297,23 @@ class TestStrategistService:
         # Get protocol results (should cache them)
         results1, sk_to_tf1 = strategist_service._get_protocol_results(network_sk)
 
+        # We expect cache misses since the requested results weren't cached on
+        # the call above yet
+        assert (
+            strategist_service._cache.stats() == (0, 1)
+            and len(strategist_service._cache) == 1
+        )
+
         # Get them again (should use cache)
         results2, sk_to_tf2 = strategist_service._get_protocol_results(network_sk)
 
+        assert (
+            strategist_service._cache.stats() == (1, 1)
+            and len(strategist_service._cache) == 1
+        )
+
         # Should be the same
-        assert len(results1) == len(results2)
-        for tf_sk in results1:
-            if results1[tf_sk] is not None and results2[tf_sk] is not None:
-                # Both should have the same data
-                assert results1[tf_sk] is not None
-                assert results2[tf_sk] is not None
+        assert results1 == results2
 
     def test_weights_to_task_counts_linear(self, strategist_service):
         """Test weight to task count conversion with linear scaling."""
