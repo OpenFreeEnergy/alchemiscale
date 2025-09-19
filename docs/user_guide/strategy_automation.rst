@@ -4,14 +4,14 @@
 Automating Execution with a Strategy
 ####################################
 
-After submitting an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` and creating some initial :py:class:`~alchemiscale.storage.models.Task`\s as described in :ref:`getting-started`, you can automate the ongoing management of your computation with a **Strategy**.
-A Strategy intelligently analyzes your network's current results and automatically prioritizes which transformations should receive computational resources next.
+After submitting an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` and creating some initial :py:class:`~alchemiscale.storage.models.Task`\s as described in :ref:`getting-started`, you can automate the ongoing management of your computation with a ``Strategy``.
+A ``Strategy`` intelligently analyzes your network's current results and automatically prioritizes which transformations should receive computational resources next.
 
 *******************
 What is a Strategy?
 *******************
 
-A Strategy is an algorithm that continuously monitors your :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` and:
+A ``Strategy`` is an algorithm that continuously monitors your :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` and:
 
 - Analyzes the current state of your network and existing results
 - Assigns priority weights to transformations (0.0 to 1.0 scale)
@@ -27,7 +27,7 @@ Basic Strategy Usage
 Setting up a Strategy for your Network
 ======================================
 
-Once you have submitted an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` (see :ref:`user-guide-submit-network`), you can attach a Strategy to it::
+Once you have submitted an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` (see :ref:`user-guide-submit-network`), you can attach a ``Strategy`` to it::
 
     >>> from stratocaster.strategies import ConnectivityStrategy
     >>> from alchemiscale import AlchemiscaleClient, Scope
@@ -51,7 +51,7 @@ This connectivity strategy will prioritize transformations critical for overall 
 Monitoring Strategy Progress
 ============================
 
-You can check on your Strategy's current status::
+You can check on your ``Strategy``\'s current status::
 
     >>> # Check strategy state
     >>> state = asc.get_network_strategy_state(network_sk)
@@ -59,7 +59,7 @@ You can check on your Strategy's current status::
     >>> print(f"Iterations: {state.iterations}")
     >>> print(f"Last run: {state.last_iteration}")
 
-The Strategy will automatically run periodically (every 1 hour by default) to reassess your network and adjust :py:class:`~alchemiscale.storage.models.Task` allocation accordingly.
+The ``Strategy`` will automatically run periodically (every 1 hour by default) to reassess your network and adjust :py:class:`~alchemiscale.storage.models.Task` allocation accordingly.
 
 ****************************
 Understanding Strategy Modes
@@ -70,7 +70,7 @@ Strategies operate in different modes that control how aggressively they manage 
 Partial Mode (Default)
 ======================
 
-In ``partial`` mode, the Strategy takes a conservative approach::
+In ``partial`` mode, the ``Strategy`` takes a conservative approach::
 
     >>> asc.set_network_strategy(
     ...     network=network_sk,
@@ -86,7 +86,7 @@ In ``partial`` mode, the Strategy takes a conservative approach::
 Full Mode
 =========
 
-In ``full`` mode, the Strategy actively reallocates resources::
+In ``full`` mode, the ``Strategy`` actively reallocates resources::
 
     >>> asc.set_network_strategy(
     ...     network=network_sk,
@@ -169,35 +169,35 @@ Your ``Strategy`` also features a ``status``, similar to :py:class:`.Task` ``sta
 Awake Status
 ============
 
-When ``'awake'``, the Strategy is actively working::
+When ``'awake'``, the ``Strategy`` is actively working::
 
     >>> status = asc.get_network_strategy_status(network_sk)
     >>> print(status)
     'awake'
 
-The Strategy analyzes your network, assigns weights to transformations, and creates and actions (or cancels) :py:class:`.Task`\s according to its ``mode``.
+The ``Strategy`` analyzes your network, assigns weights to transformations, and creates and actions (or cancels) :py:class:`.Task`\s according to its ``mode``.
 
 Dormant Status
 ==============
 
-A Strategy goes ``'dormant'`` when it determines no further work is needed::
+A ``Strategy`` goes ``'dormant'`` when it determines no further work is needed::
 
     >>> status = asc.get_network_strategy_status(network_sk)
     >>> print(status)
     'dormant'
 
-This happens when all transformation weights are ``None``, indicating the Strategy has reached its stop condition.
+This happens when all transformation weights are ``None``, indicating the ``Strategy`` has reached its stop condition.
 
 A ``Strategy`` will automatically go from ``'dormant'`` to ``'awake'`` if new results have appeared since it went ``'dormant'``,
 giving it a chance to evaluate whether to allocate additional effort given the new information.
-You can also manually wake up a ``'dormant'`` Strategy with::
+You can also manually wake up a ``'dormant'`` ``Strategy`` with::
 
     >>> asc.set_network_strategy_awake(network_sk)
 
 Error Status
 ============
 
-If the Strategy encounters an error during execution, it will enter the ``'error'`` ``status``::
+If the ``Strategy`` encounters an error during execution, it will enter the ``'error'`` ``status``::
 
     >>> status = asc.get_network_strategy_status(network_sk)
     >>> print(status)
@@ -220,7 +220,7 @@ You should address the issue indicated by the traceback, and then set the ``Stra
 Managing Strategy Execution Frequency
 *************************************
 
-You can control how often your Strategy runs::
+You can control how often your ``Strategy`` runs::
 
     >>> asc.set_network_strategy(
     ...     network=network_sk,
@@ -246,7 +246,7 @@ If you need to pause strategy execution temporarily::
     ...     mode="disabled"
     ... )
 
-This completely stops the Strategy from creating or canceling any :py:class:`~alchemiscale.storage.models.Task`\s.
+This completely stops the ``Strategy`` from creating or canceling any :py:class:`.Task`\s.
 You can re-enable it later by changing the mode back to ``partial`` or ``full``.
 
 **************
@@ -256,7 +256,7 @@ Best Practices
 Start Conservative
 ==================
 
-When first using Strategies:
+When first using a ``Strategy``:
 
 - Begin with ``partial`` mode to avoid unexpected cancellations
 - Use lower ``max_tasks_per_transformation`` values initially
@@ -272,7 +272,7 @@ Resource Planning
 Monitoring
 ==========
 
-Regular monitoring helps ensure your Strategy is working as expected::
+Regular monitoring helps ensure your ``Strategy`` is working as expected::
 
     >>> # Check strategy state periodically
     >>> state = asc.get_network_strategy_state(network_sk)
@@ -289,7 +289,7 @@ Troubleshooting
 Strategy Not Running
 ====================
 
-If your Strategy isn't executing:
+If your ``Strategy`` isn't executing:
 
 - Verify with the ``alchemiscale`` server administrator that the Strategist service is running and accessible
 - Check that your network is in a :py:class:`~alchemiscale.models.Scope` visible to the Strategist service
@@ -306,17 +306,17 @@ If :py:class:`.Task`\s are being created or canceled unexpectedly:
 Poor Performance
 ================
 
-If Strategy execution is slow:
+If ``Strategy`` execution is slow:
 
 - Increase the strategist service cache size if running your own service
 - Consider reducing ``max_workers`` if the host is overloaded, or increasing if underutilized
-- Evaluate whether your chosen Strategy algorithm is efficient for large networks
+- Evaluate whether your chosen ``Strategy`` algorithm is efficient for large networks
 
 ****************
 Example Workflow
 ****************
 
-Here's a complete example showing typical Strategy usage::
+Here's a complete example showing typical ``Strategy`` usage::
 
     >>> from alchemiscale import AlchemiscaleClient, Scope, ScopedKey
     >>> from stratocaster.strategies import ConnectivityStrategy
@@ -349,4 +349,4 @@ Here's a complete example showing typical Strategy usage::
     ...     max_tasks_per_transformation=10
     ... )
 
-This workflow starts conservatively and becomes more aggressive as you gain confidence in the Strategy's behavior.
+This workflow starts conservatively and becomes more aggressive as you gain confidence in the ``Strategy``'s behavior.
