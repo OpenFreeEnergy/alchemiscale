@@ -16,6 +16,7 @@ from moto.server import ThreadedMotoServer
 from neo4j import GraphDatabase
 
 from gufe import ChemicalSystem, NonTransformation, Transformation, AlchemicalNetwork
+from gufe.protocols import ProtocolResult
 from gufe.protocols.protocoldag import execute_DAG
 from gufe.tests.test_protocol import DummyProtocol, BrokenProtocol
 from openfe_benchmarks import tyk2
@@ -303,8 +304,7 @@ class DummyProtocolC(DummyProtocol):
 
 class DummyStrategySettings(StrategySettings):
     """Settings for DummyStrategy."""
-
-    pass
+    ...
 
 
 class DummyStrategy(Strategy):
@@ -322,10 +322,19 @@ class DummyStrategy(Strategy):
         return DummyStrategySettings()
 
     def _propose(self, alchemical_network, protocol_results):
-        """Simple strategy that returns equal weights for all transformations."""
+        """Simple strategy that returns equal weights for any transformations
+        if no results exist, and ``None`` for each transformation if *any*
+        results exist.
+
+        """
+
         weights = {}
         for transformation in alchemical_network.edges:
-            weights[transformation.key] = 0.5
+            if isinstance(protocol_results[transformation.key], ProtocolResult):
+                weights[transformation.key] = None
+            else:
+                weights[transformation.key] = 0.5
+
         return StrategyResult(weights)
 
 
