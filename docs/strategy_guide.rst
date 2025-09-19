@@ -234,7 +234,7 @@ Connectivity Strategy
     # Prioritize poorly connected transformations
     network_sk = client.create_network(my_network, my_scope)
 
-    strategy = ConnectivityStrategy(ConnectivityStrategy.default_settings()
+    strategy = ConnectivityStrategy(ConnectivityStrategy.default_settings())
 
     # Use conservative settings
     client.set_network_strategy(
