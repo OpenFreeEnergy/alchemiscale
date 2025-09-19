@@ -25,7 +25,7 @@ Basic Strategy Usage
 ********************
 
 Setting up a Strategy for your Network
-=======================================
+======================================
 
 Once you have submitted an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` (see :ref:`user-guide-submit-network`), you can attach a Strategy to it::
 
@@ -102,9 +102,9 @@ In ``full`` mode, the Strategy actively reallocates resources::
 .. warning::
    Use ``full`` mode carefully, as it may cancel in-progress work if transformation priorities change significantly.
 
-*****************************
+*********************************
 Task Scaling and Resource Control
-*****************************
+*********************************
 
 You can control how many :py:class:`~alchemiscale.storage.models.Task`\s are created based on transformation priorities:
 
@@ -134,7 +134,7 @@ Linear scaling gives the following qualitative relationship between weight and `
 
 
 Exponential Scaling (Default)
-==============================
+=============================
 
 With exponential scaling, high-priority transformations receive disproportionately more resources::
 
@@ -216,9 +216,9 @@ You should address the issue indicated by the traceback, and then set the ``Stra
     >>> asc.set_network_strategy_awake(network_sk)
 
 
-************************************
+*************************************
 Managing Strategy Execution Frequency
-************************************
+*************************************
 
 You can control how often your Strategy runs::
 
@@ -249,9 +249,9 @@ If you need to pause strategy execution temporarily::
 This completely stops the Strategy from creating or canceling any :py:class:`~alchemiscale.storage.models.Task`\s.
 You can re-enable it later by changing the mode back to ``partial`` or ``full``.
 
-*************
+**************
 Best Practices
-*************
+**************
 
 Start Conservative
 ==================
