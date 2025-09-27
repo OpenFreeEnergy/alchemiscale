@@ -862,8 +862,119 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         raise NotImplementedError
 
-    def merge_networks(self, networks: list[ScopedKey], scope: Scope) -> ScopedKey:
-        raise NotImplementedError
+    @chainable
+    def merge_networks(
+        self,
+        network_scoped_keys: list[ScopedKey],
+        name: str,
+        scope: Scope,
+        clone_incomplete_tasks=False,
+        tx=None,
+    ) -> ScopedKey:
+        """Merge multiple ``AlchemicalNetwork`` nodes into a new ``AlchemicalNetwork``.
+
+        Parameters
+        ----------
+        network_scoped_keys
+          List of ``AlchemicalNetwork`` ``ScopedKey`` objects to merge.
+        name
+          The name of the new ``AlchemicalNetwork``.
+        scope
+          The ``Scope`` of the new ``AlchemicalNetwork``.
+
+        Returns
+        -------
+        The ``ScopedKey`` of the new ``AlchemicalNetwork`` in the database.
+        """
+
+        # - Collect keyed chain representation for all alchemiscale networks
+        try:
+            network_keyed_chains: list[tuple[Scope, KeyedChain]] = []
+            for network_scoped_key in network_scoped_keys:
+                keyed_chain = self.get_keyed_chain(network_scoped_key)
+                network_keyed_chains.append((network_scoped_key.scope, keyed_chain))
+        # could not find specified network by provided scoped key
+        except KeyError:
+            raise ValueError(
+                f"ScopedKey ({network_scoped_key}) not found in the database."
+            )
+
+        from dataclasses import dataclass, field
+
+        @dataclass
+        class TransformationData:
+            transformation: Transformation
+            task_tree: list = field(
+                default_factory=list
+            )  # flat represenation of task tree with results
+
+            def __eq__(self, other):
+                if isinstance(other, (Transformation, NonTransformation)):
+                    return other is self.transformation
+                return other.transformation is self.transformation
+
+            def add_known_scoped_key_results(self, key, scope):
+                known_scoped_key = ScopedKey(gufe_key=GufeKey(key), **scope.to_dict())
+                self.update_task_tree(known_scoped_key)
+
+            def update_task_tree(self, tf_scoped_key):
+                nonlocal tx
+                query = """
+                MATCH (task:Task)-[:PERFORMS]->(:Transformation {`_scoped_key`: $tf_scoped_key})
+                OPTIONAL MATCH (task)-[:EXTENDS]->(extended_task:Task)
+                OPTIONAL MATCH (task)<-[:RESULTS_IN]-(pdrr:ProtocolDAGResultRef)
+                RETURN task, extended_task._scoped_key as etask_sk, pdrr
+                """
+                results = (
+                    tx.run(query, tf_scoped_key=str(tf_scoped_key))
+                    .to_eager_result()
+                    .records
+                )
+
+                self.task_tree.extend(results)
+
+        from gufe.tokenization import key_decode_dependencies
+
+        # TODO: upstream to gufe
+        def kc_to_gufe(kc, gts):
+            for gufe_key, keyed_dict in kc:
+                if gt := gts.get(gufe_key):
+                    continue
+                gt = key_decode_dependencies(keyed_dict, registry=gts)
+                gts[gufe_key] = gt
+            return gt
+
+        # Map Transformation and NonTransformation objects to their
+        # potentially duplicated database gufe keys. This may happen
+        # due to minor version changes between serialization
+        # times. These keys are then used to get all results for Tasks
+        # associated with them.
+        transformation_data: list[TransformationData] = []
+        for network_scope, network_keyed_chain in network_keyed_chains:
+            gts = {}
+            for index, (database_key, _) in enumerate(network_keyed_chain):
+                # only process Transformation or NonTransformation keys
+                if (
+                    "Transformation" in database_key
+                    or "NonTransformation" in database_key
+                ):
+                    # get the tokenizable at the index along with all previous data
+                    subchain = KeyedChain(network_keyed_chain[: index + 1])
+                    transformation = kc_to_gufe(subchain, gts)
+                    try:
+                        index = transformation_data.index(transformation)
+                        data = transformation_data[index]
+                    except ValueError:
+                        data = TransformationData(transformation)
+                        transformation_data.append(data)
+                    data.add_known_scoped_key_results(database_key, network_scope)
+        # - Collect all transformation gufe objects and collect into a new set of edges
+        new_edges = [td.transformation for td in transformation_data]
+        # - Make new alchemiscale network with these edges
+        combined_alchemical_network = AlchemicalNetwork(edges=new_edges, name=name)
+        # - assemble the network
+        an_sk, _, _ = self.assemble_network(combined_alchemical_network, scope, tx=tx)
+        return an_sk
 
     def get_network_state(self, networks: list[ScopedKey]) -> list[str | None]:
         """Get the states of a group of networks.

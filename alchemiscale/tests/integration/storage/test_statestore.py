@@ -138,6 +138,122 @@ class TestNeo4jStore(TestStateStore):
     def test_delete_network(self):
         raise NotImplementedError
 
+    def test_merge_networks(self, n4js, network_tyk2, scope_test):
+        network_sks = []
+
+        scope_args = scope_test.to_dict()
+        all_transformations = list(network_tyk2.edges)
+        all_transformations.sort(key=lambda x: x.key)
+
+        def project_scope(iteration):
+            return Scope(**(scope_args | {"project": f"project{iteration}"}))
+
+        transformations_common = all_transformations[:3]
+
+        # note the nonlocal task_sks and transformation_sks to reduce
+        # clutter down below
+        def set_result(_slice, *, ok: bool):
+            nonlocal task_sks, transformation_sks
+            for task_sk, transformation_sk in zip(
+                task_sks[_slice], transformation_sks[_slice]
+            ):
+                pdrr = ProtocolDAGResultRef(
+                    obj_key=transformation_sk.gufe_key, scope=task_sk.scope, ok=ok
+                )
+                n4js.set_task_result(task_sk, pdrr)
+
+        # NETWORK 1---JUST TYK2
+        # 5 tasks: [completed, completed, running, error, waiting]
+        # no extends
+        an = network_tyk2.copy_with_replacements(
+            name=network_tyk2.name + f"_test_network_clone_1"
+        )
+        scope = project_scope(1)
+        sk, th_sk, _ = n4js.assemble_network(an, scope)
+        network_sks.append(sk)
+        # add two more of the transformations
+        transformation_sks = [
+            n4js.get_scoped_key(transformation, scope)
+            for transformation in transformations_common + all_transformations[3:5]
+        ]
+        task_sks = n4js.create_tasks(transformation_sks)
+        n4js.set_task_running(task_sks[2:3])
+        n4js.action_tasks(task_sks[2:3], th_sk)
+
+        n4js.set_task_waiting(task_sks[5:])
+        n4js.action_tasks(task_sks[5:], th_sk)
+
+        n4js.set_task_error(task_sks[4:5])
+        n4js.action_tasks(task_sks[4:5], th_sk)
+
+        n4js.set_task_complete(task_sks[:2])
+
+        set_result(slice(None, 2), ok=True)
+        set_result(slice(4, 5), ok=False)
+
+        # NETWORK 2---TYK2 WITH TRIMMED EDGES
+        # 6 tasks: [complete, complete, complete]
+        #               ^         ^         ^
+        #               |         |         |
+        # extends: [waiting,  running,  complete]
+        an = network_tyk2.copy_with_replacements(
+            name=network_tyk2.name + f"_test_network_clone_2_fewer_transformations",
+            edges=all_transformations[:-2],
+        )
+        scope = project_scope(2)
+        sk, _, _ = n4js.assemble_network(an, scope)
+        network_sks.append(sk)
+        transformation_sks = [
+            n4js.get_scoped_key(transformation, scope)
+            for transformation in transformations_common
+        ]
+        task_sks = n4js.create_tasks(transformation_sks)
+        n4js.set_task_complete(task_sks)
+        set_result(slice(None), ok=True)
+
+        # create extending tasks
+        task_sks = n4js.create_tasks(transformation_sks, extends=task_sks)
+
+        n4js.set_task_waiting(task_sks[0:1])
+        n4js.set_task_running(task_sks[1:2])
+        n4js.set_task_complete(task_sks[2:3])
+
+        set_result(slice(2, 3), ok=True)
+
+        # network 3---tyk2
+        # 6 tasks: [waiting, waiting, waiting, waiting, waiting, complete]
+        # no extends
+        # last task is for a transformation missing from NETWORK 2
+        an = network_tyk2.copy_with_replacements(
+            name=network_tyk2.name + f"_test_network_clone_2_name_only"
+        )
+        scope = project_scope(3)
+        sk, _, _ = n4js.assemble_network(an, scope)
+        network_sks.append(sk)
+
+        transformation_sks = [
+            n4js.get_scoped_key(transformation, scope)
+            for transformation in transformations_common + all_transformations[-2:]
+        ]
+
+        task_sks = n4js.create_tasks(transformation_sks)
+        n4js.set_task_waiting(task_sks[:-1])
+        n4js.set_task_complete(task_sks[-1:])
+        set_result(slice(-1, None), ok=True)
+
+        scope_dict = scope_test.to_dict()
+        scope_dict["project"] = "mergedproject"
+        new_scope = Scope(**scope_dict)
+        sk_merged = n4js.merge_networks(
+            network_sks, f"{network_tyk2.name}_combined", new_scope
+        )
+        assert len(n4js.get_gufe(sk_merged).edges) == len(
+            n4js.get_gufe(network_sks[0]).edges
+        )
+        assert len(n4js.get_gufe(sk_merged).edges) != len(
+            n4js.get_gufe(network_sks[1]).edges
+        )
+
     def test_set_network_state(self, n4js, network_tyk2, scope_test):
         valid_states = [state.value for state in NetworkStateEnum]
         network_sks = []
