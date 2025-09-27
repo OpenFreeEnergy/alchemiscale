@@ -766,11 +766,13 @@ class Neo4jStore(AlchemiscaleStateStore):
                 graph_data.pop(rk)
         return L
 
+    @chainable
     def assemble_network(
         self,
         network: AlchemicalNetwork,
         scope: Scope,
         state: NetworkStateEnum | str = NetworkStateEnum.active,
+        tx=None,
     ) -> tuple[ScopedKey, ScopedKey, ScopedKey]:
         """Create all nodes and relationships needed for an AlchemicalNetwork
         represented in an alchemiscale state store.
@@ -796,8 +798,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         subgraph = nw_subgraph | th_subgraph | nm_subgraph
 
-        with self.transaction() as tx:
-            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+        merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return nw_sk, th_sk, nm_sk
 
