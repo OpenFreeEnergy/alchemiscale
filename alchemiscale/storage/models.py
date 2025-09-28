@@ -12,7 +12,7 @@ from uuid import uuid4, UUID
 import hashlib
 
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, PositiveInt, field_validator
 from gufe.tokenization import GufeTokenizable, GufeKey
 
 from ..models import ScopedKey, Scope
@@ -542,3 +542,59 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         )
 
         return super()._from_dict(d_)
+
+
+class StrategyModeEnum(StrEnum):
+    full = "full"
+    partial = "partial"
+    disabled = "disabled"
+
+
+class StrategyStatusEnum(StrEnum):
+    awake = "awake"
+    dormant = "dormant"
+    error = "error"
+
+
+class StrategyTaskScalingEnum(StrEnum):
+    linear = "linear"
+    exponential = "exponential"
+
+
+class StrategyState(BaseModel):
+    """State information for a Strategy on an AlchemicalNetwork."""
+
+    mode: StrategyModeEnum = StrategyModeEnum.partial
+    status: StrategyStatusEnum = StrategyStatusEnum.awake
+    iterations: int = 0
+    sleep_interval: PositiveInt = 3600  # seconds
+    last_iteration: datetime.datetime | None = None
+    last_iteration_result_count: int = 0
+    max_tasks_per_transformation: PositiveInt = 3
+    task_scaling: StrategyTaskScalingEnum = StrategyTaskScalingEnum.exponential
+    exception: tuple[str, str] | None = None  # (exception_type, exception_message)
+    traceback: str | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
+
+    @field_validator("last_iteration", mode="before")
+    @classmethod
+    def _convert_neo4j_datetime(cls, v):
+        """Convert neo4j DateTime objects to Python datetime objects."""
+        if v is not None and hasattr(v, "to_native"):
+            # This is a neo4j DateTime object
+            return v.to_native()
+        return v
+
+    def to_dict(self):
+        dct = self.dict()
+
+        dct["mode"] = dct["mode"].value
+        dct["status"] = dct["status"].value
+        dct["task_scaling"] = dct["task_scaling"].value
+
+        return dct
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(**d)

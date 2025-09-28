@@ -21,16 +21,16 @@ import zstandard as zstd
 from ..base.client import (
     AlchemiscaleBaseClient,
     AlchemiscaleBaseClientError,
-    json_to_gufe,
     use_session,
 )
-from ..compression import decompress_gufe_zstd, compress_keyed_chain_zstd
+from ..compression import decompress_gufe_zstd, compress_keyed_chain_zstd, json_to_gufe
 from ..models import Scope, ScopedKey
 from ..storage.models import (
     TaskStatusEnum,
     NetworkStateEnum,
+    StrategyState,
 )
-from ..strategies import Strategy
+from stratocaster.base import Strategy
 from ..validators import validate_network_nonself
 
 from warnings import warn
@@ -690,14 +690,131 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
     ### compute
 
-    def set_strategy(self, network: ScopedKey, strategy: Strategy):
-        """Set the Strategy for evaluating the given AlchemicalNetwork.
+    #### strategies
 
-        The Strategy will be applied to create and action tasks for the
-        Transformations in the AlchemicalNetwork without user interaction.
+    def set_network_strategy(
+        self,
+        network: ScopedKey,
+        strategy: GufeTokenizable | None,
+        max_tasks_per_transformation: int = 3,
+        task_scaling: str = "exponential",
+        mode: str = "partial",
+        sleep_interval: int = 3600,
+    ) -> ScopedKey | None:
+        """Set a Strategy for the given AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network
+            ScopedKey of the AlchemicalNetwork.
+        strategy
+            Strategy object (GufeTokenizable) or None to remove strategy.
+        max_tasks_per_transformation.
+            Maximum number of actioned Tasks allowed on a Transformation at once.
+        task_scaling
+            How to translate weights into Task counts: "linear" or "exponential".
+        mode
+            Strategy mode: "full", "partial", or "disabled".
+        sleep_interval
+            Wait time between iterations of the Strategy in seconds.
+
+        Returns
+        -------
+        ScopedKey | None
+            ScopedKey of the Strategy that was set, or ``None`` if strategy was
+            removed.
+        """
+        if strategy is not None:
+            # Convert strategy to keyed chain for serialization
+            strategy_keyed_chain = KeyedChain.gufe_to_keyed_chain_rep(strategy)
+            data = {
+                "strategy": strategy_keyed_chain,
+                "max_tasks_per_transformation": max_tasks_per_transformation,
+                "task_scaling": task_scaling,
+                "mode": mode,
+                "sleep_interval": sleep_interval,
+            }
+        else:
+            # Remove strategy
+            data = {"strategy": None}
+
+        result = self._post_resource(f"/networks/{network}/strategy", data)
+        return ScopedKey.from_str(result) if result else None
+
+    def get_network_strategy(self, network: ScopedKey) -> Strategy | None:
+        """Get the Strategy for the given AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network
+            ScopedKey of the AlchemicalNetwork.
+
+        Returns
+        -------
+        strategy
+            Strategy object for this AlchemicalNetwork; ``None`` if no Strategy
+            is set.
 
         """
-        raise NotImplementedError
+        keyed_chain = self._get_resource(f"/networks/{network}/strategy")
+        return GufeTokenizable.from_keyed_chain(keyed_chain) if keyed_chain else None
+
+    def get_network_strategy_state(self, network: ScopedKey) -> StrategyState | None:
+        """Get the StrategyState for the given AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network
+            ScopedKey of the AlchemicalNetwork.
+
+        Returns
+        -------
+        strategy_state
+            Strategy state with execution metadata; ``None`` if no Strategy is
+            set.
+
+        """
+        state_dict = self._get_resource(f"/networks/{network}/strategy/state")
+        return StrategyState.from_dict(state_dict) if state_dict else None
+
+    def get_network_strategy_status(self, network: ScopedKey) -> str | None:
+        """Get the status of the Strategy for the given AlchemicalNetwork.
+
+        Parameters
+        ----------
+        network
+            ScopedKey of the AlchemicalNetwork.
+
+        Returns
+        -------
+        status
+            Strategy status: "awake", "dormant", or "error"; ``None`` if no
+            Strategy is set.
+
+        """
+        return self._get_resource(f"/networks/{network}/strategy/status")
+
+    def set_network_strategy_awake(self, network: ScopedKey) -> ScopedKey | None:
+        """Set the Strategy status to 'awake' for the given AlchemicalNetwork.
+
+        This resets a dormant or errored strategy to active status.
+
+        Parameters
+        ----------
+        network
+            ScopedKey of the AlchemicalNetwork to set Strategy 'awake' for.
+
+        Returns
+        -------
+        ScopedKey | None
+            ScopedKey of the AlchemicalNetwork if Strategy status set to
+            'awake'; ``None`` otherwise.
+
+        """
+        result = self._post_resource(f"/networks/{network}/strategy/awake", {})
+        return ScopedKey.from_str(result) if result is not None else None
+
+    #### tasks
 
     def create_tasks(
         self,

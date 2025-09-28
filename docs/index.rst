@@ -48,7 +48,7 @@ and the :ref:`developer-guide` for details on how the components of this archite
    :maxdepth: 1
    :caption: Contents:
 
-   ./user_guide
+   ./user_guide/index
    ./tutorials/index
    ./deployment
    ./compute

@@ -1,4 +1,6 @@
 import pytest
+from datetime import datetime
+from unittest.mock import MagicMock
 
 from uuid import uuid4
 
@@ -7,6 +9,10 @@ from alchemiscale.storage.models import (
     NetworkMark,
     TaskRestartPattern,
     Tracebacks,
+    StrategyState,
+    StrategyModeEnum,
+    StrategyStatusEnum,
+    StrategyTaskScalingEnum,
     ComputeManagerID,
 )
 from alchemiscale import ScopedKey
@@ -194,6 +200,222 @@ class TestTracebacks:
 
         assert tb_reconstructed.tracebacks == self.valid_entry
         tb_orig is tb_reconstructed
+
+
+class TestStrategyState:
+
+    def test_default_values(self):
+        """Test that StrategyState has correct default values."""
+        state = StrategyState()
+
+        assert state.mode == StrategyModeEnum.partial
+        assert state.status == StrategyStatusEnum.awake
+        assert state.iterations == 0
+        assert state.sleep_interval == 3600
+        assert state.last_iteration is None
+        assert state.last_iteration_result_count == 0
+        assert state.max_tasks_per_transformation == 3
+        assert state.task_scaling == StrategyTaskScalingEnum.exponential
+        assert state.exception is None
+        assert state.traceback is None
+
+    def test_enum_validation(self):
+        """Test that enum fields validate correctly."""
+        # Valid enum values should work
+        state = StrategyState(
+            mode=StrategyModeEnum.full,
+            status=StrategyStatusEnum.dormant,
+            task_scaling=StrategyTaskScalingEnum.linear,
+        )
+        assert state.mode == StrategyModeEnum.full
+        assert state.status == StrategyStatusEnum.dormant
+        assert state.task_scaling == StrategyTaskScalingEnum.linear
+
+        # String enum values should also work
+        state = StrategyState(
+            mode="disabled",
+            status="error",
+            task_scaling="exponential",
+        )
+        assert state.mode == StrategyModeEnum.disabled
+        assert state.status == StrategyStatusEnum.error
+        assert state.task_scaling == StrategyTaskScalingEnum.exponential
+
+    def test_positive_int_validation(self):
+        """Test that PositiveInt fields validate correctly."""
+        # Valid positive integers should work
+        state = StrategyState(
+            sleep_interval=1800,
+            max_tasks_per_transformation=5,
+        )
+        assert state.sleep_interval == 1800
+        assert state.max_tasks_per_transformation == 5
+
+        # Zero and negative values should fail
+        with pytest.raises(ValueError):
+            StrategyState(sleep_interval=0)
+
+        with pytest.raises(ValueError):
+            StrategyState(sleep_interval=-1)
+
+        with pytest.raises(ValueError):
+            StrategyState(max_tasks_per_transformation=0)
+
+        with pytest.raises(ValueError):
+            StrategyState(max_tasks_per_transformation=-1)
+
+    def test_neo4j_datetime_conversion(self):
+        """Test that Neo4j DateTime objects are converted to Python datetime."""
+        # Mock a Neo4j DateTime object
+        mock_neo4j_datetime = MagicMock()
+        mock_neo4j_datetime.to_native.return_value = datetime(2023, 12, 25, 10, 30, 0)
+
+        state = StrategyState(last_iteration=mock_neo4j_datetime)
+
+        # Should be converted to Python datetime
+        assert isinstance(state.last_iteration, datetime)
+        assert state.last_iteration == datetime(2023, 12, 25, 10, 30, 0)
+        mock_neo4j_datetime.to_native.assert_called_once()
+
+    def test_datetime_passthrough(self):
+        """Test that regular datetime objects are passed through unchanged."""
+        test_datetime = datetime(2023, 12, 25, 10, 30, 0)
+        state = StrategyState(last_iteration=test_datetime)
+
+        assert state.last_iteration == test_datetime
+        assert isinstance(state.last_iteration, datetime)
+
+    def test_none_datetime(self):
+        """Test that None datetime values are handled correctly."""
+        state = StrategyState(last_iteration=None)
+        assert state.last_iteration is None
+
+    def test_exception_tuple(self):
+        """Test exception tuple handling."""
+        exception_info = ("ValueError", "Test error message")
+        state = StrategyState(exception=exception_info)
+
+        assert state.exception == exception_info
+        assert state.exception[0] == "ValueError"
+        assert state.exception[1] == "Test error message"
+
+    def test_to_dict(self):
+        """Test conversion to dictionary with enum values as strings."""
+        test_datetime = datetime(2023, 12, 25, 10, 30, 0)
+        exception_info = ("ValueError", "Test error")
+
+        state = StrategyState(
+            mode=StrategyModeEnum.full,
+            status=StrategyStatusEnum.dormant,
+            iterations=5,
+            sleep_interval=1800,
+            last_iteration=test_datetime,
+            last_iteration_result_count=10,
+            max_tasks_per_transformation=5,
+            task_scaling=StrategyTaskScalingEnum.linear,
+            exception=exception_info,
+            traceback="Test traceback",
+        )
+
+        result = state.to_dict()
+
+        assert result["mode"] == "full"
+        assert result["status"] == "dormant"
+        assert result["task_scaling"] == "linear"
+        assert result["iterations"] == 5
+        assert result["sleep_interval"] == 1800
+        assert result["last_iteration"] == test_datetime
+        assert result["last_iteration_result_count"] == 10
+        assert result["max_tasks_per_transformation"] == 5
+        assert result["exception"] == exception_info
+        assert result["traceback"] == "Test traceback"
+
+    def test_from_dict(self):
+        """Test creation from dictionary."""
+        test_datetime = datetime(2023, 12, 25, 10, 30, 0)
+        exception_info = ("ValueError", "Test error")
+
+        data = {
+            "mode": "full",
+            "status": "dormant",
+            "iterations": 5,
+            "sleep_interval": 1800,
+            "last_iteration": test_datetime,
+            "last_iteration_result_count": 10,
+            "max_tasks_per_transformation": 5,
+            "task_scaling": "linear",
+            "exception": exception_info,
+            "traceback": "Test traceback",
+        }
+
+        state = StrategyState.from_dict(data)
+
+        assert state.mode == StrategyModeEnum.full
+        assert state.status == StrategyStatusEnum.dormant
+        assert state.task_scaling == StrategyTaskScalingEnum.linear
+        assert state.iterations == 5
+        assert state.sleep_interval == 1800
+        assert state.last_iteration == test_datetime
+        assert state.last_iteration_result_count == 10
+        assert state.max_tasks_per_transformation == 5
+        assert state.exception == exception_info
+        assert state.traceback == "Test traceback"
+
+    def test_roundtrip_dict_conversion(self):
+        """Test that to_dict and from_dict are consistent."""
+        original = StrategyState(
+            mode=StrategyModeEnum.disabled,
+            status=StrategyStatusEnum.error,
+            iterations=3,
+            sleep_interval=900,
+            last_iteration=datetime(2023, 12, 25, 10, 30, 0),
+            last_iteration_result_count=7,
+            max_tasks_per_transformation=2,
+            task_scaling=StrategyTaskScalingEnum.exponential,
+            exception=("RuntimeError", "Test runtime error"),
+            traceback="Full traceback here",
+        )
+
+        # Convert to dict and back
+        data = original.to_dict()
+        reconstructed = StrategyState.from_dict(data)
+
+        assert original == reconstructed
+
+    def test_validate_assignment_config(self):
+        """Test that validate_assignment=True works correctly."""
+        state = StrategyState()
+
+        # Should allow valid enum assignment
+        state.mode = StrategyModeEnum.full
+        state.status = "dormant"  # String should be converted to enum
+
+        assert state.mode == StrategyModeEnum.full
+        assert state.status == StrategyStatusEnum.dormant
+
+        # Should validate positive integers on assignment
+        state.sleep_interval = 1200
+        assert state.sleep_interval == 1200
+
+        with pytest.raises(ValueError):
+            state.sleep_interval = -1
+
+    def test_all_enum_values(self):
+        """Test that all enum values work correctly."""
+        # Test all StrategyModeEnum values
+        for mode in StrategyModeEnum:
+            state = StrategyState(mode=mode)
+            assert state.mode == mode
+
+        # Test all StrategyStatusEnum values
+        for status in StrategyStatusEnum:
+            state = StrategyState(status=status)
+            assert state.status == status
+
+        # Test all StrategyTaskScalingEnum values
+        for scaling in StrategyTaskScalingEnum:
+            state = StrategyState(task_scaling=scaling)
+            assert state.task_scaling == scaling
 
 
 class TestComputeManagerID:
