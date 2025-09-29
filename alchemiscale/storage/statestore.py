@@ -2895,7 +2895,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## tasks
 
-    def _validate_extends_tasks(self, task_list) -> dict[str, tuple[Node, str]]:
+    @chainable
+    def _validate_extends_tasks(
+        self, task_list, tx=None
+    ) -> dict[str, tuple[Node, str]]:
 
         if not task_list:
             return {}
@@ -2906,7 +2909,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             return t, tf._scoped_key as tf_sk
         """
 
-        results = self.execute_query(q, task_list=list(map(str, task_list)))
+        results = tx.run(q, task_list=list(map(str, task_list))).to_eager_result()
 
         nodes = {}
 
@@ -2926,11 +2929,13 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return nodes
 
+    @chainable
     def create_tasks(
         self,
         transformations: list[ScopedKey],
         extends: list[ScopedKey | None] | None = None,
         creator: str | None = None,
+        tx=None,
     ) -> list[ScopedKey]:
         """Create Tasks for the given Transformations.
 
@@ -2985,7 +2990,8 @@ class Neo4jStore(AlchemiscaleStateStore):
             transformation_map[transformation.qualname][1].append(extends[i])
 
         extends_nodes = self._validate_extends_tasks(
-            [_extends for _extends in extends if _extends is not None]
+            [_extends for _extends in extends if _extends is not None],
+            tx=tx,
         )
 
         subgraph = Subgraph()
@@ -3006,9 +3012,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             RETURN n
             """
 
-            results = self.execute_query(
+            results = tx.run(
                 q, transformation_subset=list(map(str, transformation_subset))
-            )
+            ).to_eager_result()
 
             transformation_nodes = {}
             for record in results.records:
@@ -3057,8 +3063,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     _project=scope.project,
                 )
 
-        with self.transaction() as tx:
-            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+        merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return sks
 
