@@ -1037,8 +1037,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                     transformation = kc_to_gufe(subchain, gts)
                     subchain_cache[transformation] = subchain
                     try:
-                        index = transformation_data.index(transformation)
-                        data = transformation_data[index]
+                        idx = transformation_data.index(transformation)
+                        data = transformation_data[idx]
                     except ValueError:
                         data = TransformationData(transformation)
                         transformation_data.append(data)
