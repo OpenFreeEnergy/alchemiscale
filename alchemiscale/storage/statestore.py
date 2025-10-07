@@ -781,13 +781,11 @@ class Neo4jStore(AlchemiscaleStateStore):
                 graph_data.pop(rk)
         return L
 
-    @chainable
     def assemble_network(
         self,
         network: AlchemicalNetwork,
         scope: Scope,
         state: NetworkStateEnum | str = NetworkStateEnum.active,
-        tx=None,
     ) -> tuple[ScopedKey, ScopedKey, ScopedKey]:
         """Create all nodes and relationships needed for an AlchemicalNetwork
         represented in an alchemiscale state store.
@@ -813,7 +811,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         subgraph = nw_subgraph | th_subgraph | nm_subgraph
 
-        merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+        with self.transaction() as tx:
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return nw_sk, th_sk, nm_sk
 
@@ -877,14 +876,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         raise NotImplementedError
 
-    @chainable
     def merge_networks(
         self,
         network_scoped_keys: list[ScopedKey],
         name: str,
         scope: Scope,
         clone_incomplete_tasks=False,
-        tx=None,
     ) -> ScopedKey:
         """Merge multiple ``AlchemicalNetwork`` nodes into a new ``AlchemicalNetwork``.
 
@@ -921,9 +918,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             task_tree: list = field(
                 default_factory=list
             )  # flat represenation of task tree with results
-            known_scoped_keys: list = field(
-                default_factory=list
-            )
+            known_scoped_keys: list = field(default_factory=list)
 
             def __eq__(self, other):
                 if isinstance(other, (Transformation, NonTransformation)):
@@ -931,12 +926,20 @@ class Neo4jStore(AlchemiscaleStateStore):
                 return other.transformation is self.transformation
 
             def add_known_scoped_key(self, key, scope):
-                self.known_scoped_keys.append(ScopedKey(gufe_key=GufeKey(key), **scope.to_dict()))
+                self.known_scoped_keys.append(
+                    ScopedKey(gufe_key=GufeKey(key), **scope.to_dict())
+                )
 
             @staticmethod
-            def update_task_trees(transformation_data: list, tx):
-                key_to_data_map = {str(td.transformation.key): td for td in transformation_data}
-                transformation_sk_pairs = [[str(td.transformation.key), str(sk)] for td in transformation_data for sk in td.known_scoped_keys]
+            def update_task_trees(transformation_data: list, statestore):
+                key_to_data_map = {
+                    str(td.transformation.key): td for td in transformation_data
+                }
+                transformation_sk_pairs = [
+                    [str(td.transformation.key), str(sk)]
+                    for td in transformation_data
+                    for sk in td.known_scoped_keys
+                ]
                 # TODO: filter out tasks that are not wanted before returning them
                 query = """
                 UNWIND $tf_sk_pairs as pairs
@@ -946,11 +949,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                 OPTIONAL MATCH (task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)
                 RETURN tf_key, task, extended_task as extended_task, collect(pdrr) as pdrrs
                 """
-                results = (
-                    tx.run(query, tf_sk_pairs=transformation_sk_pairs)
-                    .to_eager_result()
-                    .records
-                )
+                results = statestore.execute_query(
+                    query, tf_sk_pairs=transformation_sk_pairs
+                ).records
 
                 for record in results:
                     key_to_data_map[record["tf_key"]].task_tree.append(record)
@@ -958,7 +959,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             def to_subgraph(self, target_scope, statestore, subchain_cache):
                 if not self.task_tree:
                     return Subgraph()
-                _, tf_node, _ = statestore._keyed_chain_to_subgraph(subchain_cache[self.transformation], target_scope)
+                _, tf_node, _ = statestore._keyed_chain_to_subgraph(
+                    subchain_cache[self.transformation], target_scope
+                )
                 subgraph = Subgraph() | tf_node
 
                 scope_props = {
@@ -969,19 +972,34 @@ class Neo4jStore(AlchemiscaleStateStore):
 
                 def record_to_node(record):
                     scoped_key = record["_scoped_key"]
-                    scoped_key = ScopedKey(gufe_key=record["_gufe_key"], **scope.to_dict())
-                    return Node(*record.labels, **record._properties | scope_props | {"_scoped_key": str(scoped_key)})
+                    scoped_key = ScopedKey(
+                        gufe_key=record["_gufe_key"], **scope.to_dict()
+                    )
+                    return Node(
+                        *record.labels,
+                        **record._properties
+                        | scope_props
+                        | {"_scoped_key": str(scoped_key)},
+                    )
 
                 for record in self.task_tree:
                     etask_record = record["extended_task"]
                     pdrr_records = record["pdrrs"]
                     task_node = record_to_node(record["task"])
-                    etask_node = None if not record["extended_task"] else record_to_node(record["extended_task"])
+                    etask_node = (
+                        None
+                        if not record["extended_task"]
+                        else record_to_node(record["extended_task"])
+                    )
                     if etask_node:
-                        subgraph |= Relationship.type("EXTENDS")(etask_node, task_node, **scope_props)
+                        subgraph |= Relationship.type("EXTENDS")(
+                            etask_node, task_node, **scope_props
+                        )
                     for pdrr_record in record["pdrrs"]:
                         pdrr_node = record_to_node(pdrr_record)
-                        subgraph |= Relationship.type("RESULTS_IN")(task_node, pdrr_node, **scope_props)
+                        subgraph |= Relationship.type("RESULTS_IN")(
+                            task_node, pdrr_node, **scope_props
+                        )
 
                 return subgraph
 
@@ -1026,17 +1044,23 @@ class Neo4jStore(AlchemiscaleStateStore):
                         transformation_data.append(data)
                     data.add_known_scoped_key(database_key, network_scope)
         # - Collect all transformation gufe objects and collect into a new set of edges
-        TransformationData.update_task_trees(transformation_data, tx)
+        TransformationData.update_task_trees(transformation_data, self)
         new_edges = [td.transformation for td in transformation_data]
         # - Make new alchemiscale network with these edges
         combined_alchemical_network = AlchemicalNetwork(edges=new_edges, name=name)
-        an_subgraph, an_node, an_sk = self._keyed_chain_to_subgraph(KeyedChain.from_gufe(combined_alchemical_network), scope)
-        an_subgraph |= self.create_network_mark_subgraph(an_node)[0] | self.create_taskhub_subgraph(an_node)[0]
+        an_subgraph, an_node, an_sk = self._keyed_chain_to_subgraph(
+            KeyedChain.from_gufe(combined_alchemical_network), scope
+        )
+        an_subgraph |= (
+            self.create_network_mark_subgraph(an_node)[0]
+            | self.create_taskhub_subgraph(an_node)[0]
+        )
         task_subgraph = Subgraph()
         for td in transformation_data:
             task_subgraph |= td.to_subgraph(scope, self, subchain_cache)
         an_subgraph |= task_subgraph
-        merge_subgraph(tx, an_subgraph, "GufeTokenizable", "_scoped_key")
+        with self.transaction() as tx:
+            merge_subgraph(tx, an_subgraph, "GufeTokenizable", "_scoped_key")
         return an_sk
 
     def get_network_state(self, networks: list[ScopedKey]) -> list[str | None]:
@@ -2943,9 +2967,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## tasks
 
-    @chainable
     def _validate_extends_tasks(
-        self, task_list, tx=None
+        self,
+        task_list,
     ) -> dict[str, tuple[Node, str]]:
 
         if not task_list:
@@ -2957,7 +2981,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             return t, tf._scoped_key as tf_sk
         """
 
-        results = tx.run(q, task_list=list(map(str, task_list))).to_eager_result()
+        results = self.execute_query(q, task_list=list(map(str, task_list)))
 
         nodes = {}
 
@@ -2977,13 +3001,11 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return nodes
 
-    @chainable
     def create_tasks(
         self,
         transformations: list[ScopedKey],
         extends: list[ScopedKey | None] | None = None,
         creator: str | None = None,
-        tx=None,
     ) -> list[ScopedKey]:
         """Create Tasks for the given Transformations.
 
@@ -3039,7 +3061,6 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         extends_nodes = self._validate_extends_tasks(
             [_extends for _extends in extends if _extends is not None],
-            tx=tx,
         )
 
         subgraph = Subgraph()
@@ -3060,9 +3081,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             RETURN n
             """
 
-            results = tx.run(
+            results = self.execute_query(
                 q, transformation_subset=list(map(str, transformation_subset))
-            ).to_eager_result()
+            )
 
             transformation_nodes = {}
             for record in results.records:
@@ -3111,7 +3132,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                     _project=scope.project,
                 )
 
-        merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+        with self.transaction() as tx:
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
         return sks
 
