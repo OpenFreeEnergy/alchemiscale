@@ -1055,10 +1055,8 @@ class Neo4jStore(AlchemiscaleStateStore):
             self.create_network_mark_subgraph(an_node)[0]
             | self.create_taskhub_subgraph(an_node)[0]
         )
-        task_subgraph = Subgraph()
         for td in transformation_data:
-            task_subgraph |= td.to_subgraph(scope, self, subchain_cache)
-        an_subgraph |= task_subgraph
+            an_subgraph |= td.to_subgraph(scope, self, subchain_cache)
         with self.transaction() as tx:
             merge_subgraph(tx, an_subgraph, "GufeTokenizable", "_scoped_key")
         return an_sk
