@@ -26,6 +26,8 @@ MAX_SECRET_SIZE = 4096
 # passlib forbids NULL bytes in the secret. This is not necessary for backwards
 # compatibility, but we follow passlib's lead.
 _BNULL = b"\x00"
+# Bcrypt raises a ValueError when passed more than 72 bytes
+BCRYPT_MAX_KEY_SIZE = 72
 
 
 class BcryptPasswordHandler:
@@ -45,8 +47,8 @@ class BcryptPasswordHandler:
 
     def verify(self, key: str, hashed_salted: str) -> bool:
         validate_secret(key)
-
-        return bcrypt.checkpw(key.encode("utf-8"), hashed_salted.encode("utf-8"))
+        truncated_encoded_key = key.encode("utf-8")[:BCRYPT_MAX_KEY_SIZE]
+        return bcrypt.checkpw(truncated_encoded_key, hashed_salted.encode("utf-8"))
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

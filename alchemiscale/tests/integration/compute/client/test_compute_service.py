@@ -7,8 +7,10 @@ import pytest
 from pathlib import Path
 
 from alchemiscale.models import ScopedKey, Scope
+from alchemiscale.storage.models import ComputeManagerID
 from alchemiscale.storage.statestore import Neo4jStore
 from alchemiscale.storage.objectstore import S3ObjectStore
+from alchemiscale.compute.client import AlchemiscaleComputeClientError
 from alchemiscale.compute.service import SynchronousComputeService
 from alchemiscale.compute.settings import ComputeServiceSettings
 
@@ -243,3 +245,13 @@ class TestSynchronousComputeService:
     def test_kwarg_scopes(self):
         # TODO: add test here with alternative settings to `service` fixture
         _ = Scope("totally", "different", "scope")
+
+    def test_missing_compute_manager(self, n4js_preloaded, service):
+        service.settings.compute_manager_id = ComputeManagerID.new_from_name(
+            "testmanager"
+        )
+        with pytest.raises(
+            AlchemiscaleComputeClientError,
+            match="Could not find ComputeManagerRegistration",
+        ):
+            service._register()

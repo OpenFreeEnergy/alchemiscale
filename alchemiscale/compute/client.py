@@ -17,7 +17,14 @@ from ..base.client import (
 )
 from ..compression import compress_gufe_zstd, decompress_gufe_zstd
 from ..models import Scope, ScopedKey
-from ..storage.models import TaskHub, Task, ComputeServiceID
+from ..storage.models import (
+    TaskHub,
+    Task,
+    ComputeServiceID,
+    ComputeManagerID,
+    ComputeManagerInstruction,
+    ComputeManagerStatus,
+)
 
 
 class AlchemiscaleComputeClientError(AlchemiscaleBaseClientError): ...
@@ -28,8 +35,15 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
     _exception = AlchemiscaleComputeClientError
 
-    def register(self, compute_service_id: ComputeServiceID):
-        res = self._post_resource(f"/computeservice/{compute_service_id}/register", {})
+    def register(
+        self,
+        compute_service_id: ComputeServiceID,
+        compute_manager_id: ComputeManagerID | None = None,
+    ):
+        res = self._post_resource(
+            f"/computeservice/{compute_service_id}/register",
+            {"compute_manager_id": compute_manager_id},
+        )
         return ComputeServiceID(res)
 
     def deregister(self, compute_service_id: ComputeServiceID):
@@ -58,7 +72,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
             taskhubs = []
 
         for scope in scopes:
-            params = dict(return_gufe=return_gufe, **scope.dict())
+            params = dict(return_gufe=return_gufe, **scope.to_dict())
             if return_gufe:
                 taskhubs.update(self._query_resource("/taskhubs", params=params))
             else:
@@ -90,7 +104,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
     ):
         """Claim Tasks from TaskHubs within a list of Scopes."""
         data = dict(
-            scopes=[scope.dict() for scope in scopes],
+            scopes=[scope.to_dict() for scope in scopes],
             compute_service_id=str(compute_service_id),
             count=count,
             protocols=protocols,
@@ -144,3 +158,72 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         pdr_sk = self._post_resource(f"/tasks/{task}/results", data)
 
         return ScopedKey.from_dict(pdr_sk)
+
+
+class AlchemiscaleComputeManagerClientError(AlchemiscaleBaseClientError): ...
+
+
+class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
+
+    _exception = AlchemiscaleComputeManagerClientError
+
+    def register(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
+        res = self._post_resource(f"/computemanager/{compute_manager_id}/register", {})
+        return ComputeManagerID(res)
+
+    def deregister(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
+        res = self._post_resource(
+            f"/computemanager/{compute_manager_id}/deregister", {}
+        )
+        return ComputeManagerID(res)
+
+    def get_instruction(
+        self,
+        scopes: list[Scope],
+        compute_manager_id: ComputeManagerID,
+    ) -> tuple[ComputeManagerInstruction, dict]:
+        instruction_data = self._post_resource(
+            f"/computemanager/{compute_manager_id}/instruction",
+            {"scopes": [scope.to_dict() for scope in scopes]},
+        )
+
+        match instruction_data:
+            case {
+                "instruction": "OK",
+                "compute_service_ids": ids,
+                "num_tasks": num_tasks,
+            }:
+                return ComputeManagerInstruction.OK, {
+                    "compute_service_ids": ids,
+                    "num_tasks": num_tasks,
+                }
+            case {"instruction": "SKIP", "compute_service_ids": ids}:
+                return ComputeManagerInstruction.SKIP, {"compute_service_ids": ids}
+            case {"instruction": "SHUTDOWN", "message": message}:
+                return ComputeManagerInstruction.SHUTDOWN, {"message": message}
+            case _:
+                raise self._exception(
+                    f"Received unknown instruction pattern: {instruction_data}"
+                )
+
+    def update_status(
+        self,
+        compute_manager_id: ComputeManagerID,
+        status: ComputeManagerStatus,
+        *,
+        detail: str | None = None,
+        saturation: float | None = None,
+    ) -> ComputeManagerID:
+        payload = {"detail": detail, "saturation": saturation, "status": str(status)}
+        res = self._post_resource(
+            f"/computemanager/{compute_manager_id}/status",
+            payload,
+        )
+
+        return ComputeManagerID(res)
+
+    def clear_error(self, compute_manager_name: str):
+        res = self._post_resource(
+            f"/computemanager/{compute_manager_name}/clear_error",
+            {},
+        )

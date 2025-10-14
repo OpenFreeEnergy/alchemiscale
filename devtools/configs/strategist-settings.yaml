@@ -1,0 +1,46 @@
+---
+
+# Time in seconds between strategist iterations.
+# The strategist will query for ready strategies and execute them,
+# then sleep for this duration before the next iteration.
+sleep_interval: 300
+
+# Maximum number of worker processes for parallel strategy execution.
+# Each strategy execution runs in its own process to avoid blocking.
+max_workers: 4
+
+# Scopes to limit strategy execution to; defaults to all accessible scopes.
+# If specified, only strategies on networks within these scopes will be executed.
+# Use null or comment out to process all accessible scopes.
+scopes:
+  - '*-*-*'
+
+# Location of the cache directory as either a `pathlib.Path` or `str`.
+# If ``None`` is provided then the directory will be determined via
+# the ``XDG_CACHE_HOME`` environment variable or default to
+# ``${HOME}/.cache/alchemiscale``. Default ``None``.
+cache_directory: null
+
+# Maximum size of the client cache in bytes. Default 1 GiB.
+cache_size_limit: 1073741824
+
+# Whether or not to use the local cache on disk.
+use_local_cache: true
+
+# Neo4j database settings for state store access.
+# If not specified, defaults from environment variables will be used.
+neo4j_settings:
+  NEO4J_URL: "neo4j://localhost:7687"
+  NEO4J_USER: "neo4j"
+  NEO4J_PASS: "password"
+  NEO4J_DBNAME: "neo4j"
+
+# S3 object store settings for ProtocolDAGResult access.
+# If not specified, defaults from environment variables will be used.
+s3_settings:
+  AWS_ACCESS_KEY_ID: "your-access-key-id"
+  AWS_SECRET_ACCESS_KEY: "your-secret-access-key"
+  AWS_SESSION_TOKEN: null
+  AWS_S3_BUCKET: "alchemiscale-storage"
+  AWS_S3_PREFIX: "results/"
+  AWS_DEFAULT_REGION: "us-east-1"

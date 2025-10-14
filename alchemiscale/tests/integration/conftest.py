@@ -5,6 +5,7 @@
 
 import os
 from pathlib import Path
+import logging
 
 from grolt import Neo4jService, Neo4jDirectorySpec, docker
 from grolt.security import install_self_signed_certificate
@@ -15,19 +16,26 @@ from moto.server import ThreadedMotoServer
 from neo4j import GraphDatabase
 
 from gufe import ChemicalSystem, NonTransformation, Transformation, AlchemicalNetwork
+from gufe.protocols import ProtocolResult
 from gufe.protocols.protocoldag import execute_DAG
 from gufe.tests.test_protocol import DummyProtocol, BrokenProtocol
 from openfe_benchmarks import tyk2
 
 from alchemiscale.models import Scope
-from alchemiscale.settings import S3ObjectStoreSettings
+from alchemiscale.settings import S3ObjectStoreSettings, Neo4jStoreSettings
 from alchemiscale.storage.statestore import Neo4jStore
 from alchemiscale.storage.objectstore import get_s3os
 from alchemiscale.storage.models import ComputeServiceID
+from stratocaster.base import Strategy, StrategyResult, StrategySettings
 
 
 NEO4J_PROCESS = {}
 NEO4J_VERSION = os.getenv("NEO4J_VERSION", "")
+
+
+# suppress warnings from neo4j python driver
+neo4j_logger = logging.getLogger("neo4j")
+neo4j_logger.setLevel(logging.ERROR)
 
 
 class DeploymentProfile:
@@ -144,32 +152,41 @@ def uri(neo4j_service_and_uri):
     return uri
 
 
-# TODO: this should be pulling from the defined profile
-@fixture(scope="session")
-def graph(uri):
-    return GraphDatabase.driver(
-        uri,
-        auth=("neo4j", "password"),
-    )
-
-
 ## data
 ### below specific to alchemiscale
 
 
 @fixture(scope="module")
-def n4js(graph):
-    return Neo4jStore(graph)
+def n4jstore_settings(uri):
+
+    os.environ["NEO4J_URL"] = uri
+    os.environ["NEO4J_USER"] = "neo4j"
+    os.environ["NEO4J_PASS"] = "password"
+    os.environ["NEO4J_DBNAME"] = "neo4j"
+
+    return Neo4jStoreSettings()
+
+
+@fixture(scope="module")
+def n4js(n4jstore_settings):
+
+    n4js = Neo4jStore(n4jstore_settings)
+
+    yield n4js
+
+    n4js.close()
 
 
 @fixture
-def n4js_fresh(graph):
-    n4js = Neo4jStore(graph)
+def n4js_fresh(n4jstore_settings):
+    n4js = Neo4jStore(n4jstore_settings)
 
     n4js.reset()
     n4js.initialize()
 
-    return n4js
+    yield n4js
+
+    n4js.close()
 
 
 @fixture
@@ -228,11 +245,22 @@ def s3objectstore_settings():
 
 
 @fixture(scope="module")
-def s3os_server(s3objectstore_settings):
+def s3objectstore_settings_endpoint(s3objectstore_settings):
+
+    settings = s3objectstore_settings.model_dump()
+    settings["AWS_ENDPOINT_URL"] = "http://127.0.0.1:5000"
+
+    return S3ObjectStoreSettings(**settings)
+
+
+@fixture(scope="module")
+def s3os_server(s3objectstore_settings_endpoint):
+
     server = ThreadedMotoServer()
     server.start()
 
-    s3os = get_s3os(s3objectstore_settings, endpoint_url="http://127.0.0.1:5000")
+    # Create settings with endpoint URL for testing
+    s3os = get_s3os(s3objectstore_settings_endpoint)
     s3os.initialize()
 
     yield s3os
@@ -250,6 +278,7 @@ def s3os_server_fresh(s3os_server):
 
 @fixture(scope="module")
 def s3os(s3objectstore_settings):
+
     with mock_aws():
         s3os = get_s3os(s3objectstore_settings)
         s3os.initialize()
@@ -271,6 +300,43 @@ class DummyProtocolB(DummyProtocol):
 
 class DummyProtocolC(DummyProtocol):
     pass
+
+
+class DummyStrategySettings(StrategySettings):
+    """Settings for DummyStrategy."""
+
+    ...
+
+
+class DummyStrategy(Strategy):
+    """Test strategy for integration tests."""
+
+    _settings_cls = DummyStrategySettings
+
+    def __init__(self, settings=None):
+        if settings is None:
+            settings = self._default_settings()
+        super().__init__(settings)
+
+    @classmethod
+    def _default_settings(cls):
+        return DummyStrategySettings()
+
+    def _propose(self, alchemical_network, protocol_results):
+        """Simple strategy that returns equal weights for any transformations
+        if no results exist, and ``None`` for each transformation if *any*
+        results exist.
+
+        """
+
+        weights = {}
+        for transformation in alchemical_network.edges:
+            if isinstance(protocol_results[transformation.key], ProtocolResult):
+                weights[transformation.key] = None
+            else:
+                weights[transformation.key] = 0.5
+
+        return StrategyResult(weights)
 
 
 # TODO: add in atom mapping once `gufe`#35 is settled

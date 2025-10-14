@@ -9,7 +9,8 @@ import datetime
 from datetime import timedelta
 import random
 
-from fastapi import FastAPI, APIRouter, Body, Depends, Request
+from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Request
+from fastapi import status as http_status
 from fastapi.middleware.gzip import GZipMiddleware
 from gufe.tokenization import JSON_HANDLER
 from gufe.protocols import ProtocolDAGResult
@@ -40,7 +41,10 @@ from ..storage.objectstore import S3ObjectStore
 from ..storage.models import (
     ProtocolDAGResultRef,
     ComputeServiceID,
+    ComputeManagerID,
+    ComputeManagerRegistration,
     ComputeServiceRegistration,
+    ComputeManagerStatus,
 )
 from ..models import Scope, ScopedKey
 from ..security.models import (
@@ -102,17 +106,31 @@ def list_scopes(
 @router.post("/computeservice/{compute_service_id}/register")
 def register_computeservice(
     compute_service_id,
+    *,
+    compute_manager_id: str | None = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     now = datetime.datetime.now(tz=datetime.UTC)
+    if compute_manager_id:
+        manager_name = process_compute_manager_id_string(compute_manager_id).name
+    else:
+        manager_name = None
+
     csreg = ComputeServiceRegistration(
         identifier=ComputeServiceID(compute_service_id),
         registered=now,
         heartbeat=now,
         failure_times=[],
+        manager_name=manager_name,
     )
 
-    compute_service_id_ = n4js.register_computeservice(csreg)
+    try:
+        compute_service_id_ = n4js.register_computeservice(csreg)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
 
     return compute_service_id_
 
@@ -313,7 +331,7 @@ def retrieve_task_transformation(
 
     if protocoldagresultref_sk:
         protocoldagresultref = n4js.get_gufe(protocoldagresultref_sk)
-        pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.dict())
+        pdr_sk = ScopedKey(gufe_key=protocoldagresultref.obj_key, **sk.scope.to_dict())
 
         # we keep this as a string to avoid useless deserialization/reserialization here
         try:
@@ -390,6 +408,136 @@ async def set_task_result(
         n4js.resolve_task_restarts(task_scoped_keys=[task_sk])
 
     return result_sk
+
+
+def process_compute_manager_id_string(
+    compute_manager_id_string: str,
+) -> ComputeManagerID:
+    """Try creating a ComputeManagerID from a string representation. Raise HTTPException."""
+    try:
+        compute_manager_id = ComputeManagerID(compute_manager_id_string)
+    except Exception as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    return compute_manager_id
+
+
+@router.post("/computemanager/{compute_manager_id}/register")
+def register_computemanager(
+    compute_manager_id,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+
+    now = datetime.datetime.now(tz=datetime.UTC)
+    cm_registration = ComputeManagerRegistration(
+        name=compute_manager_id.name,
+        uuid=compute_manager_id.uuid,
+        registered=now,
+        last_status_update=now,
+        status=ComputeManagerStatus.OK,
+        detail="",
+        saturation=0,
+    )
+
+    try:
+        compute_manager_id_ = n4js.register_computemanager(cm_registration)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    return compute_manager_id_
+
+
+@router.post("/computemanager/{compute_manager_id}/deregister")
+def deregister_computemanager(
+    compute_manager_id,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+    n4js.deregister_computemanager(compute_manager_id)
+    return compute_manager_id
+
+
+@router.post("/computemanager/{compute_manager_id}/instruction")
+def get_instruction_computemanager(
+    compute_manager_id,
+    *,
+    scopes: list[Scope] = Body([], embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    scopes = scopes or [Scope()]
+    scopes_reduced = minimize_scope_space(scopes)
+    query_scopes = []
+    for scope in scopes_reduced:
+        query_scopes.extend(validate_scopes_query(scope, token))
+
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+    now = datetime.datetime.now(tz=datetime.UTC)
+    instruction, payload = n4js.get_computemanager_instruction(
+        compute_manager_id,
+        now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
+        settings.ALCHEMISCALE_COMPUTE_API_MAX_FAILURES,
+        query_scopes,
+    )
+    payload["instruction"] = str(instruction)
+    return payload
+
+
+@router.post("/computemanager/{compute_manager_id}/status")
+def update_status_computemanager(
+    compute_manager_id,
+    *,
+    status: str = Body(),
+    detail: str | None = Body(None),
+    saturation: float | None = Body(None),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
+):
+    expire_seconds = settings.ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS
+    expire_seconds_errored = (
+        settings.ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR
+    )
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+    try:
+        n4js.update_compute_manager_status(
+            compute_manager_id, status, detail, saturation
+        )
+        now = datetime.datetime.now(tz=datetime.UTC)
+        n4js.expire_computemanager_registrations(
+            now - timedelta(seconds=expire_seconds),
+            now - timedelta(seconds=expire_seconds_errored),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    return compute_manager_id
+
+
+@router.post("/computemanager/{compute_manager_name}/clear_error")
+def clear_error_computemanager(
+    compute_manager_name: str,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    if not compute_manager_name.isalnum():
+        raise ValueError("Provided manager name is not alphanumeric")
+
+    with n4js.transaction() as tx:
+        compute_manager_id = n4js.get_compute_manager_id(
+            name=compute_manager_name, tx=tx
+        )
+        n4js.clear_errored_computemanager(compute_manager_id, tx=tx)
 
 
 ### add router

@@ -18,5 +18,4 @@ See :ref:`library-layout` for a higher-level overview of these modules.
    ./api/interface
    ./api/compute
    ./api/security
-   ./api/strategies
    ./api/strategist
