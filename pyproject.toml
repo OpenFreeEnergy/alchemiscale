@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "setuptools>=64",
+    "setuptools>=77.0.3",
     "setuptools-scm>=8",
 ]
 build-backend = "setuptools.build_meta"
@@ -10,11 +10,11 @@ name = "alchemiscale"
 description = "a high-throughput alchemical free energy execution system for use with HPC, cloud, bare metal, and Folding@Home"
 readme = "README.md"
 authors = [{name = "OpenFE and OpenFF developers"}]
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX",
     "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
@@ -38,7 +38,6 @@ alchemiscale = "alchemiscale.cli:cli"
 [tool.setuptools]
 zip-safe = false
 include-package-data = true
-license-files = ["LICENSE"]
 
 [tool.setuptools.packages]
 find = {namespaces = false}
