@@ -154,11 +154,11 @@ class TestNeo4jStore(TestStateStore):
         # clutter down below
         def set_result(_slice, *, ok: bool):
             nonlocal task_sks, transformation_sks
-            for task_sk, transformation_sk in zip(
-                task_sks[_slice], transformation_sks[_slice]
-            ):
+            for task_sk in task_sks[_slice]:
                 pdrr = ProtocolDAGResultRef(
-                    obj_key=transformation_sk.gufe_key, scope=task_sk.scope, ok=ok
+                    obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+                    scope=task_sk.scope,
+                    ok=ok,
                 )
                 n4js.set_task_result(task_sk, pdrr)
 
@@ -183,9 +183,11 @@ class TestNeo4jStore(TestStateStore):
         n4js.set_task_waiting(task_sks[5:])
         n4js.action_tasks(task_sks[5:], th_sk)
 
+        n4js.set_task_running(task_sks[4:5])
         n4js.set_task_error(task_sks[4:5])
         n4js.action_tasks(task_sks[4:5], th_sk)
 
+        n4js.set_task_running(task_sks[:2])
         n4js.set_task_complete(task_sks[:2])
 
         set_result(slice(None, 2), ok=True)
@@ -208,6 +210,7 @@ class TestNeo4jStore(TestStateStore):
             for transformation in transformations_common
         ]
         task_sks = n4js.create_tasks(transformation_sks)
+        n4js.set_task_running(task_sks)
         n4js.set_task_complete(task_sks)
         set_result(slice(None), ok=True)
 
@@ -216,6 +219,7 @@ class TestNeo4jStore(TestStateStore):
 
         n4js.set_task_waiting(task_sks[0:1])
         n4js.set_task_running(task_sks[1:2])
+        n4js.set_task_running(task_sks[2:3])
         n4js.set_task_complete(task_sks[2:3])
 
         set_result(slice(2, 3), ok=True)
@@ -238,6 +242,7 @@ class TestNeo4jStore(TestStateStore):
 
         task_sks = n4js.create_tasks(transformation_sks)
         n4js.set_task_waiting(task_sks[:-1])
+        n4js.set_task_running(task_sks[-1:])
         n4js.set_task_complete(task_sks[-1:])
         set_result(slice(-1, None), ok=True)
 
@@ -253,6 +258,16 @@ class TestNeo4jStore(TestStateStore):
         assert len(n4js.get_gufe(sk_merged).edges) != len(
             n4js.get_gufe(network_sks[1]).edges
         )
+
+        # we expect 7 pdrrs from the completed tasks
+        results = n4js.execute_query(
+            """
+        MATCH (pdrr: ProtocolDAGResultRef {`_project`: $project})
+        RETURN pdrr
+        """,
+            project=new_scope.project,
+        )
+        assert len(results.records) == 7
 
     def test_set_network_state(self, n4js, network_tyk2, scope_test):
         valid_states = [state.value for state in NetworkStateEnum]
