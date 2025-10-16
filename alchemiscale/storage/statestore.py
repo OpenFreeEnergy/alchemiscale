@@ -7,6 +7,7 @@
 import abc
 import bisect
 import datetime
+from dataclasses import dataclass, field
 from contextlib import contextmanager
 import json
 import re
@@ -881,7 +882,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         network_scoped_keys: list[ScopedKey],
         name: str,
         scope: Scope,
-        clone_incomplete_tasks=False,
     ) -> ScopedKey:
         """Merge multiple ``AlchemicalNetwork`` nodes into a new ``AlchemicalNetwork``.
 
@@ -910,8 +910,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                 f"ScopedKey ({network_scoped_key}) not found in the database."
             )
 
-        from dataclasses import dataclass, field
-
         @dataclass
         class TransformationData:
             transformation: Transformation
@@ -919,11 +917,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                 default_factory=list
             )  # flat represenation of task tree with results
             known_scoped_keys: list = field(default_factory=list)
-
-            def __eq__(self, other):
-                if isinstance(other, (Transformation, NonTransformation)):
-                    return other is self.transformation
-                return other.transformation is self.transformation
 
             def add_known_scoped_key(self, key, scope):
                 self.known_scoped_keys.append(
@@ -940,11 +933,10 @@ class Neo4jStore(AlchemiscaleStateStore):
                     for td in transformation_data
                     for sk in td.known_scoped_keys
                 ]
-                # TODO: filter out tasks that are not wanted before returning them
                 query = """
                 UNWIND $tf_sk_pairs as pairs
                 WITH pairs[0] AS tf_key, pairs[1] AS tf_scoped_key
-                MATCH (task:Task)-[:PERFORMS]->(:Transformation|NonTransformation {`_scoped_key`: tf_scoped_key})
+                MATCH (task:Task {status: "complete"})-[:PERFORMS]->(:Transformation|NonTransformation {`_scoped_key`: tf_scoped_key})
                 OPTIONAL MATCH (task)-[:EXTENDS]->(extended_task:Task)
                 OPTIONAL MATCH (task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)
                 RETURN tf_key, task, extended_task as extended_task, collect(pdrr) as pdrrs
@@ -959,6 +951,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             def to_subgraph(self, target_scope, statestore, subchain_cache):
                 if not self.task_tree:
                     return Subgraph()
+
                 _, tf_node, _ = statestore._keyed_chain_to_subgraph(
                     subchain_cache[self.transformation], target_scope
                 )
