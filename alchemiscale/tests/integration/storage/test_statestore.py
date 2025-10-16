@@ -263,11 +263,23 @@ class TestNeo4jStore(TestStateStore):
         results = n4js.execute_query(
             """
         MATCH (pdrr: ProtocolDAGResultRef {`_project`: $project})
+        WHERE pdrr.ok = True
         RETURN pdrr
         """,
             project=new_scope.project,
         )
         assert len(results.records) == 7
+
+        # we expect 1 pdrrs from the errored task
+        results = n4js.execute_query(
+            """
+        MATCH (pdrr: ProtocolDAGResultRef {`_project`: $project})
+        WHERE pdrr.ok = False
+        RETURN pdrr
+        """,
+            project=new_scope.project,
+        )
+        assert len(results.records) == 1
 
     def test_set_network_state(self, n4js, network_tyk2, scope_test):
         valid_states = [state.value for state in NetworkStateEnum]

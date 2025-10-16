@@ -936,7 +936,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                 query = """
                 UNWIND $tf_sk_pairs as pairs
                 WITH pairs[0] AS tf_key, pairs[1] AS tf_scoped_key
-                MATCH (task:Task {status: "complete"})-[:PERFORMS]->(:Transformation|NonTransformation {`_scoped_key`: tf_scoped_key})
+                MATCH (task:Task)-[:PERFORMS]->(:Transformation|NonTransformation {`_scoped_key`: tf_scoped_key})
+                WHERE task.status IN ["complete", "error"]
                 OPTIONAL MATCH (task)-[:EXTENDS]->(extended_task:Task)
                 OPTIONAL MATCH (task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)
                 RETURN tf_key, task, extended_task as extended_task, collect(pdrr) as pdrrs
