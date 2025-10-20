@@ -25,7 +25,13 @@ from gufe import (
     Protocol,
 )
 from gufe.settings import SettingsBaseModel
-from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER, KeyedChain
+from gufe.tokenization import (
+    GufeTokenizable,
+    GufeKey,
+    JSON_HANDLER,
+    KeyedChain,
+    key_decode_dependencies,
+)
 from gufe.protocols import ProtocolUnitFailure
 
 from neo4j import Transaction, GraphDatabase, Driver
@@ -898,7 +904,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         -------
         The ``ScopedKey`` of the new ``AlchemicalNetwork`` in the database.
         """
-        # - Collect keyed chain representation for all alchemiscale networks
+        # Collect keyed chain representation for all alchemiscale networks
         try:
             network_keyed_chains: list[tuple[Scope, KeyedChain]] = []
             for network_scoped_key in network_scoped_keys:
@@ -910,8 +916,23 @@ class Neo4jStore(AlchemiscaleStateStore):
                 f"ScopedKey ({network_scoped_key}) not found in the database."
             )
 
+        # Helper dataclass for managing transformations and tasks that
+        # perform them.
         @dataclass
         class TransformationData:
+            """
+            transformation
+
+            task_tree
+                flat representation of tasks associated with the transformation, each entry has:
+                - transformation gufe key
+                - full task neo4j node
+                - optional: full task neo4j node that this task extends
+                - list of ProtocolDAGResultRef nodes
+            known_scoped_keys
+                All scoped keys that represent the transformation across networks
+            """
+
             transformation: Transformation
             task_tree: list = field(
                 default_factory=list
@@ -925,9 +946,16 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             @staticmethod
             def update_task_trees(transformation_data: list, statestore):
+                """Given a list of TransformationData, extract all
+                necessary info from Neo4j and load the task trees.
+                """
+
                 key_to_data_map = {
                     str(td.transformation.key): td for td in transformation_data
                 }
+                # prepare for unwind claus, include transformation key
+                # for updating each entry of transformation_data for
+                # each scoped key
                 transformation_sk_pairs = [
                     [str(td.transformation.key), str(sk)]
                     for td in transformation_data
@@ -950,9 +978,26 @@ class Neo4jStore(AlchemiscaleStateStore):
                     key_to_data_map[record["tf_key"]].task_tree.append(record)
 
             def to_subgraph(self, target_scope, statestore, subchain_cache):
+                """Create a subgraph where the "central" node is the
+                transformation and iteratively add Task and PDRRs
+                nodes with their corresponding relationships.
+
+                """
+                # if there are no tasks, can return an subgraph, no
+                # need to make transformation node because it exists
+                # already outside of this method
                 if not self.task_tree:
                     return Subgraph()
 
+                # create the transformation node from its keyed chain,
+                # this allows later nodes to be easily connected to
+                # the subgraph outside of this method. subchain_cache
+                # is a nonlocal dict[Transformation, KeyedChain] that
+                # removes the need to find the transformation within a
+                # larger KeyedChain. This will likely be unnecessary
+                # with later versions of gufe when decode_subchains is
+                # added.
+                # (https://github.com/OpenFreeEnergy/gufe/pull/634)
                 _, tf_node, _ = statestore._keyed_chain_to_subgraph(
                     subchain_cache[self.transformation], target_scope
                 )
@@ -965,7 +1010,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                 }
 
                 def record_to_node(record):
-                    scoped_key = record["_scoped_key"]
+                    # create node from a neo4j record with updated scoped key
                     scoped_key = ScopedKey(
                         gufe_key=record["_gufe_key"], **scope.to_dict()
                     )
@@ -976,10 +1021,14 @@ class Neo4jStore(AlchemiscaleStateStore):
                         | {"_scoped_key": str(scoped_key)},
                     )
 
+                # process each task found. Each record represents a
+                # single task.
                 for record in self.task_tree:
                     etask_record = record["extended_task"]
                     pdrr_records = record["pdrrs"]
+                    # update task node to have new scoped key
                     task_node = record_to_node(record["task"])
+                    # create the task node this task extends if it exists
                     etask_node = (
                         None
                         if not record["extended_task"]
@@ -989,6 +1038,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                         subgraph |= Relationship.type("EXTENDS")(
                             etask_node, task_node, **scope_props
                         )
+                    # clone all result refs for the task
                     for pdrr_record in record["pdrrs"]:
                         pdrr_node = record_to_node(pdrr_record)
                         subgraph |= Relationship.type("RESULTS_IN")(
@@ -996,8 +1046,6 @@ class Neo4jStore(AlchemiscaleStateStore):
                         )
 
                 return subgraph
-
-        from gufe.tokenization import key_decode_dependencies
 
         # TODO: upstream to gufe
         def kc_to_gufe(kc, gts):
@@ -1013,9 +1061,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         # due to minor version changes between serialization
         # times. These keys are then used to get all results for Tasks
         # associated with them.
-        #
-        # TODO: this is currently slow from all of the to_gufe calls
-        # on subchains that contain more information than is necessary
         transformation_data: list[TransformationData] = []
         subchain_cache = {}
         for network_scope, network_keyed_chain in network_keyed_chains:
@@ -1037,20 +1082,24 @@ class Neo4jStore(AlchemiscaleStateStore):
                         data = TransformationData(transformation)
                         transformation_data.append(data)
                     data.add_known_scoped_key(database_key, network_scope)
-        # - Collect all transformation gufe objects and collect into a new set of edges
+        # Collect all transformation gufe objects and collect into a new set of edges
         TransformationData.update_task_trees(transformation_data, self)
         new_edges = [td.transformation for td in transformation_data]
-        # - Make new alchemiscale network with these edges
+        # Make new alchemiscale network with these edges
         combined_alchemical_network = AlchemicalNetwork(edges=new_edges, name=name)
         an_subgraph, an_node, an_sk = self._keyed_chain_to_subgraph(
             KeyedChain.from_gufe(combined_alchemical_network), scope
         )
+        # create and fold in taskhub and network mark supporting nodes
         an_subgraph |= (
             self.create_network_mark_subgraph(an_node)[0]
             | self.create_taskhub_subgraph(an_node)[0]
         )
+        # create and fold in all task and results data
         for td in transformation_data:
             an_subgraph |= td.to_subgraph(scope, self, subchain_cache)
+
+        # merge the new network into neo4j
         with self.transaction() as tx:
             merge_subgraph(tx, an_subgraph, "GufeTokenizable", "_scoped_key")
         return an_sk
