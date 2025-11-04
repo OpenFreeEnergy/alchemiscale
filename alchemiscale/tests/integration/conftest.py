@@ -38,6 +38,18 @@ neo4j_logger = logging.getLogger("neo4j")
 neo4j_logger.setLevel(logging.ERROR)
 
 
+def get_worker_port_offset(worker_id: str) -> int:
+    """Calculate port offset for worker to avoid conflicts"""
+    if worker_id == 'master':
+        return 0
+    elif worker_id.startswith('gw'):
+        # Extract number from 'gw0', 'gw1', etc.
+        worker_num = int(worker_id[2:])
+        return worker_num * 100  # Each worker gets 100 port range
+    else:
+        # Fallback for other worker ID formats
+        return hash(worker_id) % 1000
+
 class DeploymentProfile:
     def __init__(self, release=None, topology=None, cert=None, schemes=None):
         self.release = release
@@ -86,7 +98,9 @@ class TestProfile:
     def release_str(self):
         return ".".join(map(str, self.release))
 
-    def generate_uri(self, service_name=None):
+    def generate_uri(self, worker_id: str):
+        service_name = f"neo4j-{worker_id}"
+        port_offset = get_worker_port_offset(worker_id)
         if self.cert == "full":
             raise NotImplementedError("Full certificates are not yet supported")
         elif self.cert == "ssc":
@@ -100,6 +114,10 @@ class TestProfile:
             auth=("neo4j", "password"),
             dir_spec=dir_spec,
             config={},
+            http_port=Neo4jService.default_http_port + port_offset,
+            https_port=Neo4jService.default_https_port + port_offset,
+            bolt_port=Neo4jService.default_bolt_port + port_offset,
+
         ) as service:
             uris = [router.uri(self.scheme) for router in service.routers()]
             yield service, uris[0]
@@ -138,8 +156,8 @@ def test_profile(request):
 
 
 @fixture(scope="session")
-def neo4j_service_and_uri(test_profile):
-    yield from test_profile.generate_uri("py2neo")
+def neo4j_service_and_uri(test_profile, worker_id):
+    yield from test_profile.generate_uri(worker_id)
 
     # prune all docker volumes left behind
     docker.volumes.prune()
