@@ -29,7 +29,7 @@ from alchemiscale.storage.models import ComputeServiceID
 from stratocaster.base import Strategy, StrategyResult, StrategySettings
 
 
-NEO4J_PROCESS = {}
+# Removed NEO4J_PROCESS global dict - not used and would cause race conditions in parallel execution
 NEO4J_VERSION = os.getenv("NEO4J_VERSION", "")
 
 
@@ -157,10 +157,20 @@ def test_profile(request):
 
 @fixture(scope="session")
 def neo4j_service_and_uri(test_profile, worker_id):
+    """
+    Provides a Neo4j service instance and connection URI for testing.
+
+    Each worker gets its own isolated Neo4j container with unique ports.
+    The container is automatically cleaned up when the session ends.
+
+    Note: We do NOT call docker.volumes.prune() here as it would remove
+    volumes from all workers in parallel test execution, causing race conditions.
+    Docker will clean up anonymous volumes when containers are removed.
+    """
     yield from test_profile.generate_uri(worker_id)
 
-    # prune all docker volumes left behind
-    docker.volumes.prune()
+    # Cleanup happens automatically via the context manager in generate_uri()
+    # No need for explicit volume pruning which causes race conditions
     return
 
 
