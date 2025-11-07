@@ -44,7 +44,7 @@ def get_worker_port_offset(worker_id: str) -> int:
         return 0
     elif worker_id.startswith("gw"):
         # Extract number from 'gw0', 'gw1', etc.
-        worker_num = int(worker_id[2:])
+        worker_num = int(worker_id[2:]) + 1
         return worker_num * 100  # Each worker gets 100 port range
     else:
         # Fallback for other worker ID formats
@@ -166,12 +166,14 @@ def neo4j_service_and_uri(test_profile, worker_id):
     Note: We do NOT call docker.volumes.prune() here as it would remove
     volumes from all workers in parallel test execution, causing race conditions.
     Docker will clean up anonymous volumes when containers are removed.
+
+    Instead we call docker.volumes.prune() *once* at the end of the entire test session
+    in pytest_sessionfinish().
     """
     yield from test_profile.generate_uri(worker_id)
 
     # Cleanup happens automatically via the context manager in generate_uri()
     # No need for explicit volume pruning which causes race conditions
-    return
 
 
 @fixture(scope="session")
@@ -273,18 +275,26 @@ def s3objectstore_settings():
 
 
 @fixture(scope="module")
-def s3objectstore_settings_endpoint(s3objectstore_settings):
+def s3os_port(worker_id):
+    """Calculate worker-specific port for S3 mock server to avoid conflicts"""
+    base_port = 5000
+    port_offset = get_worker_port_offset(worker_id)
+    return base_port + port_offset
+
+
+@fixture(scope="module")
+def s3objectstore_settings_endpoint(s3objectstore_settings, s3os_port):
 
     settings = s3objectstore_settings.model_dump()
-    settings["AWS_ENDPOINT_URL"] = "http://127.0.0.1:5000"
+    settings["AWS_ENDPOINT_URL"] = f"http://127.0.0.1:{s3os_port}"
 
     return S3ObjectStoreSettings(**settings)
 
 
 @fixture(scope="module")
-def s3os_server(s3objectstore_settings_endpoint):
+def s3os_server(s3objectstore_settings_endpoint, s3os_port):
 
-    server = ThreadedMotoServer()
+    server = ThreadedMotoServer(port=s3os_port)
     server.start()
 
     # Create settings with endpoint URL for testing
@@ -547,3 +557,22 @@ def multiple_scopes(scope_test):
 @fixture(scope="module")
 def compute_service_id():
     return ComputeServiceID("compute-service-123")
+
+
+@fixture(scope="module")
+def compute_api_port(worker_id):
+    """Calculate worker-specific port for compute API to avoid conflicts"""
+    base_port = 8000
+    port_offset = get_worker_port_offset(worker_id)
+    return base_port + port_offset
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Called after whole test run finished, right before returning exit status.
+
+    With pytest-xdist, this runs in each worker AND the controller.
+    We only want to prune volumes once on the controller.
+    """
+    # Check if this is the controller process (not a worker)
+    if not hasattr(session.config, "workerinput"):
+        docker.volumes.prune()
