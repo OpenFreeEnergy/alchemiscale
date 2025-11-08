@@ -128,9 +128,7 @@ class StrategistService:
         self.logger = logging.getLogger("AlchemiscaleStrategistService")
         self.logger.setLevel(self.settings.loglevel)
 
-        formatter = logging.Formatter(
-            "[%(asctime)s] [%(levelname)s] %(message)s"
-        )
+        formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s")
         formatter.converter = time.gmtime  # use utc time for logging timestamps
 
         sh = logging.StreamHandler()
