@@ -9,19 +9,23 @@ from alchemiscale.compute import api, client
 
 from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
 from alchemiscale.tests.integration.utils import running_service
+from alchemiscale.tests.integration.conftest import get_worker_port_offset
 
 
 ## compute client
 
 
 @pytest.fixture(scope="module")
-def compute_api(n4jstore_settings, s3os_server):
+def compute_api(n4jstore_settings, s3os_server, compute_api_port):
     def get_s3os_override():
         return s3os_server
 
+    def get_settings_override():
+        return get_compute_settings_override(port=compute_api_port)
+
     overrides = copy(api.app.dependency_overrides)
 
-    api.app.dependency_overrides[get_base_api_settings] = get_compute_settings_override
+    api.app.dependency_overrides[get_base_api_settings] = get_settings_override
     api.app.dependency_overrides[get_s3os_depends] = get_s3os_override
     yield api.app
     api.app.dependency_overrides = overrides
@@ -37,8 +41,8 @@ def run_server(fastapi_app, settings):
 
 
 @pytest.fixture(scope="module")
-def uvicorn_server(compute_api):
-    settings = get_compute_settings_override()
+def uvicorn_server(compute_api, compute_api_port):
+    settings = get_compute_settings_override(port=compute_api_port)
     with running_service(
         run_server,
         port=settings.ALCHEMISCALE_COMPUTE_API_PORT,
@@ -50,12 +54,13 @@ def uvicorn_server(compute_api):
 @pytest.fixture(scope="module")
 def compute_client(
     uvicorn_server,
+    compute_api_port,
     compute_identity,
     single_scoped_credentialed_compute,
     compute_service_id,
 ):
     return client.AlchemiscaleComputeClient(
-        api_url="http://127.0.0.1:8000/",
+        api_url=f"http://127.0.0.1:{compute_api_port}/",
         # use the identifier for the single-scoped user who should have access to some things
         identifier=single_scoped_credentialed_compute.identifier,
         # all the test users are based on compute_identity who use the same password
@@ -64,9 +69,9 @@ def compute_client(
 
 
 @pytest.fixture(scope="module")
-def compute_client_wrong_credential(uvicorn_server, compute_identity):
+def compute_client_wrong_credential(uvicorn_server, compute_api_port, compute_identity):
     return client.AlchemiscaleComputeClient(
-        api_url="http://127.0.0.1:8000/",
+        api_url=f"http://127.0.0.1:{compute_api_port}/",
         identifier=compute_identity["identifier"],
         key="wrong credential",
     )
@@ -75,11 +80,12 @@ def compute_client_wrong_credential(uvicorn_server, compute_identity):
 @pytest.fixture(scope="module")
 def compute_manager_client(
     uvicorn_server,
+    compute_api_port,
     compute_identity,
     single_scoped_credentialed_compute,
 ):
     return client.AlchemiscaleComputeManagerClient(
-        api_url="http://127.0.0.1:8000/",
+        api_url=f"http://127.0.0.1:{compute_api_port}/",
         # use the identifier for the single-scoped user who should have access to some things
         identifier=single_scoped_credentialed_compute.identifier,
         # all the test users are based on compute_identity who use the same password
@@ -88,9 +94,9 @@ def compute_manager_client(
 
 
 @pytest.fixture(scope="module")
-def manager_client_wrong_credential(uvicorn_server, compute_identity):
+def manager_client_wrong_credential(uvicorn_server, compute_api_port, compute_identity):
     return client.AlchemiscaleComputeManagerClient(
-        api_url="http://127.0.0.1:8000/",
+        api_url=f"http://127.0.0.1:{compute_api_port}/",
         identifier=compute_identity["identifier"],
         key="wrong credential",
     )

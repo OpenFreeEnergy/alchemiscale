@@ -50,7 +50,7 @@ jobs:
 
       - name: "Run tests"
         run: |
-          pytest -v --cov=alchemiscale --cov-report=xml alchemiscale/tests
+          pytest -n auto -v --cov=alchemiscale --cov-report=xml alchemiscale/tests
 
       - name: codecov
         if: ${{ github.repository == 'OpenFreeEnergy/alchemiscale'
