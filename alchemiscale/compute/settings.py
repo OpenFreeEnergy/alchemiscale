@@ -1,5 +1,5 @@
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..models import Scope
 
@@ -121,6 +121,19 @@ class ComputeServiceSettings(BaseModel):
         True,
         description="Whether to verify SSL certificate presented by the API server.",
     )
+
+    @field_validator("scopes", mode="before")
+    @classmethod
+    def validate_scopes(cls, values) -> list[Scope]:
+        _values = values[:]
+        for idx, value in enumerate(_values):
+            if isinstance(value, Scope):
+                continue
+            if isinstance(value, str):
+                _values[idx] = Scope.from_str(value)
+            else:
+                raise ValueError("Unable to parse input as a Scope")
+        return _values
 
 
 class ComputeManagerSettings(BaseModel):

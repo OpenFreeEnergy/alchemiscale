@@ -85,6 +85,7 @@ class ComputeManager:
                 if max_cycles and count >= max_cycles:
                     self.logger.info("Reached maximum number of cycles")
                     break
+                self.logger.info(f"Sleeping for {self.settings.sleep_interval} seconds")
                 time.sleep(self.settings.sleep_interval)
         except Exception as e:
             self.logger.error(f"Unknown exception raised: '{str(e)}'")
