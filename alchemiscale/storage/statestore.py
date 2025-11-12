@@ -904,7 +904,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         -------
         The ``ScopedKey`` of the new ``AlchemicalNetwork`` in the database.
         """
-        # Collect keyed chain representation for all alchemiscale networks
+        # Collect keyed chain representation for all alchemical networks
         try:
             network_keyed_chains: list[tuple[Scope, KeyedChain]] = []
             for network_scoped_key in network_scoped_keys:
@@ -1082,6 +1082,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                         data = TransformationData(transformation)
                         transformation_data.append(data)
                     data.add_known_scoped_key(database_key, network_scope)
+
         # Collect all transformation gufe objects and collect into a new set of edges
         TransformationData.update_task_trees(transformation_data, self)
         new_edges = [td.transformation for td in transformation_data]
