@@ -8,8 +8,8 @@ dependencies:
   - cuda-version >=12
   
   # alchemiscale dependencies
-  - gufe=1.6.0
-  - openfe=1.6.0
+  - gufe=1.6.1
+  - openfe=1.6.1
   - requests
   - click
   - httpx
@@ -29,4 +29,4 @@ dependencies:
   - openmmforcefields>=0.14.2
 
   - pip:
-    - git+https://github.com/OpenFreeEnergy/alchemiscale.git@v0.6.2
+    - git+https://github.com/OpenFreeEnergy/alchemiscale.git@v0.7.0

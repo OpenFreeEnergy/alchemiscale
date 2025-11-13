@@ -353,6 +353,8 @@ class SynchronousComputeService:
             If `None`, the service will have no time limit.
 
         """
+        self._stop = False
+
         # add ComputeServiceRegistration
         self.logger.info("Starting up service '%s'", self.name)
         self._register()
@@ -418,6 +420,8 @@ class AsynchronousComputeService(SynchronousComputeService):
 
     def start(self):
         """Start the service; will keep going until told to stop."""
+        self._stop = False
+
         while True:
             if self._stop:
                 return

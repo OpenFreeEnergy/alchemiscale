@@ -15,13 +15,16 @@ from alchemiscale.tests.integration.utils import running_service
 
 
 @pytest.fixture(scope="module")
-def user_api(n4jstore_settings, s3os_server):
+def user_api(n4jstore_settings, s3os_server, compute_api_port):
     def get_s3os_override():
         return s3os_server
 
+    def get_settings_override():
+        return get_user_settings_override(port=compute_api_port)
+
     overrides = copy(api.app.dependency_overrides)
 
-    api.app.dependency_overrides[get_base_api_settings] = get_user_settings_override
+    api.app.dependency_overrides[get_base_api_settings] = get_settings_override
     api.app.dependency_overrides[get_s3os_depends] = get_s3os_override
     yield api.app
     api.app.dependency_overrides = overrides
@@ -37,8 +40,8 @@ def run_server(fastapi_app, settings):
 
 
 @pytest.fixture(scope="module")
-def uvicorn_server(user_api):
-    settings = get_user_settings_override()
+def uvicorn_server(user_api, compute_api_port):
+    settings = get_user_settings_override(port=compute_api_port)
     with running_service(
         run_server, port=settings.ALCHEMISCALE_API_PORT, args=(user_api, settings)
     ):
@@ -52,9 +55,9 @@ def cache_dir(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
-def user_client(uvicorn_server, user_identity, cache_dir):
+def user_client(uvicorn_server, user_identity, cache_dir, compute_api_port):
     test_client = client.AlchemiscaleClient(
-        api_url="http://127.0.0.1:8000/",
+        api_url=f"http://127.0.0.1:{compute_api_port}/",
         identifier=user_identity["identifier"],
         key=user_identity["key"],
         cache_directory=cache_dir,
@@ -66,9 +69,9 @@ def user_client(uvicorn_server, user_identity, cache_dir):
 
 
 @pytest.fixture(scope="module")
-def user_client_no_cache(uvicorn_server, user_identity, cache_dir):
+def user_client_no_cache(uvicorn_server, user_identity, cache_dir, compute_api_port):
     test_client = client.AlchemiscaleClient(
-        api_url="http://127.0.0.1:8000/",
+        api_url=f"http://127.0.0.1:{compute_api_port}/",
         identifier=user_identity["identifier"],
         key=user_identity["key"],
         use_local_cache=False,
@@ -90,9 +93,9 @@ def user_client_from_env(_client_setenv):
 
 
 @pytest.fixture(scope="module")
-def user_client_wrong_credential(uvicorn_server, user_identity):
+def user_client_wrong_credential(uvicorn_server, user_identity, compute_api_port):
     return client.AlchemiscaleClient(
-        api_url="http://127.0.0.1:8000/",
+        api_url=f"http://127.0.0.1:{compute_api_port}/",
         identifier=user_identity["identifier"],
         key="incorrect credential",
     )

@@ -356,7 +356,15 @@ def api(
     help="YAML-based configuration file giving the settings for this service",
     required=True,
 )
-def synchronous(config_file):
+@click.option(
+    "--name",
+    "-n",
+    type=str,
+    default=None,
+    help="The compute service name. This value overrides any value provided through the configuration file.",
+    required=False,
+)
+def synchronous(config_file, name):
     from alchemiscale.models import Scope
     from alchemiscale.compute.service import SynchronousComputeService
     from alchemiscale.compute.settings import ComputeServiceSettings
@@ -366,10 +374,8 @@ def synchronous(config_file):
     params_init = params.get("init", {})
     params_start = params.get("start", {})
 
-    if "scopes" in params_init:
-        params_init["scopes"] = [
-            Scope.from_str(scope) for scope in params_init["scopes"]
-        ]
+    if name is not None:
+        params_init["name"] = name
 
     service = SynchronousComputeService(ComputeServiceSettings(**params_init))
 
