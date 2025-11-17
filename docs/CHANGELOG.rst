@@ -4,6 +4,24 @@ CHANGELOG
 
 .. current developments
 
+
+v0.7.1
+====================
+
+**Added:**
+
+* Added commandline-level override of compute service name (#450)
+* Added ``Scope``\s validation for ``ComputeServiceSettings``
+
+**Changed:**
+
+* Enabled parallel execution of test suite
+
+**Fixed:**
+
+* Fixed startup issue in ``StrategistService``
+
+
 v0.7.0
 ====================
 
