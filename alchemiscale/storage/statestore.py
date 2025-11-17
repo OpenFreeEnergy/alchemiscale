@@ -1864,7 +1864,13 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
+        def debug(content):
+            print(f"STATESTORE DEBUG::: ", repr(content))
+
         name, uuid = compute_manager_id.name, compute_manager_id.uuid
+
+        debug(f"MANAGER INFO: {name}, {uuid}")
+        debug(f"SCOPES: {scopes}")
 
         # get the target compute manager along with any compute
         # services it might manage. Expected structure of output when
@@ -1896,6 +1902,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         results = self.execute_query(query, name=name, uuid=uuid)
+        debug(results)
 
         # no compute manager was found the given name and UUID, issue a SHUTDOWN
         if len(results.records) == 0:
@@ -1917,6 +1924,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # determine how many tasks are available
         tasks = []
         for scope in scopes:
+            debug(scope)
             params = {
                 "org": scope.org,
                 "campaign": scope.campaign,
@@ -1932,7 +1940,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             RETURN task._gufe_key as task
             """
             result = self.execute_query(query, **params)
+            debug(result)
             tasks += [record["task"] for record in result.records]
+            debug(tasks)
 
         return ComputeManagerInstruction.OK, {
             "compute_service_ids": csr_ids,

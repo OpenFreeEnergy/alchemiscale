@@ -474,13 +474,24 @@ def get_instruction_computemanager(
     settings: ComputeAPISettings = Depends(get_base_api_settings),
     token: TokenData = Depends(get_token_data_depends),
 ):
+
+    def debug(content):
+        print(f"API DEBUG::: ", repr(content))
+
+    debug(f"scoped before default {scopes}")
     scopes = scopes or [Scope()]
+    debug(f"scoped after default {scopes}")
+
     scopes_reduced = minimize_scope_space(scopes)
+    debug(f"scopes_reduced {scopes_reduced}")
+
     query_scopes = []
     for scope in scopes_reduced:
         query_scopes.extend(validate_scopes_query(scope, token))
+        debug(f"query_scopes growth {query_scopes}")
 
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+    debug(f"CMID {compute_manager_id}")
     now = datetime.datetime.now(tz=datetime.UTC)
     instruction, payload = n4js.get_computemanager_instruction(
         compute_manager_id,
@@ -489,6 +500,7 @@ def get_instruction_computemanager(
         query_scopes,
     )
     payload["instruction"] = str(instruction)
+    debug(f"returned payload: {payload}")
     return payload
 
 
