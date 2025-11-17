@@ -27,8 +27,7 @@ from ..base.api import (
     _check_store_connectivity,
     GzipRoute,
 )
-from ..settings import get_api_settings
-from ..settings import get_base_api_settings
+from ..settings import get_api_settings, get_base_api_settings, APISettings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
 from ..storage.models import TaskStatusEnum, StrategyState
@@ -402,21 +401,32 @@ def create_tasks(
     count: int = Body(...),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> list[str]:
+    settings: APISettings = Depends(get_api_settings),
+) -> list[str | None]:
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
+    task_sks = count * [None]
+    if max_waiting_tasks := settings.ALCHEMISCALE_API_MAX_TASKS_WAITING:
+        current_waiting = len(
+            n4js.get_transformation_tasks(sk, status=TaskStatusEnum.WAITING.value)
+        )
+        if current_waiting >= max_waiting_tasks:
+            return task_sks
+        count = max_waiting_tasks - current_waiting
+
     try:
-        task_sks = n4js.create_tasks(
+        _task_sks = n4js.create_tasks(
             [sk] * count, [extends] * count, creator=token.entity
         )
+        task_sks[: len(_task_sks)] = _task_sks
     except ValueError as e:
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
 
-    return [str(sk) for sk in task_sks]
+    return [str(sk) if sk else None for sk in task_sks]
 
 
 @router.post("/bulk/transformations/tasks/create")
