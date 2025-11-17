@@ -706,6 +706,7 @@ def action_tasks(
     weight: float | list[float] | None = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
+    settings: APISettings = Depends(get_api_settings),
 ) -> list[str | None]:
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
@@ -715,21 +716,33 @@ def action_tasks(
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    actioned_sks = n4js.action_tasks(tasks, taskhub_sk)
+    actioned_sks = [None] * len(tasks)
+    _tasks = tasks
+    if max_allowed_actioned_tasks := settings.ALCHEMISCALE_API_MAX_TASKS_ACTIONED:
+        num_actioned_tasks = len(
+            n4js.get_taskhub_actioned_tasks([taskhub_sk])[taskhub_sk]
+        )
+        if num_actioned_tasks >= max_allowed_actioned_tasks:
+            return action_tasks
+        _tasks = _tasks[: (max_allowed_actioned_tasks - num_actioned_tasks) + 1]
+
+    _actioned_sks = n4js.action_tasks(_tasks, taskhub_sk)
+    actioned_sks[: len(_actioned_sks)] = _actioned_sks
 
     try:
         if isinstance(weight, float):
-            n4js.set_task_weights(tasks, taskhub_sk, weight)
+            n4js.set_task_weights(_tasks, taskhub_sk, weight)
         elif isinstance(weight, list):
+            # check against original number of tasks
             if len(weight) != len(tasks):
                 detail = "weight (when in a list) must have the same length as tasks"
                 raise HTTPException(
                     status_code=http_status.HTTP_400_BAD_REQUEST,
                     detail=detail,
                 )
-
+            # zip limits weight application to tasks selected in _tasks
             n4js.set_task_weights(
-                {task: weight for task, weight in zip(tasks, weight)}, taskhub_sk, None
+                {task: weight for task, weight in zip(_tasks, weight)}, taskhub_sk, None
             )
     except ValueError as e:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
