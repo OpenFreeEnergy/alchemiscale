@@ -66,7 +66,7 @@ class ComputeManager:
         try:
             self.client.register(self.compute_manager_id)
         except AlchemiscaleComputeManagerClientError as e:
-            self.logger.error(f"Registration failed: '{e.detail}'")
+            self.logger.error(f"Registration failed: '{e}'")
             raise e
 
     def _deregister(self):
