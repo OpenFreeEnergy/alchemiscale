@@ -1928,9 +1928,11 @@ class Neo4jStore(AlchemiscaleStateStore):
                     scope_params.append(f'{n4js_attr}: "{value}"')
 
             scope_params_str = ",".join(scope_params)
+            if scope_params_str:
+                scope_params_str += ","
             query = f"""
             MATCH (task:Task {{
-                              {scope_params_str},
+                              {scope_params_str}
                               status: $waiting_status
                              }}),
                   (task)<-[:ACTIONS]-(:TaskHub)
