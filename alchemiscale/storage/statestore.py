@@ -1917,17 +1917,22 @@ class Neo4jStore(AlchemiscaleStateStore):
         # determine how many tasks are available
         tasks = []
         for scope in scopes:
-            params = {
-                "org": scope.org,
-                "campaign": scope.campaign,
-                "project": scope.project,
-                "waiting_status": TaskStatusEnum.waiting.value,
-            }
-            query = """
-            MATCH (task:Task {_org: $org,
-                              _campaign: $campaign,
-                              _project: $project,
-                              status: $waiting_status}),
+            params = {"waiting_status": TaskStatusEnum.waiting.value}
+
+            scope_params = []
+            for n4js_attr, value in zip(
+                ["_org", "_campaign", "_project"],
+                [scope.org, scope.campaign, scope.project],
+            ):
+                if value:
+                    scope_params.append(f'{n4js_attr}: "{value}"')
+
+            scope_params_str = ",".join(scope_params)
+            query = f"""
+            MATCH (task:Task {{
+                              {scope_params_str},
+                              status: $waiting_status
+                             }}),
                   (task)<-[:ACTIONS]-(:TaskHub)
             RETURN task._gufe_key as task
             """
