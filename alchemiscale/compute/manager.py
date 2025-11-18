@@ -121,11 +121,13 @@ class ComputeManager:
         instruction, data = self.client.get_instruction(
             self.service_settings.scopes or [], self.compute_manager_id
         )
-        self.logger.info(f"Recieved instruction '{instruction}'")
         match instruction:
             case ComputeManagerInstruction.OK:
                 total_services = len(data["compute_service_ids"])
                 num_tasks = data["num_tasks"]
+                self.logger.info(
+                    f"Received instruction '{instruction}', {num_tasks} tasks available"
+                )
                 if (
                     total_services < self.settings.max_compute_services
                     and num_tasks > 0
