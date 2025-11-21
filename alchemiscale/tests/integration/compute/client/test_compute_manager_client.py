@@ -87,7 +87,25 @@ class TestComputeManagerClient:
 
         # no compute services being managed
         instruction, payload = compute_manager_client.get_instruction(
-            [], compute_manager_id
+            [], [], compute_manager_id
+        )
+
+        assert instruction == ComputeManagerInstruction.OK
+        assert payload == {"compute_service_ids": [], "num_tasks": 3}
+
+        # try again, but with a protocol filter
+        instruction, payload = compute_manager_client.get_instruction(
+            [], ["FakeProtocol"], compute_manager_id
+        )
+
+        assert instruction == ComputeManagerInstruction.OK
+        assert payload == {"compute_service_ids": [], "num_tasks": 0}
+
+        # try again, name all possible protocols
+        instruction, payload = compute_manager_client.get_instruction(
+            [],
+            ["FakeProtocol", "DummyProtocolA", "DummyProtocolB", "DummyProtocolC"],
+            compute_manager_id,
         )
 
         assert instruction == ComputeManagerInstruction.OK
@@ -99,7 +117,7 @@ class TestComputeManagerClient:
         )
 
         instruction, payload = compute_manager_client.get_instruction(
-            [], compute_manager_id
+            [], [], compute_manager_id
         )
 
         assert instruction == ComputeManagerInstruction.OK, (instruction, payload)
@@ -124,7 +142,7 @@ class TestComputeManagerClient:
         )
 
         instruction, payload = compute_manager_client.get_instruction(
-            [], compute_manager_id
+            [], [], compute_manager_id
         )
 
         assert instruction == ComputeManagerInstruction.SKIP, (instruction, payload)
@@ -146,7 +164,7 @@ class TestComputeManagerClient:
         n4js_preloaded.execute_query(usurp_query, params)
 
         instruction, payload = compute_manager_client.get_instruction(
-            [], compute_manager_id
+            [], [], compute_manager_id
         )
 
         assert instruction == ComputeManagerInstruction.SHUTDOWN, (instruction, payload)

@@ -66,7 +66,7 @@ class ComputeManager:
         try:
             self.client.register(self.compute_manager_id)
         except AlchemiscaleComputeManagerClientError as e:
-            self.logger.error(f"Registration failed: '{e.detail}'")
+            self.logger.error(f"Registration failed: '{e}'")
             raise e
 
     def _deregister(self):
@@ -119,13 +119,17 @@ class ComputeManager:
 
         self.logger.info(f"Requesting instruction from '{self.client.api_url}'")
         instruction, data = self.client.get_instruction(
-            self.service_settings.scopes or [], self.compute_manager_id
+            self.service_settings.scopes or [],
+            self.service_settings.protocols or [],
+            self.compute_manager_id,
         )
-        self.logger.info(f"Recieved instruction '{instruction}'")
         match instruction:
             case ComputeManagerInstruction.OK:
                 total_services = len(data["compute_service_ids"])
                 num_tasks = data["num_tasks"]
+                self.logger.info(
+                    f"Received instruction '{instruction}', {num_tasks} tasks available"
+                )
                 if (
                     total_services < self.settings.max_compute_services
                     and num_tasks > 0

@@ -470,6 +470,7 @@ def get_instruction_computemanager(
     compute_manager_id,
     *,
     scopes: list[Scope] = Body([], embed=True),
+    protocols: list[str] = Body([], embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     settings: ComputeAPISettings = Depends(get_base_api_settings),
     token: TokenData = Depends(get_token_data_depends),
@@ -487,6 +488,7 @@ def get_instruction_computemanager(
         now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
         settings.ALCHEMISCALE_COMPUTE_API_MAX_FAILURES,
         query_scopes,
+        protocols,
     )
     payload["instruction"] = str(instruction)
     return payload
