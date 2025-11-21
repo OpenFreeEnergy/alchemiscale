@@ -1827,6 +1827,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         forgive_time: datetime.datetime,
         max_failures: int,
         scopes: list[Scope],
+        protocols: list[str],
     ) -> tuple[ComputeManagerInstruction, dict]:
         """Return an instruction for a compute manager based on the contents of the statestore.
 
@@ -1855,6 +1856,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         scopes
             The scopes to consider when determining available tasks.
+
+        protocols
+            A list of Protocols to filter on. An empty list will not filter.
 
         Returns
         -------
@@ -1930,12 +1934,35 @@ class Neo4jStore(AlchemiscaleStateStore):
             scope_params_str = ",".join(scope_params)
             if scope_params_str:
                 scope_params_str += ","
+
             query = f"""
             MATCH (task:Task {{
                               {scope_params_str}
                               status: $waiting_status
                              }}),
                   (task)<-[:ACTIONS]-(:TaskHub)
+            OPTIONAL MATCH (task)-[:EXTENDS]->(other_task)
+            WITH task
+            WHERE other_task.status = $complete OR other_task IS NULL
+            """
+            params |= {"complete": TaskStatusEnum.complete.value}
+
+            if protocols:
+                protocols = [
+                    (
+                        protocol.__qualname__
+                        if isinstance(protocol, Protocol)
+                        else protocol
+                    )
+                    for protocol in protocols
+                ]
+
+                query += f"""
+                MATCH (task)-[:PERFORMS]->(:Transformation|NonTransformation)-[:DEPENDS_ON]->(:{cypher_or(protocols)})
+                WITH task
+                """
+
+            query += f"""
             RETURN task._gufe_key as task
             """
             result = self.execute_query(query, **params)

@@ -3837,6 +3837,7 @@ class TestNeo4jStore(TestStateStore):
                     forgive_time=now + timedelta(seconds=forgive_seconds),
                     max_failures=failures,
                     scopes=[scope_test],
+                    [],
                 )
                 return instruction, instruction_data
 
