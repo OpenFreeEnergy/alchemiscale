@@ -364,7 +364,15 @@ def api(
     help="The compute service name. This value overrides any value provided through the configuration file.",
     required=False,
 )
-def synchronous(config_file, name):
+@click.option(
+    "--compute-manager-id",
+    "-m",
+    type=str,
+    default=None,
+    help="The identifier for the compute manager resonsible for running the compute service. Ignore this option unless automating startups on a compute platform.",
+    required=False,
+)
+def synchronous(config_file, name, compute_manager_id):
     from alchemiscale.models import Scope
     from alchemiscale.compute.service import SynchronousComputeService
     from alchemiscale.compute.settings import ComputeServiceSettings
@@ -376,6 +384,9 @@ def synchronous(config_file, name):
 
     if name is not None:
         params_init["name"] = name
+
+    if compute_manager_id is not None:
+        params_init["compute_manager_id"] = compute_manager_id
 
     service = SynchronousComputeService(ComputeServiceSettings(**params_init))
 
