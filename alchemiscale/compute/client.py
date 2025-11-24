@@ -167,8 +167,12 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
 
     _exception = AlchemiscaleComputeManagerClientError
 
-    def register(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
-        res = self._post_resource(f"/computemanager/{compute_manager_id}/register", {})
+    def register(
+        self, compute_manager_id: ComputeManagerID, steal: bool = False
+    ) -> ComputeManagerID:
+        res = self._post_resource(
+            f"/computemanager/{compute_manager_id}/register", {"steal": steal}
+        )
         return ComputeManagerID(res)
 
     def deregister(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:

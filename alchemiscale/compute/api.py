@@ -428,6 +428,8 @@ def process_compute_manager_id_string(
 @router.post("/computemanager/{compute_manager_id}/register")
 def register_computemanager(
     compute_manager_id,
+    *,
+    steal: bool = Body(False, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
 
@@ -445,7 +447,7 @@ def register_computemanager(
     )
 
     try:
-        compute_manager_id_ = n4js.register_computemanager(cm_registration)
+        compute_manager_id_ = n4js.register_computemanager(cm_registration, steal=steal)
     except ValueError as e:
         raise HTTPException(
             status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,

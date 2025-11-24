@@ -60,10 +60,21 @@ class TestComputeManagerClient:
         n4js_preloaded,
         compute_manager_client: client.AlchemiscaleComputeManagerClient,
     ):
-        compute_manager_id = ComputeManagerID.new_from_name("testmanager")
-        returned_id = compute_manager_client.register(compute_manager_id)
+        compute_manager_id_1 = ComputeManagerID.new_from_name("testmanager")
+        compute_manager_id_2 = ComputeManagerID.new_from_name("testmanager")
 
-        assert compute_manager_id == returned_id
+        returned_id = compute_manager_client.register(compute_manager_id_1)
+
+        assert compute_manager_id_1 == returned_id
+
+        with pytest.raises(
+            client.AlchemiscaleComputeManagerClientError,
+            match="ComputeManager with this name is already registered",
+        ):
+            compute_manager_client.register(compute_manager_id_2)
+
+        returned_id = compute_manager_client.register(compute_manager_id_2, steal=True)
+        assert compute_manager_id_2 == returned_id
 
     def test_deregistration(
         self,
