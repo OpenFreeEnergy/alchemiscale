@@ -62,9 +62,9 @@ class ComputeManager:
 
         self.logger = logging.LoggerAdapter(logger, extra)
 
-    def _register(self):
+    def _register(self, steal=False):
         try:
-            self.client.register(self.compute_manager_id)
+            self.client.register(self.compute_manager_id, steal=steal)
         except AlchemiscaleComputeManagerClientError as e:
             self.logger.error(f"Registration failed: '{e}'")
             raise e
@@ -72,9 +72,9 @@ class ComputeManager:
     def _deregister(self):
         self.client.deregister(self.compute_manager_id)
 
-    def start(self, max_cycles: int | None = None):
+    def start(self, max_cycles: int | None = None, steal=False):
         self.logger.info(f"Starting up compute manager '{self.settings.name}'")
-        self._register()
+        self._register(steal=steal)
         self.logger.info(f"Registered compute manager '{self.compute_manager_id}'")
         self._stop = False
         try:
