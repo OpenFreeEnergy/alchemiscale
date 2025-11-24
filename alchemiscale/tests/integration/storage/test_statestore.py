@@ -3697,7 +3697,7 @@ class TestNeo4jStore(TestStateStore):
 
             with pytest.raises(
                 ValueError,
-                match="ComputeManager with this name is already registered",
+                match="ComputeManager with this name is already registered with status",
             ):
                 n4js.register_computemanager(cmr_2)
 
@@ -3712,7 +3712,7 @@ class TestNeo4jStore(TestStateStore):
             # now expected to fail in the same way as before
             with pytest.raises(
                 ValueError,
-                match="ComputeManager with this name is already registered",
+                match="ComputeManager with this name is already registered with status",
             ):
                 n4js.register_computemanager(cmr_1)
 

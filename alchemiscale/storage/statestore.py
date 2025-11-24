@@ -1673,8 +1673,11 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             res = tx.run(query, name=compute_manager_registration.name)
 
-            if res.to_eager_result().records:
-                raise ValueError("ComputeManager with this name is already registered")
+            if records := res.to_eager_result().records:
+                status = records[0]["cmr"]["status"]
+                raise ValueError(
+                    f"ComputeManager with this name is already registered with status {status}"
+                )
 
             # create the registrattion for the manager and merge it into
             # the database
