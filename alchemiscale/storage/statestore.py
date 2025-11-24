@@ -1640,7 +1640,9 @@ class Neo4jStore(AlchemiscaleStateStore):
     ## compute manager
 
     def register_computemanager(
-        self, compute_manager_registration: ComputeManagerRegistration
+        self,
+        compute_manager_registration: ComputeManagerRegistration,
+        steal: bool = False,
     ) -> ComputeManagerID:
         """Register a compute manager with the statestore.
 
@@ -1648,6 +1650,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         ----------
         compute_manager_registration
             The compute manager registration.
+
+        steal
+            Whether or not to steal the registration from an existing
+            registration.
 
         Returns
         -------
@@ -1662,22 +1668,24 @@ class Neo4jStore(AlchemiscaleStateStore):
             the provided name.
 
         """
+
+        # first check if a compute manager with the given name is
+        # already registered
+        existing_registration = self.get_compute_manager_id(
+            compute_manager_registration.name
+        )
+
+        if steal:
+            self.deregister_computemanager(existing_registration)
+            existing_registration = None
+
+        if existing_registration:
+            status = self.get_compute_manager_status(existing_registration)
+            raise ValueError(
+                f"ComputeManager with this name is already registered with status {status}"
+            )
+
         with self.transaction() as tx:
-
-            # first check if a compute manager with the given name is
-            # already registered
-            query = """
-            MATCH (cmr:ComputeManagerRegistration {name: $name})
-            RETURN cmr
-            """
-
-            res = tx.run(query, name=compute_manager_registration.name)
-
-            if records := res.to_eager_result().records:
-                status = records[0]["cmr"]["status"]
-                raise ValueError(
-                    f"ComputeManager with this name is already registered with status {status}"
-                )
 
             # create the registrattion for the manager and merge it into
             # the database
@@ -1789,6 +1797,22 @@ class Neo4jStore(AlchemiscaleStateStore):
         result = records[0]
         uuid = result["uuid"]
         return ComputeManagerID(f"{name}-{uuid}")
+
+    @chainable
+    def get_compute_manager_status(self, compute_manager_id: ComputeManagerID, tx=None):
+        query = """
+        MATCH (cmr:ComputeManagerRegistration {name: $name, uuid: $uuid})
+        RETURN cmr.status as status
+        """
+        records = (
+            tx.run(query, name=compute_manager_id.name, uuid=compute_manager_id.uuid)
+            .to_eager_result()
+            .records
+        )
+        if not records:
+            return None
+        result = records[0]
+        return ComputeManagerStatus(result["status"])
 
     @chainable
     def clear_errored_computemanager(
