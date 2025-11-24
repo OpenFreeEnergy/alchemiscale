@@ -38,6 +38,9 @@ class ComputeManager:
             api_url=self.service_settings.api_url,
             identifier=self.service_settings.identifier,
             key=self.service_settings.key,
+            max_retries=self.settings.client_max_retries,
+            retry_base_seconds=self.settings.client_retry_base_seconds,
+            retry_max_seconds=self.settings.client_retry_max_seconds,
         )
 
         self._stop = False
