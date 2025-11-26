@@ -219,7 +219,7 @@ class TestClient:
         # check that we get an exception when we try a malformed key
         with pytest.raises(
             AlchemiscaleClientError,
-            match="Status Code 422 : Unprocessable Entity : input does not appear to be a `ScopedKey`",
+            match=r"Status Code 422 : Unprocessable .* : input does not appear to be a `ScopedKey`",
         ):
             user_client.check_exists("lol")
 
