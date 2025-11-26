@@ -168,8 +168,9 @@ class ComputeManagerSettings(BaseModel):
     )
     client_retry_base_seconds: float = Field(
         2.0,
-        description=("The base number of seconds to use for exponential backoff to alchemiscale. "
-                     "Must be greater than 1.0.",
+        description=(
+            "The base number of seconds to use for exponential backoff to alchemiscale. "
+            "Must be greater than 1.0.",
         ),
     )
     client_retry_max_seconds: float = Field(
