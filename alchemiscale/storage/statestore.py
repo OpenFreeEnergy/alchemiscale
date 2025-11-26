@@ -1677,7 +1677,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         if steal:
             self.deregister_computemanager(existing_registration)
-            existing_registration = None
+            existing_registration = self.get_compute_manager_id(
+                compute_manager_registration.name
+            )
 
         if existing_registration:
             status = self.get_compute_manager_status(existing_registration)
