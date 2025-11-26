@@ -174,7 +174,7 @@ services:
 
   reverse-proxy:
     # The official v2 Traefik docker image
-    image: traefik:v2.9
+    image: traefik:v2.11
     networks:
       - internal
       - web
