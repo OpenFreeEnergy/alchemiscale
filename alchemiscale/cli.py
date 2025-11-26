@@ -369,7 +369,7 @@ def api(
     "-m",
     type=str,
     default=None,
-    help="The identifier for the compute manager resonsible for running the compute service. Ignore this option unless automating startups on a compute platform.",
+    help="The identifier for the compute manager responsible for running the compute service. Ignore this option unless automating startups on a compute platform.",
     required=False,
 )
 def synchronous(config_file, name, compute_manager_id):
