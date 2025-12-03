@@ -2686,7 +2686,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         else:
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
-    @classmethod
+    @staticmethod
     def _validate_protocols(protocols: list[str]):
         for protocol in protocols:
             if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_]*|\*$", protocol):
