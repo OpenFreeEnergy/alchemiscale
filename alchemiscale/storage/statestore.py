@@ -1640,7 +1640,9 @@ class Neo4jStore(AlchemiscaleStateStore):
     ## compute manager
 
     def register_computemanager(
-        self, compute_manager_registration: ComputeManagerRegistration
+        self,
+        compute_manager_registration: ComputeManagerRegistration,
+        steal: bool = False,
     ) -> ComputeManagerID:
         """Register a compute manager with the statestore.
 
@@ -1648,6 +1650,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         ----------
         compute_manager_registration
             The compute manager registration.
+
+        steal
+            Whether or not to steal the registration from an existing
+            registration.
 
         Returns
         -------
@@ -1662,19 +1668,26 @@ class Neo4jStore(AlchemiscaleStateStore):
             the provided name.
 
         """
+
+        # first check if a compute manager with the given name is
+        # already registered
+        existing_registration = self.get_compute_manager_id(
+            compute_manager_registration.name
+        )
+
+        if steal:
+            self.deregister_computemanager(existing_registration)
+            existing_registration = self.get_compute_manager_id(
+                compute_manager_registration.name
+            )
+
+        if existing_registration:
+            status = self.get_compute_manager_status(existing_registration)
+            raise ValueError(
+                f"ComputeManager with this name is already registered with status {status}"
+            )
+
         with self.transaction() as tx:
-
-            # first check if a compute manager with the given name is
-            # already registered
-            query = """
-            MATCH (cmr:ComputeManagerRegistration {name: $name})
-            RETURN cmr
-            """
-
-            res = tx.run(query, name=compute_manager_registration.name)
-
-            if res.to_eager_result().records:
-                raise ValueError("ComputeManager with this name is already registered")
 
             # create the registrattion for the manager and merge it into
             # the database
@@ -1788,6 +1801,22 @@ class Neo4jStore(AlchemiscaleStateStore):
         return ComputeManagerID(f"{name}-{uuid}")
 
     @chainable
+    def get_compute_manager_status(self, compute_manager_id: ComputeManagerID, tx=None):
+        query = """
+        MATCH (cmr:ComputeManagerRegistration {name: $name, uuid: $uuid})
+        RETURN cmr.status as status
+        """
+        records = (
+            tx.run(query, name=compute_manager_id.name, uuid=compute_manager_id.uuid)
+            .to_eager_result()
+            .records
+        )
+        if not records:
+            return None
+        result = records[0]
+        return ComputeManagerStatus(result["status"])
+
+    @chainable
     def clear_errored_computemanager(
         self, compute_manager_id: ComputeManagerID, tx=None
     ):
@@ -1827,6 +1856,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         forgive_time: datetime.datetime,
         max_failures: int,
         scopes: list[Scope],
+        protocols: list[str],
     ) -> tuple[ComputeManagerInstruction, dict]:
         """Return an instruction for a compute manager based on the contents of the statestore.
 
@@ -1855,6 +1885,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         scopes
             The scopes to consider when determining available tasks.
+
+        protocols
+            A list of Protocols to filter on. An empty list will not filter.
 
         Returns
         -------
@@ -1917,18 +1950,50 @@ class Neo4jStore(AlchemiscaleStateStore):
         # determine how many tasks are available
         tasks = []
         for scope in scopes:
-            params = {
-                "org": scope.org,
-                "campaign": scope.campaign,
-                "project": scope.project,
-                "waiting_status": TaskStatusEnum.waiting.value,
-            }
-            query = """
-            MATCH (task:Task {_org: $org,
-                              _campaign: $campaign,
-                              _project: $project,
-                              status: $waiting_status}),
+            params = {"waiting_status": TaskStatusEnum.waiting.value}
+
+            scope_params = []
+            for n4js_attr, value in zip(
+                ["_org", "_campaign", "_project"],
+                [scope.org, scope.campaign, scope.project],
+            ):
+                if value:
+                    scope_params.append(f'{n4js_attr}: "{value}"')
+
+            scope_params_str = ",".join(scope_params)
+            if scope_params_str:
+                scope_params_str += ","
+
+            query = f"""
+            MATCH (task:Task {{
+                              {scope_params_str}
+                              status: $waiting_status
+                             }}),
                   (task)<-[:ACTIONS]-(:TaskHub)
+            OPTIONAL MATCH (task)-[:EXTENDS]->(other_task)
+            WITH task
+            WHERE other_task.status = $complete OR other_task IS NULL
+            """
+            params |= {"complete": TaskStatusEnum.complete.value}
+
+            if protocols:
+                protocols = [
+                    (
+                        protocol.__qualname__
+                        if isinstance(protocol, Protocol)
+                        else protocol
+                    )
+                    for protocol in protocols
+                ]
+
+                self._validate_protocols(protocols)
+
+                query += f"""
+                MATCH (task)-[:PERFORMS]->(:Transformation|NonTransformation)-[:DEPENDS_ON]->(:{cypher_or(protocols)})
+                WITH task
+                """
+
+            query += f"""
             RETURN task._gufe_key as task
             """
             result = self.execute_query(query, **params)
@@ -2621,6 +2686,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         else:
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
+    @staticmethod
+    def _validate_protocols(protocols: list[str]):
+        for protocol in protocols:
+            if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_]*|\*$", protocol):
+                raise ValueError("Invalid `Protocol` name among `protocols`")
+
     def claim_taskhub_tasks(
         self,
         taskhub: ScopedKey,
@@ -2671,6 +2742,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                 protocol.__qualname__ if isinstance(protocol, Protocol) else protocol
                 for protocol in protocols
             ]
+
+            self._validate_protocols(protocols)
 
             q += f"""
             MATCH (task)-[:PERFORMS]->(:Transformation|NonTransformation)-[:DEPENDS_ON]->(protocol:{cypher_or(protocols)})

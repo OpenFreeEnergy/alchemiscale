@@ -3697,7 +3697,7 @@ class TestNeo4jStore(TestStateStore):
 
             with pytest.raises(
                 ValueError,
-                match="ComputeManager with this name is already registered",
+                match="ComputeManager with this name is already registered with status",
             ):
                 n4js.register_computemanager(cmr_2)
 
@@ -3712,9 +3712,13 @@ class TestNeo4jStore(TestStateStore):
             # now expected to fail in the same way as before
             with pytest.raises(
                 ValueError,
-                match="ComputeManager with this name is already registered",
+                match="ComputeManager with this name is already registered with status",
             ):
                 n4js.register_computemanager(cmr_1)
+
+            # however, providing the steal kwarg will allow registration
+            n4js.register_computemanager(cmr_1, steal=True)
+            assert self.confirm_registration_contents(n4js, cmr_1)
 
         def test_deregister(self, n4js: Neo4jStore):
             cmr: ComputeManagerRegistration = (
@@ -3829,7 +3833,7 @@ class TestNeo4jStore(TestStateStore):
             compute_manager_id = cmr.to_compute_manager_id()
             n4js.register_computemanager(cmr)
 
-            def get_instruction(forgive_seconds=-60, failures=2):
+            def get_instruction(forgive_seconds=-60, failures=2, protocols=[]):
                 nonlocal n4js, compute_manager_id
                 now = datetime.datetime.now(tz=datetime.UTC)
                 instruction, instruction_data = n4js.get_computemanager_instruction(
@@ -3837,6 +3841,7 @@ class TestNeo4jStore(TestStateStore):
                     forgive_time=now + timedelta(seconds=forgive_seconds),
                     max_failures=failures,
                     scopes=[scope_test],
+                    protocols=protocols,
                 )
                 return instruction, instruction_data
 
@@ -3887,6 +3892,31 @@ class TestNeo4jStore(TestStateStore):
             n4js.action_tasks(task_sks, taskhub_sk)
 
             instruction, data = get_instruction(forgive_seconds=0)
+
+            assert data == {
+                "compute_service_ids": [compute_service_id],
+                "num_tasks": 5,
+            }
+
+            # protocol filtration
+            instruction, data = get_instruction(
+                forgive_seconds=0, protocols=["FakeProtocol"]
+            )
+
+            assert data == {
+                "compute_service_ids": [compute_service_id],
+                "num_tasks": 0,
+            }
+
+            instruction, data = get_instruction(
+                forgive_seconds=0,
+                protocols=[
+                    "FakeProtocol",
+                    "DummyProtocolA",
+                    "DummyProtocolB",
+                    "DummyProtocolC",
+                ],
+            )
 
             assert data == {
                 "compute_service_ids": [compute_service_id],
