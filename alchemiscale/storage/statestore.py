@@ -1986,6 +1986,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                     for protocol in protocols
                 ]
 
+                self._validate_protocols(protocols)
+
                 query += f"""
                 MATCH (task)-[:PERFORMS]->(:Transformation|NonTransformation)-[:DEPENDS_ON]->(:{cypher_or(protocols)})
                 WITH task
@@ -2684,6 +2686,12 @@ class Neo4jStore(AlchemiscaleStateStore):
         else:
             return [ScopedKey.from_str(t["_scoped_key"]) for t in tasks]
 
+    @classmethod
+    def _validate_protocols(protocols: list[str]):
+        for protocol in protocols:
+            if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_]*|\*$", protocol):
+                raise ValueError("Invalid `Protocol` name among `protocols`")
+
     def claim_taskhub_tasks(
         self,
         taskhub: ScopedKey,
@@ -2734,6 +2742,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                 protocol.__qualname__ if isinstance(protocol, Protocol) else protocol
                 for protocol in protocols
             ]
+
+            self._validate_protocols(protocols)
 
             q += f"""
             MATCH (task)-[:PERFORMS]->(:Transformation|NonTransformation)-[:DEPENDS_ON]->(protocol:{cypher_or(protocols)})
