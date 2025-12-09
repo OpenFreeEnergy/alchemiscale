@@ -27,7 +27,7 @@ from gufe.settings import SettingsBaseModel
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER, KeyedChain
 from gufe.protocols import ProtocolUnitFailure
 
-from neo4j import Transaction, GraphDatabase, Driver
+from neo4j import Transaction, GraphDatabase, Driver, NotificationDisabledClassification
 
 from stratocaster.base import Strategy
 
@@ -159,7 +159,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         self.settings = settings
 
         self.graph: Driver = GraphDatabase.driver(
-            settings.NEO4J_URL, auth=(settings.NEO4J_USER, settings.NEO4J_PASS)
+            settings.NEO4J_URL,
+            auth=(settings.NEO4J_USER, settings.NEO4J_PASS),
+            notifications_disabled_classifications=[
+                NotificationDisabledClassification.UNRECOGNIZED
+            ],
         )
         self.db_name = settings.NEO4J_DBNAME
         self.gufe_nodes = weakref.WeakValueDictionary()
