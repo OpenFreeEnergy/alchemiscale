@@ -60,10 +60,35 @@ class TestComputeManagerClient:
         n4js_preloaded,
         compute_manager_client: client.AlchemiscaleComputeManagerClient,
     ):
-        compute_manager_id = ComputeManagerID.new_from_name("testmanager")
-        returned_id = compute_manager_client.register(compute_manager_id)
+        compute_manager_id_1 = ComputeManagerID.new_from_name("testmanager")
+        compute_manager_id_2 = ComputeManagerID.new_from_name("testmanager")
 
-        assert compute_manager_id == returned_id
+        returned_id = compute_manager_client.register(compute_manager_id_1)
+
+        assert compute_manager_id_1 == returned_id
+
+        with pytest.raises(
+            client.AlchemiscaleComputeManagerClientError,
+            match="ComputeManager with this name is already registered",
+        ):
+            compute_manager_client.register(compute_manager_id_2)
+
+        returned_id = compute_manager_client.register(compute_manager_id_2, steal=True)
+        assert compute_manager_id_2 == returned_id
+
+        # we don't expect steal to work with a compute manager with
+        # the error status, setting it manually
+        compute_manager_client.update_status(
+            compute_manager_id_2,
+            ComputeManagerStatus.ERROR,
+            detail="manual error state",
+        )
+
+        with pytest.raises(
+            client.AlchemiscaleComputeManagerClientError,
+            match="ComputeManager with this name is already registered with status ERROR",
+        ):
+            compute_manager_client.register(compute_manager_id_1)
 
     def test_deregistration(
         self,
@@ -87,7 +112,25 @@ class TestComputeManagerClient:
 
         # no compute services being managed
         instruction, payload = compute_manager_client.get_instruction(
-            [], compute_manager_id
+            [], [], compute_manager_id
+        )
+
+        assert instruction == ComputeManagerInstruction.OK
+        assert payload == {"compute_service_ids": [], "num_tasks": 3}
+
+        # try again, but with a protocol filter
+        instruction, payload = compute_manager_client.get_instruction(
+            [], ["FakeProtocol"], compute_manager_id
+        )
+
+        assert instruction == ComputeManagerInstruction.OK
+        assert payload == {"compute_service_ids": [], "num_tasks": 0}
+
+        # try again, name all possible protocols
+        instruction, payload = compute_manager_client.get_instruction(
+            [],
+            ["FakeProtocol", "DummyProtocolA", "DummyProtocolB", "DummyProtocolC"],
+            compute_manager_id,
         )
 
         assert instruction == ComputeManagerInstruction.OK
@@ -99,7 +142,7 @@ class TestComputeManagerClient:
         )
 
         instruction, payload = compute_manager_client.get_instruction(
-            [], compute_manager_id
+            [], [], compute_manager_id
         )
 
         assert instruction == ComputeManagerInstruction.OK, (instruction, payload)
@@ -124,7 +167,7 @@ class TestComputeManagerClient:
         )
 
         instruction, payload = compute_manager_client.get_instruction(
-            [], compute_manager_id
+            [], [], compute_manager_id
         )
 
         assert instruction == ComputeManagerInstruction.SKIP, (instruction, payload)
@@ -146,7 +189,7 @@ class TestComputeManagerClient:
         n4js_preloaded.execute_query(usurp_query, params)
 
         instruction, payload = compute_manager_client.get_instruction(
-            [], compute_manager_id
+            [], [], compute_manager_id
         )
 
         assert instruction == ComputeManagerInstruction.SHUTDOWN, (instruction, payload)
