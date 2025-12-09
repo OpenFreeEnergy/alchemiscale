@@ -161,7 +161,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         self.graph: Driver = GraphDatabase.driver(
             settings.NEO4J_URL,
             auth=(settings.NEO4J_USER, settings.NEO4J_PASS),
-            notifications_disabled_classifications=[NotificationDisabledClassification.UNRECOGNIZED],
+            notifications_disabled_classifications=[
+                NotificationDisabledClassification.UNRECOGNIZED
+            ],
         )
         self.db_name = settings.NEO4J_DBNAME
         self.gufe_nodes = weakref.WeakValueDictionary()
