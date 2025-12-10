@@ -43,7 +43,7 @@ class ComputeManagerID(ComputeIDBase):
         self._name = parts[0]
         self._uuid = parts[1]
 
-        if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_\.]*$", self.name):
+        if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_\.\:]*$", self.name):
             raise ValueError(
                 "ComputeManagerID must either start with an alphabetical and contain "
                 "only alphanumeric, underscores ('_'), or periods ('.') thereafter"
