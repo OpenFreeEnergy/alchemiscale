@@ -26,8 +26,7 @@ class ComputeIDBase(str):
         return cls(f"{name}-{uuid4().hex}")
 
 
-class ComputeServiceID(ComputeIDBase):
-    ...
+class ComputeServiceID(ComputeIDBase): ...
 
 
 class ComputeManagerID(ComputeIDBase):
