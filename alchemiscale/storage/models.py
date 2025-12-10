@@ -30,7 +30,7 @@ class ComputeServiceID(ComputeIDBase):
     ...
 
     # TODO: consider introducing stricter naming conventions like below in a major release
-    #def __init__(self, _value):
+    # def __init__(self, _value):
     #    # don't need to process _value, handled by str.__new__
     #    parts = self.split("-")
 
@@ -54,21 +54,21 @@ class ComputeServiceID(ComputeIDBase):
     #        except ValueError:
     #            raise ValueError("Could not interpret UUID {i} as a UUID.")
 
-    #def to_dict(self):
+    # def to_dict(self):
     #    return {"name": self.name, "uuids": self.uuids}
 
-    #@classmethod
-    #def from_dict(cls, dct):
+    # @classmethod
+    # def from_dict(cls, dct):
     #    name = dct["name"]
     #    uuids = dct["uuids"]
     #    return cls("-".join([name] + uuids))
 
-    #@property
-    #def name(self) -> str:
+    # @property
+    # def name(self) -> str:
     #    return self._name
 
-    #@property
-    #def uuids(self) -> str:
+    # @property
+    # def uuids(self) -> str:
     #    return self._uuids
 
 
@@ -87,9 +87,10 @@ class ComputeManagerID(ComputeIDBase):
         self._uuid = parts[1]
 
         if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_\.]*$", self.name):
-            raise ValueError("ComputeManagerID must either start with an alphabetical and contain "
-                             "only alphanumeric, underscores ('_'), or periods ('.') thereafter"
-                        )
+            raise ValueError(
+                "ComputeManagerID must either start with an alphabetical and contain "
+                "only alphanumeric, underscores ('_'), or periods ('.') thereafter"
+            )
 
         try:
             UUID(self.uuid)
@@ -112,7 +113,6 @@ class ComputeManagerID(ComputeIDBase):
     @property
     def uuid(self) -> str:
         return self._uuid
-
 
 
 class ComputeServiceRegistration(BaseModel):
