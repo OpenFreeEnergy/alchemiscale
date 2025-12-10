@@ -438,7 +438,10 @@ class TestComputeManagerID:
         original = "676b919a-a206-4f24-9134-3cb326ad127b"
         manager_uuid = "Z" + original
 
-        with pytest.raises(ValueError, match="ComputeManagerID must have the form `{name}-{uuid}` with uuid in hex form"):
+        with pytest.raises(
+            ValueError,
+            match="ComputeManagerID must have the form `{name}-{uuid}` with uuid in hex form",
+        ):
             manager_id = ComputeManagerID(self.name + "-" + manager_uuid)
 
     def test_bad_name(self):
