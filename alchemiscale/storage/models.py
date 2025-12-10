@@ -21,57 +21,7 @@ from ..models import ScopedKey, Scope
 
 class ComputeIDBase(str):
 
-    @classmethod
-    def new_from_name(cls, name: str):
-        return cls(f"{name}-{uuid4().hex}")
-
-
-class ComputeServiceID(ComputeIDBase):
-    ...
-
-    def __init__(self, _value):
-       # don't need to process _value, handled by str.__new__
-       parts = self.split("-")
-
-       if len(parts) < 2:
-           raise ValueError(
-               "ComputeServiceID must have the form `{name}-{{uuid}-...}`, "
-               "with at least one uuid, each in hex form"
-           )
-
-       self._name = parts[0]
-       self._uuids = parts[1:]
-
-       if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_\.]*$", self.name):
-           raise ValueError("ComputeServiceID must either start with an alphabetical and contain "
-                            "only alphanumeric, underscores ('_'), or periods ('.') thereafter"
-                       )
-
-       for i, uuid_ in enumerate(self._uuids):
-           try:
-               UUID(uuid_)
-           except ValueError:
-               raise ValueError("Could not interpret UUID {i} as a UUID.")
-
-    def to_dict(self):
-       return {"name": self.name, "uuids": self.uuids}
-
-    @classmethod
-    def from_dict(cls, dct):
-       name = dct["name"]
-       uuids = dct["uuids"]
-       return cls("-".join([name] + uuids))
-
-    @property
-    def name(self) -> str:
-       return self._name
-
-    @property
-    def uuids(self) -> str:
-       return self._uuids
-
-
-class ComputeManagerID(ComputeIDBase):
+    _allowed = r"^[a-zA-Z][a-zA-Z0-9_\.\:]*$"
 
     def __init__(self, _value):
         # don't need to process _value, handled by str.__new__
@@ -79,16 +29,16 @@ class ComputeManagerID(ComputeIDBase):
 
         if len(parts) != 2:
             raise ValueError(
-                "ComputeManagerID must have the form `{name}-{uuid}` with uuid in hex form"
+                f"{self.__class__.__name__} must have the form `{{name}}-{{uuid}}` with uuid in hex form"
             )
 
         self._name = parts[0]
         self._uuid = parts[1]
 
-        if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_\.]*$", self.name):
+        if not re.fullmatch(self._allowed, self.name):
             raise ValueError(
-                "ComputeManagerID must either start with an alphabetical and contain "
-                "only alphanumeric, underscores ('_'), or periods ('.') thereafter"
+                f"{self.__class__.__name__} must either start with an alphabetical and contain "
+                "only alphanumeric, underscores ('_'), periods ('.'), or colons (':') thereafter"
             )
 
         try:
@@ -112,6 +62,16 @@ class ComputeManagerID(ComputeIDBase):
     @property
     def uuid(self) -> str:
         return self._uuid
+
+    @classmethod
+    def new_from_name(cls, name: str):
+        return cls(f"{name}-{uuid4().hex}")
+
+
+class ComputeServiceID(ComputeIDBase): ...
+
+
+class ComputeManagerID(ComputeIDBase): ...
 
 
 class ComputeServiceRegistration(BaseModel):
