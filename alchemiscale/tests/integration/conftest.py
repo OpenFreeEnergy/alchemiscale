@@ -556,7 +556,7 @@ def multiple_scopes(scope_test):
 
 @fixture(scope="module")
 def compute_service_id():
-    return ComputeServiceID("compute-service-123")
+    return ComputeServiceID.new_from_name("compute.service.123")
 
 
 @fixture(scope="module")
