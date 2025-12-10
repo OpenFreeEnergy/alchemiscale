@@ -95,7 +95,7 @@ class ComputeManagerID(ComputeIDBase):
         try:
             UUID(self.uuid)
         except ValueError:
-            raise ValueError("Could not interpret the provided UUID.")
+            raise ValueError("Could not interpret the provided UUID")
 
     def to_dict(self):
         return {"name": self.name, "uuid": self.uuid}
