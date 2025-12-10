@@ -435,12 +435,12 @@ class TestComputeManagerID:
             manager_id = ComputeManagerID(self.name + "-" + manager_uuid)
 
     def test_broken_uuid(self):
-        original = "676b919a-a206-4f24-9134-3cb326ad127b"
+        original = "676b919aa2064f2491343cb326ad127b"
         manager_uuid = "Z" + original
 
         with pytest.raises(
             ValueError,
-            match="ComputeManagerID must have the form `{name}-{uuid}` with uuid in hex form",
+            match="Could not interpret the provided UUID",
         ):
             manager_id = ComputeManagerID(self.name + "-" + manager_uuid)
 
