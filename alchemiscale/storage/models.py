@@ -29,47 +29,46 @@ class ComputeIDBase(str):
 class ComputeServiceID(ComputeIDBase):
     ...
 
-    # TODO: consider introducing stricter naming conventions like below in a major release
-    # def __init__(self, _value):
-    #    # don't need to process _value, handled by str.__new__
-    #    parts = self.split("-")
+    def __init__(self, _value):
+       # don't need to process _value, handled by str.__new__
+       parts = self.split("-")
 
-    #    if len(parts) < 2:
-    #        raise ValueError(
-    #            "ComputeServiceID must have the form `{name}-{{uuid}-...}`, "
-    #            "with at least one uuid, each in hex form"
-    #        )
+       if len(parts) < 2:
+           raise ValueError(
+               "ComputeServiceID must have the form `{name}-{{uuid}-...}`, "
+               "with at least one uuid, each in hex form"
+           )
 
-    #    self._name = parts[0]
-    #    self._uuids = parts[1:]
+       self._name = parts[0]
+       self._uuids = parts[1:]
 
-    #    if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_\.]*$", self.name):
-    #        raise ValueError("ComputeServiceID must either start with an alphabetical and contain "
-    #                         "only alphanumeric, underscores ('_'), or periods ('.') thereafter"
-    #                    )
+       if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_\.]*$", self.name):
+           raise ValueError("ComputeServiceID must either start with an alphabetical and contain "
+                            "only alphanumeric, underscores ('_'), or periods ('.') thereafter"
+                       )
 
-    #    for i, uuid_ in enumerate(self._uuids):
-    #        try:
-    #            UUID(uuid_)
-    #        except ValueError:
-    #            raise ValueError("Could not interpret UUID {i} as a UUID.")
+       for i, uuid_ in enumerate(self._uuids):
+           try:
+               UUID(uuid_)
+           except ValueError:
+               raise ValueError("Could not interpret UUID {i} as a UUID.")
 
-    # def to_dict(self):
-    #    return {"name": self.name, "uuids": self.uuids}
+    def to_dict(self):
+       return {"name": self.name, "uuids": self.uuids}
 
-    # @classmethod
-    # def from_dict(cls, dct):
-    #    name = dct["name"]
-    #    uuids = dct["uuids"]
-    #    return cls("-".join([name] + uuids))
+    @classmethod
+    def from_dict(cls, dct):
+       name = dct["name"]
+       uuids = dct["uuids"]
+       return cls("-".join([name] + uuids))
 
-    # @property
-    # def name(self) -> str:
-    #    return self._name
+    @property
+    def name(self) -> str:
+       return self._name
 
-    # @property
-    # def uuids(self) -> str:
-    #    return self._uuids
+    @property
+    def uuids(self) -> str:
+       return self._uuids
 
 
 class ComputeManagerID(ComputeIDBase):
