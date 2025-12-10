@@ -46,7 +46,7 @@ class ComputeManagerID(ComputeIDBase):
         if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_\.\:]*$", self.name):
             raise ValueError(
                 "ComputeManagerID must either start with an alphabetical and contain "
-                "only alphanumeric, underscores ('_'), or periods ('.') thereafter"
+                "only alphanumeric, underscores ('_'), periods ('.'), or colons (':') thereafter"
             )
 
         try:
