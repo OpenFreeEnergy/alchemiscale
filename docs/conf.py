@@ -49,7 +49,7 @@ autodoc_mock_imports = [
 ]
 
 intersphinx_mapping = {
-    "gufe": ("https://gufe.openfree.energy/en/v1.2.0/", None),
+    "gufe": ("https://gufe.openfree.energy/en/stable/", None),
     "openfe": ("https://docs.openfree.energy/en/stable/", None),
     "python": ("https://docs.python.org/3", None),
 }
