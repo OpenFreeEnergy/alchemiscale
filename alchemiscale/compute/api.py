@@ -534,8 +534,8 @@ def clear_error_computemanager(
     compute_manager_name: str,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
-    if not compute_manager_name.isalnum():
-        raise ValueError("Provided manager name is not alphanumeric")
+    # validate that compute_manager_name is valid
+    ComputeManagerID.new_from_name(compute_manager_name)
 
     with n4js.transaction() as tx:
         compute_manager_id = n4js.get_compute_manager_id(
