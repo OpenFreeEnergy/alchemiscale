@@ -2693,7 +2693,7 @@ class Neo4jStore(AlchemiscaleStateStore):
     @staticmethod
     def _validate_protocols(protocols: list[str]):
         for protocol in protocols:
-            if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_]*|\*$", protocol):
+            if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_]*$", protocol):
                 raise ValueError("Invalid `Protocol` name among `protocols`")
 
     def claim_taskhub_tasks(
