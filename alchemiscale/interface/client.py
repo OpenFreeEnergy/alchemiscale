@@ -5,6 +5,7 @@
 """
 
 import asyncio
+from enum import StrEnum
 from typing import Any, Literal
 from collections.abc import Iterable
 from itertools import chain
@@ -37,6 +38,23 @@ from warnings import warn
 
 
 class AlchemiscaleClientError(AlchemiscaleBaseClientError): ...
+
+
+class ResultFormat(StrEnum):
+    """Format for returned results from get_transformation_results and get_network_results methods.
+
+    Attributes
+    ----------
+    PROTOCOL_RESULT
+        Return a single aggregated ProtocolResult combining all successful ProtocolDAGResults.
+    PROTOCOL_RESULTS
+        Return a list of individual ProtocolResults, one for each successful ProtocolDAGResult.
+    PROTOCOL_DAG_RESULTS
+        Return the raw list of ProtocolDAGResults.
+    """
+    PROTOCOL_RESULT = "ProtocolResult"
+    PROTOCOL_RESULTS = "ProtocolResults"
+    PROTOCOL_DAG_RESULTS = "ProtocolDAGResults"
 
 
 def _get_transformation_results(client_settings, tf_sk, ok: bool, kwargs):
@@ -1615,7 +1633,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         network: ScopedKey,
         ok: bool = True,
-        return_as: Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"] = "ProtocolResult",
+        return_as: ResultFormat | Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"] = ResultFormat.PROTOCOL_RESULT,
         compress: bool = True,
         visualize: bool = True,
     ) -> dict[str, ProtocolResult | None | list[ProtocolResult] | list[ProtocolDAGResult]]:
@@ -1676,7 +1694,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_network_results(
         self,
         network: ScopedKey,
-        return_as: Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"] = "ProtocolResult",
+        return_as: ResultFormat | Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"] = ResultFormat.PROTOCOL_RESULT,
         return_protocoldagresults: bool | None = None,
         compress: bool = True,
         visualize: bool = True,
@@ -1692,15 +1710,16 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         network
             The `ScopedKey` of the `AlchemicalNetwork` to retrieve results for.
         return_as
-            Determines the format of returned results for each `Transformation`. Options:
-            - ``'ProtocolResult'`` (default): Return a single aggregated
-              `ProtocolResult` combining all successful `ProtocolDAGResult`\s.
-              If no results exist, ``None`` is given.
-            - ``'ProtocolResults'``: Return a list of individual `ProtocolResult`\s,
-              one for each successful `ProtocolDAGResult`. Returns empty list if
-              no results exist.
-            - ``'ProtocolDAGResults'``: Return a list of the raw
-              `ProtocolDAGResult`\s.
+            Determines the format of returned results for each `Transformation`.
+            Can be a `ResultFormat` enum value or string. Options:
+            - ``ResultFormat.PROTOCOL_RESULT`` or ``'ProtocolResult'`` (default):
+              Return a single aggregated `ProtocolResult` combining all successful
+              `ProtocolDAGResult`\s. If no results exist, ``None`` is given.
+            - ``ResultFormat.PROTOCOL_RESULTS`` or ``'ProtocolResults'``: Return a
+              list of individual `ProtocolResult`\s, one for each successful
+              `ProtocolDAGResult`. Returns empty list if no results exist.
+            - ``ResultFormat.PROTOCOL_DAG_RESULTS`` or ``'ProtocolDAGResults'``:
+              Return a list of the raw `ProtocolDAGResult`\s.
         return_protocoldagresults
             .. deprecated:: 0.8.0
                 Use `return_as` instead. If ``True``, equivalent to
@@ -1724,7 +1743,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 stacklevel=2,
             )
             if return_protocoldagresults:
-                return_as = "ProtocolDAGResults"
+                return_as = ResultFormat.PROTOCOL_DAG_RESULTS
 
         return self._get_network_results(
             network=network,
@@ -1767,7 +1786,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_transformation_results(
         self,
         transformation: ScopedKey,
-        return_as: Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"] = "ProtocolResult",
+        return_as: ResultFormat | Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"] = ResultFormat.PROTOCOL_RESULT,
         return_protocoldagresults: bool | None = None,
         compress: bool = True,
         visualize: bool = True,
@@ -1785,13 +1804,16 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         transformation
             The `ScopedKey` of the `Transformation` to retrieve results for.
         return_as
-            Determines the format of returned results. Options:
-            - ``'ProtocolResult'`` (default): Return a single aggregated
-              `ProtocolResult` combining all successful `ProtocolDAGResult`\s.
-            - ``'ProtocolResults'``: Return a list of individual `ProtocolResult`\s,
-              one for each successful `ProtocolDAGResult`.
-            - ``'ProtocolDAGResults'``: Return a list of the raw
+            Determines the format of returned results. Can be a `ResultFormat`
+            enum value or string. Options:
+            - ``ResultFormat.PROTOCOL_RESULT`` or ``'ProtocolResult'`` (default):
+              Return a single aggregated `ProtocolResult` combining all successful
               `ProtocolDAGResult`\s.
+            - ``ResultFormat.PROTOCOL_RESULTS`` or ``'ProtocolResults'``: Return a
+              list of individual `ProtocolResult`\s, one for each successful
+              `ProtocolDAGResult`.
+            - ``ResultFormat.PROTOCOL_DAG_RESULTS`` or ``'ProtocolDAGResults'``:
+              Return a list of the raw `ProtocolDAGResult`\s.
         return_protocoldagresults
             .. deprecated:: 0.8.0
                 Use `return_as` instead. If ``True``, equivalent to
@@ -1815,10 +1837,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 stacklevel=2,
             )
             if return_protocoldagresults:
-                return_as = "ProtocolDAGResults"
+                return_as = ResultFormat.PROTOCOL_DAG_RESULTS
 
         # Get the transformation if we need to create ProtocolResult(s)
-        if return_as in ("ProtocolResult", "ProtocolResults"):
+        if return_as in (ResultFormat.PROTOCOL_RESULT, ResultFormat.PROTOCOL_RESULTS, "ProtocolResult", "ProtocolResults"):
             tf: Transformation = self.get_transformation(
                 transformation, visualize=visualize
             )
@@ -1836,14 +1858,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             visualize=visualize,
         )
 
-        if return_as == "ProtocolDAGResults":
+        if return_as in (ResultFormat.PROTOCOL_DAG_RESULTS, "ProtocolDAGResults"):
             return pdrs
-        elif return_as == "ProtocolResults":
+        elif return_as in (ResultFormat.PROTOCOL_RESULTS, "ProtocolResults"):
             # Return individual ProtocolResults for each ProtocolDAGResult
             if len(pdrs) == 0:
                 return []
             return [tf.gather([pdr]) for pdr in pdrs]
-        else:  # return_as == "ProtocolResult"
+        else:  # return_as in (ResultFormat.PROTOCOL_RESULT, "ProtocolResult")
             # Return aggregated ProtocolResult
             if len(pdrs) != 0:
                 return tf.gather(pdrs)

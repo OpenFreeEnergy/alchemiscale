@@ -23,7 +23,7 @@ from alchemiscale.interface import client
 from alchemiscale.tests.integration.interface.utils import (
     get_user_settings_override,
 )
-from alchemiscale.interface.client import AlchemiscaleClientError
+from alchemiscale.interface.client import AlchemiscaleClientError, ResultFormat
 
 
 class TestClient:
@@ -2352,11 +2352,41 @@ class TestClient:
 
         assert set(protocoldagresults_old) == set(protocoldagresults)
 
+        # Test using ResultFormat enum
+        protocolresults_enum = user_client.get_transformation_results(
+            transformation_sk, return_as=ResultFormat.PROTOCOL_RESULTS
+        )
+        assert isinstance(protocolresults_enum, list)
+        assert len(protocolresults_enum) == 3
+        for pr in protocolresults_enum:
+            assert isinstance(pr, ProtocolResult)
+            assert len(pr.data["key_results"]) == 1
+
+        # Test with ResultFormat.PROTOCOL_DAG_RESULTS
+        protocoldagresults_enum = user_client.get_transformation_results(
+            transformation_sk, return_as=ResultFormat.PROTOCOL_DAG_RESULTS
+        )
+        assert set(protocoldagresults_enum) == set(protocoldagresults)
+
         # Test network-level return_as='ProtocolResults'
         network_results_list = user_client.get_network_results(
             network_sk, return_as='ProtocolResults'
         )
         for tf_sk, prs in network_results_list.items():
+            if tf_sk == transformation_sk:
+                assert isinstance(prs, list)
+                assert len(prs) == 3
+                for pr in prs:
+                    assert isinstance(pr, ProtocolResult)
+                    assert len(pr.data["key_results"]) == 1
+            else:
+                assert prs == []
+
+        # Test network-level with ResultFormat enum
+        network_results_enum = user_client.get_network_results(
+            network_sk, return_as=ResultFormat.PROTOCOL_RESULTS
+        )
+        for tf_sk, prs in network_results_enum.items():
             if tf_sk == transformation_sk:
                 assert isinstance(prs, list)
                 assert len(prs) == 3
