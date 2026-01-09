@@ -4,6 +4,8 @@
 
 """
 
+from __future__ import annotations
+
 import asyncio
 from enum import StrEnum
 from typing import Any, Literal
@@ -52,6 +54,7 @@ class ResultFormat(StrEnum):
     PROTOCOL_DAG_RESULTS
         Return the raw list of ProtocolDAGResults.
     """
+
     PROTOCOL_RESULT = "ProtocolResult"
     PROTOCOL_RESULTS = "ProtocolResults"
     PROTOCOL_DAG_RESULTS = "ProtocolDAGResults"
@@ -1633,10 +1636,15 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         self,
         network: ScopedKey,
         ok: bool = True,
-        return_as: ResultFormat | Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"] = ResultFormat.PROTOCOL_RESULT,
+        return_as: (
+            ResultFormat
+            | Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"]
+        ) = ResultFormat.PROTOCOL_RESULT,
         compress: bool = True,
         visualize: bool = True,
-    ) -> dict[str, ProtocolResult | None | list[ProtocolResult] | list[ProtocolDAGResult]]:
+    ) -> dict[
+        str, ProtocolResult | None | list[ProtocolResult] | list[ProtocolDAGResult]
+    ]:
         import multiprocessing as mp
         from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -1694,11 +1702,16 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_network_results(
         self,
         network: ScopedKey,
-        return_as: ResultFormat | Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"] = ResultFormat.PROTOCOL_RESULT,
+        return_as: (
+            ResultFormat
+            | Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"]
+        ) = ResultFormat.PROTOCOL_RESULT,
         return_protocoldagresults: bool | None = None,
         compress: bool = True,
         visualize: bool = True,
-    ) -> dict[str, ProtocolResult | None | list[ProtocolResult] | list[ProtocolDAGResult]]:
+    ) -> dict[
+        str, ProtocolResult | None | list[ProtocolResult] | list[ProtocolDAGResult]
+    ]:
         r"""Get a `ProtocolResult` for every `Transformation` in the given
         `AlchemicalNetwork`.
 
@@ -1786,7 +1799,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_transformation_results(
         self,
         transformation: ScopedKey,
-        return_as: ResultFormat | Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"] = ResultFormat.PROTOCOL_RESULT,
+        return_as: (
+            ResultFormat
+            | Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"]
+        ) = ResultFormat.PROTOCOL_RESULT,
         return_protocoldagresults: bool | None = None,
         compress: bool = True,
         visualize: bool = True,
@@ -1840,7 +1856,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 return_as = ResultFormat.PROTOCOL_DAG_RESULTS
 
         # Get the transformation if we need to create ProtocolResult(s)
-        if return_as in (ResultFormat.PROTOCOL_RESULT, ResultFormat.PROTOCOL_RESULTS, "ProtocolResult", "ProtocolResults"):
+        if return_as in (
+            ResultFormat.PROTOCOL_RESULT,
+            ResultFormat.PROTOCOL_RESULTS,
+            "ProtocolResult",
+            "ProtocolResults",
+        ):
             tf: Transformation = self.get_transformation(
                 transformation, visualize=visualize
             )

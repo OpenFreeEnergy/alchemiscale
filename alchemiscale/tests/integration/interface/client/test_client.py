@@ -2328,11 +2328,13 @@ class TestClient:
 
         # Test new return_as parameter with 'ProtocolResults'
         protocolresults_list = user_client.get_transformation_results(
-            transformation_sk, return_as='ProtocolResults'
+            transformation_sk, return_as="ProtocolResults"
         )
 
         assert isinstance(protocolresults_list, list)
-        assert len(protocolresults_list) == 3  # Should have 3 individual ProtocolResults
+        assert (
+            len(protocolresults_list) == 3
+        )  # Should have 3 individual ProtocolResults
 
         for pr in protocolresults_list:
             assert isinstance(pr, ProtocolResult)
@@ -2341,6 +2343,7 @@ class TestClient:
 
         # Test backward compatibility: old parameter should still work with deprecation warning
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             protocoldagresults_old = user_client.get_transformation_results(
@@ -2370,7 +2373,7 @@ class TestClient:
 
         # Test network-level return_as='ProtocolResults'
         network_results_list = user_client.get_network_results(
-            network_sk, return_as='ProtocolResults'
+            network_sk, return_as="ProtocolResults"
         )
         for tf_sk, prs in network_results_list.items():
             if tf_sk == transformation_sk:
