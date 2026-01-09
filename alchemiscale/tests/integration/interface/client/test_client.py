@@ -2326,6 +2326,46 @@ class TestClient:
             else:
                 assert pdrs == []
 
+        # Test new return_as parameter with 'ProtocolResults'
+        protocolresults_list = user_client.get_transformation_results(
+            transformation_sk, return_as='ProtocolResults'
+        )
+
+        assert isinstance(protocolresults_list, list)
+        assert len(protocolresults_list) == 3  # Should have 3 individual ProtocolResults
+
+        for pr in protocolresults_list:
+            assert isinstance(pr, ProtocolResult)
+            # Each individual ProtocolResult should have one key_result
+            assert len(pr.data["key_results"]) == 1
+
+        # Test backward compatibility: old parameter should still work with deprecation warning
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            protocoldagresults_old = user_client.get_transformation_results(
+                transformation_sk, return_protocoldagresults=True
+            )
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "deprecated" in str(w[0].message).lower()
+
+        assert set(protocoldagresults_old) == set(protocoldagresults)
+
+        # Test network-level return_as='ProtocolResults'
+        network_results_list = user_client.get_network_results(
+            network_sk, return_as='ProtocolResults'
+        )
+        for tf_sk, prs in network_results_list.items():
+            if tf_sk == transformation_sk:
+                assert isinstance(prs, list)
+                assert len(prs) == 3
+                for pr in prs:
+                    assert isinstance(pr, ProtocolResult)
+                    assert len(pr.data["key_results"]) == 1
+            else:
+                assert prs == []
+
     def test_get_transformation_and_network_failures(
         self,
         scope_test,
