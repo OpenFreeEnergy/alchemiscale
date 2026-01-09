@@ -1725,6 +1725,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return_as
             Determines the format of returned results for each `Transformation`.
             Can be a `ResultFormat` enum value or string. Options:
+
             - ``ResultFormat.PROTOCOL_RESULT`` or ``'ProtocolResult'`` (default):
               Return a single aggregated `ProtocolResult` combining all successful
               `ProtocolDAGResult`\s. If no results exist, ``None`` is given.
@@ -1822,6 +1823,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return_as
             Determines the format of returned results. Can be a `ResultFormat`
             enum value or string. Options:
+
             - ``ResultFormat.PROTOCOL_RESULT`` or ``'ProtocolResult'`` (default):
               Return a single aggregated `ProtocolResult` combining all successful
               `ProtocolDAGResult`\s.
