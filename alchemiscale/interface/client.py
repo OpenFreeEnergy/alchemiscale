@@ -1920,6 +1920,42 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return pdrs
 
+    def get_task_stdout(self, task: ScopedKey) -> list[str]:
+        """Get stdout logs from all `ProtocolDAGResult`s for the given `Task`.
+
+        Parameters
+        ----------
+        task
+            The `ScopedKey` of the `Task` to retrieve stdout logs for.
+
+        Returns
+        -------
+        list[str]
+            List of stdout log contents from all ProtocolDAGResults for this Task.
+            Each element corresponds to one execution attempt.
+
+        """
+        logs = self._get_resource(f"/tasks/{task}/logs/stdout")
+        return logs
+
+    def get_task_stderr(self, task: ScopedKey) -> list[str]:
+        """Get stderr logs from all `ProtocolDAGResult`s for the given `Task`.
+
+        Parameters
+        ----------
+        task
+            The `ScopedKey` of the `Task` to retrieve stderr logs for.
+
+        Returns
+        -------
+        list[str]
+            List of stderr log contents from all ProtocolDAGResults for this Task.
+            Each element corresponds to one execution attempt.
+
+        """
+        logs = self._get_resource(f"/tasks/{task}/logs/stderr")
+        return logs
+
     def add_task_restart_patterns(
         self,
         network_scoped_key: ScopedKey,

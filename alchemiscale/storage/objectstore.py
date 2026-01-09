@@ -297,3 +297,113 @@ class S3ObjectStore:
         pdr_bytes = self._get_bytes(location)
 
         return pdr_bytes
+
+    def push_protocoldagresult_log(
+        self,
+        log_content: str,
+        stream: str,
+        protocoldagresult_gufekey: GufeKey,
+        transformation: ScopedKey,
+        protocoldagresult_ok: bool,
+        creator: str | None = None,
+    ) -> ProtocolDAGResultLog:
+        """Push stdout or stderr log for a ProtocolDAGResult to this ObjectStore.
+
+        Parameters
+        ----------
+        log_content
+            The log content (stdout or stderr) as a string.
+        stream
+            Either "stdout" or "stderr".
+        protocoldagresult_gufekey
+            The GufeKey of the ProtocolDAGResult this log belongs to.
+        transformation
+            The ScopedKey of the Transformation this log corresponds to.
+        protocoldagresult_ok
+            ``True`` if ProtocolDAGResult completed successfully; ``False`` if failed.
+        creator
+            Identifier of the entity creating this log (usually compute_service_id).
+
+        Returns
+        -------
+        ProtocolDAGResultLog
+            Reference to the log in the object store.
+
+        """
+        from ..storage.models import ProtocolDAGResultLog
+
+        ok = protocoldagresult_ok
+        route = "results" if ok else "failures"
+
+        # build `location` based on gufe key
+        location = os.path.join(
+            "protocoldagresult",
+            *transformation.scope.to_tuple(),
+            transformation.gufe_key,
+            route,
+            protocoldagresult_gufekey,
+            f"{stream}.log",
+        )
+
+        # encode log content to bytes (UTF-8)
+        log_bytes = log_content.encode("utf-8")
+        self._store_bytes(location, log_bytes)
+
+        return ProtocolDAGResultLog(
+            location=location,
+            obj_key=protocoldagresult_gufekey,
+            scope=transformation.scope,
+            stream=stream,
+            datetime_created=datetime.datetime.now(tz=datetime.UTC),
+            creator=creator,
+        )
+
+    def pull_protocoldagresult_log(
+        self,
+        protocoldagresult: ScopedKey,
+        transformation: ScopedKey,
+        stream: str,
+        ok: bool = True,
+        location: str | None = None,
+    ) -> str:
+        """Pull the log content for a ProtocolDAGResult.
+
+        Parameters
+        ----------
+        protocoldagresult
+            ScopedKey for ProtocolDAGResult in the object store.
+        transformation
+            The ScopedKey of the Transformation this log corresponds to.
+        stream
+            Either "stdout" or "stderr".
+        ok
+            ``True`` if ProtocolDAGResult completed successfully; ``False`` if failed.
+        location
+            The full path in the object store to the log. If provided, this will be used.
+
+        Returns
+        -------
+        str
+            The log content as a string.
+
+        """
+        route = "results" if ok else "failures"
+
+        # build `location` based on provided ScopedKey if not provided
+        if location is None:
+            if transformation.scope != protocoldagresult.scope:
+                raise ValueError(
+                    f"transformation scope '{transformation.scope}' differs from protocoldagresult scope '{protocoldagresult.scope}'"
+                )
+
+            location = os.path.join(
+                "protocoldagresult",
+                *protocoldagresult.scope.to_tuple(),
+                transformation.gufe_key,
+                route,
+                protocoldagresult.gufe_key,
+                f"{stream}.log",
+            )
+
+        log_bytes = self._get_bytes(location)
+        return log_bytes.decode("utf-8")

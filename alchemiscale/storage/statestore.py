@@ -3551,6 +3551,103 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
+    def set_protocoldagresult_log(
+        self,
+        protocoldagresultref: ScopedKey,
+        protocoldagresultlog: "ProtocolDAGResultLog",
+    ) -> ScopedKey:
+        """Set a `ProtocolDAGResultLog` for the given `ProtocolDAGResultRef`.
+
+        Parameters
+        ----------
+        protocoldagresultref
+            ScopedKey of the ProtocolDAGResultRef this log belongs to.
+        protocoldagresultlog
+            The ProtocolDAGResultLog reference to store.
+
+        Returns
+        -------
+        ScopedKey
+            The ScopedKey of the stored ProtocolDAGResultLog.
+        """
+        from ..storage.models import ProtocolDAGResultLog
+
+        if protocoldagresultref.qualname != "ProtocolDAGResultRef":
+            raise ValueError(
+                "`protocoldagresultref` ScopedKey does not correspond to a `ProtocolDAGResultRef`"
+            )
+
+        scope = protocoldagresultref.scope
+        protocoldagresultref_node = self._get_node(protocoldagresultref)
+
+        subgraph, log_node, scoped_key = self._keyed_chain_to_subgraph(
+            KeyedChain.from_gufe(protocoldagresultlog),
+            scope=scope,
+        )
+
+        subgraph = subgraph | Relationship.type("HAS_LOG")(
+            protocoldagresultref_node,
+            log_node,
+            _org=scope.org,
+            _campaign=scope.campaign,
+            _project=scope.project,
+        )
+
+        with self.transaction() as tx:
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+
+        return scoped_key
+
+    def _get_protocoldagresultlogs(self, q: str, scoped_key: ScopedKey):
+        """Helper method to retrieve ProtocolDAGResultLog ScopedKeys."""
+        sks = []
+        with self.transaction() as tx:
+            res = tx.run(q, scoped_key=str(scoped_key))
+            for rec in res:
+                sks.append(rec["sk"])
+
+        return [ScopedKey.from_str(sk) for sk in sks]
+
+    def get_task_logs(
+        self, task: ScopedKey, stream: str | None = None
+    ) -> list[ScopedKey]:
+        """Get all log references for a given Task.
+
+        Parameters
+        ----------
+        task
+            ScopedKey of the Task.
+        stream
+            Optional filter for "stdout" or "stderr". If None, returns all logs.
+
+        Returns
+        -------
+        list[ScopedKey]
+            List of ScopedKeys for ProtocolDAGResultLog objects.
+        """
+        if stream is not None and stream not in ["stdout", "stderr"]:
+            raise ValueError("`stream` must be 'stdout', 'stderr', or None")
+
+        if stream is None:
+            q = """
+            MATCH (task:Task {_scoped_key: $scoped_key}),
+                  (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef),
+                  (res)-[:HAS_LOG]->(log:ProtocolDAGResultLog)
+            WITH log._scoped_key as sk
+            RETURN DISTINCT sk
+            """
+        else:
+            q = f"""
+            MATCH (task:Task {{_scoped_key: $scoped_key}}),
+                  (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef),
+                  (res)-[:HAS_LOG]->(log:ProtocolDAGResultLog)
+            WHERE log.stream = '{stream}'
+            WITH log._scoped_key as sk
+            RETURN DISTINCT sk
+            """
+
+        return self._get_protocoldagresultlogs(q, task)
+
     def set_task_status(
         self, tasks: list[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
     ) -> list[ScopedKey | None]:

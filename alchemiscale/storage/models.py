@@ -550,6 +550,54 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         return super()._from_dict(d_)
 
 
+class ProtocolDAGResultLog(ObjectStoreRef):
+    """Reference to stdout or stderr logs from a ProtocolDAGResult execution."""
+
+    stream: str  # "stdout" or "stderr"
+
+    def __init__(
+        self,
+        *,
+        location: str | None = None,
+        obj_key: GufeKey,
+        scope: Scope,
+        stream: str,
+        datetime_created: datetime.datetime | None = None,
+        creator: str | None = None,
+    ):
+        self.location = location
+        self.obj_key = GufeKey(obj_key)
+        self.scope = scope
+        self.stream = stream
+        self.datetime_created = datetime_created
+        self.creator = creator
+
+    def _to_dict(self):
+        return {
+            "location": self.location,
+            "obj_key": str(self.obj_key),
+            "scope": str(self.scope),
+            "stream": self.stream,
+            "datetime_created": (
+                self.datetime_created.isoformat()
+                if self.datetime_created is not None
+                else None
+            ),
+            "creator": self.creator,
+        }
+
+    @classmethod
+    def _from_dict(cls, d):
+        d_ = copy(d)
+        d_["datetime_created"] = (
+            datetime.datetime.fromisoformat(d["datetime_created"])
+            if d.get("datetime_created") is not None
+            else None
+        )
+
+        return super()._from_dict(d_)
+
+
 class StrategyModeEnum(StrEnum):
     full = "full"
     partial = "partial"

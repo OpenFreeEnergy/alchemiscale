@@ -367,6 +367,8 @@ async def set_task_result(
 
     protocoldagresult_ = body_["protocoldagresult"]
     compute_service_id = body_["compute_service_id"]
+    stdout = body_.get("stdout")
+    stderr = body_.get("stderr")
 
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
@@ -391,6 +393,29 @@ async def set_task_result(
     result_sk: ScopedKey = n4js.set_task_result(
         task=task_sk, protocoldagresultref=protocoldagresultref
     )
+
+    # Store stdout and stderr logs if provided
+    if stdout:
+        stdout_log_ref = s3os.push_protocoldagresult_log(
+            log_content=stdout,
+            stream="stdout",
+            protocoldagresult_gufekey=pdr.key,
+            transformation=tf_sk,
+            protocoldagresult_ok=pdr.ok(),
+            creator=compute_service_id,
+        )
+        n4js.set_protocoldagresult_log(result_sk, stdout_log_ref)
+
+    if stderr:
+        stderr_log_ref = s3os.push_protocoldagresult_log(
+            log_content=stderr,
+            stream="stderr",
+            protocoldagresult_gufekey=pdr.key,
+            transformation=tf_sk,
+            protocoldagresult_ok=pdr.ok(),
+            creator=compute_service_id,
+        )
+        n4js.set_protocoldagresult_log(result_sk, stderr_log_ref)
 
     # if success, set task complete, remove from all hubs
     # otherwise, set as errored, leave in hubs
