@@ -99,12 +99,14 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         self,
         scopes: list[Scope],
         compute_service_id: ComputeServiceID,
+        scopes_exclude: list[Scope] | None = None,
         count: int = 1,
         protocols: list[str] | None = None,
     ):
         """Claim Tasks from TaskHubs within a list of Scopes."""
         data = dict(
             scopes=[scope.to_dict() for scope in scopes],
+            scopes_exclude=[scope.to_dict() for scope in scopes_exclude] if scopes_exclude else None,
             compute_service_id=str(compute_service_id),
             count=count,
             protocols=protocols,
