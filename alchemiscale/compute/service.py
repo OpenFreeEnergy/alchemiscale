@@ -12,6 +12,7 @@ from uuid import uuid4
 import threading
 from pathlib import Path
 import shutil
+import traceback
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
@@ -220,13 +221,30 @@ class SynchronousComputeService:
         """
         # obtain a ProtocolDAG from the task
         self.logger.info("Creating ProtocolDAG from '%s'...", task)
-        protocoldag, transformation, extends = self.task_to_protocoldag(task)
-        self.logger.info(
-            "Created '%s' from '%s' performing '%s'",
-            protocoldag,
-            task,
-            transformation.protocol,
-        )
+        try:
+            protocoldag, transformation, extends = self.task_to_protocoldag(task)
+            self.logger.info(
+                "Created '%s' from '%s' performing '%s'",
+                protocoldag,
+                task,
+                transformation.protocol,
+            )
+        except Exception as e:
+            # If ProtocolDAG creation fails, set task to error with traceback
+            error_traceback = traceback.format_exc()
+            self.logger.error(
+                "Failed to create ProtocolDAG from '%s': %s\n%s",
+                task,
+                str(e),
+                error_traceback,
+            )
+            # Set task to error status with the exception traceback as reason
+            task_sk = self.client.set_task_error(
+                task=task,
+                reason=error_traceback,
+                compute_service_id=self.compute_service_id,
+            )
+            return task_sk
 
         # execute the task; this looks the same whether the ProtocolDAG is a
         # success or failure

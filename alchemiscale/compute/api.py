@@ -400,7 +400,14 @@ async def set_task_result(
         n4js.add_protocol_dag_result_ref_tracebacks(
             pdr.protocol_unit_failures, result_sk
         )
-        n4js.set_task_error(tasks=[task_sk])
+        # Format protocol unit failures into a reason string
+        failure_reasons = []
+        for failure in pdr.protocol_unit_failures:
+            failure_reasons.append(
+                f"ProtocolUnit '{failure}' failed:\n{failure.exception}"
+            )
+        reason = "\n\n".join(failure_reasons) if failure_reasons else None
+        n4js.set_task_error(tasks=[task_sk], reason=reason)
 
         # report that the compute service experienced a failure
         now = datetime.datetime.now(tz=datetime.UTC)
@@ -408,6 +415,39 @@ async def set_task_result(
         n4js.resolve_task_restarts(task_scoped_keys=[task_sk])
 
     return result_sk
+
+
+@router.post("/tasks/{task_scoped_key}/error")
+async def set_task_error(
+    task_scoped_key,
+    *,
+    request: Request,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    """Set a task to error status with an optional reason.
+
+    This endpoint is used when a task fails before a ProtocolDAGResult can be created,
+    such as during ProtocolDAG creation from a Transformation.
+    """
+    body = await request.body()
+    body_ = json.loads(body.decode("utf-8"), cls=JSON_HANDLER.decoder)
+
+    reason = body_.get("reason")
+    compute_service_id = body_["compute_service_id"]
+
+    task_sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(task_sk.scope, token)
+
+    # Set task to error status with the provided reason
+    n4js.set_task_error(tasks=[task_sk], reason=reason)
+
+    # Report that the compute service experienced a failure
+    now = datetime.datetime.now(tz=datetime.UTC)
+    n4js.log_failure_compute_service(compute_service_id, now)
+    n4js.resolve_task_restarts(task_scoped_keys=[task_sk])
+
+    return task_sk
 
 
 def process_compute_manager_id_string(
