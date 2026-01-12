@@ -172,7 +172,9 @@ class ComputeServiceSettings(BaseModel):
         False,
         description=(
             "Whether to enable GPU monitoring for reactive scheduling. "
-            "Requires pynvml (nvidia-ml-py) to be installed. If enabled but pynvml is not available, "
+            "Requires nvidia-ml-py (NVIDIA's official Python bindings for NVML) to be installed. "
+            "Install with: pip install nvidia-ml-py. "
+            "If enabled but nvidia-ml-py is not available, "
             "the service will log a warning and continue without GPU monitoring."
         ),
     )

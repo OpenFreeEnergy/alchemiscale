@@ -122,9 +122,12 @@ init:
   # resource constraints.
   task_retry_backoff: 300.0
 
-  # Whether to enable GPU monitoring for reactive scheduling. Requires pynvml
-  # (nvidia-ml-py) to be installed. If enabled but pynvml is not available,
-  # the service will log a warning and continue without GPU monitoring.
+  # Whether to enable GPU monitoring for reactive scheduling. Requires
+  # nvidia-ml-py (NVIDIA's official Python bindings for NVML) to be installed
+  # via: pip install nvidia-ml-py
+  # Note: The old 'pynvml' package from gpuopenanalytics is deprecated.
+  # If enabled but nvidia-ml-py is not available, the service will log a
+  # warning and continue without GPU monitoring.
   enable_gpu_monitoring: false
 
 # options for service execution

@@ -446,7 +446,12 @@ class ResourceMetrics:
 
 
 class ResourceMonitor:
-    """Monitor system resources for reactive scheduling."""
+    """Monitor system resources for reactive scheduling.
+
+    GPU monitoring requires nvidia-ml-py (NVIDIA's official Python bindings for NVML).
+    Install with: pip install nvidia-ml-py
+    Note: The old 'pynvml' package from gpuopenanalytics is deprecated.
+    """
 
     def __init__(self, enable_gpu: bool = False, logger=None):
         self.enable_gpu = enable_gpu
@@ -455,17 +460,21 @@ class ResourceMonitor:
 
         if self.enable_gpu:
             try:
+                # Import pynvml from nvidia-ml-py package
+                # Note: nvidia-ml-py is the official NVIDIA package that provides the pynvml module
                 import pynvml
 
                 pynvml.nvmlInit()
                 self._gpu_available = True
                 self._pynvml = pynvml
                 if self.logger:
-                    self.logger.info("GPU monitoring enabled")
+                    self.logger.info("GPU monitoring enabled using nvidia-ml-py")
             except (ImportError, Exception) as e:
                 if self.logger:
                     self.logger.warning(
-                        f"GPU monitoring requested but unavailable: {e}. Continuing without GPU monitoring."
+                        f"GPU monitoring requested but unavailable: {e}. "
+                        f"Install nvidia-ml-py with: pip install nvidia-ml-py. "
+                        f"Continuing without GPU monitoring."
                     )
 
     def get_metrics(self) -> ResourceMetrics:
