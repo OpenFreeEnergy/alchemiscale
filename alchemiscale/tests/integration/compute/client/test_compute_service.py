@@ -259,7 +259,11 @@ class TestSynchronousComputeService:
 
 
 class TestAsynchronousComputeService:
-    """Integration tests for AsynchronousComputeService."""
+    """Integration tests for AsynchronousComputeService.
+
+    AsynchronousComputeService uses process-based parallelism via ProcessPoolExecutor,
+    ensuring that each Task runs in a separate process for true CPU parallelism.
+    """
 
     @pytest.fixture
     def async_service(self, n4js_preloaded, compute_client, tmpdir):

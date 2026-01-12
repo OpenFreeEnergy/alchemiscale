@@ -125,7 +125,9 @@ class ComputeServiceSettings(BaseModel):
         4,
         description=(
             "Maximum number of Tasks to execute concurrently in AsynchronousComputeService. "
-            "This is the upper limit; reactive scheduling may reduce this based on resource availability."
+            "Each Task runs in a separate process for true CPU parallelism (avoiding Python's GIL). "
+            "This is the upper limit; reactive scheduling may reduce this based on resource availability. "
+            "Also determines the size of the ProcessPoolExecutor worker pool."
         ),
     )
     min_concurrent_tasks: int = Field(

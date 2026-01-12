@@ -92,8 +92,15 @@ init:
 
   # === AsynchronousComputeService-specific settings ===
 
-  # Maximum number of Tasks to execute concurrently. This is the upper limit;
-  # reactive scheduling may reduce this based on resource availability.
+  # Maximum number of Tasks to execute concurrently. Each Task runs in a
+  # separate process for true CPU parallelism (avoiding Python's GIL).
+  # This is the upper limit; reactive scheduling may reduce this based on
+  # resource availability. Also determines the ProcessPoolExecutor worker pool size.
+  #
+  # Process-based execution provides:
+  # - True CPU parallelism for CPU-bound work (no GIL contention)
+  # - Multiple ProtocolUnits executing in parallel across different processes
+  # - Isolated memory space for each Task
   max_concurrent_tasks: 4
 
   # Minimum number of Tasks to execute concurrently. Reactive scheduling will

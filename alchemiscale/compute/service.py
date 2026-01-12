@@ -17,6 +17,7 @@ import psutil
 from typing import Optional
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from concurrent.futures import ProcessPoolExecutor
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
@@ -518,18 +519,25 @@ class TaskExecution:
 
 
 class AsynchronousComputeService(SynchronousComputeService):
-    """Asynchronous compute service with reactive scheduling.
+    """Asynchronous compute service with reactive scheduling and process-based execution.
 
-    This service executes multiple Tasks concurrently and dynamically adjusts
-    parallelism based on system resource utilization. It monitors CPU, memory,
-    and optionally GPU usage to maximize throughput while preventing resource
-    saturation.
+    This service executes multiple Tasks concurrently in separate processes, providing
+    true CPU parallelism for CPU-bound work (avoiding Python's GIL). It dynamically
+    adjusts parallelism based on system resource utilization, monitoring CPU, memory,
+    and optionally GPU usage to maximize throughput while preventing resource saturation.
+
+    Process-based execution ensures that:
+    - Each Task (ProtocolDAG) runs in its own process
+    - Multiple ProtocolUnits execute in parallel across different processes
+    - CPU-bound work achieves true parallelism (no GIL contention)
+    - Each process has isolated memory space
 
     Key features:
-    - Concurrent execution of multiple Tasks/ProtocolDAGs
+    - Process-based concurrent execution of multiple Tasks/ProtocolDAGs
     - Reactive scheduling that increases parallelism when resources are available
     - Automatic termination of recently-started tasks when resources become oversaturated
     - Backoff mechanism to avoid immediately retrying terminated tasks
+    - Resource monitoring for CPU, memory, and optional GPU usage
 
     """
 
@@ -557,6 +565,9 @@ class AsynchronousComputeService(SynchronousComputeService):
         self.terminated_tasks: dict[ScopedKey, datetime] = {}
         self.current_concurrency = self.min_concurrent
 
+        # Process pool executor (will be created in start_async)
+        self.executor: Optional[ProcessPoolExecutor] = None
+
         # Update logger name
         extra = {"compute_service_id": str(self.compute_service_id)}
         logger = logging.getLogger("AlchemiscaleAsynchronousComputeService")
@@ -579,14 +590,15 @@ class AsynchronousComputeService(SynchronousComputeService):
         self.logger = logging.LoggerAdapter(logger, extra)
 
     async def execute_task_async(self, task: ScopedKey) -> Optional[ScopedKey]:
-        """Execute a single task asynchronously.
+        """Execute a single task asynchronously in a separate process.
 
-        This wraps the synchronous execute method to run in an executor.
+        This wraps the synchronous execute method to run in a ProcessPoolExecutor,
+        ensuring that each Task runs in its own process for true CPU parallelism.
         """
         try:
-            self.logger.info(f"Starting async execution of task '{task}'")
+            self.logger.info(f"Starting async execution of task '{task}' in separate process")
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self.execute, task)
+            result = await loop.run_in_executor(self.executor, self.execute, task)
             self.logger.info(f"Completed async execution of task '{task}'")
             return result
         except asyncio.CancelledError:
@@ -771,7 +783,7 @@ class AsynchronousComputeService(SynchronousComputeService):
             await asyncio.sleep(self.sleep_interval)
 
     async def start_async(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
-        """Start the asynchronous service."""
+        """Start the asynchronous service with process-based execution."""
         self._stop = False
 
         # Register service
@@ -779,6 +791,12 @@ class AsynchronousComputeService(SynchronousComputeService):
         self._register()
         self.logger.info(
             "Registered service with registration '%s'", str(self.compute_service_id)
+        )
+
+        # Create process pool executor for true parallel execution
+        self.executor = ProcessPoolExecutor(max_workers=self.max_concurrent)
+        self.logger.info(
+            f"Created ProcessPoolExecutor with {self.max_concurrent} worker processes"
         )
 
         # Start heartbeat thread
@@ -790,7 +808,7 @@ class AsynchronousComputeService(SynchronousComputeService):
         self._start_time = time.time()
 
         try:
-            self.logger.info("Starting main async loop")
+            self.logger.info("Starting main async loop with process-based execution")
 
             # Start resource monitoring task
             monitor_task = asyncio.create_task(self.monitor_resources())
@@ -834,6 +852,12 @@ class AsynchronousComputeService(SynchronousComputeService):
                     *[te.process for te in self.running_tasks.values() if te.process],
                     return_exceptions=True,
                 )
+
+            # Shut down the process pool executor
+            if self.executor:
+                self.logger.info("Shutting down ProcessPoolExecutor...")
+                self.executor.shutdown(wait=True)
+                self.logger.info("ProcessPoolExecutor shut down complete")
 
             # Clean up resources
             self.resource_monitor.cleanup()
