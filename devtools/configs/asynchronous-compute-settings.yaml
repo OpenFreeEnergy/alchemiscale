@@ -1,0 +1,139 @@
+---
+# options for AsynchronousComputeService initialization
+init:
+
+  # URL of the compute API to execute Tasks for.
+  api_url: https://compute.alchemiscale-instance.localdomain
+
+  # Identifier for the compute identity used for authentication.
+  identifier: compute-identity
+
+  # Credential for the compute identity used for authentication.
+  key: "compute-identity-key"
+
+  # The name to give this compute service; used for Task provenance, so
+  # typically set to a distinct value to distinguish different compute
+  # resources, e.g. different hosts or HPC clusters.
+  name: compute-resource-name
+
+  # Filesystem path to use for `ProtocolDAG` `shared` space.
+  shared_basedir: "./shared"
+
+  # Filesystem path to use for `ProtocolUnit` `scratch` space.
+  scratch_basedir: "./scratch"
+
+  # If True, don't remove shared directories for `ProtocolDAG`s after
+  # completion.
+  keep_shared: False
+
+  # If True, don't remove scratch directories for `ProtocolUnit`s after
+  # completion.
+  keep_scratch: False
+
+  # Number of times to attempt a given Task on failure
+  n_retries: 3
+
+  # Time in seconds to sleep if no Tasks claimed from compute API.
+  sleep_interval: 30
+
+  # Time in seconds to sleep if a Task claim request is denied by the compute API.
+  deep_sleep_interval: 300
+
+  # Frequency at which to send heartbeats to compute API.
+  heartbeat_interval: 300
+
+  # Scopes to limit Task claiming to; defaults to all Scopes accessible by
+  # compute identity.
+  scopes:
+    - '*-*-*'
+
+  # Names of Protocols to run with this service; `None` means no restriction
+  protocols: null
+
+  # Maximum number of Tasks to claim at a time from a TaskHub.
+  claim_limit: 4
+
+  # The loglevel at which to report via STDOUT; see the :mod:`logging` docs for
+  # available levels.
+  loglevel: 'INFO'
+
+  # Path to file for logging output; if not set, logging will only go to
+  # STDOUT.
+  logfile: null
+
+  # Location of the cache directory as either a `pathlib.Path` or `str`.
+  # If ``None`` is provided then the directory will be determined via
+  # the ``XDG_CACHE_HOME`` environment variable or default to
+  # ``${HOME}/.cache/alchemiscale``. Default ``None``.
+  client_cache_directory: null
+
+  # Maximum size of the client cache in bytes. Default 1 GiB.
+  client_cache_size_limit: 1073741824
+
+  # Whether or not to use the local cache on disk.
+  client_use_local_cache: false
+
+  # Maximum number of times to retry a request. In the case the API service is
+  # unresponsive an expoenential backoff is applied with retries until this
+  # number is reached. If set to -1, retries will continue indefinitely until
+  # success.
+  client_max_retries: 5
+
+  # The base number of seconds to use for exponential backoff. Must be greater
+  # than 1.0.
+  client_retry_base_seconds: 2.0
+
+  # Maximum number of seconds to sleep between retries; avoids runaway
+  # exponential backoff while allowing for many retries.
+  client_retry_max_seconds: 60.0
+
+  # Whether to verify SSL certificate presented by the API server.
+  client_verify: true
+
+  # === AsynchronousComputeService-specific settings ===
+
+  # Maximum number of Tasks to execute concurrently. This is the upper limit;
+  # reactive scheduling may reduce this based on resource availability.
+  max_concurrent_tasks: 4
+
+  # Minimum number of Tasks to execute concurrently. Reactive scheduling will
+  # not reduce parallelism below this level.
+  min_concurrent_tasks: 1
+
+  # CPU usage percentage threshold for reactive scheduling. When CPU usage
+  # exceeds this value, the service may reduce parallelism or terminate tasks.
+  cpu_threshold: 90.0
+
+  # Memory usage percentage threshold for reactive scheduling. When memory
+  # usage exceeds this value, the service may reduce parallelism or terminate
+  # tasks.
+  memory_threshold: 85.0
+
+  # GPU usage percentage threshold for reactive scheduling (if GPU monitoring
+  # is available). When GPU usage exceeds this value, the service may reduce
+  # parallelism or terminate tasks.
+  gpu_threshold: 90.0
+
+  # Time in seconds between resource utilization checks for reactive
+  # scheduling.
+  resource_check_interval: 5.0
+
+  # Time in seconds to wait before retrying a task that was terminated due to
+  # resource constraints.
+  task_retry_backoff: 300.0
+
+  # Whether to enable GPU monitoring for reactive scheduling. Requires pynvml
+  # (nvidia-ml-py) to be installed. If enabled but pynvml is not available,
+  # the service will log a warning and continue without GPU monitoring.
+  enable_gpu_monitoring: false
+
+# options for service execution
+start:
+
+  # Max number of Tasks to execute before exiting. If `null`, the service will
+  # have no task limit.
+  max_tasks: null
+
+  # Max number of seconds to run before exiting. If `null`, the service will
+  # have no time limit.
+  max_time: null

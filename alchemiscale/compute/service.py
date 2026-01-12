@@ -12,6 +12,11 @@ from uuid import uuid4
 import threading
 from pathlib import Path
 import shutil
+import asyncio
+import psutil
+from typing import Optional
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
@@ -402,29 +407,455 @@ class SynchronousComputeService:
         self._stop = True
 
 
-class AsynchronousComputeService(SynchronousComputeService):
-    """Asynchronous compute service.
+@dataclass
+class ResourceMetrics:
+    """Container for system resource metrics."""
 
-    This service can be used in production cases, though it does not make use
-    of Folding@Home.
+    cpu_percent: float
+    memory_percent: float
+    gpu_percent: Optional[float] = None
+    timestamp: datetime = field(default_factory=datetime.now)
+
+    def is_oversaturated(
+        self, cpu_threshold: float, memory_threshold: float, gpu_threshold: float
+    ) -> bool:
+        """Check if any resource exceeds its threshold."""
+        if self.cpu_percent > cpu_threshold:
+            return True
+        if self.memory_percent > memory_threshold:
+            return True
+        if self.gpu_percent is not None and self.gpu_percent > gpu_threshold:
+            return True
+        return False
+
+    def is_underutilized(
+        self,
+        cpu_threshold: float,
+        memory_threshold: float,
+        gpu_threshold: float,
+        margin: float = 20.0,
+    ) -> bool:
+        """Check if resources are significantly below thresholds."""
+        if self.cpu_percent > cpu_threshold - margin:
+            return False
+        if self.memory_percent > memory_threshold - margin:
+            return False
+        if self.gpu_percent is not None and self.gpu_percent > gpu_threshold - margin:
+            return False
+        return True
+
+
+class ResourceMonitor:
+    """Monitor system resources for reactive scheduling."""
+
+    def __init__(self, enable_gpu: bool = False, logger=None):
+        self.enable_gpu = enable_gpu
+        self.logger = logger
+        self._gpu_available = False
+
+        if self.enable_gpu:
+            try:
+                import pynvml
+
+                pynvml.nvmlInit()
+                self._gpu_available = True
+                self._pynvml = pynvml
+                if self.logger:
+                    self.logger.info("GPU monitoring enabled")
+            except (ImportError, Exception) as e:
+                if self.logger:
+                    self.logger.warning(
+                        f"GPU monitoring requested but unavailable: {e}. Continuing without GPU monitoring."
+                    )
+
+    def get_metrics(self) -> ResourceMetrics:
+        """Get current system resource metrics."""
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        memory_percent = psutil.virtual_memory().percent
+
+        gpu_percent = None
+        if self._gpu_available:
+            try:
+                # Get utilization from first GPU (can be extended for multi-GPU)
+                handle = self._pynvml.nvmlDeviceGetHandleByIndex(0)
+                utilization = self._pynvml.nvmlDeviceGetUtilizationRates(handle)
+                gpu_percent = float(utilization.gpu)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"Failed to get GPU metrics: {e}")
+
+        return ResourceMetrics(
+            cpu_percent=cpu_percent, memory_percent=memory_percent, gpu_percent=gpu_percent
+        )
+
+    def cleanup(self):
+        """Clean up GPU monitoring resources."""
+        if self._gpu_available:
+            try:
+                self._pynvml.nvmlShutdown()
+            except Exception:
+                pass
+
+
+@dataclass
+class TaskExecution:
+    """Tracks the execution state of a Task."""
+
+    task: ScopedKey
+    started_at: datetime
+    process: Optional[asyncio.Task] = None
+    terminated: bool = False
+    retry_after: Optional[datetime] = None
+
+
+class AsynchronousComputeService(SynchronousComputeService):
+    """Asynchronous compute service with reactive scheduling.
+
+    This service executes multiple Tasks concurrently and dynamically adjusts
+    parallelism based on system resource utilization. It monitors CPU, memory,
+    and optionally GPU usage to maximize throughput while preventing resource
+    saturation.
+
+    Key features:
+    - Concurrent execution of multiple Tasks/ProtocolDAGs
+    - Reactive scheduling that increases parallelism when resources are available
+    - Automatic termination of recently-started tasks when resources become oversaturated
+    - Backoff mechanism to avoid immediately retrying terminated tasks
 
     """
 
-    def __init__(self, api_url):
-        self.scheduler = sched.scheduler(time.monotonic, time.sleep)
-        # self.loop = asyncio.get_event_loop()
+    def __init__(self, settings: ComputeServiceSettings):
+        """Create an `AsynchronousComputeService` instance."""
+        # Initialize parent class
+        super().__init__(settings)
 
-        self._stop = False
+        # Async-specific configuration
+        self.max_concurrent = self.settings.max_concurrent_tasks
+        self.min_concurrent = self.settings.min_concurrent_tasks
+        self.cpu_threshold = self.settings.cpu_threshold
+        self.memory_threshold = self.settings.memory_threshold
+        self.gpu_threshold = self.settings.gpu_threshold
+        self.resource_check_interval = self.settings.resource_check_interval
+        self.task_retry_backoff = self.settings.task_retry_backoff
 
-    def get_new_tasks(self): ...
+        # Resource monitoring
+        self.resource_monitor = ResourceMonitor(
+            enable_gpu=self.settings.enable_gpu_monitoring, logger=self.logger
+        )
 
-    def start(self):
-        """Start the service; will keep going until told to stop."""
-        self._stop = False
+        # Task management
+        self.running_tasks: dict[str, TaskExecution] = {}
+        self.terminated_tasks: dict[ScopedKey, datetime] = {}
+        self.current_concurrency = self.min_concurrent
 
-        while True:
-            if self._stop:
+        # Update logger name
+        extra = {"compute_service_id": str(self.compute_service_id)}
+        logger = logging.getLogger("AlchemiscaleAsynchronousComputeService")
+        logger.setLevel(self.settings.loglevel)
+
+        formatter = logging.Formatter(
+            "[%(asctime)s] [%(compute_service_id)s] [%(levelname)s] %(message)s"
+        )
+        formatter.converter = time.gmtime
+
+        sh = logging.StreamHandler()
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
+
+        if self.settings.logfile is not None:
+            fh = logging.FileHandler(self.settings.logfile)
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
+
+        self.logger = logging.LoggerAdapter(logger, extra)
+
+    async def execute_task_async(self, task: ScopedKey) -> Optional[ScopedKey]:
+        """Execute a single task asynchronously.
+
+        This wraps the synchronous execute method to run in an executor.
+        """
+        try:
+            self.logger.info(f"Starting async execution of task '{task}'")
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, self.execute, task)
+            self.logger.info(f"Completed async execution of task '{task}'")
+            return result
+        except asyncio.CancelledError:
+            self.logger.warning(f"Task '{task}' was cancelled due to resource constraints")
+            raise
+        except Exception as e:
+            self.logger.error(f"Task '{task}' failed with exception: {e}", exc_info=True)
+            return None
+
+    async def monitor_resources(self):
+        """Continuously monitor system resources and adjust concurrency."""
+        while not self._stop:
+            try:
+                await asyncio.sleep(self.resource_check_interval)
+
+                metrics = self.resource_monitor.get_metrics()
+                self.logger.debug(
+                    f"Resource usage - CPU: {metrics.cpu_percent:.1f}%, "
+                    f"Memory: {metrics.memory_percent:.1f}%"
+                    + (
+                        f", GPU: {metrics.gpu_percent:.1f}%"
+                        if metrics.gpu_percent is not None
+                        else ""
+                    )
+                )
+
+                # Check if resources are oversaturated
+                if metrics.is_oversaturated(
+                    self.cpu_threshold, self.memory_threshold, self.gpu_threshold
+                ):
+                    await self._handle_oversaturation(metrics)
+                # Check if we can increase parallelism
+                elif metrics.is_underutilized(
+                    self.cpu_threshold, self.memory_threshold, self.gpu_threshold
+                ):
+                    self._increase_concurrency()
+
+            except Exception as e:
+                self.logger.error(f"Error in resource monitoring: {e}", exc_info=True)
+
+    async def _handle_oversaturation(self, metrics: ResourceMetrics):
+        """Handle oversaturated resources by terminating recent tasks."""
+        self.logger.warning(
+            f"Resources oversaturated - CPU: {metrics.cpu_percent:.1f}%, "
+            f"Memory: {metrics.memory_percent:.1f}%"
+            + (
+                f", GPU: {metrics.gpu_percent:.1f}%"
+                if metrics.gpu_percent is not None
+                else ""
+            )
+        )
+
+        # Find the most recently started task
+        if not self.running_tasks:
+            # Reduce target concurrency
+            self.current_concurrency = max(
+                self.min_concurrent, self.current_concurrency - 1
+            )
+            self.logger.info(
+                f"Reduced target concurrency to {self.current_concurrency}"
+            )
+            return
+
+        # Sort by start time (most recent first)
+        sorted_tasks = sorted(
+            self.running_tasks.values(), key=lambda x: x.started_at, reverse=True
+        )
+
+        # Terminate the most recent task if we're above minimum concurrency
+        if len(self.running_tasks) > self.min_concurrent:
+            task_exec = sorted_tasks[0]
+            if not task_exec.terminated and task_exec.process:
+                self.logger.warning(
+                    f"Terminating recently started task '{task_exec.task}' due to resource saturation"
+                )
+                task_exec.process.cancel()
+                task_exec.terminated = True
+
+                # Add to terminated tasks with backoff
+                retry_time = datetime.now() + timedelta(seconds=self.task_retry_backoff)
+                self.terminated_tasks[task_exec.task] = retry_time
+                self.logger.info(
+                    f"Task '{task_exec.task}' will be eligible for retry after {retry_time}"
+                )
+
+        # Also reduce target concurrency
+        self.current_concurrency = max(self.min_concurrent, self.current_concurrency - 1)
+        self.logger.info(f"Reduced target concurrency to {self.current_concurrency}")
+
+    def _increase_concurrency(self):
+        """Increase target concurrency when resources are underutilized."""
+        if self.current_concurrency < self.max_concurrent:
+            old_concurrency = self.current_concurrency
+            self.current_concurrency = min(
+                self.max_concurrent, self.current_concurrency + 1
+            )
+            if old_concurrency != self.current_concurrency:
+                self.logger.info(
+                    f"Increased target concurrency from {old_concurrency} to {self.current_concurrency}"
+                )
+
+    def _can_retry_task(self, task: ScopedKey) -> bool:
+        """Check if a terminated task can be retried."""
+        if task not in self.terminated_tasks:
+            return True
+
+        retry_time = self.terminated_tasks[task]
+        if datetime.now() >= retry_time:
+            # Remove from terminated tasks
+            del self.terminated_tasks[task]
+            self.logger.info(f"Task '{task}' is now eligible for retry")
+            return True
+
+        return False
+
+    async def cycle_async(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
+        """Asynchronous version of the main cycle."""
+        self._check_max_tasks(max_tasks)
+        self._check_max_time(max_time)
+
+        # Clean up completed tasks
+        completed_keys = [
+            key
+            for key, task_exec in self.running_tasks.items()
+            if task_exec.process and task_exec.process.done()
+        ]
+        for key in completed_keys:
+            task_exec = self.running_tasks.pop(key)
+            if not task_exec.terminated:
+                if max_tasks is not None:
+                    self._tasks_counter += 1
+                self.logger.info(f"Task '{task_exec.task}' completed and removed from running tasks")
+
+        # Claim new tasks if we're below target concurrency
+        available_slots = self.current_concurrency - len(self.running_tasks)
+        if available_slots > 0:
+            claim_count = min(available_slots, self.claim_limit)
+            self.logger.info(
+                f"Claiming up to {claim_count} tasks (current: {len(self.running_tasks)}, target: {self.current_concurrency})"
+            )
+
+            tasks = self.claim_tasks(count=claim_count)
+
+            if tasks is None:
+                self.logger.info("No tasks claimed. Compute API denied request.")
+                await asyncio.sleep(self.deep_sleep_interval)
                 return
 
+            claimed_count = len([t for t in tasks if t is not None])
+            if claimed_count > 0:
+                self.logger.info(f"Claimed {claimed_count} tasks")
+
+            # Start new tasks
+            for task in tasks:
+                if task is None:
+                    continue
+
+                # Check if task is in backoff period
+                if not self._can_retry_task(task):
+                    retry_time = self.terminated_tasks[task]
+                    wait_seconds = (retry_time - datetime.now()).total_seconds()
+                    self.logger.info(
+                        f"Skipping task '{task}' - in backoff period (retry in {wait_seconds:.0f}s)"
+                    )
+                    continue
+
+                # Create and start task execution
+                task_id = str(uuid4())
+                process = asyncio.create_task(self.execute_task_async(task))
+
+                task_exec = TaskExecution(
+                    task=task, started_at=datetime.now(), process=process
+                )
+                self.running_tasks[task_id] = task_exec
+                self.logger.info(f"Started task '{task}' with ID {task_id}")
+
+        # If no tasks running and none available, sleep
+        if len(self.running_tasks) == 0:
+            self.logger.info(
+                f"No tasks running; sleeping for {self.sleep_interval} seconds"
+            )
+            await asyncio.sleep(self.sleep_interval)
+
+    async def start_async(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
+        """Start the asynchronous service."""
+        self._stop = False
+
+        # Register service
+        self.logger.info("Starting up service '%s'", self.name)
+        self._register()
+        self.logger.info(
+            "Registered service with registration '%s'", str(self.compute_service_id)
+        )
+
+        # Start heartbeat thread
+        self.heartbeat_thread = threading.Thread(target=self.heartbeat, daemon=True)
+        self.heartbeat_thread.start()
+
+        # Initialize counters
+        self._tasks_counter = 0
+        self._start_time = time.time()
+
+        try:
+            self.logger.info("Starting main async loop")
+
+            # Start resource monitoring task
+            monitor_task = asyncio.create_task(self.monitor_resources())
+
+            # Main loop
+            while not self._stop:
+                # Check that heartbeat is still alive
+                if not self.heartbeat_thread.is_alive():
+                    self.heartbeat_thread = threading.Thread(
+                        target=self.heartbeat, daemon=True
+                    )
+                    self.heartbeat_thread.start()
+
+                # Perform main loop cycle
+                await self.cycle_async(max_tasks, max_time)
+
+                # Force garbage collection
+                gc.collect()
+
+            # Cancel monitoring task
+            monitor_task.cancel()
+            try:
+                await monitor_task
+            except asyncio.CancelledError:
+                pass
+
+        except KeyboardInterrupt:
+            self.logger.info("Caught SIGINT/Keyboard interrupt.")
+        except Exception as e:
+            self.logger.error(f"Unexpected error in main loop: {e}", exc_info=True)
+        finally:
+            # Cancel all running tasks
+            for task_exec in self.running_tasks.values():
+                if task_exec.process and not task_exec.process.done():
+                    task_exec.process.cancel()
+
+            # Wait for tasks to complete cancellation
+            if self.running_tasks:
+                self.logger.info("Waiting for running tasks to complete cancellation...")
+                await asyncio.gather(
+                    *[te.process for te in self.running_tasks.values() if te.process],
+                    return_exceptions=True,
+                )
+
+            # Clean up resources
+            self.resource_monitor.cleanup()
+
+            # Deregister service
+            self._deregister()
+            self.logger.info(
+                "Deregistered service with registration '%s'",
+                str(self.compute_service_id),
+            )
+
+    def start(self, max_tasks: Optional[int] = None, max_time: Optional[int] = None):
+        """Start the service.
+
+        Limits to the maximum number of executed tasks or seconds to run for
+        can be set. The first maximum to be hit will trigger the service to
+        exit.
+
+        Parameters
+        ----------
+        max_tasks
+            Max number of Tasks to execute before exiting.
+            If `None`, the service will have no task limit.
+        max_time
+            Max number of seconds to run before exiting.
+            If `None`, the service will have no time limit.
+
+        """
+        # Run the async event loop
+        asyncio.run(self.start_async(max_tasks, max_time))
+
     def stop(self):
+        """Stop the service."""
         self._stop = True

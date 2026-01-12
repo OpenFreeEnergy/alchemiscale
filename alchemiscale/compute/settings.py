@@ -121,6 +121,61 @@ class ComputeServiceSettings(BaseModel):
         True,
         description="Whether to verify SSL certificate presented by the API server.",
     )
+    max_concurrent_tasks: int = Field(
+        4,
+        description=(
+            "Maximum number of Tasks to execute concurrently in AsynchronousComputeService. "
+            "This is the upper limit; reactive scheduling may reduce this based on resource availability."
+        ),
+    )
+    min_concurrent_tasks: int = Field(
+        1,
+        description=(
+            "Minimum number of Tasks to execute concurrently in AsynchronousComputeService. "
+            "Reactive scheduling will not reduce parallelism below this level."
+        ),
+    )
+    cpu_threshold: float = Field(
+        90.0,
+        description=(
+            "CPU usage percentage threshold for reactive scheduling. "
+            "When CPU usage exceeds this value, the service may reduce parallelism or terminate tasks."
+        ),
+    )
+    memory_threshold: float = Field(
+        85.0,
+        description=(
+            "Memory usage percentage threshold for reactive scheduling. "
+            "When memory usage exceeds this value, the service may reduce parallelism or terminate tasks."
+        ),
+    )
+    gpu_threshold: float = Field(
+        90.0,
+        description=(
+            "GPU usage percentage threshold for reactive scheduling (if GPU monitoring is available). "
+            "When GPU usage exceeds this value, the service may reduce parallelism or terminate tasks."
+        ),
+    )
+    resource_check_interval: float = Field(
+        5.0,
+        description=(
+            "Time in seconds between resource utilization checks for reactive scheduling."
+        ),
+    )
+    task_retry_backoff: float = Field(
+        300.0,
+        description=(
+            "Time in seconds to wait before retrying a task that was terminated due to resource constraints."
+        ),
+    )
+    enable_gpu_monitoring: bool = Field(
+        False,
+        description=(
+            "Whether to enable GPU monitoring for reactive scheduling. "
+            "Requires pynvml (nvidia-ml-py) to be installed. If enabled but pynvml is not available, "
+            "the service will log a warning and continue without GPU monitoring."
+        ),
+    )
 
     @field_validator("scopes", mode="before")
     @classmethod
