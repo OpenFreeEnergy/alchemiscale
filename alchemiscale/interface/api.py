@@ -1179,7 +1179,7 @@ def get_task_failures(
 
 @router.get("/tasks/{task_scoped_key}/tracebacks")
 def get_task_tracebacks(
-    task_scoped_key,
+    task_scoped_key: str,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),

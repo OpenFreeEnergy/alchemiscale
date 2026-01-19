@@ -1939,7 +1939,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             A list of dictionaries, one per failed `ProtocolDAGResultRef`
             associated with the `Task`. Each dictionary maps
             `ProtocolUnitFailure` `GufeKey` strings to their corresponding
-            traceback strings. Returns an empty list if no tracebacks are found.
+            traceback strings. Returns an empty list if no tracebacks are found,
+            including for Tasks that have no failures or do not exist.
 
         Examples
         --------
