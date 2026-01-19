@@ -1920,6 +1920,37 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return pdrs
 
+    def get_task_tracebacks(self, task: ScopedKey) -> list[dict[str, str]]:
+        """Get stored tracebacks associated with a given `Task`.
+
+        This method retrieves traceback information from failed
+        `ProtocolDAGResult`s associated with the `Task`. Each traceback is
+        returned as a dictionary mapping the `ProtocolUnitFailure` `GufeKey` to
+        its corresponding traceback string.
+
+        Parameters
+        ----------
+        task
+            The `ScopedKey` of the `Task` to retrieve tracebacks for.
+
+        Returns
+        -------
+        list[dict[str, str]]
+            A list of dictionaries, one per failed `ProtocolDAGResultRef`
+            associated with the `Task`. Each dictionary maps
+            `ProtocolUnitFailure` `GufeKey` strings to their corresponding
+            traceback strings. Returns an empty list if no tracebacks are found.
+
+        Examples
+        --------
+        >>> tracebacks = client.get_task_tracebacks(task_sk)
+        >>> for tb_dict in tracebacks:
+        ...     for failure_key, traceback_str in tb_dict.items():
+        ...         print(f"Failure {failure_key}: {traceback_str[:100]}...")
+
+        """
+        return self._get_resource(f"/tasks/{task}/tracebacks")
+
     def add_task_restart_patterns(
         self,
         network_scoped_key: ScopedKey,

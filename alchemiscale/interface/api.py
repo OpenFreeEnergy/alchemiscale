@@ -1177,6 +1177,24 @@ def get_task_failures(
     return [str(sk) for sk in n4js.get_task_failures(sk)]
 
 
+@router.get("/tasks/{task_scoped_key}/tracebacks")
+def get_task_tracebacks(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> list[dict[str, str]]:
+    """Get all stored tracebacks associated with a given Task.
+
+    Returns a list of dictionaries, one per failed ProtocolDAGResultRef,
+    each mapping ProtocolUnitFailure GufeKey to traceback string.
+    """
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return n4js.get_task_tracebacks(sk)
+
+
 ### strategies
 
 

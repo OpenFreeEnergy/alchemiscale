@@ -2270,6 +2270,125 @@ class TestNeo4jStore(TestStateStore):
 
         assert returned_tracebacks == [puf.traceback for puf in protocol_unit_failures]
 
+    @pytest.mark.parametrize("failure_count", (1, 2, 3))
+    def test_get_task_tracebacks(
+        self,
+        network_tyk2_failure,
+        n4js,
+        scope_test,
+        transformation_failure,
+        protocoldagresults_failure,
+        failure_count: int,
+    ):
+        """Test retrieving tracebacks associated with a Task."""
+        an = network_tyk2_failure.copy_with_replacements(
+            name=network_tyk2_failure.name + "_test_get_task_tracebacks"
+        )
+        n4js.assemble_network(an, scope_test)
+        transformation_scoped_key = n4js.get_scoped_key(
+            transformation_failure, scope_test
+        )
+
+        # create a task; pretend we computed it, submit reference for pre-baked result
+        task_scoped_key = n4js.create_task(transformation_scoped_key)
+
+        protocol_unit_failure = protocoldagresults_failure[0].protocol_unit_failures[0]
+
+        pdrr = ProtocolDAGResultRef(
+            scope=task_scoped_key.scope,
+            obj_key=protocoldagresults_failure[0].key,
+            ok=protocoldagresults_failure[0].ok(),
+        )
+
+        # push the result
+        pdrr_scoped_key = n4js.set_task_result(task_scoped_key, pdrr)
+
+        # simulating many failures
+        protocol_unit_failures = []
+        for failure_index in range(failure_count):
+            protocol_unit_failures.append(
+                protocol_unit_failure.copy_with_replacements(
+                    traceback=protocol_unit_failure.traceback + "_" + str(failure_index)
+                )
+            )
+
+        n4js.add_protocol_dag_result_ref_tracebacks(
+            protocol_unit_failures, pdrr_scoped_key
+        )
+
+        # now test the get_task_tracebacks method
+        tracebacks = n4js.get_task_tracebacks(task_scoped_key)
+
+        assert len(tracebacks) == 1  # one ProtocolDAGResultRef
+
+        # check that the traceback mapping is correct
+        traceback_dict = tracebacks[0]
+        assert len(traceback_dict) == failure_count
+
+        for puf in protocol_unit_failures:
+            assert puf.key in traceback_dict
+            assert traceback_dict[puf.key] == puf.traceback
+
+    def test_get_task_tracebacks_no_failures(
+        self,
+        network_tyk2,
+        n4js,
+        scope_test,
+    ):
+        """Test that get_task_tracebacks returns empty list for task with no failures."""
+        an = network_tyk2.copy_with_replacements(
+            name=network_tyk2.name + "_test_get_task_tracebacks_no_failures"
+        )
+        n4js.assemble_network(an, scope_test)
+        transformation = list(an.edges)[0]
+        transformation_scoped_key = n4js.get_scoped_key(transformation, scope_test)
+
+        # create a task without any results
+        task_scoped_key = n4js.create_task(transformation_scoped_key)
+
+        # should return empty list
+        tracebacks = n4js.get_task_tracebacks(task_scoped_key)
+        assert tracebacks == []
+
+    def test_get_task_tracebacks_multiple_failures(
+        self,
+        network_tyk2_failure,
+        n4js,
+        scope_test,
+        transformation_failure,
+        protocoldagresults_failure,
+    ):
+        """Test retrieving tracebacks when a task has multiple failed results."""
+        an = network_tyk2_failure.copy_with_replacements(
+            name=network_tyk2_failure.name + "_test_get_task_tracebacks_multiple"
+        )
+        n4js.assemble_network(an, scope_test)
+        transformation_scoped_key = n4js.get_scoped_key(
+            transformation_failure, scope_test
+        )
+
+        task_scoped_key = n4js.create_task(transformation_scoped_key)
+
+        protocol_unit_failure = protocoldagresults_failure[0].protocol_unit_failures[0]
+
+        # Create two failed ProtocolDAGResultRefs
+        for i in range(2):
+            pdrr = ProtocolDAGResultRef(
+                scope=task_scoped_key.scope,
+                obj_key=protocoldagresults_failure[i].key,
+                ok=protocoldagresults_failure[i].ok(),
+            )
+            pdrr_scoped_key = n4js.set_task_result(task_scoped_key, pdrr)
+
+            puf = protocol_unit_failure.copy_with_replacements(
+                traceback=f"Error traceback for failure {i}"
+            )
+            n4js.add_protocol_dag_result_ref_tracebacks([puf], pdrr_scoped_key)
+
+        # get tracebacks - should have 2 entries
+        tracebacks = n4js.get_task_tracebacks(task_scoped_key)
+        assert len(tracebacks) == 2
+
     ### task restart policies
 
     class TestTaskRestartPolicy:
