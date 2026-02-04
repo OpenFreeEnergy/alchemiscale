@@ -13,6 +13,7 @@ from functools import lru_cache
 from async_lru import alru_cache
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
+from gufe.archival import AlchemicalArchive
 from gufe.tokenization import GufeTokenizable, KeyedChain
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 import zstandard as zstd
@@ -1747,6 +1748,24 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return self._get_network_results(
             network=network, ok=False, compress=compress, visualize=visualize
         )
+
+    def get_network_archives(
+        self, networks: list[ScopedKey]
+    ) -> list[AlchemicalArchive | None]:
+        """Get the archives for the given ``AlchemicalNetwork`` objects.
+
+        Parameters
+        ----------
+        networks
+            A list of ``AlchemicalNetwork`` ``ScopedKey`` values. The list must contain unique values.
+
+        Returns
+        -------
+        A list of ``AlchemicalArchive`` instances matching the order
+        of ``networks``. If a network was not found, ``None`` is
+        returned in its place.
+        """
+        raise NotImplementedError
 
     def get_transformation_results(
         self,

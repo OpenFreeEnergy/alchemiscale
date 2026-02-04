@@ -258,6 +258,35 @@ def get_network_transformations(
     return [str(sk) for sk in n4js.get_network_transformations(network=sk)]
 
 
+@router.get("/bulk/networks/archive")
+def get_networks_archives(
+    *,
+    networks: list[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+
+    network_sks = [ScopedKey.from_str(sk) for sk in networks]
+
+    # check for repeated entries
+    for idx in range(len(networks_sks) - 1):
+        if networks_sks[idx] in networks[idx + 1 :]:
+            msg = "Provided network ScopedKey list contains repeats"
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST, detail=msg
+            )
+
+    for sk in network_sks:
+        validate_scopes(sk.scope, token)
+
+    archives = []
+    for sk in network_sks:
+        archive = n4js.get_network_archive(sk)
+        archives.append(archive)
+
+    return archives
+
+
 @router.get("/transformations/{transformation_scoped_key}/networks")
 def get_transformation_networks(
     transformation_scoped_key,
