@@ -1767,6 +1767,22 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         raise NotImplementedError
 
+    def get_network_archive(self, network: ScopedKey) -> AlchemicalArchive | None:
+        """Get the archive for a given ``AlchemicalNetwork``.
+
+        Parameters
+        ----------
+        network
+            The ``AlchemicalNetwork`` to archive.
+
+        Returns
+        -------
+        An ``AlchemicalArchive`` for the provided
+        ``AlchemicalNetwork``. If the ntwork was not found, ``None``
+        is returned.
+        """
+        return self.get_network_archives([network])[0]
+
     def get_transformation_results(
         self,
         transformation: ScopedKey,

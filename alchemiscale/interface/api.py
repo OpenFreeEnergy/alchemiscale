@@ -27,6 +27,7 @@ from ..base.api import (
     _check_store_connectivity,
     GzipRoute,
 )
+from ..compression import decompress_gufe_zstd, json_to_gufe
 from ..settings import get_api_settings
 from ..settings import get_base_api_settings
 from ..storage.statestore import Neo4jStore
@@ -256,6 +257,53 @@ def get_network_transformations(
     validate_scopes(sk.scope, token)
 
     return [str(sk) for sk in n4js.get_network_transformations(network=sk)]
+
+
+def _get_network_archive(n4js: Neo4JStore, network: ScopedKey):
+    try:
+        an = n4js.get_gufe(network)
+    except KeyError:
+        return None
+
+    transformation_sks = n4js.get_network_transformations(network)
+
+    transformation_results = []
+    for transformation_sk in transformation_sks:
+        pdrrs_sks = n4js.get_transformation_results(transformation_sk)
+        if not pdrs:
+            continue
+        transformation = n4js.get_gufe(transformation_sk)
+        transform_results.append([transformation, []])
+        for pdrr_sk in pdrr_sks:
+            try:
+                pdrr = n4js.get_gufe(pdrr_sk)
+            except KeyError:
+                raise HTTPException(
+                    status_code=http_status.HTTP_400_BAD_REQUEST,
+                    detail=str(e),
+                )
+            pdr_sk = ScopedKey(
+                gufe_key=protocoldagresultref.obj_key, **sk.scope.to_dict()
+            )
+            try:
+                pdr_bytes: str = s3os.pull_protocoldagresult(
+                    pdr_sk, transformation_sk, ok=ok
+                )
+            except Exception:
+                pdr_bytes: str = s3os.pull_protocoldagresult(
+                    location=protocoldagresultref.location,
+                    ok=True,
+                )
+            try:
+                pdr = decompress_gufe_zstd(pdr_bytes)
+            except zstd.ZstdError:
+                pdr = json_to_gufe(pdr_bytes.decode("utf-8"))
+            transformation_results[-1][1].append(pdr)
+
+    archive = AlchemicalArchive(
+        network=an, transform_results=transform_results, metadata={}
+    )
+    return archive
 
 
 @router.get("/bulk/networks/archive")

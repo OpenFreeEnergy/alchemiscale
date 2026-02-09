@@ -23,7 +23,6 @@ from gufe import (
     NonTransformation,
     Protocol,
 )
-from gufe.archival import AlchemicalArchive
 from gufe.settings import SettingsBaseModel
 from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER, KeyedChain
 from gufe.protocols import ProtocolUnitFailure
@@ -1206,21 +1205,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN DISTINCT sk
         """
         return self._get_protocoldagresultrefs(q, transformation)
-
-    def get_network_archive(self, network: ScopedKey) -> AlchemicalArchive | None:
-        """Get an ``AlchemicalArchive`` for a given ``AlchemicalNetwork``
-
-        Parameters
-        ----------
-        network
-            ScopedKey of the AlchemicalNetwork.
-
-        Returns
-        -------
-        The AlchemicalArchive for the AlchemicalNetwork. If the
-        network count not be found, None is returned.
-        """
-        raise NotImplementedError
 
     ## compute
 
