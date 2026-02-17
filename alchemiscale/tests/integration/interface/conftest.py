@@ -17,7 +17,6 @@ from alchemiscale.base.api import (
 
 from alchemiscale.tests.integration.interface.utils import get_user_settings_override
 
-
 ## user api
 
 
