@@ -14,7 +14,7 @@ from async_lru import alru_cache
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
 from gufe.archival import AlchemicalArchive
-from gufe.tokenization import GufeTokenizable, KeyedChain
+from gufe.tokenization import GufeTokenizable, KeyedChain, JSON_HANDLER
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 import zstandard as zstd
 
@@ -1750,7 +1750,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
     def get_network_archives(
-        self, networks: list[ScopedKey]
+            self, networks: list[ScopedKey], metadata: list[dict | None] = None
     ) -> list[AlchemicalArchive | None]:
         """Get the archives for the given ``AlchemicalNetwork`` objects.
 
@@ -1758,14 +1758,48 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         ----------
         networks
             A list of ``AlchemicalNetwork`` ``ScopedKey`` values. The list must contain unique values.
+        metadata
+            Metadata to attach to the ``AlchemicalArchive``
+            objects. This must be a list of dictionaries that are
+            compatible with ``GufeTokenizable`` serialization, in the
+            order of the provided ``AlchemicalNetwork`` ``ScopedKey``
+            values. A ``None`` entry in the list will attach no
+            metadata to the corresponding ``AlchemicalArchive``. A
+            ``None`` in place of the list is interpretted as a list of
+            ``None``, which is the default.
 
         Returns
         -------
         A list of ``AlchemicalArchive`` instances matching the order
         of ``networks``. If a network was not found, ``None`` is
         returned in its place.
+
+        Raises
+        ------
+        A ``ValueError`` is raised if the provided metadata is not serializable or the lenghts of the metadata and networks lists are not the same.
+
         """
-        raise NotImplementedError
+
+        metadata = metadata or [None] * len(networks)
+
+        if len(metadata) != len(networks):
+            raise ValueError("metadata and networks list must be the same length")
+
+        for network, meta in zip(networks, metadata):
+            if meta:
+                try:
+                    _ = json.dumps(meta, cls=JSON_HANDLER)
+                except:
+                    raise ValueError(f"Unable to serialize metadata for {network}")
+
+        # TODO make proper request
+        raw_archives = get_archives(networks)
+
+        archives = []
+        for archive, meta in zip(raw_archives, metadata):
+            archives.append(archive.copy_with_replacements(metadata=meta) if metadata else archive)
+
+        return archives
 
     def get_network_archive(self, network: ScopedKey) -> AlchemicalArchive | None:
         """Get the archive for a given ``AlchemicalNetwork``.
