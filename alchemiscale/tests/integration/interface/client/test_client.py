@@ -8,6 +8,7 @@ import json
 
 from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey, JSON_HANDLER
+from gufe.protocols import ProtocolResult
 from gufe.protocols.protocoldag import execute_DAG
 import networkx as nx
 
@@ -2289,7 +2290,7 @@ class TestClient:
 
         # get back protocoldagresults instead
         protocoldagresults_r = user_client.get_transformation_results(
-            transformation_sk, return_protocoldagresults=True
+            transformation_sk, return_as=ResultFormat.PROTOCOL_DAG_RESULTS
         )
 
         assert set(protocoldagresults_r) == set(protocoldagresults)
@@ -2312,7 +2313,7 @@ class TestClient:
                 assert pr is None
 
         network_results = user_client.get_network_results(
-            network_sk, return_protocoldagresults=True
+            network_sk, return_as=ResultFormat.PROTOCOL_DAG_RESULTS
         )
         for tf_sk, pdrs in network_results.items():
             if tf_sk == transformation_sk:
