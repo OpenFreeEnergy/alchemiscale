@@ -1801,21 +1801,40 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return archives
 
-    def get_network_archive(self, network: ScopedKey) -> AlchemicalArchive | None:
+    def get_network_archive(self, network: ScopedKey, metadata: dict | None = None) -> AlchemicalArchive | None:
         """Get the archive for a given ``AlchemicalNetwork``.
 
         Parameters
         ----------
         network
             The ``AlchemicalNetwork`` to archive.
+        metadata
+            Metadata to attach to the ``AlchemicalArchive``. This must
+            be a dictionary that is compatible with
+            ``GufeTokenizable`` serialization.
 
         Returns
         -------
         An ``AlchemicalArchive`` for the provided
         ``AlchemicalNetwork``. If the ntwork was not found, ``None``
         is returned.
+
+        Raises
+        ------
+        A ``ValueError`` is raised if the provided metadata is not
+        serializable.
         """
-        return self.get_network_archives([network])[0]
+        match metadata:
+            case {}:
+                metadata = None
+            case dict():
+                metadata = [metadata]
+            case None:
+                pass
+            case _:
+                raise ValueError("metadata must be a dictionary or None")
+
+        return self.get_network_archives([network], metadata)[0]
 
     def get_transformation_results(
         self,
