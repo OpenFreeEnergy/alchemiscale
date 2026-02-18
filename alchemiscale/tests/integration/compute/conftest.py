@@ -163,3 +163,41 @@ def compute_api_no_auth(
 def test_client(compute_api_no_auth):
     client = TestClient(compute_api_no_auth)
     return client
+
+
+@pytest.fixture(scope="module")
+def multi_scope_token_data_depends_override(multiple_scopes):
+    """Token data override granting access to all test scopes."""
+
+    def get_token_data_depends_override():
+        token_data = TokenData(
+            entity="carl-compute",
+            scopes=[str(s) for s in multiple_scopes],
+        )
+        return token_data
+
+    return get_token_data_depends_override
+
+
+@pytest.fixture
+def multi_scope_compute_api_no_auth(
+    n4js_preloaded, s3os, multi_scope_token_data_depends_override
+):
+    def get_s3os_override():
+        return s3os
+
+    overrides = copy(api.app.dependency_overrides)
+
+    api.app.dependency_overrides[get_base_api_settings] = get_compute_settings_override
+    api.app.dependency_overrides[get_s3os_depends] = get_s3os_override
+    api.app.dependency_overrides[get_token_data_depends] = (
+        multi_scope_token_data_depends_override
+    )
+    yield api.app
+    api.app.dependency_overrides = overrides
+
+
+@pytest.fixture
+def multi_scope_test_client(multi_scope_compute_api_no_auth):
+    client = TestClient(multi_scope_compute_api_no_auth)
+    return client

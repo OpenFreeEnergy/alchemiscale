@@ -97,6 +97,11 @@ class SynchronousComputeService:
         else:
             self.scopes = self.settings.scopes
 
+        if self.settings.scopes_exclude is None:
+            self.scopes_exclude = []
+        else:
+            self.scopes_exclude = self.settings.scopes_exclude
+
         self.shared_basedir = Path(self.settings.shared_basedir).absolute()
         self.shared_basedir.mkdir(exist_ok=True)
         self.keep_shared = self.settings.keep_shared
@@ -168,6 +173,7 @@ class SynchronousComputeService:
 
         tasks = self.client.claim_tasks(
             scopes=self.scopes,
+            scopes_exclude=self.scopes_exclude,
             compute_service_id=self.compute_service_id,
             count=count,
             protocols=self.settings.protocols,
