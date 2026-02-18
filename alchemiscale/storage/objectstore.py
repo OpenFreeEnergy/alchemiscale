@@ -12,7 +12,7 @@ from functools import lru_cache
 from gufe.tokenization import GufeKey
 
 from ..models import ScopedKey
-from .models import ProtocolDAGResultRef
+from .models import ProtocolDAGResultRef, ProtocolDAGResultLog
 from ..settings import S3ObjectStoreSettings
 
 # default filename for object store files
@@ -330,8 +330,6 @@ class S3ObjectStore:
             Reference to the log in the object store.
 
         """
-        from ..storage.models import ProtocolDAGResultLog
-
         ok = protocoldagresult_ok
         route = "results" if ok else "failures"
 
@@ -360,26 +358,14 @@ class S3ObjectStore:
 
     def pull_protocoldagresult_log(
         self,
-        protocoldagresult: ScopedKey,
-        transformation: ScopedKey,
-        stream: str,
-        ok: bool = True,
-        location: str | None = None,
+        location: str,
     ) -> str:
         """Pull the log content for a ProtocolDAGResult.
 
         Parameters
         ----------
-        protocoldagresult
-            ScopedKey for ProtocolDAGResult in the object store.
-        transformation
-            The ScopedKey of the Transformation this log corresponds to.
-        stream
-            Either "stdout" or "stderr".
-        ok
-            ``True`` if ProtocolDAGResult completed successfully; ``False`` if failed.
         location
-            The full path in the object store to the log. If provided, this will be used.
+            The full path in the object store to the log file.
 
         Returns
         -------
@@ -387,23 +373,5 @@ class S3ObjectStore:
             The log content as a string.
 
         """
-        route = "results" if ok else "failures"
-
-        # build `location` based on provided ScopedKey if not provided
-        if location is None:
-            if transformation.scope != protocoldagresult.scope:
-                raise ValueError(
-                    f"transformation scope '{transformation.scope}' differs from protocoldagresult scope '{protocoldagresult.scope}'"
-                )
-
-            location = os.path.join(
-                "protocoldagresult",
-                *protocoldagresult.scope.to_tuple(),
-                transformation.gufe_key,
-                route,
-                protocoldagresult.gufe_key,
-                f"{stream}.log",
-            )
-
         log_bytes = self._get_bytes(location)
         return log_bytes.decode("utf-8")

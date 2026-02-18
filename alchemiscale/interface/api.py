@@ -1201,35 +1201,20 @@ def get_task_logs(
     """
     if stream not in ["stdout", "stderr"]:
         raise HTTPException(
-            status_code=400, detail="stream must be 'stdout' or 'stderr'"
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="stream must be 'stdout' or 'stderr'",
         )
 
     sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(sk.scope, token)
 
-    # Get all log references for this task and stream
-    log_refs = n4js.get_task_logs(sk, stream=stream)
+    # Get all log S3 locations for this task and stream
+    log_locations = n4js.get_task_log_locations(sk, stream=stream)
 
     # Retrieve the actual log content from the object store
     logs = []
-    for log_ref_sk in log_refs:
-        # Get the log reference node to extract location and other metadata
-        log_ref_data = n4js.get_scoped_key(log_ref_sk, resolve_gufe=False)
-        from ..storage.models import ProtocolDAGResultLog
-
-        log_ref = ProtocolDAGResultLog._from_dict(log_ref_data)
-
-        # Get transformation for this task
-        tf_sk, _ = n4js.get_task_transformation(task=task_scoped_key, return_gufe=False)
-
-        # Pull the log content from S3
-        log_content = s3os.pull_protocoldagresult_log(
-            protocoldagresult=ScopedKey(log_ref.scope, log_ref.obj_key),
-            transformation=tf_sk,
-            stream=stream,
-            ok=True,  # We'll try both success and failure
-            location=log_ref.location,
-        )
+    for location in log_locations:
+        log_content = s3os.pull_protocoldagresult_log(location=location)
         logs.append(log_content)
 
     return logs

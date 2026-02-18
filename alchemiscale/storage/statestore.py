@@ -3594,20 +3594,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return scoped_key
 
-    def _get_protocoldagresultlogs(self, q: str, scoped_key: ScopedKey):
-        """Helper method to retrieve ProtocolDAGResultLog ScopedKeys."""
-        sks = []
-        with self.transaction() as tx:
-            res = tx.run(q, scoped_key=str(scoped_key))
-            for rec in res:
-                sks.append(rec["sk"])
-
-        return [ScopedKey.from_str(sk) for sk in sks]
-
-    def get_task_logs(
+    def get_task_log_locations(
         self, task: ScopedKey, stream: str | None = None
-    ) -> list[ScopedKey]:
-        """Get all log references for a given Task.
+    ) -> list[str]:
+        """Get all log S3 locations for a given Task.
 
         Parameters
         ----------
@@ -3618,31 +3608,27 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Returns
         -------
-        list[ScopedKey]
-            List of ScopedKeys for ProtocolDAGResultLog objects.
+        list[str]
+            List of S3 location strings for ProtocolDAGResultLog objects.
         """
         if stream is not None and stream not in ["stdout", "stderr"]:
             raise ValueError("`stream` must be 'stdout', 'stderr', or None")
 
-        if stream is None:
-            q = """
-            MATCH (task:Task {_scoped_key: $scoped_key}),
-                  (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef),
-                  (res)-[:HAS_LOG]->(log:ProtocolDAGResultLog)
-            WITH log._scoped_key as sk
-            RETURN DISTINCT sk
-            """
-        else:
-            q = f"""
-            MATCH (task:Task {{_scoped_key: $scoped_key}}),
-                  (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef),
-                  (res)-[:HAS_LOG]->(log:ProtocolDAGResultLog)
-            WHERE log.stream = '{stream}'
-            WITH log._scoped_key as sk
-            RETURN DISTINCT sk
-            """
+        q = """
+        MATCH (task:Task {_scoped_key: $scoped_key}),
+              (task)-[:RESULTS_IN]->(res:ProtocolDAGResultRef),
+              (res)-[:HAS_LOG]->(log:ProtocolDAGResultLog)
+        WHERE ($stream IS NULL OR log.stream = $stream)
+        RETURN DISTINCT log.location as location
+        """
 
-        return self._get_protocoldagresultlogs(q, task)
+        locations = []
+        with self.transaction() as tx:
+            res = tx.run(q, scoped_key=str(task), stream=stream)
+            for rec in res:
+                locations.append(rec["location"])
+
+        return locations
 
     def set_task_status(
         self, tasks: list[ScopedKey], status: TaskStatusEnum, raise_error: bool = False

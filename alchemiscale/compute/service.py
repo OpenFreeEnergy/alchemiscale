@@ -16,6 +16,22 @@ import sys
 import io
 from contextlib import redirect_stdout, redirect_stderr
 
+
+class _TeeStream(io.TextIOBase):
+    """A stream wrapper that writes to both a capture buffer and the original stream."""
+
+    def __init__(self, capture: io.StringIO, original: io.TextIOBase):
+        self._capture = capture
+        self._original = original
+
+    def write(self, s):
+        self._capture.write(s)
+        return self._original.write(s)
+
+    def flush(self):
+        self._capture.flush()
+        self._original.flush()
+
 from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
 
@@ -245,12 +261,15 @@ class SynchronousComputeService:
 
         self.logger.info("Executing '%s'...", protocoldag)
 
-        # Capture stdout and stderr during execution
+        # Capture stdout and stderr during execution.
+        # Use _TeeStream for stderr so that logging output (which goes to
+        # stderr via the StreamHandler) is both captured and still emitted.
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
+        stderr_tee = _TeeStream(stderr_capture, sys.stderr)
 
         try:
-            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+            with redirect_stdout(stdout_capture), redirect_stderr(stderr_tee):
                 protocoldagresult = execute_DAG(
                     protocoldag,
                     shared_basedir=shared,

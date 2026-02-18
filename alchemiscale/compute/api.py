@@ -394,7 +394,7 @@ async def set_task_result(
     )
 
     # Store stdout and stderr logs if provided
-    if stdout:
+    if stdout is not None:
         stdout_log_ref = s3os.push_protocoldagresult_log(
             log_content=stdout,
             stream="stdout",
@@ -405,7 +405,7 @@ async def set_task_result(
         )
         n4js.set_protocoldagresult_log(result_sk, stdout_log_ref)
 
-    if stderr:
+    if stderr is not None:
         stderr_log_ref = s3os.push_protocoldagresult_log(
             log_content=stderr,
             stream="stderr",
