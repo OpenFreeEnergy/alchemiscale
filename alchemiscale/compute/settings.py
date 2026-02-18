@@ -141,7 +141,9 @@ class ComputeServiceSettings(BaseModel):
 
     @field_validator("scopes_exclude", mode="before")
     @classmethod
-    def validate_scopes_exclude(cls, values) -> list[Scope]:
+    def validate_scopes_exclude(cls, values) -> list[Scope] | None:
+        if values is None:
+            return None
         _values = values[:]
         for idx, value in enumerate(_values):
             if isinstance(value, Scope):
