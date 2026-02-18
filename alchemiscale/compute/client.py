@@ -148,12 +148,20 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         task: ScopedKey,
         protocoldagresult: ProtocolDAGResult,
         compute_service_id: ComputeServiceID | None = None,
+        stdout: str | None = None,
+        stderr: str | None = None,
     ) -> ScopedKey:
 
         data = dict(
             protocoldagresult=compress_gufe_zstd(protocoldagresult),
             compute_service_id=str(compute_service_id),
         )
+
+        # Add logs if provided
+        if stdout is not None:
+            data["stdout"] = stdout
+        if stderr is not None:
+            data["stderr"] = stderr
 
         pdr_sk = self._post_resource(f"/tasks/{task}/results", data)
 

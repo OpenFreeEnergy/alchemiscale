@@ -1176,6 +1176,50 @@ def get_task_failures(
     return [str(sk) for sk in n4js.get_task_failures(sk)]
 
 
+@router.get("/tasks/{task_scoped_key}/logs/{stream}")
+def get_task_logs(
+    task_scoped_key,
+    stream: str,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    """Get log content for a Task.
+
+    Parameters
+    ----------
+    task_scoped_key
+        The ScopedKey of the Task.
+    stream
+        Either "stdout" or "stderr".
+
+    Returns
+    -------
+    list[str]
+        List of log contents from all ProtocolDAGResults for this Task.
+    """
+    if stream not in ["stdout", "stderr"]:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="stream must be 'stdout' or 'stderr'",
+        )
+
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    # Get all log S3 locations for this task and stream
+    log_locations = n4js.get_task_log_locations(sk, stream=stream)
+
+    # Retrieve the actual log content from the object store
+    logs = []
+    for location in log_locations:
+        log_content = s3os.pull_protocoldagresult_log(location=location)
+        logs.append(log_content)
+
+    return logs
+
+
 ### strategies
 
 
