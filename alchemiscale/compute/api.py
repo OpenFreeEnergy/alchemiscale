@@ -52,7 +52,6 @@ from ..security.models import (
     CredentialedComputeIdentity,
 )
 
-
 app = FastAPI(title="AlchemiscaleComputeAPI")
 app.dependency_overrides[get_base_api_settings] = get_compute_api_settings
 app.include_router(base_router)

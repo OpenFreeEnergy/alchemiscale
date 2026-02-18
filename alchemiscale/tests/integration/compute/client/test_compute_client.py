@@ -66,12 +66,10 @@ class TestComputeClient:
         out = compute_client.register(compute_service_id)
         assert out == compute_service_id
 
-        csreg = n4js_preloaded.graph.execute_query(
-            f"""
+        csreg = n4js_preloaded.graph.execute_query(f"""
             match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
-            """
-        )
+            """)
 
         assert csreg.records
         assert (
