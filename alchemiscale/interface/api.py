@@ -328,7 +328,7 @@ def get_networks_archives(
     archives = []
     for sk in network_sks:
         archive = n4js.get_network_archive(sk)
-        archives.append(archive)
+        archives.append(archive.to_json())
 
     return archives
 

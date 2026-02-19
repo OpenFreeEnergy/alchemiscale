@@ -1746,7 +1746,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
     def get_network_archives(
-            self, networks: list[ScopedKey], metadata: list[dict | None] = None
+        self, networks: list[ScopedKey], metadata: list[dict | None] = None
     ) -> list[AlchemicalArchive | None]:
         """Get the archives for the given ``AlchemicalNetwork`` objects.
 
@@ -1788,16 +1788,21 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 except:
                     raise ValueError(f"Unable to serialize metadata for {network}")
 
-        # TODO make proper request
-        raw_archives = get_archives(networks)
+        data = {"networks": list(map(str, networks))}
+        raw_archives = self._post_resource(f"/bulk/networks/archive", data)
 
         archives = []
         for archive, meta in zip(raw_archives, metadata):
-            archives.append(archive.copy_with_replacements(metadata=meta) if metadata else archive)
+            _archive = AlchemicalArchive.from_json(archive)
+            archives.append(
+                _archive.copy_with_replacements(metadata=meta) if metadata else _archive
+            )
 
         return archives
 
-    def get_network_archive(self, network: ScopedKey, metadata: dict | None = None) -> AlchemicalArchive | None:
+    def get_network_archive(
+        self, network: ScopedKey, metadata: dict | None = None
+    ) -> AlchemicalArchive | None:
         """Get the archive for a given ``AlchemicalNetwork``.
 
         Parameters
