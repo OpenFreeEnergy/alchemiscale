@@ -16,7 +16,8 @@ from functools import lru_cache
 from async_lru import alru_cache
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
-from gufe.tokenization import GufeTokenizable, KeyedChain
+from gufe.archival import AlchemicalArchive
+from gufe.tokenization import GufeTokenizable, KeyedChain, JSON_HANDLER
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 import zstandard as zstd
 
@@ -34,6 +35,7 @@ from ..storage.models import (
     StrategyState,
 )
 from stratocaster.base import Strategy
+from ..utils import pdr_from_bytes
 from ..validators import validate_network_nonself
 
 from warnings import warn
@@ -1556,12 +1558,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     pdr_bytes,
                 )
 
-        try:
-            # Attempt to decompress the ProtocolDAGResult object
-            pdr = decompress_gufe_zstd(pdr_bytes)
-        except zstd.ZstdError:
-            # If decompress fails, assume it's a UTF-8 encoded JSON string
-            pdr = json_to_gufe(pdr_bytes.decode("utf-8"))
+        pdr = pdr_from_bytes(pdr_bytes)
 
         return pdr
 
@@ -1796,6 +1793,98 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return self._get_network_results(
             network=network, ok=False, compress=compress, visualize=visualize
         )
+
+    def get_network_archives(
+        self, networks: list[ScopedKey], metadata: list[dict | None] = None
+    ) -> list[AlchemicalArchive | None]:
+        """Get the archives for the given ``AlchemicalNetwork`` objects.
+
+        Parameters
+        ----------
+        networks
+            A list of ``AlchemicalNetwork`` ``ScopedKey`` values. The list must contain unique values.
+        metadata
+            Metadata to attach to the ``AlchemicalArchive``
+            objects. This must be a list of dictionaries that are
+            compatible with ``GufeTokenizable`` serialization, in the
+            order of the provided ``AlchemicalNetwork`` ``ScopedKey``
+            values. A ``None`` entry in the list will attach no
+            metadata to the corresponding ``AlchemicalArchive``. A
+            ``None`` in place of the list is interpretted as a list of
+            ``None``, which is the default.
+
+        Returns
+        -------
+        A list of ``AlchemicalArchive`` instances matching the order
+        of ``networks``. If a network was not found, ``None`` is
+        returned in its place.
+
+        Raises
+        ------
+        A ``ValueError`` is raised if the provided metadata is not serializable or the lenghts of the metadata and networks lists are not the same.
+
+        """
+
+        metadata = metadata or [None] * len(networks)
+
+        if len(metadata) != len(networks):
+            raise ValueError("metadata and networks list must be the same length")
+
+        for network, meta in zip(networks, metadata):
+            if meta:
+                try:
+                    _ = json.dumps(meta, cls=JSON_HANDLER)
+                except:
+                    raise ValueError(f"Unable to serialize metadata for {network}")
+
+        data = {"networks": list(map(str, networks))}
+        raw_archives = self._post_resource(f"/bulk/networks/archive", data)
+
+        archives = []
+        for archive, meta in zip(raw_archives, metadata):
+            _archive = AlchemicalArchive.from_json(archive)
+            archives.append(
+                _archive.copy_with_replacements(metadata=meta) if metadata else _archive
+            )
+
+        return archives
+
+    def get_network_archive(
+        self, network: ScopedKey, metadata: dict | None = None
+    ) -> AlchemicalArchive | None:
+        """Get the archive for a given ``AlchemicalNetwork``.
+
+        Parameters
+        ----------
+        network
+            The ``AlchemicalNetwork`` to archive.
+        metadata
+            Metadata to attach to the ``AlchemicalArchive``. This must
+            be a dictionary that is compatible with
+            ``GufeTokenizable`` serialization.
+
+        Returns
+        -------
+        An ``AlchemicalArchive`` for the provided
+        ``AlchemicalNetwork``. If the ntwork was not found, ``None``
+        is returned.
+
+        Raises
+        ------
+        A ``ValueError`` is raised if the provided metadata is not
+        serializable.
+        """
+        match metadata:
+            case {}:
+                metadata = None
+            case dict():
+                metadata = [metadata]
+            case None:
+                pass
+            case _:
+                raise ValueError("metadata must be a dictionary or None")
+
+        return self.get_network_archives([network], metadata)[0]
 
     def get_transformation_results(
         self,
