@@ -35,6 +35,7 @@ from ..storage.objectstore import S3ObjectStore
 from ..storage.models import TaskStatusEnum, StrategyState
 from ..models import Scope, ScopedKey
 from ..security.models import TokenData, CredentialedUserIdentity
+from ..utils import pdr_from_bytes
 
 app = FastAPI(title="AlchemiscaleAPI")
 app.dependency_overrides[get_base_api_settings] = get_api_settings
@@ -294,10 +295,7 @@ def _get_network_archive(n4js: Neo4JStore, network: ScopedKey):
                     location=protocoldagresultref.location,
                     ok=True,
                 )
-            try:
-                pdr = decompress_gufe_zstd(pdr_bytes)
-            except zstd.ZstdError:
-                pdr = json_to_gufe(pdr_bytes.decode("utf-8"))
+            pdr = pdr_from_bytes(pdr_bytes)
             transformation_results[-1][1].append(pdr)
 
     archive = AlchemicalArchive(

@@ -32,6 +32,7 @@ from ..storage.models import (
     StrategyState,
 )
 from stratocaster.base import Strategy
+from ..utils import pdr_from_bytes
 from ..validators import validate_network_nonself
 
 from warnings import warn
@@ -1536,12 +1537,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     pdr_bytes,
                 )
 
-        try:
-            # Attempt to decompress the ProtocolDAGResult object
-            pdr = decompress_gufe_zstd(pdr_bytes)
-        except zstd.ZstdError:
-            # If decompress fails, assume it's a UTF-8 encoded JSON string
-            pdr = json_to_gufe(pdr_bytes.decode("utf-8"))
+        pdr = pdr_from_bytes(pdr_bytes)
 
         return pdr
 
