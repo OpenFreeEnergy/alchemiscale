@@ -157,3 +157,26 @@ class ComputeManagerSettings(BaseModel):
         "WARN",
         description="The loglevel at which to report; see the :mod:`logging` docs for available levels.",
     )
+    client_max_retries: int = Field(
+        5,
+        description=(
+            "Maximum number of times to retry a request to alchemiscale. "
+            "In the case the API service is unresponsive an expoenential backoff "
+            "is applied with retries until this number is reached. "
+            "If set to -1, retries will continue indefinitely until success."
+        ),
+    )
+    client_retry_base_seconds: float = Field(
+        2.0,
+        description=(
+            "The base number of seconds to use for exponential backoff to alchemiscale. "
+            "Must be greater than 1.0.",
+        ),
+    )
+    client_retry_max_seconds: float = Field(
+        60.0,
+        description=(
+            "Maximum number of seconds to sleep between retries to alchemiscale; "
+            "avoids runaway exponential backoff while allowing for many retries."
+        ),
+    )

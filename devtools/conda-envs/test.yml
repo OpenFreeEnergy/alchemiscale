@@ -7,8 +7,8 @@ dependencies:
   - cuda-version >=12
 
   # alchemiscale dependencies
-  - gufe=1.6.1
-  - openfe=1.6.1
+  - gufe =1.7.1
+  - openfe =1.8.0
   - pydantic >2
   - pydantic-settings
   - async-lru
@@ -58,4 +58,4 @@ dependencies:
 
   - pip:
     - git+https://github.com/datryllic/grolt # neo4j test server deployment
-    - git+https://github.com/OpenFreeEnergy/openfe-benchmarks
+    - git+https://github.com/OpenFreeEnergy/openfe-benchmarks@v0.1.0

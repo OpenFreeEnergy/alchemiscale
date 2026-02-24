@@ -34,7 +34,6 @@ from ..storage.models import TaskStatusEnum, StrategyState
 from ..models import Scope, ScopedKey
 from ..security.models import TokenData, CredentialedUserIdentity
 
-
 app = FastAPI(title="AlchemiscaleAPI")
 app.dependency_overrides[get_base_api_settings] = get_api_settings
 app.include_router(base_router)
