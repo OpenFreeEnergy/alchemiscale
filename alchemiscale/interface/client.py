@@ -1330,17 +1330,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return list(chain.from_iterable(values))
 
-        coro = async_request(self)
-
-        try:
-            return asyncio.run(coro)
-        except RuntimeError:
-            # we use nest_asyncio to support environments where an event loop
-            # is already running, such as in a Jupyter notebook
-            import nest_asyncio
-
-            nest_asyncio.apply()
-            return asyncio.run(coro)
+        return self._run_async(async_request(self))
 
     def _batched_attribute_setter(
         self,
@@ -1368,17 +1358,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return list(chain.from_iterable(scoped_keys))
 
-        coro = async_request(self)
-
-        try:
-            return asyncio.run(coro)
-        except RuntimeError:
-            # we use nest_asyncio to support environments where an event loop
-            # is already running, such as in a Jupyter notebook
-            import nest_asyncio
-
-            nest_asyncio.apply()
-            return asyncio.run(coro)
+        return self._run_async(async_request(self))
 
     async def _set_task_status(
         self, tasks: list[ScopedKey], status: TaskStatusEnum
@@ -1620,17 +1600,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return pdrs
 
-        coro = async_request(self)
-
-        try:
-            return asyncio.run(coro)
-        except RuntimeError:
-            # we use nest_asyncio to support environments where an event loop
-            # is already running, such as in a Jupyter notebook
-            import nest_asyncio
-
-            nest_asyncio.apply()
-            return asyncio.run(coro)
+        return self._run_async(async_request(self))
 
     def _get_network_results(
         self,
