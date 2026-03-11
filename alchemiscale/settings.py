@@ -69,6 +69,8 @@ class APISettings(BaseAPISettings):
     ALCHEMISCALE_API_HOST: str = "127.0.0.1"
     ALCHEMISCALE_API_PORT: int = 80
     ALCHEMISCALE_API_LOGLEVEL: str = "info"
+    ALCHEMISCALE_API_MAX_TASKS_WAITING: int = 0
+    ALCHEMISCALE_API_MAX_TASKS_ACTIONED: int = 0
 
 
 class ComputeAPISettings(BaseAPISettings):

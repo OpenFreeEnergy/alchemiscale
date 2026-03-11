@@ -27,8 +27,7 @@ from ..base.api import (
     _check_store_connectivity,
     GzipRoute,
 )
-from ..settings import get_api_settings
-from ..settings import get_base_api_settings
+from ..settings import get_api_settings, get_base_api_settings, APISettings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
 from ..storage.models import TaskStatusEnum, StrategyState
@@ -401,21 +400,32 @@ def create_tasks(
     count: int = Body(...),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
-) -> list[str]:
+    settings: APISettings = Depends(get_api_settings),
+) -> list[str | None]:
     sk = ScopedKey.from_str(transformation_scoped_key)
     validate_scopes(sk.scope, token)
 
+    task_sks = count * [None]
+    if max_waiting_tasks := settings.ALCHEMISCALE_API_MAX_TASKS_WAITING:
+        current_waiting = len(
+            n4js.get_transformation_tasks(sk, status=TaskStatusEnum.WAITING.value)
+        )
+        if current_waiting >= max_waiting_tasks:
+            return task_sks
+        count = max_waiting_tasks - current_waiting
+
     try:
-        task_sks = n4js.create_tasks(
+        _task_sks = n4js.create_tasks(
             [sk] * count, [extends] * count, creator=token.entity
         )
+        task_sks[: len(_task_sks)] = _task_sks
     except ValueError as e:
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
 
-    return [str(sk) for sk in task_sks]
+    return [str(sk) if sk else None for sk in task_sks]
 
 
 @router.post("/bulk/transformations/tasks/create")
@@ -695,6 +705,7 @@ def action_tasks(
     weight: float | list[float] | None = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
+    settings: APISettings = Depends(get_api_settings),
 ) -> list[str | None]:
     sk = ScopedKey.from_str(network_scoped_key)
     validate_scopes(sk.scope, token)
@@ -704,21 +715,33 @@ def action_tasks(
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    actioned_sks = n4js.action_tasks(tasks, taskhub_sk)
+    actioned_sks = [None] * len(tasks)
+    _tasks = tasks
+    if max_allowed_actioned_tasks := settings.ALCHEMISCALE_API_MAX_TASKS_ACTIONED:
+        num_actioned_tasks = len(
+            n4js.get_taskhub_actioned_tasks([taskhub_sk])[taskhub_sk]
+        )
+        if num_actioned_tasks >= max_allowed_actioned_tasks:
+            return action_tasks
+        _tasks = _tasks[: (max_allowed_actioned_tasks - num_actioned_tasks) + 1]
+
+    _actioned_sks = n4js.action_tasks(_tasks, taskhub_sk)
+    actioned_sks[: len(_actioned_sks)] = _actioned_sks
 
     try:
         if isinstance(weight, float):
-            n4js.set_task_weights(tasks, taskhub_sk, weight)
+            n4js.set_task_weights(_tasks, taskhub_sk, weight)
         elif isinstance(weight, list):
+            # check against original number of tasks
             if len(weight) != len(tasks):
                 detail = "weight (when in a list) must have the same length as tasks"
                 raise HTTPException(
                     status_code=http_status.HTTP_400_BAD_REQUEST,
                     detail=detail,
                 )
-
+            # zip limits weight application to tasks selected in _tasks
             n4js.set_task_weights(
-                {task: weight for task, weight in zip(tasks, weight)}, taskhub_sk, None
+                {task: weight for task, weight in zip(_tasks, weight)}, taskhub_sk, None
             )
     except ValueError as e:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
