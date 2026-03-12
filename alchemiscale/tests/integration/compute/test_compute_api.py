@@ -1,9 +1,12 @@
+import json
+
 import pytest
 
 from gufe import Transformation
 
 from alchemiscale.base.client import json_to_gufe
-from alchemiscale.models import ScopedKey
+from alchemiscale.models import Scope, ScopedKey
+from alchemiscale.storage.models import ComputeServiceID
 
 
 class TestComputeAPI:
@@ -106,3 +109,104 @@ class TestComputeAPI:
 
     #    assert len(objs) == 1
     #    assert objs[0].key == os.path.join(s3os.prefix, objstoreref.location)
+
+    def test_claim_tasks_with_scopes_exclude(
+        self,
+        n4js_preloaded,
+        multi_scope_test_client,
+        multiple_scopes,
+        scope_test,
+        compute_service_id,
+    ):
+        """Test that scopes_exclude filters out taskhubs matching excluded scopes."""
+        # register a compute service
+        multi_scope_test_client.post(
+            f"/computeservice/{compute_service_id}/register",
+            content=json.dumps({"compute_manager_id": None}),
+        )
+
+        # claim tasks with all scopes, no exclusions
+        data = dict(
+            scopes=[s.to_dict() for s in multiple_scopes],
+            scopes_exclude=None,
+            compute_service_id=str(compute_service_id),
+            count=1,
+            protocols=None,
+        )
+        response = multi_scope_test_client.post("/claim", content=json.dumps(data))
+        assert response.status_code == 200
+        tasks_no_exclude = response.json()
+        assert len(tasks_no_exclude) == 1
+        assert tasks_no_exclude[0] is not None
+
+        # claim tasks excluding scope_test — should still get tasks from other scopes
+        data_with_exclude = dict(
+            scopes=[s.to_dict() for s in multiple_scopes],
+            scopes_exclude=[scope_test.to_dict()],
+            compute_service_id=str(compute_service_id),
+            count=1,
+            protocols=None,
+        )
+        response = multi_scope_test_client.post(
+            "/claim", content=json.dumps(data_with_exclude)
+        )
+        assert response.status_code == 200
+        tasks_with_exclude = response.json()
+        assert len(tasks_with_exclude) == 1
+        # the claimed task should not be from scope_test
+        if tasks_with_exclude[0] is not None:
+            claimed_sk = ScopedKey.from_str(tasks_with_exclude[0])
+            assert claimed_sk.scope != scope_test
+
+    def test_claim_tasks_scopes_exclude_all(
+        self,
+        n4js_preloaded,
+        multi_scope_test_client,
+        multiple_scopes,
+        compute_service_id,
+    ):
+        """Test that excluding all scopes returns an empty list."""
+        # register a compute service
+        multi_scope_test_client.post(
+            f"/computeservice/{compute_service_id}/register",
+            content=json.dumps({"compute_manager_id": None}),
+        )
+
+        # exclude all scopes — should return empty list
+        data = dict(
+            scopes=[s.to_dict() for s in multiple_scopes],
+            scopes_exclude=[s.to_dict() for s in multiple_scopes],
+            compute_service_id=str(compute_service_id),
+            count=1,
+            protocols=None,
+        )
+        response = multi_scope_test_client.post("/claim", content=json.dumps(data))
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_claim_tasks_scopes_exclude_wildcard(
+        self,
+        n4js_preloaded,
+        multi_scope_test_client,
+        multiple_scopes,
+        compute_service_id,
+    ):
+        """Test that a wildcard exclusion scope filters all matching taskhubs."""
+        # register a compute service
+        multi_scope_test_client.post(
+            f"/computeservice/{compute_service_id}/register",
+            content=json.dumps({"compute_manager_id": None}),
+        )
+
+        # exclude with a wildcard scope that matches everything
+        wildcard_scope = Scope()  # org=None, campaign=None, project=None => *-*-*
+        data = dict(
+            scopes=[s.to_dict() for s in multiple_scopes],
+            scopes_exclude=[wildcard_scope.to_dict()],
+            compute_service_id=str(compute_service_id),
+            count=1,
+            protocols=None,
+        )
+        response = multi_scope_test_client.post("/claim", content=json.dumps(data))
+        assert response.status_code == 200
+        assert response.json() == []

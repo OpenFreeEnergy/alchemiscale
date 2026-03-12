@@ -66,10 +66,12 @@ class TestComputeClient:
         out = compute_client.register(compute_service_id)
         assert out == compute_service_id
 
-        csreg = n4js_preloaded.graph.execute_query(f"""
+        csreg = n4js_preloaded.graph.execute_query(
+            f"""
             match (csreg:ComputeServiceRegistration {{identifier: '{compute_service_id}'}})
             return csreg
-            """)
+            """
+        )
 
         assert csreg.records
         assert (
@@ -221,6 +223,48 @@ class TestComputeClient:
         assert [t.gufe_key for t in task_sks] == [
             t.gufe_key for t in all_tasks if priorities[t] == 1
         ]
+
+    def test_claim_tasks_scopes_exclude(
+        self,
+        scope_test,
+        n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        compute_service_id,
+        uvicorn_server,
+    ):
+        # register compute service id
+        compute_client.register(compute_service_id)
+
+        # claim with scopes_exclude matching scope_test — should return empty
+        # since the client token only has access to scope_test
+        task_sks = compute_client.claim_tasks(
+            scopes=[scope_test],
+            scopes_exclude=[scope_test],
+            compute_service_id=compute_service_id,
+        )
+
+        assert task_sks == []
+
+    def test_claim_tasks_scopes_exclude_none(
+        self,
+        scope_test,
+        n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        compute_service_id,
+        uvicorn_server,
+    ):
+        # register compute service id
+        compute_client.register(compute_service_id)
+
+        # claim with scopes_exclude=None (default) — should work normally
+        task_sks = compute_client.claim_tasks(
+            scopes=[scope_test],
+            scopes_exclude=None,
+            compute_service_id=compute_service_id,
+        )
+
+        assert len(task_sks) == 1
+        assert task_sks[0] is not None
 
     def test_get_task_transformation(
         self,
