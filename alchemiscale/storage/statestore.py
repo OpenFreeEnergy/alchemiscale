@@ -3547,6 +3547,54 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
+    def get_task_tracebacks(
+        self, task: ScopedKey
+    ) -> list[dict[str, str]]:
+        """Get all stored tracebacks associated with a given Task.
+
+        This method retrieves traceback information from failed ProtocolDAGResults
+        associated with the Task. Each traceback is returned as a dictionary mapping
+        the ProtocolUnitFailure GufeKey to its corresponding traceback string.
+
+        Parameters
+        ----------
+        task
+            The ScopedKey of the Task to retrieve tracebacks for.
+
+        Returns
+        -------
+        list[dict[str, str]]
+            A list of dictionaries, one per failed ProtocolDAGResultRef associated
+            with the Task. Each dictionary maps ProtocolUnitFailure GufeKey strings
+            to their corresponding traceback strings. Returns an empty list if no
+            tracebacks are found, including for Tasks that have no failures or do
+            not exist.
+
+        """
+        q = """
+        MATCH (task:Task {_scoped_key: $scoped_key})-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)<-[:DETAILS]-(tracebacks:Tracebacks)
+        WHERE pdrr.ok = false
+        RETURN tracebacks.tracebacks AS tracebacks, tracebacks.failure_keys AS failure_keys
+        ORDER BY pdrr.datetime_created DESC
+        """
+
+        results = []
+        with self.transaction() as tx:
+            res = tx.run(q, scoped_key=str(task))
+
+            for record in res:
+                tracebacks = record["tracebacks"]
+                failure_keys = record["failure_keys"]
+
+                # Create a mapping of failure_key -> traceback
+                traceback_mapping = {}
+                for failure_key, traceback in zip(failure_keys, tracebacks):
+                    traceback_mapping[failure_key] = traceback
+
+                results.append(traceback_mapping)
+
+        return results
+
     def set_task_status(
         self, tasks: list[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
     ) -> list[ScopedKey | None]:

@@ -2633,6 +2633,137 @@ class TestClient:
         # TODO: can we mix in a success in here somewhere?
         # not possible with current BrokenProtocol, unfortunately
 
+    def test_get_task_tracebacks(
+        self,
+        scope_test,
+        n4js_preloaded,
+        s3os_server,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2_failure,
+        tmpdir,
+    ):
+        """Test that get_task_tracebacks returns traceback information for failed tasks."""
+        n4js = n4js_preloaded
+
+        # select the transformation we want to compute
+        an = network_tyk2_failure
+        network_sk = user_client.create_network(an, scope_test)
+
+        # ensure full AlchemicalNetwork is present before we proceed
+        while True:
+            try:
+                an_ = user_client.get_network(network_sk)
+
+                if an_ != an:
+                    raise Exception("Network out doesn't exactly match network in yet")
+                else:
+                    break
+            except Exception:
+                sleep(0.1)
+
+        tf_sks = user_client.get_network_transformations(network_sk)
+
+        # select the transformation we want to compute
+        for tf_sk in tf_sks:
+            tf = user_client.get_transformation(tf_sk)
+            if tf.name == "broken":
+                transformation_sk = tf_sk
+                break
+
+        # user client : create tasks for the transformation
+        tasks = user_client.create_tasks(transformation_sk, count=1)
+
+        # action the tasks
+        actioned_tasks = user_client.action_tasks(tasks, network_sk)
+
+        # execute the task and push results directly
+        with tmpdir.as_cwd():
+            try:
+                protocoldagresults = self._execute_tasks(
+                    actioned_tasks, n4js, s3os_server
+                )
+            except TypeError as e:
+                if (
+                    str(e)
+                    == "Transformation.__init__() missing 3 required positional arguments: 'stateA', 'stateB', and 'protocol'"
+                ):
+                    pytest.xfail()
+                else:
+                    raise e
+
+            # push results and add tracebacks for failures
+            for task_sk, pdr in zip(actioned_tasks, protocoldagresults):
+                transformation_sk_task, _ = n4js.get_task_transformation(
+                    task_sk, return_gufe=False
+                )
+                protocoldagresultref = s3os_server.push_protocoldagresult(
+                    compress_gufe_zstd(pdr),
+                    pdr.ok(),
+                    pdr.key,
+                    transformation=transformation_sk_task,
+                )
+                result_sk = n4js.set_task_result(
+                    task=task_sk, protocoldagresultref=protocoldagresultref
+                )
+
+                # add tracebacks for failures (this is what we're testing)
+                if not pdr.ok():
+                    n4js.add_protocol_dag_result_ref_tracebacks(
+                        pdr.protocol_unit_failures, result_sk
+                    )
+                    n4js.set_task_error(tasks=[task_sk])
+
+        # now test get_task_tracebacks
+        for task in tasks:
+            tracebacks = user_client.get_task_tracebacks(task)
+
+            # should have at least one set of tracebacks for the failed task
+            assert len(tracebacks) >= 1
+
+            # each entry should be a dict mapping failure key to traceback
+            for tb_dict in tracebacks:
+                assert isinstance(tb_dict, dict)
+                for failure_key, traceback_str in tb_dict.items():
+                    assert isinstance(failure_key, str)
+                    assert isinstance(traceback_str, str)
+                    # traceback should not be empty
+                    assert len(traceback_str) > 0
+
+    def test_get_task_tracebacks_no_failures(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        """Test that get_task_tracebacks returns empty list for task with no failures."""
+        n4js = n4js_preloaded
+
+        # create a simple network and task but don't execute it
+        an = network_tyk2
+        network_sk = user_client.create_network(an, scope_test)
+
+        # ensure full AlchemicalNetwork is present before we proceed
+        while True:
+            try:
+                an_ = user_client.get_network(network_sk)
+                if an_ != an:
+                    raise Exception("Network out doesn't exactly match network in yet")
+                else:
+                    break
+            except Exception:
+                sleep(0.1)
+
+        tf_sks = user_client.get_network_transformations(network_sk)
+        transformation_sk = tf_sks[0]
+
+        # create a task but don't execute it
+        tasks = user_client.create_tasks(transformation_sk, count=1)
+
+        # get_task_tracebacks should return empty list
+        tracebacks = user_client.get_task_tracebacks(tasks[0])
+        assert tracebacks == []
+
 
 class TestTaskRestartPolicy:
     default_max_retries = 3
