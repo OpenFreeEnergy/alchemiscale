@@ -159,6 +159,26 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 
         return ScopedKey.from_dict(pdr_sk)
 
+    def set_task_error(
+        self,
+        task: ScopedKey,
+        reason: str | None = None,
+        compute_service_id: ComputeServiceID | None = None,
+    ) -> ScopedKey:
+        """Set a task to error status with an optional reason.
+
+        This is used when a task fails before a ProtocolDAGResult can be created,
+        such as during ProtocolDAG creation from a Transformation.
+        """
+        data = dict(
+            reason=reason,
+            compute_service_id=str(compute_service_id),
+        )
+
+        task_sk = self._post_resource(f"/tasks/{task}/error", data)
+
+        return ScopedKey.from_dict(task_sk)
+
 
 class AlchemiscaleComputeManagerClientError(AlchemiscaleBaseClientError): ...
 

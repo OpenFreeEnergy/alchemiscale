@@ -180,6 +180,14 @@ class Task(GufeTokenizable):
     claim
         Identifier of the compute service that has a claim on this task.
     datetime_created
+        Timestamp when the task was created.
+    creator
+        Identifier of who/what created the task.
+    extends
+        Reference to another task this task extends from.
+    reason
+        Optional reason field for task state changes, e.g., error tracebacks
+        or user-provided reasons for manual state changes to deleted/invalid.
 
     """
 
@@ -189,6 +197,7 @@ class Task(GufeTokenizable):
     datetime_created: datetime.datetime | None
     creator: str | None
     extends: str | None
+    reason: str | None
 
     def __init__(
         self,
@@ -199,6 +208,7 @@ class Task(GufeTokenizable):
         creator: str | None = None,
         extends: str | None = None,
         claim: str | None = None,
+        reason: str | None = None,
         _key: str = None,
     ):
         if _key is not None:
@@ -216,6 +226,7 @@ class Task(GufeTokenizable):
         self.creator = creator
         self.extends = extends
         self.claim = claim
+        self.reason = reason
 
     def _gufe_tokenize(self):
         # tokenize with uuid
@@ -229,6 +240,7 @@ class Task(GufeTokenizable):
             "creator": self.creator,
             "extends": self.extends,
             "claim": self.claim,
+            "reason": self.reason,
             "_key": str(self.key),
         }
 
