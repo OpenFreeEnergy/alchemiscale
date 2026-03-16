@@ -434,11 +434,15 @@ If there are complete :py:class:`~alchemiscale.storage.models.Task`\s, we can pu
 
 This object features a :external+gufe:py:meth:`~gufe.protocols.protocol.ProtocolResult.get_estimate` and :external+gufe:py:meth:`~gufe.protocols.protocol.ProtocolResult.get_uncertainty` method, giving the best available estimate of the free energy difference and its uncertainty. 
 
-To pull the :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s and not combine them into a :external+gufe:py:class:`~gufe.protocols.protocol.ProtocolResult` object, you can give ``return_protocoldagresults=True`` to this method.
+To get individual :external+gufe:py:class:`~gufe.protocols.protocol.ProtocolResult`\s for each :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult` rather than a single aggregated result, use ``return_as='ProtocolResults'``::
+
+    >>> from alchemiscale import ResultFormat
+    >>> protocol_results = asc.get_transformation_results(tf_sk, return_as=ResultFormat.PROTOCOL_RESULTS)
+
+To pull the raw :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s, use ``return_as='ProtocolDAGResults'``.
 Any number of :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s can then be manually combined into a single :external+gufe:py:class:`~gufe.protocols.protocol.ProtocolResult` with::
 
-    >>> # protocol_dag_results: List[ProtocolDAGResult]
-    >>> protocol_dag_results = asc.get_transformation_results(tf_sk, return_protocoldagresults=True)
+    >>> protocol_dag_results = asc.get_transformation_results(tf_sk, return_as=ResultFormat.PROTOCOL_DAG_RESULTS)
     >>> protocol_result = transformation.gather(protocol_dag_results)
     >>> protocol_result
     <RelativeHybridTopologyProtocolResult-44b0f588f5f3073aa58d86e1017ef623>

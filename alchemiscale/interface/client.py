@@ -4,8 +4,11 @@
 
 """
 
+from __future__ import annotations
+
 import asyncio
-from typing import Any
+from enum import StrEnum
+from typing import Any, Literal
 from collections.abc import Iterable
 from itertools import chain
 from functools import lru_cache
@@ -39,6 +42,24 @@ from warnings import warn
 
 
 class AlchemiscaleClientError(AlchemiscaleBaseClientError): ...
+
+
+class ResultFormat(StrEnum):
+    """Format for returned results from get_transformation_results and get_network_results methods.
+
+    Attributes
+    ----------
+    PROTOCOL_RESULT
+        Return a single aggregated ProtocolResult combining all successful ProtocolDAGResults.
+    PROTOCOL_RESULTS
+        Return a list of individual ProtocolResults, one for each successful ProtocolDAGResult.
+    PROTOCOL_DAG_RESULTS
+        Return the raw list of ProtocolDAGResults.
+    """
+
+    PROTOCOL_RESULT = "ProtocolResult"
+    PROTOCOL_RESULTS = "ProtocolResults"
+    PROTOCOL_DAG_RESULTS = "ProtocolDAGResults"
 
 
 def _get_transformation_results(client_settings, tf_sk, ok: bool, kwargs):
@@ -1311,17 +1332,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return list(chain.from_iterable(values))
 
-        coro = async_request(self)
-
-        try:
-            return asyncio.run(coro)
-        except RuntimeError:
-            # we use nest_asyncio to support environments where an event loop
-            # is already running, such as in a Jupyter notebook
-            import nest_asyncio
-
-            nest_asyncio.apply()
-            return asyncio.run(coro)
+        return self._run_async(async_request(self))
 
     def _batched_attribute_setter(
         self,
@@ -1349,17 +1360,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return list(chain.from_iterable(scoped_keys))
 
-        coro = async_request(self)
-
-        try:
-            return asyncio.run(coro)
-        except RuntimeError:
-            # we use nest_asyncio to support environments where an event loop
-            # is already running, such as in a Jupyter notebook
-            import nest_asyncio
-
-            nest_asyncio.apply()
-            return asyncio.run(coro)
+        return self._run_async(async_request(self))
 
     async def _set_task_status(
         self, tasks: list[ScopedKey], status: TaskStatusEnum
@@ -1596,26 +1597,21 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
             return pdrs
 
-        coro = async_request(self)
-
-        try:
-            return asyncio.run(coro)
-        except RuntimeError:
-            # we use nest_asyncio to support environments where an event loop
-            # is already running, such as in a Jupyter notebook
-            import nest_asyncio
-
-            nest_asyncio.apply()
-            return asyncio.run(coro)
+        return self._run_async(async_request(self))
 
     def _get_network_results(
         self,
         network: ScopedKey,
         ok: bool = True,
-        return_protocoldagresults: bool = False,
+        return_as: (
+            ResultFormat
+            | Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"]
+        ) = ResultFormat.PROTOCOL_RESULT,
         compress: bool = True,
         visualize: bool = True,
-    ) -> dict[str, ProtocolResult | None | list[ProtocolDAGResult]]:
+    ) -> dict[
+        str, ProtocolResult | None | list[ProtocolResult] | list[ProtocolDAGResult]
+    ]:
         import multiprocessing as mp
         from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -1623,7 +1619,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         if ok:
             kwargs = dict(
-                return_protocoldagresults=return_protocoldagresults,
+                return_as=return_as,
                 compress=compress,
                 visualize=False,
             )
@@ -1673,30 +1669,42 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_network_results(
         self,
         network: ScopedKey,
-        return_protocoldagresults: bool = False,
+        return_as: (
+            ResultFormat
+            | Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"]
+        ) = ResultFormat.PROTOCOL_RESULT,
+        return_protocoldagresults: bool | None = None,
         compress: bool = True,
         visualize: bool = True,
-    ) -> dict[str, ProtocolResult | None | list[ProtocolDAGResult]]:
+    ) -> dict[
+        str, ProtocolResult | None | list[ProtocolResult] | list[ProtocolDAGResult]
+    ]:
         r"""Get a `ProtocolResult` for every `Transformation` in the given
         `AlchemicalNetwork`.
 
         A dict giving the `ScopedKey` of each `Transformation` in the network
-        as keys, `ProtocolResult` as values, is returned. If no
-        `ProtocolDAGResult`\s exist for a given `Transformation`, ``None`` is
-        given for its value.
-
-        If `return_protocoldagresults` is ``True``, then a list of the
-        `ProtocolDAGResult`\s themselves is given as values instead of
-        `ProtocolResult`\s.
+        as keys, with values determined by the `return_as` parameter.
 
         Parameters
         ----------
         network
             The `ScopedKey` of the `AlchemicalNetwork` to retrieve results for.
+        return_as
+            Determines the format of returned results for each `Transformation`.
+            Can be a `ResultFormat` enum value or string. Options:
+
+            - ``ResultFormat.PROTOCOL_RESULT`` or ``'ProtocolResult'`` (default):
+              Return a single aggregated `ProtocolResult` combining all successful
+              `ProtocolDAGResult`\s. If no results exist, ``None`` is given.
+            - ``ResultFormat.PROTOCOL_RESULTS`` or ``'ProtocolResults'``: Return a
+              list of individual `ProtocolResult`\s, one for each successful
+              `ProtocolDAGResult`. Returns empty list if no results exist.
+            - ``ResultFormat.PROTOCOL_DAG_RESULTS`` or ``'ProtocolDAGResults'``:
+              Return a list of the raw `ProtocolDAGResult`\s.
         return_protocoldagresults
-            If ``True``, return the raw `ProtocolDAGResult`s instead of returning
-            a processed `ProtocolResult`. Only successful `ProtocolDAGResult`\s
-            are returned.
+            .. deprecated:: 0.8.0
+                Use `return_as` instead. If ``True``, equivalent to
+                ``return_as='ProtocolDAGResults'``.
         compress
             If ``True``, compress the ProtocolDAGResults server-side before
             shipping them to the client. This can reduce retrieval time depending
@@ -1707,10 +1715,21 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             If ``True``, show retrieval progress indicators.
 
         """
+        # Handle backward compatibility
+        if return_protocoldagresults is not None:
+            warn(
+                "The 'return_protocoldagresults' parameter is deprecated and will be "
+                "removed in a future version. Use 'return_as' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if return_protocoldagresults:
+                return_as = ResultFormat.PROTOCOL_DAG_RESULTS
+
         return self._get_network_results(
             network=network,
             ok=True,
-            return_protocoldagresults=return_protocoldagresults,
+            return_as=return_as,
             compress=compress,
             visualize=visualize,
         )
@@ -1840,10 +1859,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_transformation_results(
         self,
         transformation: ScopedKey,
-        return_protocoldagresults: bool = False,
+        return_as: (
+            ResultFormat
+            | Literal["ProtocolResult", "ProtocolResults", "ProtocolDAGResults"]
+        ) = ResultFormat.PROTOCOL_RESULT,
+        return_protocoldagresults: bool | None = None,
         compress: bool = True,
         visualize: bool = True,
-    ) -> ProtocolResult | None | list[ProtocolDAGResult]:
+    ) -> ProtocolResult | None | list[ProtocolResult] | list[ProtocolDAGResult]:
         r"""Get a `ProtocolResult` for the given `Transformation`.
 
         A `ProtocolResult` object corresponds to the `Protocol` used for this
@@ -1852,17 +1875,26 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         `Transformation.gather`. If no `ProtocolDAGResult`\s exist for this
         `Transformation`, ``None`` is returned.
 
-        If `return_protocoldagresults` is ``True``, then a list of the
-        `ProtocolDAGResult`\s themselves is returned instead.
-
         Parameters
         ----------
         transformation
             The `ScopedKey` of the `Transformation` to retrieve results for.
+        return_as
+            Determines the format of returned results. Can be a `ResultFormat`
+            enum value or string. Options:
+
+            - ``ResultFormat.PROTOCOL_RESULT`` or ``'ProtocolResult'`` (default):
+              Return a single aggregated `ProtocolResult` combining all successful
+              `ProtocolDAGResult`\s.
+            - ``ResultFormat.PROTOCOL_RESULTS`` or ``'ProtocolResults'``: Return a
+              list of individual `ProtocolResult`\s, one for each successful
+              `ProtocolDAGResult`.
+            - ``ResultFormat.PROTOCOL_DAG_RESULTS`` or ``'ProtocolDAGResults'``:
+              Return a list of the raw `ProtocolDAGResult`\s.
         return_protocoldagresults
-            If ``True``, return the raw `ProtocolDAGResult`s instead of returning
-            a processed `ProtocolResult`. Only successful `ProtocolDAGResult`\s
-            are returned.
+            .. deprecated:: 0.8.0
+                Use `return_as` instead. If ``True``, equivalent to
+                ``return_as='ProtocolDAGResults'``.
         compress
             If ``True``, compress the ProtocolDAGResults server-side before
             shipping them to the client. This can reduce retrieval time depending
@@ -1873,9 +1905,24 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             If ``True``, show retrieval progress indicators.
 
         """
+        # Handle backward compatibility
+        if return_protocoldagresults is not None:
+            warn(
+                "The 'return_protocoldagresults' parameter is deprecated and will be "
+                "removed in a future version. Use 'return_as' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if return_protocoldagresults:
+                return_as = ResultFormat.PROTOCOL_DAG_RESULTS
 
-        if not return_protocoldagresults:
-            # get the transformation if we intend to return a ProtocolResult
+        # Get the transformation if we need to create ProtocolResult(s)
+        if return_as in (
+            ResultFormat.PROTOCOL_RESULT,
+            ResultFormat.PROTOCOL_RESULTS,
+            "ProtocolResult",
+            "ProtocolResults",
+        ):
             tf: Transformation = self.get_transformation(
                 transformation, visualize=visualize
             )
@@ -1893,9 +1940,15 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             visualize=visualize,
         )
 
-        if return_protocoldagresults:
+        if return_as in (ResultFormat.PROTOCOL_DAG_RESULTS, "ProtocolDAGResults"):
             return pdrs
-        else:
+        elif return_as in (ResultFormat.PROTOCOL_RESULTS, "ProtocolResults"):
+            # Return individual ProtocolResults for each ProtocolDAGResult
+            if len(pdrs) == 0:
+                return []
+            return [tf.gather([pdr]) for pdr in pdrs]
+        else:  # return_as in (ResultFormat.PROTOCOL_RESULT, "ProtocolResult")
+            # Return aggregated ProtocolResult
             if len(pdrs) != 0:
                 return tf.gather(pdrs)
             else:
