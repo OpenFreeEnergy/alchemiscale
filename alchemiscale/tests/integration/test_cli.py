@@ -114,15 +114,17 @@ def test_api(n4js, s3os):
 
 
 @pytest.fixture
-def compute_api_args():
+def compute_api_args(uri, worker_id):
+    from alchemiscale.tests.integration.conftest import get_worker_port_offset
+
     workers = 2
     host = "127.0.0.1"
-    port = 50100
+    port = 50100 + get_worker_port_offset(worker_id)
     command = ["compute", "api"]
     api_opts = ["--workers", workers, "--host", host, "--port", port]
     db_opts = [
         "--url",
-        "bolt://localhost:7687",
+        uri,
         "--user",
         "neo4j",
         "--password",

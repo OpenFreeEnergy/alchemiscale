@@ -21,6 +21,14 @@ class StrategistSettings(BaseModel):
         None,
         description="Scopes to limit strategy execution to; defaults to all accessible scopes.",
     )
+    loglevel: str = Field(
+        "WARN",
+        description="The loglevel at which to report; see the :mod:`logging` docs for available levels.",
+    )
+    logfile: Path | None = Field(
+        None,
+        description="Path to file for logging output; if not set, logging will only go to STDOUT.",
+    )
     cache_directory: Path | str | None = Field(
         None,
         description="Location of the cache directory; defaults to ${HOME}/.cache/alchemiscale-strategist",

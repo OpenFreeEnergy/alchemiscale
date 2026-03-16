@@ -15,7 +15,6 @@ from jose import JWTError, jwt
 
 from .models import CredentialedEntity, TokenData
 
-
 # we set a max size to avoid denial-of-service attacks
 # since an extremely large secret attempted by an attacker can take
 # increasing amounts of time or memory to validate;

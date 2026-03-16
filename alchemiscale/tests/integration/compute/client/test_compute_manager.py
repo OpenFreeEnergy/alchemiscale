@@ -81,10 +81,12 @@ def manager_settings():
 
 
 @pytest.fixture()
-def service_settings(compute_identity, single_scoped_credentialed_compute):
+def service_settings(
+    compute_identity, single_scoped_credentialed_compute, compute_api_port
+):
     return ComputeServiceSettings(
         name="testservice",
-        api_url="http://127.0.0.1:8000/",
+        api_url=f"http://127.0.0.1:{compute_api_port}/",
         identifier=single_scoped_credentialed_compute.identifier,
         key=compute_identity["key"],
         shared_basedir="./shared",

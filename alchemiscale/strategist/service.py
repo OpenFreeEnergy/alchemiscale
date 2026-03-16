@@ -38,9 +38,6 @@ from ..compression import compress_keyed_chain_zstd, decompress_gufe_zstd, json_
 from .settings import StrategistSettings
 
 
-logger = logging.getLogger(__name__)
-
-
 def execute_strategy_worker(
     network_sk: ScopedKey,
     strategy_state: StrategyState,
@@ -126,6 +123,22 @@ class StrategistService:
             self._cache = None
 
         self._stop = False
+
+        # logging
+        self.logger = logging.getLogger("AlchemiscaleStrategistService")
+        self.logger.setLevel(self.settings.loglevel)
+
+        formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s")
+        formatter.converter = time.gmtime  # use utc time for logging timestamps
+
+        sh = logging.StreamHandler()
+        sh.setFormatter(formatter)
+        self.logger.addHandler(sh)
+
+        if self.settings.logfile is not None:
+            fh = logging.FileHandler(self.settings.logfile)
+            fh.setFormatter(formatter)
+            self.logger.addHandler(fh)
 
     def _get_protocoldagresult_cached(
         self, result_ref, transformation_sk: ScopedKey
@@ -562,7 +575,7 @@ class StrategistService:
 
         except Exception as e:
             # Strategy execution failed
-            logger.exception(f"Strategy execution failed for network {network_sk}")
+            self.logger.exception(f"Strategy execution failed for network {network_sk}")
             return self._update_strategy_state_error(
                 strategy_state, current_result_count, e
             )
@@ -579,10 +592,10 @@ class StrategistService:
         )
 
         if not ready_strategies:
-            logger.debug("No strategies ready for execution")
+            self.logger.debug("No strategies ready for execution")
             return
 
-        logger.info(f"Executing {len(ready_strategies)} strategies")
+        self.logger.info(f"Executing {len(ready_strategies)} strategies")
 
         # Use ProcessPoolExecutor for parallel strategy execution
         with ProcessPoolExecutor(
@@ -612,16 +625,16 @@ class StrategistService:
                                 network_sk, updated_state
                             )
                             if not success:
-                                logger.error(
+                                self.logger.error(
                                     f"Failed to update strategy state for network {network_sk}"
                                 )
                             else:
-                                logger.debug(
+                                self.logger.debug(
                                     f"Updated strategy state for network {network_sk}"
                                 )
 
                         except Exception as e:
-                            logger.exception(
+                            self.logger.exception(
                                 f"Strategy execution failed for network {network_sk}: {e}"
                             )
 
@@ -658,15 +671,15 @@ class StrategistService:
                             )
                             future_to_network[future] = network_sk
                             network_to_future[network_sk] = future
-                            logger.debug(
+                            self.logger.debug(
                                 f"Added new strategy execution for network {network_sk}"
                             )
 
     def start(self):
         """Start the Strategist service."""
 
-        logger.info("Starting Strategist service")
-        self._stop = True
+        self._stop = False
+        self.logger.info("Starting Strategist service")
 
         try:
             while not self._stop:
@@ -675,7 +688,7 @@ class StrategistService:
                 try:
                     self.cycle()
                 except Exception as e:
-                    logger.exception(f"Iteration failed: {e}")
+                    self.logger.exception(f"Iteration failed: {e}")
 
                 # Check if we should stop before sleeping
                 if self._stop:
@@ -686,14 +699,14 @@ class StrategistService:
                 remaining_sleep = max(0, self.sleep_interval - elapsed)
 
                 if remaining_sleep > 0:
-                    logger.debug(f"Sleeping for {remaining_sleep:.1f} seconds")
+                    self.logger.debug(f"Sleeping for {remaining_sleep:.1f} seconds")
                     time.sleep(remaining_sleep)
 
         except KeyboardInterrupt:
-            logger.info("Received interrupt signal")
+            self.logger.info("Received interrupt signal")
         finally:
             self._stop = True
-            logger.info("Strategist service stopped")
+            self.logger.info("Strategist service stopped")
 
     def stop(self):
         """Stop the strategist service."""

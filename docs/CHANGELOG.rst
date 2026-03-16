@@ -4,6 +4,43 @@ CHANGELOG
 
 .. current developments
 
+v0.7.2
+====================
+
+**Added:**
+
+* Added ``Strategist`` service to included ``docker-compose`` deployment
+* ``ComputeServiceID`` now includes ``new_from_name`` method for UUID generation
+
+**Changed:**
+
+* Disabled UNRECOGNIZED warnings handling by ``neo4j`` driver, which appear often in normal operation due to the form of our Cypher queries
+* ``ComputeManagerID`` now allows underscores (``_``), periods (``.``), and colons (``:``)
+* Now using ``traefik`` v2.11 in ``docker-compose`` deployment
+
+**Fixed:**
+
+* Protocol names now validated upon ``Task`` claiming
+* Compute managers now respect ``Protocol`` filtering from compute service settings
+
+
+v0.7.1
+====================
+
+**Added:**
+
+* Added commandline-level override of compute service name (#450)
+* Added ``Scope``\s validation for ``ComputeServiceSettings``
+
+**Changed:**
+
+* Enabled parallel execution of test suite
+
+**Fixed:**
+
+* Fixed startup issue in ``StrategistService``
+
+
 v0.7.0
 ====================
 

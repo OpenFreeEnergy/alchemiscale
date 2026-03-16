@@ -1,4 +1,4 @@
-from .interface import AlchemiscaleClient
+from .interface import AlchemiscaleClient, ResultFormat
 from .models import Scope, ScopedKey
 
 from importlib.metadata import version
