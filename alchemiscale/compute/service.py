@@ -12,6 +12,7 @@ from uuid import uuid4
 import threading
 from pathlib import Path
 import shutil
+from typing import Any
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
@@ -401,6 +402,86 @@ class SynchronousComputeService:
         self.int_sleep.interrupt()
         self._stop = True
 
+from multiprocessing import Process, Queue
+
+type NodeKey = str
+
+class JailedKeyError(Exception):
+    pass
+
+class Executor(Process):
+
+    key: NodeKey
+    queue: Queue
+
+    def __init__(self, key, queue):
+        super().__init__()
+        self._key = key
+        self._queue = queue
+
+    def run(self):
+        result = self.execute_unit()
+        self.queue.put(result)
+
+    @property
+    def key(self) -> NodeKey:
+        return self._key
+
+    @property
+    def queue(self) -> Queue:
+        return self._queue
+
+    @classmethod
+    def from_key(cls, key: NodeKey, queue: Queue):
+        return cls(key=key, queue=queue)
+
+class ExecutorStack:
+
+    stack_size: int
+    stack: list[Executor]
+    jail: dict[NodeKey, set[NodeKey]]
+    queue: Queue
+
+    def __init__(self, stack_size: int):
+        self._stack = []
+        self._stack_size = stack_size
+        self._jail = {}
+        self._queue = Queue()
+
+    @property
+    def stack(self) -> list[Executor]:
+        return self._stack
+
+    @property
+    def stack_size(self) -> int:
+        return self._stack_size
+
+    @property
+    def jail(self) -> dict[NodeKey, set[NodeKey]]:
+        return self._jail
+
+    @property
+    def queue(self) -> Queue:
+        return self._queue
+
+    def push(self, value: NodeKey):
+        if value in self._jail.keys():
+            raise JailedKeyError(value)
+
+        executor = Executor.from_key(value)
+        self._stack.append(executor)
+        self._stack[-1].start()
+
+    def pop(self):
+        if self._stack_size == 0:
+            raise IndexError("pop from empty stack")
+        popped_executor = self._stack.pop()
+        for key in self._jail.keys():
+            self._jail[key] -= popped_executor.key
+            if not self._jail[key]:
+                self._jail.pop(key)
+
+        return popped_executor
 
 class AsynchronousComputeService(SynchronousComputeService):
     """Asynchronous compute service.
@@ -410,21 +491,114 @@ class AsynchronousComputeService(SynchronousComputeService):
 
     """
 
-    def __init__(self, api_url):
+    _dag_tree: nx.DiGraph
+    _executor_stack: ExecutorStack
+
+    def __init__(self, settings: AsynchronousComputeServiceSettings):
+
+        self._dag_tree = nx.DiGraph()
+        self._dag_tree.add_node((None, "ROOT"))
+
+        self.settings = settings
+
+        self.api_url = self.settings.api_url
+        self.name = self.settings.name
+        self.sleep_interval = self.settings.sleep_interval
+        self.heartbeat_interval = self.settings.heartbeat_interval
+        self.claim_limit = self.settings.claim_limit
+
         self.scheduler = sched.scheduler(time.monotonic, time.sleep)
-        # self.loop = asyncio.get_event_loop()
+
+        self.client = AlchemiscaleComputeClient(
+            self.settings.api_url,
+            self.settings.identifier,
+            self.settings.key,
+            cache_directory=self.settings.client_cache_directory,
+            cache_size_limit=self.settings.client_cache_size_limit,
+            use_local_cache=self.settings.client_use_local_cache,
+            max_retries=self.settings.client_max_retries,
+            retry_base_seconds=self.settings.client_retry_base_seconds,
+            retry_max_seconds=self.settings.client_retry_max_seconds,
+            verify=self.settings.client_verify,
+        )
 
         self._stop = False
 
-    def get_new_tasks(self): ...
+        self.scopes = self.settings.scopes or [Scope()]
+        self.shared_basedir = Path(self.settings.shared_basedir).absolute()
+        self.shared_basedir.mkdir(exist_ok=True)
+        self.keep_shared = self.settings.keep_shared
 
-    def start(self):
-        """Start the service; will keep going until told to stop."""
+        self.scratch_basedir = Path(self.settings.scratch_basedir).absolute()
+        self.scratch_basedir.mkdir(exist_ok=True)
+        self.keep_scratch = self.settings.keep_scratch
+
+        self.compute_service_id = ComputeServiceID.new_from_name(self.name)
         self._stop = False
 
-        while True:
-            if self._stop:
-                return
+    async def async_cycle(self, max_tasks, max_time):
+
+        # (ProtocolDAG, dwindling_graph, results)
+        for task in tasks:
+            raise NotImplementedError
+
+    def blocked_units(self):
+        raise NotImplementedError
+
+    def running_units(self):
+        raise NotImplementedError
+
+    def available_units(self) -> set[tuple[string, Any]]:
+        return {node for node, degree in self._dag_tree.out_degree() if degree == 0}
+
+    def check_completed(self) -> list[str]:
+        completed = []
+        for node in self.available:
+            task_id, base_node = node
+            if base_node == "TERM":
+                completed.append(task_id)
+        return completed
+
+    def add_task(self, task):
+        """Add a ``Task`` to the ``AsynchronousComputeService`` internal DAG."""
+        task_key = str(task.key)
+
+        def node_transformation(node):
+            nonlocal task_key
+            return (task_key, node)
+
+        tagged_dag = nx.DiGraph()
+        terminating = node_transformation("TERM")
+        tagged_dag.add_node(terminating)
+
+        for child, parent in task.dag.edges:
+            tagged_child = node_transformation(child)
+            tagged_parent = node_transformation(parent)
+            tagged_dag.add_edge(tagged_child, tagged_parent)
+
+        for node, in_degree in task.dag.in_degree:
+            if in_degree == 0:
+                tagged_dag.add_edge(terminating, node_transformation(node))
+
+        self._dag_tree.add_edges_from(tagged_dag.edges)
+        self._dag_tree.add_edge((None, "ROOT"), terminating)
+
+        # TODO create necessary directories for contexts
+        raise NotImplementedError
+
+    def remove_task(self, task_key):
+        # TODO: check executor stack
+        # avoid deleting the root node
+        if task_key is None:
+            raise ValueError()
+
+        for node in self._dag_tree.nodes:
+            key, _ = node
+            if key == task_key:
+                self._dag_tree.remove_node(node)
+
+        # TODO: remove directories
+        raise NotImplementedError
 
     def stop(self):
         self._stop = True
