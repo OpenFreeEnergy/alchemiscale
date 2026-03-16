@@ -10,7 +10,6 @@ from alchemiscale.interface import api, client
 from alchemiscale.tests.integration.interface.utils import get_user_settings_override
 from alchemiscale.tests.integration.utils import running_service
 
-
 ## user client
 
 

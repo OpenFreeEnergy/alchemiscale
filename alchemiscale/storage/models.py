@@ -9,6 +9,7 @@ from copy import copy
 import datetime
 from enum import Enum, StrEnum
 from uuid import uuid4, UUID
+import re
 import hashlib
 
 
@@ -18,7 +19,57 @@ from gufe.tokenization import GufeTokenizable, GufeKey
 from ..models import ScopedKey, Scope
 
 
-class ComputeServiceID(str): ...
+class ComputeIDBase(str):
+
+    @classmethod
+    def new_from_name(cls, name: str):
+        return cls(f"{name}-{uuid4().hex}")
+
+
+class ComputeServiceID(ComputeIDBase): ...
+
+
+class ComputeManagerID(ComputeIDBase):
+
+    def __init__(self, _value):
+        # don't need to process _value, handled by str.__new__
+        parts = self.split("-")
+
+        if len(parts) != 2:
+            raise ValueError(
+                "ComputeManagerID must have the form `{name}-{uuid}` with uuid in hex form"
+            )
+
+        self._name = parts[0]
+        self._uuid = parts[1]
+
+        if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_\.\:]*$", self.name):
+            raise ValueError(
+                "ComputeManagerID must either start with an alphabetical and contain "
+                "only alphanumeric, underscores ('_'), periods ('.'), or colons (':') thereafter"
+            )
+
+        try:
+            UUID(self.uuid)
+        except ValueError:
+            raise ValueError("Could not interpret the provided UUID")
+
+    def to_dict(self):
+        return {"name": self.name, "uuid": self.uuid}
+
+    @classmethod
+    def from_dict(cls, dct):
+        name = dct["name"]
+        uuid = dct["uuid"]
+        return cls(name + "-" + uuid)
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def uuid(self) -> str:
+        return self._uuid
 
 
 class ComputeServiceRegistration(BaseModel):
@@ -68,51 +119,6 @@ class ComputeManagerInstruction(StrEnum):
 class ComputeManagerStatus(StrEnum):
     OK = "OK"
     ERROR = "ERROR"
-
-
-class ComputeManagerID(str):
-
-    def __init__(self, _value):
-        # don't need to process _value, handled by str.__new__
-        parts = self.split("-")
-
-        if len(parts) != 6:
-            # this currently only supports field-separated hex uuid4s
-            raise ValueError(
-                "ComputeManagerID must have the form `{name}-{uuid}` with a field-separated hex"
-            )
-
-        self._name = parts[0]
-        self._uuid = "-".join(parts[1:])
-
-        if not self.name.isalnum():
-            raise ValueError("ComputeManagerID only allows alpha-numeric names")
-
-        try:
-            UUID(self.uuid)
-        except ValueError:
-            raise ValueError("Could not interpret the provided UUID.")
-
-    @classmethod
-    def new_from_name(cls, name: str):
-        return cls(f"{name}-{uuid4()}")
-
-    def to_dict(self):
-        return {"name": self.name, "uuid": self.uuid}
-
-    @classmethod
-    def from_dict(cls, dct):
-        name = dct["name"]
-        uuid = dct["uuid"]
-        return cls(name + "-" + uuid)
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def uuid(self) -> str:
-        return self._uuid
 
 
 class ComputeManagerRegistration(BaseModel):

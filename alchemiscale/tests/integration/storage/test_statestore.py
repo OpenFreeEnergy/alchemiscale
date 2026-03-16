@@ -1704,13 +1704,11 @@ class TestNeo4jStore(TestStateStore):
         claimed4 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=4)
         assert len(claimed4) == 4
 
-        res = n4js.execute_query(
-            f"""
+        res = n4js.execute_query(f"""
         match (cs:ComputeServiceRegistration {{identifier: '{csid}'}})-[:CLAIMS]->(t:Task)
         with t.status as status
         return status
-        """
-        )
+        """)
 
         # check that all tasks in a running state
         statuses = [rec["status"] for rec in res.records]
@@ -1720,13 +1718,11 @@ class TestNeo4jStore(TestStateStore):
         _ = n4js.deregister_computeservice(csid)
 
         # check that all tasks are in a waiting state after deregistering
-        res = n4js.execute_query(
-            """
+        res = n4js.execute_query("""
         match (t:Task) where t.status = 'waiting'
         with t._scoped_key as sk
         return sk
-        """
-        )
+        """)
 
         task_scoped_keys = [rec["sk"] for rec in res.records]
         assert len(set(task_scoped_keys)) == 10
@@ -2085,12 +2081,10 @@ class TestNeo4jStore(TestStateStore):
         # try to push the result
         n4js.set_task_result(task_sk, pdr_ref)
 
-        n = n4js.execute_query(
-            """
+        n = n4js.execute_query("""
                 match (n:ProtocolDAGResultRef)<-[:RESULTS_IN]-(t:Task)
                 return n
-                """
-        ).records[0]["n"]
+                """).records[0]["n"]
 
         assert n["location"] == pdr_ref.location
         assert n["obj_key"] == str(protocoldagresult.key)
@@ -2751,12 +2745,10 @@ class TestNeo4jStore(TestStateStore):
 
         n4js.create_credentialed_entity(user)
 
-        n = n4js.execute_query(
-            f"""
+        n = n4js.execute_query(f"""
             match (n:{cls_name} {{identifier: '{user.identifier}'}})
             return n
-            """
-        ).records[0]["n"]
+            """).records[0]["n"]
 
         assert n["identifier"] == user.identifier
         assert n["hashed_key"] == user.hashed_key

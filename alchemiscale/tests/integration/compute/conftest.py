@@ -18,7 +18,6 @@ from alchemiscale.base.api import (
 
 from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
 
-
 ## compute api
 
 
