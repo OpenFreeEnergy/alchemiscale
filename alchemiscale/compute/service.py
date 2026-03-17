@@ -402,9 +402,10 @@ class SynchronousComputeService:
         self.int_sleep.interrupt()
         self._stop = True
 
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, Lock
 
-type NodeKey = str
+type TaskKey = GufeKey
+type NodeKey = (TaskKey, ProtocolUnit | None) # None covers terminating node condition
 
 class JailedKeyError(Exception):
     pass
@@ -413,15 +414,30 @@ class Executor(Process):
 
     key: NodeKey
     queue: Queue
+    lock: Lock
+    context: Context
+    unit: ProtocolUnit
 
-    def __init__(self, key, queue):
+    def __init__(self, key, queue, lock, context, unit):
         super().__init__()
         self._key = key
         self._queue = queue
+        self._lock = lock
+        self._context = context
+        self._unit = unit
 
     def run(self):
         result = self.execute_unit()
-        self.queue.put(result)
+        self.put_result(result)
+        self.cleanup()
+
+    @property
+    def context(self) -> Context:
+        return self._context
+
+    @property
+    def unit(self) -> ProtocolUnit:
+        return self._unit
 
     @property
     def key(self) -> NodeKey:
@@ -431,9 +447,27 @@ class Executor(Process):
     def queue(self) -> Queue:
         return self._queue
 
+    @property
+    def lock(self) -> Lock:
+        return self._lock
+
     @classmethod
-    def from_key(cls, key: NodeKey, queue: Queue):
-        return cls(key=key, queue=queue)
+    def from_key(cls, key: NodeKey, queue: Queue, lock: Lock, context: Context):
+        return cls(key=key, queue=queue, lock=lock, context=context)
+
+    def put_result(self, result: ProtocolUnitResult):
+        """Acquire lock, push result to queue, release lock.
+        """
+        with self.lock:
+            self.queue.put(result)
+
+    def execute_unit(self) -> ProtocolUnitResult:
+        # this method assumes the context is in place and will be removed correctly
+        raise NotImplementedError
+
+    def cleanup(self):
+        # clean up depending on context and execution settings
+        raise NotImplementedError
 
 class ExecutorStack:
 
@@ -441,12 +475,14 @@ class ExecutorStack:
     stack: list[Executor]
     jail: dict[NodeKey, set[NodeKey]]
     queue: Queue
+    lock: Lock
 
     def __init__(self, stack_size: int):
         self._stack = []
         self._stack_size = stack_size
         self._jail = {}
         self._queue = Queue()
+        self._lock = Lock()
 
     @property
     def stack(self) -> list[Executor]:
@@ -464,15 +500,26 @@ class ExecutorStack:
     def queue(self) -> Queue:
         return self._queue
 
-    def push(self, value: NodeKey):
-        if value in self._jail.keys():
-            raise JailedKeyError(value)
+    def terminate_all(self, force=False):
+        if force:
+            for proc in self.stack:
+            proc.terminate()
 
-        executor = Executor.from_key(value)
-        self._stack.append(executor)
-        self._stack[-1].start()
+        with self.lock:
+            for proc in self.stack:
+                proc.terminate()
+
+    def push(self, node: NodeKey, context: Context):
+        with self.lock:
+            if node in self._jail.keys():
+                raise JailedKeyError(node)
+
+            executor = Executor.from_key(node, queue, lock, context)
+            self._stack.append(executor)
+            self._stack[-1].start()
 
     def pop(self):
+        """Remove last process in the stack. This also clears the node from the jail."""
         if self._stack_size == 0:
             raise IndexError("pop from empty stack")
         popped_executor = self._stack.pop()
@@ -482,6 +529,31 @@ class ExecutorStack:
                 self._jail.pop(key)
 
         return popped_executor
+
+    def _get_by_pid(self, pid) -> Executor | None:
+        """Get an executor by its PID.
+        """
+        for proc in self.stack:
+            if proc.pid == pid:
+                return proc
+        return None
+
+    def _get_statuses(self) -> tuple[set[Executor], set[Executor]]:
+        running = set()
+        terminated =set()
+        for proc in self.stack:
+            if proc.is_alive():
+                running.add(proc)
+            else:
+                terminated.add(proc)
+        return running, terminated
+
+from dataclasses import dataclass
+
+@dataclass
+class TaskData:
+    results: dict[GufeKey, ProtocolUnitResult]
+    context: Context
 
 class AsynchronousComputeService(SynchronousComputeService):
     """Asynchronous compute service.
@@ -493,11 +565,15 @@ class AsynchronousComputeService(SynchronousComputeService):
 
     _dag_tree: nx.DiGraph
     _executor_stack: ExecutorStack
+    _task_data: dict[TaskKey, TaskData]
 
     def __init__(self, settings: AsynchronousComputeServiceSettings):
 
         self._dag_tree = nx.DiGraph()
-        self._dag_tree.add_node((None, "ROOT"))
+        root_node: NodeKey = (None, "ROOT")
+        self._dag_tree.add_node(root_node)
+
+        self._task_data = dict()
 
         self.settings = settings
 
@@ -542,14 +618,14 @@ class AsynchronousComputeService(SynchronousComputeService):
         for task in tasks:
             raise NotImplementedError
 
-    def blocked_units(self):
-        raise NotImplementedError
+    def available_units(self) -> set[NodeKey]:
 
-    def running_units(self):
-        raise NotImplementedError
+        available = set()
+        for node, degree in self._dag_tree.out_degree():
+            if degree == 0:
+                available.add(node)
 
-    def available_units(self) -> set[tuple[string, Any]]:
-        return {node for node, degree in self._dag_tree.out_degree() if degree == 0}
+        return available
 
     def check_completed(self) -> list[str]:
         completed = []
@@ -559,11 +635,13 @@ class AsynchronousComputeService(SynchronousComputeService):
                 completed.append(task_id)
         return completed
 
-    def add_task(self, task):
+    def add_task(self, task: ScopedKey):
         """Add a ``Task`` to the ``AsynchronousComputeService`` internal DAG."""
-        task_key = str(task.key)
+        task_key: TaskKey = str(task.gufe_key)
 
-        def node_transformation(node):
+        dag, _, _ = self.task_to_protocoldag(task)
+
+        def node_transformation(node: ProtocolUnit) -> (TaskKey, ProtocolUnit):
             nonlocal task_key
             return (task_key, node)
 
@@ -571,7 +649,7 @@ class AsynchronousComputeService(SynchronousComputeService):
         terminating = node_transformation("TERM")
         tagged_dag.add_node(terminating)
 
-        for child, parent in task.dag.edges:
+        for child, parent in dag.graph.edges:
             tagged_child = node_transformation(child)
             tagged_parent = node_transformation(parent)
             tagged_dag.add_edge(tagged_child, tagged_parent)
@@ -583,7 +661,9 @@ class AsynchronousComputeService(SynchronousComputeService):
         self._dag_tree.add_edges_from(tagged_dag.edges)
         self._dag_tree.add_edge((None, "ROOT"), terminating)
 
-        # TODO create necessary directories for contexts
+        context = Context()
+        self._task_data[task_key] = TaskData(results={}, context=context)
+        # TODO create necessary directories for contexts: shared and scratch
         raise NotImplementedError
 
     def remove_task(self, task_key):
@@ -597,7 +677,7 @@ class AsynchronousComputeService(SynchronousComputeService):
             if key == task_key:
                 self._dag_tree.remove_node(node)
 
-        # TODO: remove directories
+        # TODO: remove context directories: shared and scratch
         raise NotImplementedError
 
     def stop(self):
