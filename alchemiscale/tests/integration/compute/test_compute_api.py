@@ -1,12 +1,9 @@
-import json
-
 import pytest
 
 from gufe import Transformation
 
 from alchemiscale.base.client import json_to_gufe
 from alchemiscale.models import Scope, ScopedKey
-from alchemiscale.storage.models import ComputeServiceID
 
 
 class TestComputeAPI:
@@ -122,7 +119,7 @@ class TestComputeAPI:
         # register a compute service
         multi_scope_test_client.post(
             f"/computeservice/{compute_service_id}/register",
-            content=json.dumps({"compute_manager_id": None}),
+            json={"compute_manager_id": None},
         )
 
         # claim tasks with all scopes, no exclusions
@@ -133,7 +130,7 @@ class TestComputeAPI:
             count=1,
             protocols=None,
         )
-        response = multi_scope_test_client.post("/claim", content=json.dumps(data))
+        response = multi_scope_test_client.post("/claim", json=data)
         assert response.status_code == 200
         tasks_no_exclude = response.json()
         assert len(tasks_no_exclude) == 1
@@ -147,9 +144,7 @@ class TestComputeAPI:
             count=1,
             protocols=None,
         )
-        response = multi_scope_test_client.post(
-            "/claim", content=json.dumps(data_with_exclude)
-        )
+        response = multi_scope_test_client.post("/claim", json=data_with_exclude)
         assert response.status_code == 200
         tasks_with_exclude = response.json()
         assert len(tasks_with_exclude) == 1
@@ -169,7 +164,7 @@ class TestComputeAPI:
         # register a compute service
         multi_scope_test_client.post(
             f"/computeservice/{compute_service_id}/register",
-            content=json.dumps({"compute_manager_id": None}),
+            json={"compute_manager_id": None},
         )
 
         # exclude all scopes — should return empty list
@@ -180,7 +175,7 @@ class TestComputeAPI:
             count=1,
             protocols=None,
         )
-        response = multi_scope_test_client.post("/claim", content=json.dumps(data))
+        response = multi_scope_test_client.post("/claim", json=data)
         assert response.status_code == 200
         assert response.json() == []
 
@@ -195,7 +190,7 @@ class TestComputeAPI:
         # register a compute service
         multi_scope_test_client.post(
             f"/computeservice/{compute_service_id}/register",
-            content=json.dumps({"compute_manager_id": None}),
+            json={"compute_manager_id": None},
         )
 
         # exclude with a wildcard scope that matches everything
@@ -207,6 +202,6 @@ class TestComputeAPI:
             count=1,
             protocols=None,
         )
-        response = multi_scope_test_client.post("/claim", content=json.dumps(data))
+        response = multi_scope_test_client.post("/claim", json=data)
         assert response.status_code == 200
         assert response.json() == []
