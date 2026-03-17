@@ -258,17 +258,12 @@ def claim_tasks(
 
     # filter out taskhubs that match excluded scopes
     if scopes_exclude:
-        taskhubs_filtered = {}
-        for taskhub_sk, taskhub in taskhubs.items():
-            exclude = False
-            for exclude_scope in scopes_exclude:
-                # if the exclude scope is a superset of the taskhub scope, exclude it
-                if exclude_scope.is_superset(taskhub_sk.scope):
-                    exclude = True
-                    break
-            if not exclude:
-                taskhubs_filtered[taskhub_sk] = taskhub
-        taskhubs = taskhubs_filtered
+        scopes_exclude_reduced = minimize_scope_space(scopes_exclude)
+        taskhubs = {
+            sk: th
+            for sk, th in taskhubs.items()
+            if not any(ex.is_superset(sk.scope) for ex in scopes_exclude_reduced)
+        }
 
     # list of tasks to return
     tasks = []
