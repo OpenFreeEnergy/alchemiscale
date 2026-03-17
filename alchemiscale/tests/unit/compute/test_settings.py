@@ -31,6 +31,9 @@ class TestComputeServiceSettings:
             scopes = ["*.*.*", "*-*-*"]
             ComputeServiceSettings.validate_scopes(scopes)
 
+    def test_validate_scopes_none(self):
+        assert ComputeServiceSettings.validate_scopes(None) is None
+
     def test_validate_scopes_exclude(self):
         orgs = ["testorg", "*"]
         campaigns = ["testcompaign", "*"]
