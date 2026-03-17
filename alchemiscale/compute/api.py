@@ -217,6 +217,7 @@ def claim_taskhub_tasks(
 @router.post("/claim")
 def claim_tasks(
     scopes: list[Scope] = Body(),
+    scopes_exclude: list[Scope] | None = Body(None, embed=True),
     compute_service_id: str = Body(),
     count: int = Body(),
     protocols: list[str] | None = Body(None, embed=True),
@@ -254,6 +255,15 @@ def claim_tasks(
     # loop might be more removable in the future with a Union like operator on scopes
     for single_query_scope in set(query_scopes):
         taskhubs.update(n4js.query_taskhubs(scope=single_query_scope, return_gufe=True))
+
+    # filter out taskhubs that match excluded scopes
+    if scopes_exclude:
+        scopes_exclude_reduced = minimize_scope_space(scopes_exclude)
+        taskhubs = {
+            sk: th
+            for sk, th in taskhubs.items()
+            if not any(ex.is_superset(sk.scope) for ex in scopes_exclude_reduced)
+        }
 
     # list of tasks to return
     tasks = []
