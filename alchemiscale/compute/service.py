@@ -12,6 +12,25 @@ from uuid import uuid4
 import threading
 from pathlib import Path
 import shutil
+import sys
+import io
+from contextlib import redirect_stdout, redirect_stderr
+
+
+class _TeeStream(io.TextIOBase):
+    """A stream wrapper that writes to both a capture buffer and the original stream."""
+
+    def __init__(self, capture: io.StringIO, original: io.TextIOBase):
+        self._capture = capture
+        self._original = original
+
+    def write(self, s):
+        self._capture.write(s)
+        return self._original.write(s)
+
+    def flush(self):
+        self._capture.flush()
+        self._original.flush()
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
@@ -198,16 +217,20 @@ class SynchronousComputeService:
         return protocoldag, transformation, extends_protocoldagresult
 
     def push_result(
-        self, task: ScopedKey, protocoldagresult: ProtocolDAGResult
+        self,
+        task: ScopedKey,
+        protocoldagresult: ProtocolDAGResult,
+        stdout: str | None = None,
+        stderr: str | None = None,
     ) -> ScopedKey:
         # TODO: this method should postprocess any paths,
         # leaf nodes in DAG for blob results that should go to object store
 
         # TODO: ship paths to object store
 
-        # finally, push ProtocolDAGResult
+        # finally, push ProtocolDAGResult with logs
         sk: ScopedKey = self.client.set_task_result(
-            task, protocoldagresult, self.compute_service_id
+            task, protocoldagresult, self.compute_service_id, stdout=stdout, stderr=stderr
         )
 
         return sk
@@ -237,21 +260,34 @@ class SynchronousComputeService:
         scratch.mkdir()
 
         self.logger.info("Executing '%s'...", protocoldag)
+
+        # Capture stdout and stderr during execution.
+        # Use _TeeStream for stderr so that logging output (which goes to
+        # stderr via the StreamHandler) is both captured and still emitted.
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        stderr_tee = _TeeStream(stderr_capture, sys.stderr)
+
         try:
-            protocoldagresult = execute_DAG(
-                protocoldag,
-                shared_basedir=shared,
-                scratch_basedir=scratch,
-                keep_scratch=self.keep_scratch,
-                raise_error=False,
-                n_retries=self.settings.n_retries,
-            )
+            with redirect_stdout(stdout_capture), redirect_stderr(stderr_tee):
+                protocoldagresult = execute_DAG(
+                    protocoldag,
+                    shared_basedir=shared,
+                    scratch_basedir=scratch,
+                    keep_scratch=self.keep_scratch,
+                    raise_error=False,
+                    n_retries=self.settings.n_retries,
+                )
         finally:
             if not self.keep_shared:
                 shutil.rmtree(shared)
 
             if not self.keep_scratch:
                 shutil.rmtree(scratch)
+
+        # Get captured output
+        stdout_content = stdout_capture.getvalue()
+        stderr_content = stderr_capture.getvalue()
 
         if protocoldagresult.ok():
             self.logger.info("'%s' -> '%s' : SUCCESS", protocoldag, protocoldagresult)
@@ -265,8 +301,10 @@ class SynchronousComputeService:
                     failure.exception,
                 )
 
-        # push the result (or failure) back to the compute API
-        result_sk = self.push_result(task, protocoldagresult)
+        # push the result (or failure) back to the compute API with captured logs
+        result_sk = self.push_result(
+            task, protocoldagresult, stdout=stdout_content, stderr=stderr_content
+        )
         self.logger.info("Pushed result `%s'", protocoldagresult)
 
         return result_sk
