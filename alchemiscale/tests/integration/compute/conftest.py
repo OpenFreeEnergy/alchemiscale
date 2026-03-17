@@ -129,75 +129,68 @@ def n4js_preloaded(
     return n4js
 
 
+def _make_token_data_override(scopes):
+    """Create a token data dependency override for the given scopes."""
+
+    def get_token_data_depends_override():
+        return TokenData(
+            entity="carl-compute",
+            scopes=[str(s) for s in scopes],
+        )
+
+    return get_token_data_depends_override
+
+
+def _make_compute_api_no_auth(n4js_preloaded, s3os, token_data_override):
+    """Yield a compute API app with auth bypassed using the given token override."""
+
+    def get_s3os_override():
+        return s3os
+
+    overrides = copy(api.app.dependency_overrides)
+
+    api.app.dependency_overrides[get_base_api_settings] = get_compute_settings_override
+    api.app.dependency_overrides[get_s3os_depends] = get_s3os_override
+    api.app.dependency_overrides[get_token_data_depends] = token_data_override
+    yield api.app
+    api.app.dependency_overrides = overrides
+
+
 @pytest.fixture(scope="module")
 def scope_consistent_token_data_depends_override(scope_test):
     """Make a consistent helper to provide an override to the api.app while still accessing fixtures"""
-
-    def get_token_data_depends_override():
-        token_data = TokenData(entity="carl-compute", scopes=[str(scope_test)])
-        return token_data
-
-    return get_token_data_depends_override
+    return _make_token_data_override([scope_test])
 
 
 @pytest.fixture
 def compute_api_no_auth(
     n4js_preloaded, s3os, scope_consistent_token_data_depends_override
 ):
-    def get_s3os_override():
-        return s3os
-
-    overrides = copy(api.app.dependency_overrides)
-    get_token_data_depends_override = scope_consistent_token_data_depends_override
-
-    api.app.dependency_overrides[get_base_api_settings] = get_compute_settings_override
-    api.app.dependency_overrides[get_s3os_depends] = get_s3os_override
-    api.app.dependency_overrides[get_token_data_depends] = (
-        get_token_data_depends_override
+    yield from _make_compute_api_no_auth(
+        n4js_preloaded, s3os, scope_consistent_token_data_depends_override
     )
-    yield api.app
-    api.app.dependency_overrides = overrides
 
 
 @pytest.fixture
 def test_client(compute_api_no_auth):
-    client = TestClient(compute_api_no_auth)
-    return client
+    return TestClient(compute_api_no_auth)
 
 
 @pytest.fixture(scope="module")
 def multi_scope_token_data_depends_override(multiple_scopes):
     """Token data override granting access to all test scopes."""
-
-    def get_token_data_depends_override():
-        token_data = TokenData(
-            entity="carl-compute",
-            scopes=[str(s) for s in multiple_scopes],
-        )
-        return token_data
-
-    return get_token_data_depends_override
+    return _make_token_data_override(multiple_scopes)
 
 
 @pytest.fixture
 def multi_scope_compute_api_no_auth(
     n4js_preloaded, s3os, multi_scope_token_data_depends_override
 ):
-    def get_s3os_override():
-        return s3os
-
-    overrides = copy(api.app.dependency_overrides)
-
-    api.app.dependency_overrides[get_base_api_settings] = get_compute_settings_override
-    api.app.dependency_overrides[get_s3os_depends] = get_s3os_override
-    api.app.dependency_overrides[get_token_data_depends] = (
-        multi_scope_token_data_depends_override
+    yield from _make_compute_api_no_auth(
+        n4js_preloaded, s3os, multi_scope_token_data_depends_override
     )
-    yield api.app
-    api.app.dependency_overrides = overrides
 
 
 @pytest.fixture
 def multi_scope_test_client(multi_scope_compute_api_no_auth):
-    client = TestClient(multi_scope_compute_api_no_auth)
-    return client
+    return TestClient(multi_scope_compute_api_no_auth)
