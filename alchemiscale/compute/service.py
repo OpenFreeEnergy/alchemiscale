@@ -16,6 +16,9 @@ from typing import Any
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
+from gufe.protocols.protocolunit import Context, ProtocolUnitResult, ProtocolUnit
+from gufe.tokenization import GufeKey
+import networkx as nx
 
 from .client import AlchemiscaleComputeClient
 from .settings import ComputeServiceSettings
@@ -402,13 +405,16 @@ class SynchronousComputeService:
         self.int_sleep.interrupt()
         self._stop = True
 
+
 from multiprocessing import Process, Queue, Lock
 
 type TaskKey = GufeKey
-type NodeKey = (TaskKey, ProtocolUnit | None) # None covers terminating node condition
+type NodeKey = (TaskKey, ProtocolUnit | None)  # None covers terminating node condition
+
 
 class JailedKeyError(Exception):
     pass
+
 
 class Executor(Process):
 
@@ -416,20 +422,19 @@ class Executor(Process):
     queue: Queue
     lock: Lock
     context: Context
-    unit: ProtocolUnit
+    inputs: dict
 
-    def __init__(self, key, queue, lock, context, unit):
+    def __init__(self, key, queue, lock, context, inputs):
         super().__init__()
         self._key = key
         self._queue = queue
         self._lock = lock
         self._context = context
-        self._unit = unit
+        self._inputs = inputs
 
     def run(self):
         result = self.execute_unit()
         self.put_result(result)
-        self.cleanup()
 
     @property
     def context(self) -> Context:
@@ -437,7 +442,7 @@ class Executor(Process):
 
     @property
     def unit(self) -> ProtocolUnit:
-        return self._unit
+        return self._key[1]
 
     @property
     def key(self) -> NodeKey:
@@ -451,23 +456,25 @@ class Executor(Process):
     def lock(self) -> Lock:
         return self._lock
 
+    @property
+    def inputs(self) -> dict:
+        return self._inputs
+
     @classmethod
-    def from_key(cls, key: NodeKey, queue: Queue, lock: Lock, context: Context):
-        return cls(key=key, queue=queue, lock=lock, context=context)
+    def from_key(
+        cls, key: NodeKey, queue: Queue, lock: Lock, context: Context, inputs: dict
+    ):
+        return cls(key=key, queue=queue, lock=lock, context=context, inputs=inputs)
 
     def put_result(self, result: ProtocolUnitResult):
-        """Acquire lock, push result to queue, release lock.
-        """
+        """Acquire lock, push key and result into the queue, release lock."""
         with self.lock:
-            self.queue.put(result)
+            self.queue.put((self._key, result))
 
     def execute_unit(self) -> ProtocolUnitResult:
         # this method assumes the context is in place and will be removed correctly
-        raise NotImplementedError
+        return self.unit.execute(context=self.context, **self._inputs)
 
-    def cleanup(self):
-        # clean up depending on context and execution settings
-        raise NotImplementedError
 
 class ExecutorStack:
 
@@ -497,24 +504,28 @@ class ExecutorStack:
         return self._jail
 
     @property
+    def lock(self) -> Lock:
+        return self._lock
+
+    @property
     def queue(self) -> Queue:
         return self._queue
 
     def terminate_all(self, force=False):
         if force:
             for proc in self.stack:
-            proc.terminate()
+                proc.terminate()
 
         with self.lock:
             for proc in self.stack:
                 proc.terminate()
 
-    def push(self, node: NodeKey, context: Context):
+    def push(self, node: NodeKey, context: Context, inputs: dict):
         with self.lock:
             if node in self._jail.keys():
                 raise JailedKeyError(node)
 
-            executor = Executor.from_key(node, queue, lock, context)
+            executor = Executor.from_key(node, self.queue, self.lock, context, inputs)
             self._stack.append(executor)
             self._stack[-1].start()
 
@@ -531,8 +542,7 @@ class ExecutorStack:
         return popped_executor
 
     def _get_by_pid(self, pid) -> Executor | None:
-        """Get an executor by its PID.
-        """
+        """Get an executor by its PID."""
         for proc in self.stack:
             if proc.pid == pid:
                 return proc
@@ -540,7 +550,7 @@ class ExecutorStack:
 
     def _get_statuses(self) -> tuple[set[Executor], set[Executor]]:
         running = set()
-        terminated =set()
+        terminated = set()
         for proc in self.stack:
             if proc.is_alive():
                 running.add(proc)
@@ -548,12 +558,26 @@ class ExecutorStack:
                 terminated.add(proc)
         return running, terminated
 
+
 from dataclasses import dataclass
+
 
 @dataclass
 class TaskData:
+    protocol_dag: ProtocolDAG
     results: dict[GufeKey, ProtocolUnitResult]
     context: Context
+
+    # TODO failures?
+    def to_ProtocolDAGResult(self) -> ProtocolDAGResult:
+        return ProtocolDAGResult(
+            name=self.protocol_dag.name,
+            protocol_units=self.protocol_dag.protocol_units,
+            protocol_unit_results=list(self.results.values()),
+            transformation_key=self.protocol_dag.transformation_key,
+            extends_key=self.protocol_dag.extends_key,
+        )
+
 
 class AsynchronousComputeService(SynchronousComputeService):
     """Asynchronous compute service.
@@ -567,7 +591,7 @@ class AsynchronousComputeService(SynchronousComputeService):
     _executor_stack: ExecutorStack
     _task_data: dict[TaskKey, TaskData]
 
-    def __init__(self, settings: AsynchronousComputeServiceSettings):
+    def __init__(self, settings: ComputeServiceSettings):
 
         self._dag_tree = nx.DiGraph()
         root_node: NodeKey = (None, "ROOT")
