@@ -408,8 +408,11 @@ class SynchronousComputeService:
 
 from multiprocessing import Process, Queue, Lock
 
-type TaskKey = GufeKey
-type NodeKey = (TaskKey, ProtocolUnit | None)  # None covers terminating node condition
+type TaskKey = ScopedKey
+type NodeKey = (
+    TaskKey | None,
+    ProtocolUnit | str,
+)  # None covers terminating node condition
 
 
 class JailedKeyError(Exception):
@@ -593,11 +596,8 @@ class AsynchronousComputeService(SynchronousComputeService):
 
     def __init__(self, settings: ComputeServiceSettings):
 
-        self._dag_tree = nx.DiGraph()
-        root_node: NodeKey = (None, "ROOT")
-        self._dag_tree.add_node(root_node)
-
         self._task_data = dict()
+        self._initialize_dag_tree()
 
         self.settings = settings
 
@@ -636,6 +636,11 @@ class AsynchronousComputeService(SynchronousComputeService):
         self.compute_service_id = ComputeServiceID.new_from_name(self.name)
         self._stop = False
 
+    def _initialize_dag_tree(self):
+        self._dag_tree = nx.DiGraph()
+        root_node: NodeKey = (None, "ROOT")
+        self._dag_tree.add_node(root_node)
+
     async def async_cycle(self, max_tasks, max_time):
 
         # (ProtocolDAG, dwindling_graph, results)
@@ -659,15 +664,16 @@ class AsynchronousComputeService(SynchronousComputeService):
                 completed.append(task_id)
         return completed
 
-    def add_task(self, task: ScopedKey):
-        """Add a ``Task`` to the ``AsynchronousComputeService`` internal DAG."""
-        task_key: TaskKey = str(task.gufe_key)
+    def add_task(self, task_scoped_key: ScopedKey):
+        dag, _, _ = self.task_to_protocoldag(task_scoped_key)
+        self.graft_dag(task_scoped_key, dag)
 
-        dag, _, _ = self.task_to_protocoldag(task)
+    def graft_dag(self, task_scoped_key: ScopedKey, dag):
+        """Add a ``Task`` to the ``AsynchronousComputeService`` internal DAG."""
 
         def node_transformation(node: ProtocolUnit) -> (TaskKey, ProtocolUnit):
-            nonlocal task_key
-            return (task_key, node)
+            nonlocal task_scoped_key
+            return (task_scoped_key, node)
 
         tagged_dag = nx.DiGraph()
         terminating = node_transformation("TERM")
@@ -678,31 +684,37 @@ class AsynchronousComputeService(SynchronousComputeService):
             tagged_parent = node_transformation(parent)
             tagged_dag.add_edge(tagged_child, tagged_parent)
 
-        for node, in_degree in task.dag.in_degree:
+        for node, in_degree in dag.graph.in_degree:
             if in_degree == 0:
                 tagged_dag.add_edge(terminating, node_transformation(node))
 
         self._dag_tree.add_edges_from(tagged_dag.edges)
         self._dag_tree.add_edge((None, "ROOT"), terminating)
 
-        context = Context()
-        self._task_data[task_key] = TaskData(results={}, context=context)
-        # TODO create necessary directories for contexts: shared and scratch
-        raise NotImplementedError
+        context = Context(
+            scratch=self.scratch_basedir / str(task_scoped_key),
+            shared=self.shared_basedir / str(task_scoped_key),
+        )
+        context.scratch.mkdir(exist_ok=True)
+        context.shared.mkdir(exist_ok=True)
+        self._task_data[task_scoped_key] = TaskData(
+            results={}, context=context, protocol_dag=dag
+        )
 
-    def remove_task(self, task_key):
+    def remove_task(self, task_scoped_key):
         # TODO: check executor stack
         # avoid deleting the root node
-        if task_key is None:
+        if task_scoped_key is None:
             raise ValueError()
 
-        for node in self._dag_tree.nodes:
+        for node in tuple(self._dag_tree.nodes):
             key, _ = node
-            if key == task_key:
+            if key == task_scoped_key:
                 self._dag_tree.remove_node(node)
 
-        # TODO: remove context directories: shared and scratch
-        raise NotImplementedError
+        context = self._task_data[task_scoped_key].context
+        shutil.rmtree(context.shared)
+        shutil.rmtree(context.scratch)
 
     def stop(self):
         self._stop = True
