@@ -68,6 +68,16 @@ if __name__ == "__main__":
     pdrs = []
     while mock_service._task_data:
 
+        for completed_node in mock_service.next_terminating_nodes():
+            tsk, _ = completed_node
+            data = mock_service._task_data.pop(tsk)
+            pdr = data.to_ProtocolDAGResult()
+            print(f"Collected output: {pdr}")
+            mock_service._dag_tree.remove_node(completed_node)
+            shutil.rmtree(data.context.scratch)
+            shutil.rmtree(data.context.shared)
+            pdrs.append(pdr)
+
         # collect results
         while result := mock_service._executor_stack.get_result():
             node_key, res = result
@@ -81,19 +91,12 @@ if __name__ == "__main__":
         )
         for key in tuple(mock_service.next())[:n]:
             tsk, unit = key
-            task_data = mock_service._task_data[tsk]
 
-            # TODO: if we hit the terminal node, clean up, this should
-            # live outside of this loop
-            if unit == "TERM":
-                pdr = task_data.to_ProtocolDAGResult()
-                print(f"Collected output: {pdr}")
-                data = mock_service._task_data.pop(tsk)
-                mock_service._dag_tree.remove_node(key)
-                shutil.rmtree(data.context.scratch)
-                shutil.rmtree(data.context.shared)
-                pdrs.append(pdr)
+            # TODO `next` should not return TERM or ROOT nodes
+            if unit in ("TERM", "ROOT"):
                 continue
+
+            task_data = mock_service._task_data[tsk]
 
             inputs = _pu_to_pur(unit.inputs, mock_service._task_data[tsk].results)
             unit_scratch_dir = task_data.context.scratch / f"{str(unit.key)}"
@@ -102,6 +105,5 @@ if __name__ == "__main__":
             unit_shared_dir.mkdir()
             context = Context(scratch=unit_scratch_dir, shared=unit_shared_dir)
             mock_service._executor_stack.push(key, context, inputs)
-
 
     print(pdrs)

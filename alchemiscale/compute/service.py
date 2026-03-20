@@ -412,7 +412,7 @@ type TaskKey = ScopedKey
 type NodeKey = (
     TaskKey | None,
     ProtocolUnit | str,
-)  # None covers terminating node condition
+)  # None covers root node condition
 
 
 class JailedKeyError(Exception):
@@ -671,12 +671,8 @@ class AsynchronousComputeService(SynchronousComputeService):
         terminated = {t.key for t in terminated}
         return self.available_units() - (running | terminated)
 
-    def check_completed(self) -> list[str]:
-        completed = []
-        for node in self.available:
-            task_id, base_node = node
-            if base_node == "TERM":
-                completed.append(task_id)
+    def next_terminating_nodes(self) -> set[NodeKey]:
+        completed = {node for node in self.available_units() if node[1] == "TERM"}
         return completed
 
     def add_task(self, task_scoped_key: ScopedKey):
