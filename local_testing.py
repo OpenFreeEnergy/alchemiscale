@@ -67,6 +67,14 @@ if __name__ == "__main__":
     # collect for final inspection
     pdrs = []
     while mock_service._task_data:
+
+        # collect results
+        while result := mock_service._executor_stack.get_result():
+            node_key, res = result
+            task_scoped_key, pu = node_key
+            mock_service._task_data[task_scoped_key].results[pu.key] = res
+            mock_service._dag_tree.remove_node(node_key)
+
         # only submit enough tasks to fill the stack
         n = mock_service._executor_stack._stack_size - len(
             mock_service._executor_stack._stack
@@ -95,11 +103,5 @@ if __name__ == "__main__":
             context = Context(scratch=unit_scratch_dir, shared=unit_shared_dir)
             mock_service._executor_stack.push(key, context, inputs)
 
-        # collect results
-        while result := mock_service._executor_stack.get_result():
-            node_key, res = result
-            task_scoped_key, pu = node_key
-            mock_service._task_data[task_scoped_key].results[pu.key] = res
-            mock_service._dag_tree.remove_node(node_key)
 
     print(pdrs)
