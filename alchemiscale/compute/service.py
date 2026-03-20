@@ -544,12 +544,23 @@ class ExecutorStack:
 
         return popped_executor
 
-    def _get_by_pid(self, pid) -> Executor | None:
-        """Get an executor by its PID."""
+    def get_result(self) -> tuple[NodeKey, ProtocolUnitResult] | None:
+        if self.queue.qsize():
+            with self.lock:
+                res = self.queue.get()
+                node_key, _ = res
+                self.remove_by_node_key(node_key)
+                return res
+
+    def remove_by_node_key(self, node_key: NodeKey):
+        to_remove = None
         for proc in self.stack:
-            if proc.pid == pid:
-                return proc
-        return None
+            if proc.key == node_key:
+                to_remove = proc
+                break
+
+        if to_remove:
+            self._stack.remove(proc)
 
     def _get_statuses(self) -> tuple[set[Executor], set[Executor]]:
         running = set()
@@ -642,19 +653,23 @@ class AsynchronousComputeService(SynchronousComputeService):
         self._dag_tree.add_node(root_node)
 
     async def async_cycle(self, max_tasks, max_time):
-
         # (ProtocolDAG, dwindling_graph, results)
         for task in tasks:
             raise NotImplementedError
 
     def available_units(self) -> set[NodeKey]:
-
         available = set()
         for node, degree in self._dag_tree.out_degree():
             if degree == 0:
                 available.add(node)
 
         return available
+
+    def next(self) -> set[NodeKey]:
+        running, terminated = self._executor_stack._get_statuses()
+        running = {r.key for r in running}
+        terminated = {t.key for t in terminated}
+        return self.available_units() - (running | terminated)
 
     def check_completed(self) -> list[str]:
         completed = []
@@ -665,8 +680,8 @@ class AsynchronousComputeService(SynchronousComputeService):
         return completed
 
     def add_task(self, task_scoped_key: ScopedKey):
-        dag, _, _ = self.task_to_protocoldag(task_scoped_key)
-        self.graft_dag(task_scoped_key, dag)
+        protocol_dag, _, _ = self.task_to_protocoldag(task_scoped_key)
+        self.graft_dag(task_scoped_key, protocol_dag)
 
     def graft_dag(self, task_scoped_key: ScopedKey, dag):
         """Add a ``Task`` to the ``AsynchronousComputeService`` internal DAG."""

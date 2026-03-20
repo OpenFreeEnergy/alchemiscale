@@ -9,3 +9,7 @@ class MockService(AsynchronousComputeService):
 
         self.scratch_basedir = scratch_basedir
         self.shared_basedir = shared_basedir
+
+    def add_task(self, task_scoped_key, transformation):
+        protocol_dag = transformation.create()
+        self.graft_dag(task_scoped_key, protocol_dag)
