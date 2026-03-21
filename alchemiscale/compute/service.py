@@ -12,9 +12,13 @@ from uuid import uuid4
 import threading
 from pathlib import Path
 import shutil
+from typing import Any
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
+from gufe.protocols.protocolunit import Context, ProtocolUnitResult, ProtocolUnit
+from gufe.tokenization import GufeKey
+import networkx as nx
 
 from .client import AlchemiscaleComputeClient
 from .settings import ComputeServiceSettings
@@ -402,6 +406,193 @@ class SynchronousComputeService:
         self._stop = True
 
 
+from multiprocessing import Process, Queue, Lock
+
+type TaskKey = ScopedKey
+type NodeKey = (
+    TaskKey | None,
+    ProtocolUnit | str,
+)  # None covers root node condition
+
+
+class JailedKeyError(Exception):
+    pass
+
+
+class Executor(Process):
+
+    key: NodeKey
+    queue: Queue
+    lock: Lock
+    context: Context
+    inputs: dict
+
+    def __init__(self, key, queue, lock, context, inputs):
+        super().__init__()
+        self._key = key
+        self._queue = queue
+        self._lock = lock
+        self._context = context
+        self._inputs = inputs
+
+    def run(self):
+        result = self.execute_unit()
+        self.put_result(result)
+
+    @property
+    def context(self) -> Context:
+        return self._context
+
+    @property
+    def unit(self) -> ProtocolUnit:
+        return self._key[1]
+
+    @property
+    def key(self) -> NodeKey:
+        return self._key
+
+    @property
+    def queue(self) -> Queue:
+        return self._queue
+
+    @property
+    def lock(self) -> Lock:
+        return self._lock
+
+    @property
+    def inputs(self) -> dict:
+        return self._inputs
+
+    @classmethod
+    def from_key(
+        cls, key: NodeKey, queue: Queue, lock: Lock, context: Context, inputs: dict
+    ):
+        return cls(key=key, queue=queue, lock=lock, context=context, inputs=inputs)
+
+    def put_result(self, result: ProtocolUnitResult):
+        """Acquire lock, push key and result into the queue, release lock."""
+        with self.lock:
+            self.queue.put((self._key, result))
+
+    def execute_unit(self) -> ProtocolUnitResult:
+        # this method assumes the context is in place and will be removed correctly
+        return self.unit.execute(context=self.context, **self._inputs)
+
+
+class ExecutorStack:
+
+    stack_size: int
+    stack: list[Executor]
+    jail: dict[NodeKey, set[NodeKey]]
+    queue: Queue
+    lock: Lock
+
+    def __init__(self, stack_size: int):
+        self._stack = []
+        self._stack_size = stack_size
+        self._jail = {}
+        self._queue = Queue()
+        self._lock = Lock()
+
+    @property
+    def stack(self) -> list[Executor]:
+        return self._stack
+
+    @property
+    def stack_size(self) -> int:
+        return self._stack_size
+
+    @property
+    def jail(self) -> dict[NodeKey, set[NodeKey]]:
+        return self._jail
+
+    @property
+    def lock(self) -> Lock:
+        return self._lock
+
+    @property
+    def queue(self) -> Queue:
+        return self._queue
+
+    def terminate_all(self, force=False):
+        if force:
+            for proc in self.stack:
+                proc.terminate()
+
+        with self.lock:
+            for proc in self.stack:
+                proc.terminate()
+
+    def push(self, node: NodeKey, context: Context, inputs: dict):
+        with self.lock:
+            if node in self._jail.keys():
+                raise JailedKeyError(node)
+
+            executor = Executor.from_key(node, self.queue, self.lock, context, inputs)
+            self._stack.append(executor)
+            self._stack[-1].start()
+
+    def pop(self):
+        """Remove last process in the stack. This also clears the node from the jail."""
+        if self._stack_size == 0:
+            raise IndexError("pop from empty stack")
+        popped_executor = self._stack.pop()
+        for key in self._jail.keys():
+            self._jail[key] -= popped_executor.key
+            if not self._jail[key]:
+                self._jail.pop(key)
+
+        return popped_executor
+
+    def get_result(self) -> tuple[NodeKey, ProtocolUnitResult] | None:
+        if self.queue.qsize():
+            with self.lock:
+                res = self.queue.get()
+                node_key, _ = res
+                self.remove_by_node_key(node_key)
+                return res
+
+    def remove_by_node_key(self, node_key: NodeKey):
+        to_remove = None
+        for proc in self.stack:
+            if proc.key == node_key:
+                to_remove = proc
+                break
+
+        if to_remove:
+            self._stack.remove(proc)
+
+    def _get_statuses(self) -> tuple[set[Executor], set[Executor]]:
+        running = set()
+        terminated = set()
+        for proc in self.stack:
+            if proc.is_alive():
+                running.add(proc)
+            else:
+                terminated.add(proc)
+        return running, terminated
+
+
+from dataclasses import dataclass
+
+
+@dataclass
+class TaskData:
+    protocol_dag: ProtocolDAG
+    results: dict[GufeKey, ProtocolUnitResult]
+    context: Context
+
+    # TODO failures?
+    def to_ProtocolDAGResult(self) -> ProtocolDAGResult:
+        return ProtocolDAGResult(
+            name=self.protocol_dag.name,
+            protocol_units=self.protocol_dag.protocol_units,
+            protocol_unit_results=list(self.results.values()),
+            transformation_key=self.protocol_dag.transformation_key,
+            extends_key=self.protocol_dag.extends_key,
+        )
+
+
 class AsynchronousComputeService(SynchronousComputeService):
     """Asynchronous compute service.
 
@@ -410,21 +601,131 @@ class AsynchronousComputeService(SynchronousComputeService):
 
     """
 
-    def __init__(self, api_url):
+    _dag_tree: nx.DiGraph
+    _executor_stack: ExecutorStack
+    _task_data: dict[TaskKey, TaskData]
+
+    def __init__(self, settings: ComputeServiceSettings):
+
+        self._task_data = dict()
+        self._initialize_dag_tree()
+
+        self.settings = settings
+
+        self.api_url = self.settings.api_url
+        self.name = self.settings.name
+        self.sleep_interval = self.settings.sleep_interval
+        self.heartbeat_interval = self.settings.heartbeat_interval
+        self.claim_limit = self.settings.claim_limit
+
         self.scheduler = sched.scheduler(time.monotonic, time.sleep)
-        # self.loop = asyncio.get_event_loop()
+
+        self.client = AlchemiscaleComputeClient(
+            self.settings.api_url,
+            self.settings.identifier,
+            self.settings.key,
+            cache_directory=self.settings.client_cache_directory,
+            cache_size_limit=self.settings.client_cache_size_limit,
+            use_local_cache=self.settings.client_use_local_cache,
+            max_retries=self.settings.client_max_retries,
+            retry_base_seconds=self.settings.client_retry_base_seconds,
+            retry_max_seconds=self.settings.client_retry_max_seconds,
+            verify=self.settings.client_verify,
+        )
 
         self._stop = False
 
-    def get_new_tasks(self): ...
+        self.scopes = self.settings.scopes or [Scope()]
+        self.shared_basedir = Path(self.settings.shared_basedir).absolute()
+        self.shared_basedir.mkdir(exist_ok=True)
+        self.keep_shared = self.settings.keep_shared
 
-    def start(self):
-        """Start the service; will keep going until told to stop."""
+        self.scratch_basedir = Path(self.settings.scratch_basedir).absolute()
+        self.scratch_basedir.mkdir(exist_ok=True)
+        self.keep_scratch = self.settings.keep_scratch
+
+        self.compute_service_id = ComputeServiceID.new_from_name(self.name)
         self._stop = False
 
-        while True:
-            if self._stop:
-                return
+    def _initialize_dag_tree(self):
+        self._dag_tree = nx.DiGraph()
+        root_node: NodeKey = (None, "ROOT")
+        self._dag_tree.add_node(root_node)
+
+    async def async_cycle(self, max_tasks, max_time):
+        # (ProtocolDAG, dwindling_graph, results)
+        for task in tasks:
+            raise NotImplementedError
+
+    def available_units(self) -> set[NodeKey]:
+        available = set()
+        for node, degree in self._dag_tree.out_degree():
+            if degree == 0:
+                available.add(node)
+
+        return available
+
+    def next(self) -> set[NodeKey]:
+        running, terminated = self._executor_stack._get_statuses()
+        running = {r.key for r in running}
+        terminated = {t.key for t in terminated}
+        return self.available_units() - (running | terminated)
+
+    def next_terminating_nodes(self) -> set[NodeKey]:
+        completed = {node for node in self.available_units() if node[1] == "TERM"}
+        return completed
+
+    def add_task(self, task_scoped_key: ScopedKey):
+        protocol_dag, _, _ = self.task_to_protocoldag(task_scoped_key)
+        self.graft_dag(task_scoped_key, protocol_dag)
+
+    def graft_dag(self, task_scoped_key: ScopedKey, dag):
+        """Add a ``Task`` to the ``AsynchronousComputeService`` internal DAG."""
+
+        def node_transformation(node: ProtocolUnit) -> (TaskKey, ProtocolUnit):
+            nonlocal task_scoped_key
+            return (task_scoped_key, node)
+
+        tagged_dag = nx.DiGraph()
+        terminating = node_transformation("TERM")
+        tagged_dag.add_node(terminating)
+
+        for child, parent in dag.graph.edges:
+            tagged_child = node_transformation(child)
+            tagged_parent = node_transformation(parent)
+            tagged_dag.add_edge(tagged_child, tagged_parent)
+
+        for node, in_degree in dag.graph.in_degree:
+            if in_degree == 0:
+                tagged_dag.add_edge(terminating, node_transformation(node))
+
+        self._dag_tree.add_edges_from(tagged_dag.edges)
+        self._dag_tree.add_edge((None, "ROOT"), terminating)
+
+        context = Context(
+            scratch=self.scratch_basedir / str(task_scoped_key),
+            shared=self.shared_basedir / str(task_scoped_key),
+        )
+        context.scratch.mkdir(exist_ok=True)
+        context.shared.mkdir(exist_ok=True)
+        self._task_data[task_scoped_key] = TaskData(
+            results={}, context=context, protocol_dag=dag
+        )
+
+    def remove_task(self, task_scoped_key):
+        # TODO: check executor stack
+        # avoid deleting the root node
+        if task_scoped_key is None:
+            raise ValueError()
+
+        for node in tuple(self._dag_tree.nodes):
+            key, _ = node
+            if key == task_scoped_key:
+                self._dag_tree.remove_node(node)
+
+        context = self._task_data[task_scoped_key].context
+        shutil.rmtree(context.shared)
+        shutil.rmtree(context.scratch)
 
     def stop(self):
         self._stop = True
