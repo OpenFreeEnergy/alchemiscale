@@ -1,7 +1,7 @@
 from openfe_benchmarks import tyk2
 
 from gufe import ChemicalSystem, Transformation, NonTransformation, AlchemicalNetwork
-from gufe.tests.test_protocol import DummyProtocol
+from gufe.tests.test_protocol import DummyProtocol, BrokenProtocol
 
 class DummyProtocolA(DummyProtocol):
     ...
@@ -44,7 +44,7 @@ def network_tyk2():
         Transformation(
             stateA=solvated[edge[0]],
             stateB=solvated[edge[1]],
-            protocol=DummyProtocolB(settings=DummyProtocolB.default_settings()),
+            protocol=BrokenProtocol(settings=BrokenProtocol.default_settings()),
             name=f"{edge[0]}_to_{edge[1]}_solvent",
         )
         for edge in tyk2s.connections

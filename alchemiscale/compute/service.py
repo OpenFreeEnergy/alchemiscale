@@ -11,12 +11,13 @@ import logging
 from uuid import uuid4
 import threading
 from pathlib import Path
+import queue
 import shutil
 from typing import Any
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
-from gufe.protocols.protocolunit import Context, ProtocolUnitResult, ProtocolUnit
+from gufe.protocols.protocolunit import Context, ProtocolUnitFailure, ProtocolUnitResult, ProtocolUnit
 from gufe.tokenization import GufeKey
 import networkx as nx
 
@@ -409,10 +410,10 @@ class SynchronousComputeService:
 from multiprocessing import Process, Queue, Lock
 
 type TaskKey = ScopedKey
-type NodeKey = (
+type NodeKey = tuple[
     TaskKey | None,
     ProtocolUnit | str,
-)  # None covers root node condition
+]  # None covers root node condition
 
 
 class JailedKeyError(Exception):
@@ -424,24 +425,33 @@ class Executor(Process):
     key: NodeKey
     queue: Queue
     lock: Lock
-    context: Context
+    unit_context: Context
     inputs: dict
+    n_retries: int
 
-    def __init__(self, key, queue, lock, context, inputs):
+    def __init__(self, key, queue, lock, context, inputs, n_retries):
         super().__init__()
         self._key = key
         self._queue = queue
         self._lock = lock
-        self._context = context
+        self._unit_context = context
         self._inputs = inputs
+        assert n_retries >= 0
+        self._n_retries = n_retries
 
     def run(self):
-        result = self.execute_unit()
+        attempt = 0
+        while attempt <= self._n_retries:
+            shared_dir = self._unit_context.shared / str(attempt)
+            scratch_dir = self._unit_context.scratch / str(attempt)
+            attempt_context = Context(shared=shared_dir, scratch=scratch_dir)
+            attempt_context.shared.mkdir()
+            attempt_context.scratch.mkdir()
+            result = self.execute_unit(attempt_context)
+            if result.ok():
+                break
+            attempt = attempt + 1
         self.put_result(result)
-
-    @property
-    def context(self) -> Context:
-        return self._context
 
     @property
     def unit(self) -> ProtocolUnit:
@@ -465,18 +475,18 @@ class Executor(Process):
 
     @classmethod
     def from_key(
-        cls, key: NodeKey, queue: Queue, lock: Lock, context: Context, inputs: dict
+            cls, key: NodeKey, queue: Queue, lock: Lock, context: Context, inputs: dict, n_retries: int
     ):
-        return cls(key=key, queue=queue, lock=lock, context=context, inputs=inputs)
+        return cls(key=key, queue=queue, lock=lock, context=context, inputs=inputs, n_retries=n_retries)
 
     def put_result(self, result: ProtocolUnitResult):
         """Acquire lock, push key and result into the queue, release lock."""
         with self.lock:
             self.queue.put((self._key, result))
 
-    def execute_unit(self) -> ProtocolUnitResult:
+    def execute_unit(self, context) -> ProtocolUnitResult | ProtocolUnitFailure:
         # this method assumes the context is in place and will be removed correctly
-        return self.unit.execute(context=self.context, **self._inputs)
+        return self.unit.execute(context=context, **self._inputs)
 
 
 class ExecutorStack:
@@ -514,23 +524,38 @@ class ExecutorStack:
     def queue(self) -> Queue:
         return self._queue
 
-    def terminate_all(self, force=False):
-        if force:
-            for proc in self.stack:
-                proc.terminate()
-
+    def terminate_all(self):
         with self.lock:
             for proc in self.stack:
                 proc.terminate()
 
-    def push(self, node: NodeKey, context: Context, inputs: dict):
+    def terminate_task(self, task_key: TaskKey):
+        with self.lock:
+            to_remove = set()
+            for proc in self.stack:
+                _task_key, _ = proc.key
+                if task_key == _task_key:
+                    to_remove.add(proc)
+            for proc in to_remove:
+                try:
+                    proc.close()
+                except ValueError:
+                    proc.terminate()
+                self._stack.remove(proc)
+
+    def push(self, node: NodeKey, context: Context, inputs: dict, n_retries, in_process=False):
         with self.lock:
             if node in self._jail.keys():
                 raise JailedKeyError(node)
 
-            executor = Executor.from_key(node, self.queue, self.lock, context, inputs)
+            executor = Executor.from_key(node, self.queue, self.lock, context, inputs, n_retries)
             self._stack.append(executor)
-            self._stack[-1].start()
+            if not in_process:
+                self._stack[-1].start()
+                return
+
+        self._stack[-1].run()
+        self._stack[-1].close()
 
     def pop(self):
         """Remove last process in the stack. This also clears the node from the jail."""
@@ -544,10 +569,15 @@ class ExecutorStack:
 
         return popped_executor
 
-    def get_result(self) -> tuple[NodeKey, ProtocolUnitResult] | None:
+    def get_result(self) -> tuple[NodeKey, ProtocolUnitResult | ProtocolUnitFailure] | None:
         if self.queue.qsize():
             with self.lock:
-                res = self.queue.get()
+                # since qsize is not always reliable, we tentatively
+                # accept there might be results
+                try:
+                    res = self.queue.get_nowait()
+                except queue.Empty:
+                    return None
                 node_key, _ = res
                 self.remove_by_node_key(node_key)
                 return res
@@ -582,7 +612,6 @@ class TaskData:
     results: dict[GufeKey, ProtocolUnitResult]
     context: Context
 
-    # TODO failures?
     def to_ProtocolDAGResult(self) -> ProtocolDAGResult:
         return ProtocolDAGResult(
             name=self.protocol_dag.name,
@@ -726,6 +755,13 @@ class AsynchronousComputeService(SynchronousComputeService):
         context = self._task_data[task_scoped_key].context
         shutil.rmtree(context.shared)
         shutil.rmtree(context.scratch)
+
+    def _consume_results(self, task_scoped_key) -> ProtocolDAGResult:
+        self.remove_task(task_scoped_key)
+        data = self._task_data.pop(task_scoped_key)
+        pdr = data.to_ProtocolDAGResult()
+        return pdr
+
 
     def stop(self):
         self._stop = True
