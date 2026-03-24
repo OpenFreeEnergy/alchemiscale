@@ -537,25 +537,18 @@ class ExecutorStack:
                 if task_key == _task_key:
                     to_remove.add(proc)
             for proc in to_remove:
-                try:
-                    proc.close()
-                except ValueError:
-                    proc.terminate()
+                proc.terminate()
                 self._stack.remove(proc)
 
-    def push(self, node: NodeKey, context: Context, inputs: dict, n_retries, in_process=False):
+    def push(self, node: NodeKey, context: Context, inputs: dict, n_retries):
         with self.lock:
             if node in self._jail.keys():
                 raise JailedKeyError(node)
 
             executor = Executor.from_key(node, self.queue, self.lock, context, inputs, n_retries)
             self._stack.append(executor)
-            if not in_process:
-                self._stack[-1].start()
-                return
+            self._stack[-1].start()
 
-        self._stack[-1].run()
-        self._stack[-1].close()
 
     def pop(self):
         """Remove last process in the stack. This also clears the node from the jail."""
@@ -753,8 +746,11 @@ class AsynchronousComputeService(SynchronousComputeService):
                 self._dag_tree.remove_node(node)
 
         context = self._task_data[task_scoped_key].context
-        shutil.rmtree(context.shared)
-        shutil.rmtree(context.scratch)
+
+        if not self.keep_shared:
+            shutil.rmtree(context.shared)
+        if not self.keep_scratch:
+            shutil.rmtree(context.scratch)
 
     def _consume_results(self, task_scoped_key) -> ProtocolDAGResult:
         self.remove_task(task_scoped_key)

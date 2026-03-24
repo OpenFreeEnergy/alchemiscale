@@ -30,7 +30,8 @@ SCRATCH_DIR = Path("./acs_testing/scratch")
 SHARED_DIR = Path("./acs_testing/shared")
 STACKSIZE = 10
 N_RETRIES = 2
-IN_PROCESS = False
+KEEP_SHARED = False
+KEEP_SCRATCH = False
 
 SCRATCH_DIR.mkdir(parents=True, exist_ok=True)
 SHARED_DIR.mkdir(parents=True, exist_ok=True)
@@ -50,7 +51,7 @@ def create_tyk2():
 
 if __name__ == "__main__":
 
-    mock_service = service.MockService(SCRATCH_DIR, SHARED_DIR, STACKSIZE)
+    mock_service = service.MockService(SCRATCH_DIR, SHARED_DIR, STACKSIZE, KEEP_SCRATCH, KEEP_SHARED)
 
     with utils.timer(wrap=True):
         print("Creating network")
@@ -80,17 +81,24 @@ if __name__ == "__main__":
             node_key, res = result
             task_scoped_key, pu = node_key
             mock_service._task_data[task_scoped_key].results[pu.key] = res
+            unit_context = Context(
+                shared=mock_service._task_data[task_scoped_key].context.shared / f"{pu.key}",
+                scratch=mock_service._task_data[task_scoped_key].context.scratch / f"{pu.key}",
+            )
 
             match res:
                 case ProtocolUnitFailure():
                     mock_service._executor_stack.terminate_task(task_scoped_key)
                     failed_tasks.add(task_scoped_key)
+
                 case ProtocolUnitResult():
                     mock_service._dag_tree.remove_node(node_key)
-
+            if not mock_service.keep_scratch:
+                shutil.rmtree(unit_context.scratch)
         for failed_task in failed_tasks:
             pdr = mock_service._consume_results(failed_task)
             pdrs.append(pdr)
+
 
         # only submit enough tasks to fill the stack
         n = mock_service._executor_stack._stack_size - len(
@@ -111,6 +119,6 @@ if __name__ == "__main__":
             unit_scratch_dir.mkdir()
             unit_shared_dir.mkdir()
             context = Context(scratch=unit_scratch_dir, shared=unit_shared_dir)
-            mock_service._executor_stack.push(key, context, inputs, N_RETRIES, in_process=IN_PROCESS)
+            mock_service._executor_stack.push(key, context, inputs, N_RETRIES)
 
     print(pdrs)
