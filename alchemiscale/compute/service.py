@@ -16,7 +16,7 @@ import shutil
 from typing import Any
 
 from gufe import Transformation
-from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
+from gufe.protocols.protocoldag import _pu_to_pur, execute_DAG, ProtocolDAG, ProtocolDAGResult
 from gufe.protocols.protocolunit import Context, ProtocolUnitFailure, ProtocolUnitResult, ProtocolUnit
 from gufe.tokenization import GufeKey
 import networkx as nx
@@ -674,10 +674,99 @@ class AsynchronousComputeService(SynchronousComputeService):
         root_node: NodeKey = (None, "ROOT")
         self._dag_tree.add_node(root_node)
 
-    async def async_cycle(self, max_tasks, max_time):
-        # (ProtocolDAG, dwindling_graph, results)
-        for task in tasks:
-            raise NotImplementedError
+    def has_tasks(self) -> bool:
+        return bool(self._task_data)
+
+    def cycle(self, max_tasks, max_time) -> bool:
+        # TODO check max_tasks and max_time
+
+        match (self._stop, self.has_tasks()):
+            # should stop, but has remaining tasks, that COULD be finished
+            # 1. terminate all processes
+            # 2. Process remaining results in queue
+            # 3. Push anything that is completed or failed
+            # 4. Remove all tasks
+            # 5. break from main loop
+            case (True, True):
+                raise NotImplementedError
+                # should terminate all tasks
+                mock_service.terminate_all()
+                mock_service.process_results()
+                mock_service.remove_all()
+                return False
+            case (True, False):
+                return False
+            case (False, True):
+                pass
+            case (False, False):
+                tasks: list[ScopedKey] | None = self.claim_tasks(count=self.claim_limit)
+                should_stop = True
+
+                for task in tasks:
+                    if task is None:
+                        pass
+                    else:
+                        should_stop = False
+                        self.add_task(*task)
+                if should_stop:
+                    self.stop()
+            case _:
+                raise RuntimeError("Should never hit this")
+
+
+
+        # check for terminating nodes
+        for terminating_nodes in self.next_terminating_nodes():
+            task_scoped_key, _ = terminating_nodes
+            pdr = self._consume_results(task_scoped_key)
+            self.push_result(task_scoped_key, pdr)
+
+        # collect unit results
+        failed_tasks = set()
+        while result := self._executor_stack.get_result():
+            node_key, res = result
+            task_scoped_key, pu = node_key
+            self._task_data[task_scoped_key].results[pu.key] = res
+            unit_context = Context(
+                shared=self._task_data[task_scoped_key].context.shared / f"{pu.key}",
+                scratch=self._task_data[task_scoped_key].context.scratch / f"{pu.key}",
+            )
+
+            match res:
+                case ProtocolUnitFailure():
+                    self._executor_stack.terminate_task(task_scoped_key)
+                    failed_tasks.add(task_scoped_key)
+
+                case ProtocolUnitResult():
+                    self._dag_tree.remove_node(node_key)
+            if not self.keep_scratch:
+                shutil.rmtree(unit_context.scratch)
+
+        for failed_task in failed_tasks:
+            pdr = self._consume_results(failed_task)
+            self.push_result(task_scoped_key, pdr)
+
+        # only submit enough tasks to fill the stack
+        n = self._executor_stack._stack_size - len(
+            self._executor_stack._stack
+        )
+        for key in tuple(self.next())[:n]:
+            tsk, unit = key
+
+            # TODO `next` should not return TERM or ROOT nodes
+            if unit in ("TERM", "ROOT"):
+                continue
+
+            task_data = self._task_data[tsk]
+
+            inputs = _pu_to_pur(unit.inputs, task_data.results)
+            unit_scratch_dir = task_data.context.scratch / f"{str(unit.key)}"
+            unit_shared_dir = task_data.context.shared / f"{str(unit.key)}"
+            unit_scratch_dir.mkdir()
+            unit_shared_dir.mkdir()
+            context = Context(scratch=unit_scratch_dir, shared=unit_shared_dir)
+            self._executor_stack.push(key, context, inputs, self.n_retries)
+        return True
 
     def available_units(self) -> set[NodeKey]:
         available = set()
