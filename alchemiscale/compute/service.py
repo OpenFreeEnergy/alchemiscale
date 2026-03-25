@@ -715,11 +715,6 @@ class AsynchronousComputeService(SynchronousComputeService):
 
 
 
-        # check for terminating nodes
-        for terminating_nodes in self.next_terminating_nodes():
-            task_scoped_key, _ = terminating_nodes
-            pdr = self._consume_results(task_scoped_key)
-            self.push_result(task_scoped_key, pdr)
 
         # collect unit results
         failed_tasks = set()
@@ -744,6 +739,12 @@ class AsynchronousComputeService(SynchronousComputeService):
 
         for failed_task in failed_tasks:
             pdr = self._consume_results(failed_task)
+            self.push_result(task_scoped_key, pdr)
+
+        # check for terminating nodes
+        for terminating_nodes in self.next_terminating_nodes():
+            task_scoped_key, _ = terminating_nodes
+            pdr = self._consume_results(task_scoped_key)
             self.push_result(task_scoped_key, pdr)
 
         # only submit enough tasks to fill the stack
