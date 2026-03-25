@@ -16,8 +16,18 @@ import shutil
 from typing import Any
 
 from gufe import Transformation
-from gufe.protocols.protocoldag import _pu_to_pur, execute_DAG, ProtocolDAG, ProtocolDAGResult
-from gufe.protocols.protocolunit import Context, ProtocolUnitFailure, ProtocolUnitResult, ProtocolUnit
+from gufe.protocols.protocoldag import (
+    _pu_to_pur,
+    execute_DAG,
+    ProtocolDAG,
+    ProtocolDAGResult,
+)
+from gufe.protocols.protocolunit import (
+    Context,
+    ProtocolUnitFailure,
+    ProtocolUnitResult,
+    ProtocolUnit,
+)
 from gufe.tokenization import GufeKey
 import networkx as nx
 
@@ -475,9 +485,22 @@ class Executor(Process):
 
     @classmethod
     def from_key(
-            cls, key: NodeKey, queue: Queue, lock: Lock, context: Context, inputs: dict, n_retries: int
+        cls,
+        key: NodeKey,
+        queue: Queue,
+        lock: Lock,
+        context: Context,
+        inputs: dict,
+        n_retries: int,
     ):
-        return cls(key=key, queue=queue, lock=lock, context=context, inputs=inputs, n_retries=n_retries)
+        return cls(
+            key=key,
+            queue=queue,
+            lock=lock,
+            context=context,
+            inputs=inputs,
+            n_retries=n_retries,
+        )
 
     def put_result(self, result: ProtocolUnitResult):
         """Acquire lock, push key and result into the queue, release lock."""
@@ -528,6 +551,7 @@ class ExecutorStack:
         with self.lock:
             for proc in self.stack:
                 proc.terminate()
+            self.stack.clear()
 
     def terminate_task(self, task_key: TaskKey):
         with self.lock:
@@ -545,10 +569,11 @@ class ExecutorStack:
             if node in self._jail.keys():
                 raise JailedKeyError(node)
 
-            executor = Executor.from_key(node, self.queue, self.lock, context, inputs, n_retries)
+            executor = Executor.from_key(
+                node, self.queue, self.lock, context, inputs, n_retries
+            )
             self._stack.append(executor)
             self._stack[-1].start()
-
 
     def pop(self):
         """Remove last process in the stack. This also clears the node from the jail."""
@@ -562,7 +587,9 @@ class ExecutorStack:
 
         return popped_executor
 
-    def get_result(self) -> tuple[NodeKey, ProtocolUnitResult | ProtocolUnitFailure] | None:
+    def get_result(
+        self,
+    ) -> tuple[NodeKey, ProtocolUnitResult | ProtocolUnitFailure] | None:
         if self.queue.qsize():
             with self.lock:
                 # since qsize is not always reliable, we tentatively
@@ -710,6 +737,8 @@ class AsynchronousComputeService(SynchronousComputeService):
 
     def cycle(self, max_tasks, max_time) -> bool:
         # TODO check max_tasks and max_time
+        if (time.time() - self._start_time) >= max_time:
+            self.stop()
 
         if self._stop:
             # should stop, but has remaining tasks, that COULD be finished
@@ -720,18 +749,18 @@ class AsynchronousComputeService(SynchronousComputeService):
             # 5. break from main loop
 
             if self.has_tasks():
-                mock_service.terminate_all()
-                mock_service.process_results()
-                mock_service.remove_all()
+                self.process_results()
+                self._executor_stack.terminate_all()  # may corrupt queue, pull results out first
+                self.consume_terminated_tasks()
+                self.remove_all()
             return False
 
-        max_less_waiting = max_tasks - len(self._task_data) # why does removing this break things?
         max_less_claimed = max_tasks - self.tasks_claimed
         empty_slots = self.claim_limit - len(self._task_data)
-        n_claim = min(empty_slots,
-                      #max_less_waiting,
-                      max_less_claimed,
-                      )
+        n_claim = min(
+            empty_slots,
+            max_less_claimed,
+        )
         tasks = self.claim_tasks(count=n_claim)
         for task in tasks:
             if task is not None:
@@ -746,9 +775,7 @@ class AsynchronousComputeService(SynchronousComputeService):
             return False
 
         # only submit enough tasks to fill the stack
-        n = self._executor_stack._stack_size - len(
-            self._executor_stack._stack
-        )
+        n = self._executor_stack._stack_size - len(self._executor_stack._stack)
         for key in tuple(self.next())[:n]:
             tsk, unit = key
 
@@ -840,12 +867,16 @@ class AsynchronousComputeService(SynchronousComputeService):
         if not self.keep_scratch:
             shutil.rmtree(context.scratch)
 
+    def remove_all(self):
+        for task_scoped_key in self._task_data.keys():
+            self.remove_task(task_scoped_key)
+        self._task_data.clear()
+
     def _consume_results(self, task_scoped_key) -> ProtocolDAGResult:
         self.remove_task(task_scoped_key)
         data = self._task_data.pop(task_scoped_key)
         pdr = data.to_ProtocolDAGResult()
         return pdr
-
 
     def stop(self):
         self._stop = True

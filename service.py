@@ -1,3 +1,5 @@
+import time
+
 from alchemiscale.compute.service import AsynchronousComputeService, ExecutorStack
 
 class MockService(AsynchronousComputeService):
@@ -19,6 +21,7 @@ class MockService(AsynchronousComputeService):
         self.tasks_finished = 0
 
         self._stop = False
+        self._start_time = time.time()
 
     def add_task(self, task_scoped_key, transformation):
         protocol_dag = transformation.create()
