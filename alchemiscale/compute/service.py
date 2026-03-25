@@ -677,46 +677,13 @@ class AsynchronousComputeService(SynchronousComputeService):
     def has_tasks(self) -> bool:
         return bool(self._task_data)
 
-    def cycle(self, max_tasks, max_time) -> bool:
-        # TODO check max_tasks and max_time
+    def consume_terminated_tasks(self):
+        for terminating_nodes in self.next_terminating_nodes():
+            task_scoped_key, _ = terminating_nodes
+            pdr = self._consume_results(task_scoped_key)
+            self.push_result(task_scoped_key, pdr)
 
-        match (self._stop, self.has_tasks()):
-            # should stop, but has remaining tasks, that COULD be finished
-            # 1. terminate all processes
-            # 2. Process remaining results in queue
-            # 3. Push anything that is completed or failed
-            # 4. Remove all tasks
-            # 5. break from main loop
-            case (True, True):
-                raise NotImplementedError
-                # should terminate all tasks
-                mock_service.terminate_all()
-                mock_service.process_results()
-                mock_service.remove_all()
-                return False
-            case (True, False):
-                return False
-            case (False, True):
-                pass
-            case (False, False):
-                tasks: list[ScopedKey] | None = self.claim_tasks(count=self.claim_limit)
-                should_stop = True
-
-                for task in tasks:
-                    if task is None:
-                        pass
-                    else:
-                        should_stop = False
-                        self.add_task(*task)
-                if should_stop:
-                    self.stop()
-            case _:
-                raise RuntimeError("Should never hit this")
-
-
-
-
-        # collect unit results
+    def process_results(self):
         failed_tasks = set()
         while result := self._executor_stack.get_result():
             node_key, res = result
@@ -741,11 +708,42 @@ class AsynchronousComputeService(SynchronousComputeService):
             pdr = self._consume_results(failed_task)
             self.push_result(task_scoped_key, pdr)
 
-        # check for terminating nodes
-        for terminating_nodes in self.next_terminating_nodes():
-            task_scoped_key, _ = terminating_nodes
-            pdr = self._consume_results(task_scoped_key)
-            self.push_result(task_scoped_key, pdr)
+    def cycle(self, max_tasks, max_time) -> bool:
+        # TODO check max_tasks and max_time
+
+        if self._stop:
+            # should stop, but has remaining tasks, that COULD be finished
+            # 1. terminate all processes
+            # 2. Process remaining results in queue
+            # 3. Push anything that is completed or failed
+            # 4. Remove all tasks
+            # 5. break from main loop
+
+            if self.has_tasks():
+                mock_service.terminate_all()
+                mock_service.process_results()
+                mock_service.remove_all()
+            return False
+
+        max_less_waiting = max_tasks - len(self._task_data) # why does removing this break things?
+        max_less_claimed = max_tasks - self.tasks_claimed
+        empty_slots = self.claim_limit - len(self._task_data)
+        n_claim = min(empty_slots,
+                      #max_less_waiting,
+                      max_less_claimed,
+                      )
+        tasks = self.claim_tasks(count=n_claim)
+        for task in tasks:
+            if task is not None:
+                self.add_task(*task)
+                self.tasks_claimed = 1 + self.tasks_claimed
+
+        # collect unit results
+        self.process_results()
+        self.consume_terminated_tasks()
+        if self.tasks_finished >= max_tasks:
+            self.stop()
+            return False
 
         # only submit enough tasks to fill the stack
         n = self._executor_stack._stack_size - len(

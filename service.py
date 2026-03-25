@@ -14,6 +14,9 @@ class MockService(AsynchronousComputeService):
         self.n_retries = n_retries
         self.claim_limit = claim_limit
         self.task_generator = task_generator
+        self.pdrs = []
+        self.tasks_claimed = 0
+        self.tasks_finished = 0
 
         self._stop = False
 
@@ -24,9 +27,16 @@ class MockService(AsynchronousComputeService):
     def claim_tasks(self, count=1):
         claimed_tasks = []
         remaining = count
+        if remaining == 0:
+            return [None] * count
         for task in self.task_generator:
             claimed_tasks.append(task)
             remaining = remaining - 1
             if remaining == 0:
                 return claimed_tasks
         return claimed_tasks + [None] * remaining
+
+    def push_result(self, task_scoped_key, pdr):
+        _ = task_scoped_key
+        self.pdrs.append(pdr)
+        self.tasks_finished = self.tasks_finished + 1
