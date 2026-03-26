@@ -30,8 +30,8 @@ SCRATCH_DIR = Path("./acs_testing/scratch")
 SHARED_DIR = Path("./acs_testing/shared")
 STACKSIZE = 10
 N_RETRIES = 0
-MAX_TASKS = 100
-MAX_TIME = 25
+MAX_TASKS = None
+MAX_TIME = 20
 KEEP_SHARED = False
 KEEP_SCRATCH = False
 CLAIM_LIMIT = 10
@@ -73,7 +73,6 @@ if __name__ == "__main__":
         task_generator,
     )
 
-    while mock_service.cycle(MAX_TASKS, MAX_TIME):
-        pass
+    mock_service.start(MAX_TASKS, MAX_TIME)
 
     print(mock_service.pdrs)

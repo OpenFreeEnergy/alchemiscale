@@ -1,6 +1,8 @@
+import logging
 import time
 
-from alchemiscale.compute.service import AsynchronousComputeService, ExecutorStack
+from alchemiscale.compute.service import AsynchronousComputeService, ExecutorStack, InterruptableSleep
+from alchemiscale.storage.models import ComputeServiceID
 
 class MockService(AsynchronousComputeService):
 
@@ -20,12 +22,38 @@ class MockService(AsynchronousComputeService):
         self.tasks_claimed = 0
         self.tasks_finished = 0
 
-        self._stop = False
-        self._start_time = time.time()
+        self.int_sleep = InterruptableSleep()
+
+        self.name = "MockService"
+        self.compute_service_id = ComputeServiceID.new_from_name(self.name)
+
+        # logging shim
+        extra = {"compute_service_id": "fakeid"}
+        logger = logging.getLogger("AlchemiscaleSynchronousComputeService")
+        logger.setLevel(logging.DEBUG)
+
+        formatter = logging.Formatter(
+            "[%(asctime)s] [%(compute_service_id)s] [%(levelname)s] %(message)s"
+        )
+        formatter.converter = time.gmtime  # use utc time for logging timestamps
+
+        sh = logging.StreamHandler()
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
+        self.logger = logging.LoggerAdapter(logger, extra)
 
     def add_task(self, task_scoped_key, transformation):
         protocol_dag = transformation.create()
         self.graft_dag(task_scoped_key, protocol_dag)
+
+    def _register(self):
+        self.logger.info("Fake register")
+
+    def _deregister(self):
+        self.logger.info("Fake deregister")
+
+    def heartbeat(self):
+        pass
 
     def claim_tasks(self, count=1):
         claimed_tasks = []
@@ -41,5 +69,6 @@ class MockService(AsynchronousComputeService):
 
     def push_result(self, task_scoped_key, pdr):
         _ = task_scoped_key
+        self.logger.info(f"Pushing {pdr}")
         self.pdrs.append(pdr)
         self.tasks_finished = self.tasks_finished + 1

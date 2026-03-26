@@ -509,6 +509,8 @@ class Executor(Process):
 
     def execute_unit(self, context) -> ProtocolUnitResult | ProtocolUnitFailure:
         # this method assumes the context is in place and will be removed correctly
+        import warnings
+        warnings.filterwarnings("ignore", message=r".*RDKit does not preserve.*")
         return self.unit.execute(context=context, **self._inputs)
 
 
@@ -569,6 +571,8 @@ class ExecutorStack:
             if node in self._jail.keys():
                 raise JailedKeyError(node)
 
+            import warnings
+            warnings.filterwarnings("ignore", message=r".*This process.*is multi-threaded,.*")
             executor = Executor.from_key(
                 node, self.queue, self.lock, context, inputs, n_retries
             )
@@ -735,44 +739,39 @@ class AsynchronousComputeService(SynchronousComputeService):
             pdr = self._consume_results(failed_task)
             self.push_result(task_scoped_key, pdr)
 
+    def stop(self):
+        if self.has_tasks():
+            self.logger.info("Cleaning up")
+            self.process_results()
+            self._executor_stack.terminate_all()  # may corrupt queue, pull results out first
+            self.consume_terminated_tasks()
+            self.remove_all()
+        super().stop()
+
     def cycle(self, max_tasks, max_time) -> bool:
-        # TODO check max_tasks and max_time
-        if (time.time() - self._start_time) >= max_time:
+
+        if max_time is not None and (time.time() - self._start_time) >= max_time:
+            self.logger.info("Exceeded maximum time")
             self.stop()
-
-        if self._stop:
-            # should stop, but has remaining tasks, that COULD be finished
-            # 1. terminate all processes
-            # 2. Process remaining results in queue
-            # 3. Push anything that is completed or failed
-            # 4. Remove all tasks
-            # 5. break from main loop
-
-            if self.has_tasks():
-                self.process_results()
-                self._executor_stack.terminate_all()  # may corrupt queue, pull results out first
-                self.consume_terminated_tasks()
-                self.remove_all()
             return False
 
-        max_less_claimed = max_tasks - self.tasks_claimed
-        empty_slots = self.claim_limit - len(self._task_data)
-        n_claim = min(
-            empty_slots,
-            max_less_claimed,
-        )
+        # collect unit results
+        self.process_results()
+        self.consume_terminated_tasks()
+        if max_tasks is not None and self.tasks_finished >= max_tasks:
+            self.logger.info("Exceeded maximum tasks")
+            self.stop()
+            return False
+
+        n_claim = self.claim_limit - len(self._task_data)
+        if max_tasks is not None:
+            max_less_claimed = max_tasks - self.tasks_claimed
+            n_claim = min(n_claim, max_less_claimed)
         tasks = self.claim_tasks(count=n_claim)
         for task in tasks:
             if task is not None:
                 self.add_task(*task)
                 self.tasks_claimed = 1 + self.tasks_claimed
-
-        # collect unit results
-        self.process_results()
-        self.consume_terminated_tasks()
-        if self.tasks_finished >= max_tasks:
-            self.stop()
-            return False
 
         # only submit enough tasks to fill the stack
         n = self._executor_stack._stack_size - len(self._executor_stack._stack)
@@ -791,7 +790,9 @@ class AsynchronousComputeService(SynchronousComputeService):
             unit_scratch_dir.mkdir()
             unit_shared_dir.mkdir()
             context = Context(scratch=unit_scratch_dir, shared=unit_shared_dir)
+            self.logger.info(f"Pushing {key[1]} to the execution stack")
             self._executor_stack.push(key, context, inputs, self.n_retries)
+
         return True
 
     def available_units(self) -> set[NodeKey]:
@@ -877,6 +878,3 @@ class AsynchronousComputeService(SynchronousComputeService):
         data = self._task_data.pop(task_scoped_key)
         pdr = data.to_ProtocolDAGResult()
         return pdr
-
-    def stop(self):
-        self._stop = True
