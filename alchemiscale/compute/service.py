@@ -15,6 +15,8 @@ import queue
 import shutil
 from typing import Any
 from enum import StrEnum
+from multiprocessing import Process, Queue, Lock
+from dataclasses import dataclass
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import (
@@ -418,25 +420,21 @@ class SynchronousComputeService:
         self._stop = True
 
 
-from multiprocessing import Process, Queue, Lock
+## Asynchronous compute
 
 type TaskKey = ScopedKey
+
+# ProtocolUnits are paired with their parent task for book keeping
+# purposes
 type NodeKey = tuple[
     TaskKey | None,
     ProtocolUnit | str,
 ]  # None covers root node condition
 
-class ResourceSignal(StrEnum):
-    MAINTAIN = "maintain"
-    SHRINK = "shrink"
-    GROW = "grow"
-    TERMINATE = "terminate"
-
-class JailedKeyError(Exception):
-    pass
-
-
 class Executor(Process):
+    """Custom Process subclass for execution of protocol units.
+
+    """
 
     key: NodeKey
     queue: Queue
@@ -452,7 +450,6 @@ class Executor(Process):
         self._lock = lock
         self._unit_context = context
         self._inputs = inputs
-        assert n_retries >= 0
         self._n_retries = n_retries
 
     def run(self):
@@ -477,41 +474,10 @@ class Executor(Process):
     def key(self) -> NodeKey:
         return self._key
 
-    @property
-    def queue(self) -> Queue:
-        return self._queue
-
-    @property
-    def lock(self) -> Lock:
-        return self._lock
-
-    @property
-    def inputs(self) -> dict:
-        return self._inputs
-
-    @classmethod
-    def from_key(
-        cls,
-        key: NodeKey,
-        queue: Queue,
-        lock: Lock,
-        context: Context,
-        inputs: dict,
-        n_retries: int,
-    ):
-        return cls(
-            key=key,
-            queue=queue,
-            lock=lock,
-            context=context,
-            inputs=inputs,
-            n_retries=n_retries,
-        )
-
     def put_result(self, result: ProtocolUnitResult):
         """Acquire lock, push key and result into the queue, release lock."""
-        with self.lock:
-            self.queue.put((self._key, result))
+        with self._lock:
+            self._queue.put((self._key, result))
 
     def execute_unit(self, context) -> ProtocolUnitResult | ProtocolUnitFailure:
         # this method assumes the context is in place and will be removed correctly
@@ -519,12 +485,18 @@ class Executor(Process):
         warnings.filterwarnings("ignore", message=r".*RDKit does not preserve.*")
         return self.unit.execute(context=context, **self._inputs)
 
+class JailedKeyError(Exception):
+    pass
 
 class ExecutorStack:
+    """Structure for coordinating the creation and management of
+    Executor processes.
+    """
 
     stack_size: int
     stack: list[Executor]
-    jail: dict[NodeKey, set[NodeKey]]
+    jail: dict[NodeKey, set[NodeKey]] # blocked node specified by a
+                                      # set of blocking nodes
     queue: Queue
     lock: Lock
 
@@ -574,6 +546,7 @@ class ExecutorStack:
 
     def push(self, node: NodeKey, unit_context: Context, inputs: dict, n_retries):
         with self.lock:
+            # node may be blocked from execution
             if node in self._jail.keys():
                 raise JailedKeyError(node)
 
@@ -582,7 +555,7 @@ class ExecutorStack:
 
             import warnings
             warnings.filterwarnings("ignore", message=r".*This process.*is multi-threaded,.*")
-            executor = Executor.from_key(
+            executor = Executor(
                 node, self.queue, self.lock, unit_context, inputs, n_retries
             )
             self._stack.append(executor)
@@ -657,8 +630,6 @@ class ExecutorStack:
         return running, terminated
 
 
-from dataclasses import dataclass
-
 
 @dataclass
 class TaskData:
@@ -675,6 +646,11 @@ class TaskData:
             extends_key=self.protocol_dag.extends_key,
         )
 
+class ResourceSignal(StrEnum):
+    MAINTAIN = "maintain"
+    SHRINK = "shrink"
+    GROW = "grow"
+    TERMINATE = "terminate"
 
 class AsynchronousComputeService(SynchronousComputeService):
     """Asynchronous compute service.
@@ -778,7 +754,7 @@ class AsynchronousComputeService(SynchronousComputeService):
             self.remove_all()
         super().stop()
 
-    def resource_monitor(self) -> ResourceSignal:
+    def _resource_monitor(self) -> ResourceSignal:
         capacity = 8
         sim_value = 3
         fin_value = 1
@@ -813,29 +789,27 @@ class AsynchronousComputeService(SynchronousComputeService):
         return ResourceSignal.TERMINATE
 
     def cycle(self, max_tasks, max_time) -> bool:
-        self.logger.info(f"Cycling: {len(self._task_data)}")
-
-        if max_time is not None and (time.time() - self._start_time) >= max_time:
-            self.logger.info("Exceeded maximum time")
-            self.stop()
-            return False
-
         # collect unit results
         self.process_results() # removes unit scratch
         self.consume_terminated_tasks() # only removes if task is done
+
+        # check if max tasks have been exceeded
         if max_tasks is not None and self.tasks_finished >= max_tasks:
             self.logger.info("Exceeded maximum tasks")
             self.stop()
             return False
 
-        signal = self.resource_monitor()
+        # Check if max time has been exceeded
+        if max_time is not None and (time.time() - self._start_time) >= max_time:
+            self.logger.info("Exceeded maximum time")
+            self.stop()
+            return False
+
+        # detemine next actions based on resource usage
+        signal = self._resource_monitor()
         match signal:
             case ResourceSignal.MAINTAIN:
-                #self.process_results()
-                #self.consume_terminated_tasks()
                 return True
-            case ResourceSignal.GROW:
-                pass
             case ResourceSignal.SHRINK:
                 proc = self._executor_stack.pop()
                 self.logger.info(f"Popping: {proc} -- {proc.key[1].key}")
@@ -843,6 +817,8 @@ class AsynchronousComputeService(SynchronousComputeService):
             case ResourceSignal.TERMINATE:
                 self.stop()
                 return False
+            case ResourceSignal.GROW:
+                pass
             case _:
                 raise RuntimeError("Received unknown ResourceSignal")
 
@@ -856,15 +832,8 @@ class AsynchronousComputeService(SynchronousComputeService):
                 self.add_task(*task)
                 self.tasks_claimed = 1 + self.tasks_claimed
 
-        # only submit enough tasks to fill the stack
-        n = self._executor_stack._stack_size - len(self._executor_stack._stack)
-        for key in tuple(self.next()):
-            tsk, unit = key
-
-            # TODO `next` should not return TERM or ROOT nodes
-            if unit in ("TERM", "ROOT"):
-                continue
-
+        for key in filter(lambda k: k[1] not in ("TERM", "ROOT"), self.next()):
+            (tsk, unit) = key
             task_data = self._task_data[tsk]
 
             inputs = _pu_to_pur(unit.inputs, task_data.results)
@@ -875,10 +844,9 @@ class AsynchronousComputeService(SynchronousComputeService):
             try:
                 self._executor_stack.push(key, context, inputs, self.n_retries)
                 self.logger.info(f"Pushing {key[1]} to the execution stack")
+                break
             except JailedKeyError:
                 continue
-            if not (n := n - 1):
-                break
 
         return True
 
@@ -894,7 +862,8 @@ class AsynchronousComputeService(SynchronousComputeService):
         running, terminated = self._executor_stack._get_statuses()
         running = {r.key for r in running}
         terminated = {t.key for t in terminated}
-        return self.available_units() - (running | terminated)
+        next_units = self.available_units() - (running | terminated)
+        return next_units
 
     def next_terminating_nodes(self) -> set[NodeKey]:
         completed = {node for node in self.available_units() if node[1] == "TERM"}
