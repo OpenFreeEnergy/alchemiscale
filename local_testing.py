@@ -28,13 +28,13 @@ import utils
 
 SCRATCH_DIR = Path("./acs_testing/scratch")
 SHARED_DIR = Path("./acs_testing/shared")
-STACKSIZE = 10
+STACKSIZE = 4
 N_RETRIES = 0
-MAX_TASKS = None
-MAX_TIME = 20
+MAX_TASKS = 1
+MAX_TIME = None
 KEEP_SHARED = False
 KEEP_SCRATCH = False
-CLAIM_LIMIT = 10
+CLAIM_LIMIT = 2
 
 SCRATCH_DIR.mkdir(parents=True, exist_ok=True)
 SHARED_DIR.mkdir(parents=True, exist_ok=True)
@@ -59,7 +59,7 @@ if __name__ == "__main__":
 
     task_generator = (
         (utils.new_task_scoped_key(), transformation)
-        for transformation in tuple(tyk2.edges)
+        for transformation in tuple(tyk2.edges)[:10]
     )
 
     mock_service = service.MockService(
@@ -76,3 +76,4 @@ if __name__ == "__main__":
     mock_service.start(MAX_TASKS, MAX_TIME)
 
     print(mock_service.pdrs)
+    assert(all(pdr.ok() for pdr in mock_service.pdrs))

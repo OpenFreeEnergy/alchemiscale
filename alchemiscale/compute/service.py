@@ -14,6 +14,7 @@ from pathlib import Path
 import queue
 import shutil
 from typing import Any
+from enum import StrEnum
 
 from gufe import Transformation
 from gufe.protocols.protocoldag import (
@@ -425,6 +426,11 @@ type NodeKey = tuple[
     ProtocolUnit | str,
 ]  # None covers root node condition
 
+class ResourceSignal(StrEnum):
+    MAINTAIN = "maintain"
+    SHRINK = "shrink"
+    GROW = "grow"
+    TERMINATE = "terminate"
 
 class JailedKeyError(Exception):
     pass
@@ -566,30 +572,46 @@ class ExecutorStack:
                 proc.terminate()
                 self._stack.remove(proc)
 
-    def push(self, node: NodeKey, context: Context, inputs: dict, n_retries):
+    def push(self, node: NodeKey, unit_context: Context, inputs: dict, n_retries):
         with self.lock:
             if node in self._jail.keys():
                 raise JailedKeyError(node)
 
+            unit_context.scratch.mkdir()
+            unit_context.shared.mkdir()
+
             import warnings
             warnings.filterwarnings("ignore", message=r".*This process.*is multi-threaded,.*")
             executor = Executor.from_key(
-                node, self.queue, self.lock, context, inputs, n_retries
+                node, self.queue, self.lock, unit_context, inputs, n_retries
             )
             self._stack.append(executor)
             self._stack[-1].start()
 
     def pop(self):
         """Remove last process in the stack. This also clears the node from the jail."""
-        if self._stack_size == 0:
-            raise IndexError("pop from empty stack")
-        popped_executor = self._stack.pop()
-        for key in self._jail.keys():
-            self._jail[key] -= popped_executor.key
-            if not self._jail[key]:
+        with self.lock:
+            if self._stack_size == 0:
+                raise IndexError("pop from empty stack")
+
+            popped_executor = self._stack.pop()
+            popped_executor.terminate()
+
+            unblocked = set()
+            for blocked_key in self._jail.keys():
+                if popped_executor.key in self._jail[blocked_key]:
+                    self._jail[blocked_key].remove(popped_executor.key)
+                if not self._jail[blocked_key]:
+                    unblocked.add(key)
+
+            for key in unblocked:
                 self._jail.pop(key)
 
-        return popped_executor
+            self._jail[popped_executor.key] = {proc.key for proc in self._stack}
+            shutil.rmtree(popped_executor._unit_context.shared)
+            shutil.rmtree(popped_executor._unit_context.scratch)
+
+            return popped_executor
 
     def get_result(
         self,
@@ -613,6 +635,14 @@ class ExecutorStack:
                 to_remove = proc
                 break
 
+        unblock = set()
+        for key in self._jail.keys():
+            if node_key in self._jail[key]:
+                self._jail[key].remove(node_key)
+                if not self._jail[key]:
+                    unblock.add(key)
+        for key in unblock:
+            self._jail.pop(key)
         if to_remove:
             self._stack.remove(proc)
 
@@ -748,7 +778,42 @@ class AsynchronousComputeService(SynchronousComputeService):
             self.remove_all()
         super().stop()
 
+    def resource_monitor(self) -> ResourceSignal:
+        capacity = 8
+        sim_value = 3
+        fin_value = 1
+        init_value = 2
+
+        total = 0
+        for proc in self._executor_stack.stack:
+            if not proc.is_alive():
+                continue
+            pu = proc.key[1]
+            match pu.__class__.__name__:
+                case "WeightedFinishingUnit":
+                    total = total + fin_value
+                case "WeightedSimulationUnit":
+                    total = total + sim_value
+                case _:
+                    total = total + init_value
+
+        self.logger.info(f"Num jailed: {len(self._executor_stack._jail)} -- {total}/{capacity}")
+        if total == capacity:
+            self.logger.info("MAINTAINING")
+            return ResourceSignal.MAINTAIN
+
+        if total > capacity:
+            self.logger.info("SHRINKING")
+            return ResourceSignal.SHRINK
+
+        if total < capacity:
+            self.logger.info("GROWING")
+            return ResourceSignal.GROW
+
+        return ResourceSignal.TERMINATE
+
     def cycle(self, max_tasks, max_time) -> bool:
+        self.logger.info(f"Cycling: {len(self._task_data)}")
 
         if max_time is not None and (time.time() - self._start_time) >= max_time:
             self.logger.info("Exceeded maximum time")
@@ -756,12 +821,30 @@ class AsynchronousComputeService(SynchronousComputeService):
             return False
 
         # collect unit results
-        self.process_results()
-        self.consume_terminated_tasks()
+        self.process_results() # removes unit scratch
+        self.consume_terminated_tasks() # only removes if task is done
         if max_tasks is not None and self.tasks_finished >= max_tasks:
             self.logger.info("Exceeded maximum tasks")
             self.stop()
             return False
+
+        signal = self.resource_monitor()
+        match signal:
+            case ResourceSignal.MAINTAIN:
+                #self.process_results()
+                #self.consume_terminated_tasks()
+                return True
+            case ResourceSignal.GROW:
+                pass
+            case ResourceSignal.SHRINK:
+                proc = self._executor_stack.pop()
+                self.logger.info(f"Popping: {proc} -- {proc.key[1].key}")
+                return True
+            case ResourceSignal.TERMINATE:
+                self.stop()
+                return False
+            case _:
+                raise RuntimeError("Received unknown ResourceSignal")
 
         n_claim = self.claim_limit - len(self._task_data)
         if max_tasks is not None:
@@ -775,7 +858,7 @@ class AsynchronousComputeService(SynchronousComputeService):
 
         # only submit enough tasks to fill the stack
         n = self._executor_stack._stack_size - len(self._executor_stack._stack)
-        for key in tuple(self.next())[:n]:
+        for key in tuple(self.next()):
             tsk, unit = key
 
             # TODO `next` should not return TERM or ROOT nodes
@@ -787,11 +870,15 @@ class AsynchronousComputeService(SynchronousComputeService):
             inputs = _pu_to_pur(unit.inputs, task_data.results)
             unit_scratch_dir = task_data.context.scratch / f"{str(unit.key)}"
             unit_shared_dir = task_data.context.shared / f"{str(unit.key)}"
-            unit_scratch_dir.mkdir()
-            unit_shared_dir.mkdir()
             context = Context(scratch=unit_scratch_dir, shared=unit_shared_dir)
-            self.logger.info(f"Pushing {key[1]} to the execution stack")
-            self._executor_stack.push(key, context, inputs, self.n_retries)
+
+            try:
+                self._executor_stack.push(key, context, inputs, self.n_retries)
+                self.logger.info(f"Pushing {key[1]} to the execution stack")
+            except JailedKeyError:
+                continue
+            if not (n := n - 1):
+                break
 
         return True
 
