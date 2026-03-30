@@ -1,13 +1,25 @@
+from dataclasses import dataclass
 import logging
 import time
 
 from alchemiscale.compute.service import AsynchronousComputeService, ExecutorStack, InterruptableSleep
 from alchemiscale.storage.models import ComputeServiceID
 
+@dataclass
+class MockSettings:
+    memory_monitor_enabled: bool
+    cpu_monitor_enabled: bool
+    gpu_monitor_enabled: bool
+    gpu_monitor_gpu_id: int
+
 class MockService(AsynchronousComputeService):
 
     def __init__(self, scratch_basedir, shared_basedir, stack_size, keep_scratch, keep_shared, n_retries, claim_limit, task_generator):
+        self._child_env = dict()
         self._initialize_dag_tree()
+        settings = MockSettings(memory_monitor_enabled=True, cpu_monitor_enabled=True, gpu_monitor_enabled=False, gpu_monitor_gpu_id="0")
+        #settings = MockSettings(memory_monitor_enabled=False, cpu_monitor_enabled=False, gpu_monitor_enabled=False, gpu_monitor_gpu_id="0")
+        self._initialize_resource_monitors(settings)
         self._task_data = dict()
         self._executor_stack = ExecutorStack(stack_size)
 

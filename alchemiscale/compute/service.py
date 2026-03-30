@@ -10,11 +10,11 @@ import time
 import logging
 from uuid import uuid4
 import threading
+import os
 from pathlib import Path
 import queue
 import shutil
 from typing import Any
-from enum import StrEnum
 from multiprocessing import Process, Queue, Lock
 from dataclasses import dataclass
 
@@ -35,6 +35,7 @@ from gufe.tokenization import GufeKey
 import networkx as nx
 
 from .client import AlchemiscaleComputeClient
+from .monitor import ResourceSignal, MemoryMonitor, GPUMonitor, CPUMonitor
 from .settings import ComputeServiceSettings
 from ..storage.models import ComputeServiceID
 from ..models import Scope, ScopedKey
@@ -431,6 +432,7 @@ type NodeKey = tuple[
     ProtocolUnit | str,
 ]  # None covers root node condition
 
+
 class Executor(Process):
     """Custom Process subclass for execution of protocol units.
 
@@ -445,7 +447,7 @@ class Executor(Process):
     inputs: dict
     n_retries: int
 
-    def __init__(self, key, queue, lock, context, inputs, n_retries):
+    def __init__(self, key, queue, lock, context, inputs, n_retries, env=None):
         super().__init__()
         self._key = key
         self._queue = queue
@@ -453,6 +455,7 @@ class Executor(Process):
         self._unit_context = context
         self._inputs = inputs
         self._n_retries = n_retries
+        self._env = env or {}
         self._validate()
 
     def _validate(self):
@@ -460,6 +463,8 @@ class Executor(Process):
             raise ValueError("n_retries must be greater than or equal to 0")
 
     def run(self):
+        # update environment before running unit
+        os.environ |= self._env
         attempt = 0
         while attempt <= self._n_retries:
             # create attempt specific directories
@@ -491,11 +496,14 @@ class Executor(Process):
     def execute_unit(self, context) -> ProtocolUnitResult | ProtocolUnitFailure:
         # this method assumes the context is in place and will be removed correctly
         import warnings
+
         warnings.filterwarnings("ignore", message=r".*RDKit does not preserve.*")
         return self.unit.execute(context=context, **self._inputs)
 
+
 class JailedKeyError(Exception):
     pass
+
 
 class ExecutorStack:
     """Structure for coordinating the creation and management of
@@ -504,8 +512,8 @@ class ExecutorStack:
 
     stack_size: int
     stack: list[Executor]
-    jail: dict[NodeKey, set[NodeKey]] # blocked node specified by a
-                                      # set of blocking nodes
+    # blocked node specified by a set of blocking nodes
+    jail: dict[NodeKey, set[NodeKey]]
     queue: Queue
     lock: Lock
 
@@ -558,7 +566,14 @@ class ExecutorStack:
                 proc.terminate()
                 self._stack.remove(proc)
 
-    def push(self, node: NodeKey, unit_context: Context, inputs: dict, n_retries):
+    def push(
+        self,
+        node: NodeKey,
+        unit_context: Context,
+        inputs: dict,
+        n_retries: int,
+        env: dict[str, str],
+    ):
         with self._lock:
             # node may be blocked from execution
             if node in self._jail.keys():
@@ -568,9 +583,12 @@ class ExecutorStack:
             unit_context.shared.mkdir()
 
             import warnings
-            warnings.filterwarnings("ignore", message=r".*This process.*is multi-threaded,.*")
+
+            warnings.filterwarnings(
+                "ignore", message=r".*This process.*is multi-threaded,.*"
+            )
             executor = Executor(
-                node, self._queue, self._lock, unit_context, inputs, n_retries
+                node, self._queue, self._lock, unit_context, inputs, n_retries, env=env
             )
             self._stack.append(executor)
             self._stack[-1].start()
@@ -644,7 +662,6 @@ class ExecutorStack:
         return running, terminated
 
 
-
 @dataclass
 class TaskData:
     protocol_dag: ProtocolDAG
@@ -660,11 +677,6 @@ class TaskData:
             extends_key=self.protocol_dag.extends_key,
         )
 
-class ResourceSignal(StrEnum):
-    MAINTAIN = "maintain"
-    SHRINK = "shrink"
-    GROW = "grow"
-    TERMINATE = "terminate"
 
 class AsynchronousComputeService(SynchronousComputeService):
     """Asynchronous compute service.
@@ -677,11 +689,14 @@ class AsynchronousComputeService(SynchronousComputeService):
     _dag_tree: nx.DiGraph
     _executor_stack: ExecutorStack
     _task_data: dict[TaskKey, TaskData]
+    _child_env: dict[str, str]
 
     def __init__(self, settings: ComputeServiceSettings):
-
+        self._child_env = dict()
         self._task_data = dict()
         self._initialize_dag_tree()
+        self._resource_monitors = None
+        self._initialize_resource_monitors(settings)
 
         self.settings = settings
 
@@ -715,6 +730,23 @@ class AsynchronousComputeService(SynchronousComputeService):
         self.keep_scratch = self.settings.keep_scratch
 
         self.compute_service_id = ComputeServiceID.new_from_name(self.name)
+
+    def _initialize_resource_monitors(self, settings):
+        self._resource_monitors = []
+
+        if settings.memory_monitor_enabled:
+            self._resource_monitors.append(MemoryMonitor(settings))
+
+        if settings.cpu_monitor_enabled:
+            self._resource_monitors.append(CPUMonitor(settings))
+
+        if settings.gpu_monitor_enabled:
+            self._resource_monitors.append(GPUMonitor(settings))
+            # reliable monitoring of the GPU requires pinning the GPU index
+            self._child_env |= {"CUDA_VISIBLE_DEVICES": settings.gpu_monitor_gpu_id}
+
+        for monitor in self._resource_monitors:
+            threading.Thread(target=monitor.monitor_cycle, daemon=True).start()
 
     def _initialize_dag_tree(self):
         self._dag_tree = nx.DiGraph()
@@ -764,6 +796,13 @@ class AsynchronousComputeService(SynchronousComputeService):
             self.remove_all()
         super().stop()
 
+    def _get_resource_signal(self) -> ResourceSignal:
+        # without monitors, signal that the stack can always grow if there is room
+        if len(self._resource_monitors) == 0:
+            return ResourceSignal.GROW
+        # otherwise respect the highest priority signal from all monitors
+        return min(monitor.signal() for monitor in self._resource_monitors)
+
     def _resource_monitor(self) -> ResourceSignal:
         capacity = 8
         sim_value = 3
@@ -783,7 +822,9 @@ class AsynchronousComputeService(SynchronousComputeService):
                 case _:
                     total = total + init_value
 
-        self.logger.info(f"Num jailed: {len(self._executor_stack._jail)} -- {total}/{capacity}")
+        self.logger.info(
+            f"Num jailed: {len(self._executor_stack._jail)} -- {total}/{capacity}"
+        )
         if total == capacity:
             self.logger.info("MAINTAINING")
             return ResourceSignal.MAINTAIN
@@ -800,8 +841,8 @@ class AsynchronousComputeService(SynchronousComputeService):
 
     def cycle(self, max_tasks, max_time) -> bool:
         # collect unit results
-        self.process_results() # removes unit scratch
-        self.consume_terminated_tasks() # only removes if task is done
+        self.process_results()  # removes unit scratch
+        self.consume_terminated_tasks()  # only removes if task is done
 
         # check if max tasks have been exceeded
         if max_tasks is not None and self.tasks_finished >= max_tasks:
@@ -816,7 +857,7 @@ class AsynchronousComputeService(SynchronousComputeService):
             return False
 
         # detemine next actions based on resource usage
-        signal = self._resource_monitor()
+        signal = self._get_resource_signal()
         match signal:
             case ResourceSignal.MAINTAIN:
                 return True
@@ -843,7 +884,7 @@ class AsynchronousComputeService(SynchronousComputeService):
                 self.tasks_claimed = 1 + self.tasks_claimed
 
         for key in filter(lambda k: k[1] not in ("TERM", "ROOT"), self.next()):
-            (tsk, unit) = key
+            tsk, unit = key
             task_data = self._task_data[tsk]
 
             inputs = _pu_to_pur(unit.inputs, task_data.results)
@@ -852,7 +893,9 @@ class AsynchronousComputeService(SynchronousComputeService):
             context = Context(scratch=unit_scratch_dir, shared=unit_shared_dir)
 
             try:
-                self._executor_stack.push(key, context, inputs, self.n_retries)
+                self._executor_stack.push(
+                    key, context, inputs, self.n_retries, env=self._child_env
+                )
                 self.logger.info(f"Pushing {key[1]} to the execution stack")
                 break
             except JailedKeyError:

@@ -106,9 +106,6 @@ def network_tyk2():
         )
         for edge in tyk2s.connections
     ]
-    # breakpoint()
-    # pu = solvent_network[0].create().protocol_units[0]
-    # pu.execute(context=None, initialization=None)
 
     return AlchemicalNetwork(
         edges=(solvent_network + complex_network),
