@@ -434,6 +434,8 @@ type NodeKey = tuple[
 class Executor(Process):
     """Custom Process subclass for execution of protocol units.
 
+    Executors are responsible for creation of unit attempt directories
+    and data given a unit Context.
     """
 
     key: NodeKey
@@ -451,10 +453,16 @@ class Executor(Process):
         self._unit_context = context
         self._inputs = inputs
         self._n_retries = n_retries
+        self._validate()
+
+    def _validate(self):
+        if not self._n_retries >= 0:
+            raise ValueError("n_retries must be greater than or equal to 0")
 
     def run(self):
         attempt = 0
         while attempt <= self._n_retries:
+            # create attempt specific directories
             shared_dir = self._unit_context.shared / str(attempt)
             scratch_dir = self._unit_context.scratch / str(attempt)
             attempt_context = Context(shared=shared_dir, scratch=scratch_dir)
@@ -464,6 +472,7 @@ class Executor(Process):
             if result.ok():
                 break
             attempt = attempt + 1
+        # put the result in the queue with lock
         self.put_result(result)
 
     @property
@@ -506,6 +515,11 @@ class ExecutorStack:
         self._jail = {}
         self._queue = Queue()
         self._lock = Lock()
+        self._validate()
+
+    def _validate(self):
+        if not self._stack_size >= 1:
+            raise ValueError("stack_size must be greater than or equal to 1")
 
     @property
     def stack(self) -> list[Executor]:
@@ -528,15 +542,15 @@ class ExecutorStack:
         return self._queue
 
     def terminate_all(self):
-        with self.lock:
-            for proc in self.stack:
+        with self._lock:
+            for proc in self._stack:
                 proc.terminate()
-            self.stack.clear()
+            self._stack.clear()
 
     def terminate_task(self, task_key: TaskKey):
-        with self.lock:
+        with self._lock:
             to_remove = set()
-            for proc in self.stack:
+            for proc in self._stack:
                 _task_key, _ = proc.key
                 if task_key == _task_key:
                     to_remove.add(proc)
@@ -545,7 +559,7 @@ class ExecutorStack:
                 self._stack.remove(proc)
 
     def push(self, node: NodeKey, unit_context: Context, inputs: dict, n_retries):
-        with self.lock:
+        with self._lock:
             # node may be blocked from execution
             if node in self._jail.keys():
                 raise JailedKeyError(node)
@@ -556,14 +570,14 @@ class ExecutorStack:
             import warnings
             warnings.filterwarnings("ignore", message=r".*This process.*is multi-threaded,.*")
             executor = Executor(
-                node, self.queue, self.lock, unit_context, inputs, n_retries
+                node, self._queue, self._lock, unit_context, inputs, n_retries
             )
             self._stack.append(executor)
             self._stack[-1].start()
 
     def pop(self):
         """Remove last process in the stack. This also clears the node from the jail."""
-        with self.lock:
+        with self._lock:
             if self._stack_size == 0:
                 raise IndexError("pop from empty stack")
 
@@ -589,21 +603,21 @@ class ExecutorStack:
     def get_result(
         self,
     ) -> tuple[NodeKey, ProtocolUnitResult | ProtocolUnitFailure] | None:
-        if self.queue.qsize():
-            with self.lock:
+        if self._queue.qsize():
+            with self._lock:
                 # since qsize is not always reliable, we tentatively
                 # accept there might be results
                 try:
-                    res = self.queue.get_nowait()
+                    res = self._queue.get_nowait()
                 except queue.Empty:
                     return None
                 node_key, _ = res
-                self.remove_by_node_key(node_key)
+                self._remove_by_node_key(node_key)
                 return res
 
-    def remove_by_node_key(self, node_key: NodeKey):
+    def _remove_by_node_key(self, node_key: NodeKey):
         to_remove = None
-        for proc in self.stack:
+        for proc in self._stack:
             if proc.key == node_key:
                 to_remove = proc
                 break
@@ -622,7 +636,7 @@ class ExecutorStack:
     def _get_statuses(self) -> tuple[set[Executor], set[Executor]]:
         running = set()
         terminated = set()
-        for proc in self.stack:
+        for proc in self._stack:
             if proc.is_alive():
                 running.add(proc)
             else:
@@ -691,9 +705,6 @@ class AsynchronousComputeService(SynchronousComputeService):
             retry_max_seconds=self.settings.client_retry_max_seconds,
             verify=self.settings.client_verify,
         )
-
-        self._stop = False
-
         self.scopes = self.settings.scopes or [Scope()]
         self.shared_basedir = Path(self.settings.shared_basedir).absolute()
         self.shared_basedir.mkdir(exist_ok=True)
@@ -704,7 +715,6 @@ class AsynchronousComputeService(SynchronousComputeService):
         self.keep_scratch = self.settings.keep_scratch
 
         self.compute_service_id = ComputeServiceID.new_from_name(self.name)
-        self._stop = False
 
     def _initialize_dag_tree(self):
         self._dag_tree = nx.DiGraph()
