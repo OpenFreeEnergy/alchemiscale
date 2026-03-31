@@ -11,6 +11,8 @@ import subprocess
 import time
 from threading import Lock
 
+from alchemiscale.compute.settings import AsynchronousComputeServiceSettings
+
 
 # Signal to be issued by a resource manager to a compute
 # service. These signals are suggestions and are meant to inform the
@@ -19,7 +21,7 @@ from threading import Lock
 #    1. TERMINATE: tool/resource failure, shut stop all calculations
 #    2. SHRINK: resource is oversubscribed, scale down
 #    3. MAINTAIN: keep at current subscription
-#    4. GROW: resource is undersubscribed
+#    4. GROW: resource is under-subscribed
 class ResourceSignal(IntEnum):
     # order matters, higher priority signals should appear at top
     TERMINATE = auto()
@@ -47,7 +49,7 @@ class Monitor:
 
     """
 
-    def __init__(self, settings: ComputeServiceSettings):
+    def __init__(self, settings: AsynchronousComputeServiceSettings):
         self._setup(settings)
         self._lock = Lock()
         self._terminate = False
