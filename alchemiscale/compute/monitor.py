@@ -21,6 +21,11 @@ class Monitor:
         self._lock = Lock()
         self._terminate = False
 
+        if not hasattr(self, "sample_time"):
+            raise AttributeError(
+                f"{self.__class__.__name__} implementation requires definition of the `sample_time` attribute"
+            )
+
     def signal(self) -> ResourceSignal:
         with self._lock:
             return self._signal()
@@ -32,8 +37,7 @@ class Monitor:
         while not self._terminate:
             with self._lock:
                 self._monitor_cycle()
-            # TODO: make configurable
-            time.sleep(1)
+            time.sleep(self.sample_time)
 
     @abstractmethod
     def _setup(self, settings):
@@ -53,7 +57,11 @@ class GPUMonitor(Monitor):
 
     def _setup(self, settings):
         self.history = []
-        self.gpu_index = settings.gpu_monitor_gpu_id
+        self.history_size = settings.gpu_monitor_sample_history_size
+        self.gpu_index = settings.gpu_monitor_gpu_index
+        self.grow_limit = settings.gpu_monitor_grow_limit
+        self.maintain_limit = settings.gpu_monitor_maintain_limit
+        self.sample_time = settings.gpu_monitor_sample_time
 
     @staticmethod
     def _nvidia_smi() -> int:
@@ -78,7 +86,7 @@ class GPUMonitor(Monitor):
     def _monitor_cycle(self):
         util = self._nvidia_smi()
         self.history.append(util)
-        self.history = self.history[-60:]
+        self.history = self.history[-self.history_size :]
 
     def _signal(self) -> ResourceSignal:
         utilization = sum(self.history) / len(self.history)
@@ -91,12 +99,12 @@ class GPUMonitor(Monitor):
 
 class CPUMonitor(Monitor):
 
-    # TODO: make configurable
-    grow_limit = 0.50
-    maintain_limit = 0.75
-
     def _setup(self, settings):
         self.history = []
+        self.history_size = settings.cpu_monitor_sample_history_size
+        self.sample_time = settings.cpu_monitor_sample_time
+        self.grow_limit = settings.cpu_monitor_grow_limit
+        self.maintain_limit = settings.cpu_monitor_maintain_limit
 
     def _signal(self) -> ResourceSignal:
         total_load = sum(self.history) / len(self.history)
@@ -111,7 +119,7 @@ class CPUMonitor(Monitor):
         cpu_count = os.cpu_count()
         total_load = load / cpu_count
         self.history.append(total_load)
-        self.history = self.history[-60:]
+        self.history = self.history[-self.history_size :]
 
 
 class MemInfoParseError(Exception):
@@ -120,12 +128,12 @@ class MemInfoParseError(Exception):
 
 class MemoryMonitor(Monitor):
 
-    # TODO: make configurable
-    grow_limit = 0.65
-    maintain_limit = 0.85
-
     def _setup(self, settings):
         self.history = []
+        self.history_size = settings.memory_monitor_sample_history_size
+        self.sample_time = settings.memory_monitor_sample_time
+        self.grow_limit = settings.memory_monitor_grow_limit
+        self.maintain_limit = settings.memory_monitor_maintain_limit
 
     @staticmethod
     def _get_memory() -> tuple[int, int]:
@@ -157,7 +165,7 @@ class MemoryMonitor(Monitor):
             fraction_used = (total - avail) / total
             self.history.append(fraction_used)
             # roughly the last minute of entries
-            self.history = self.history[-60:]
+            self.history = self.history[-self.history_size :]
         except Exception:
             self._terminate = True
 

@@ -692,35 +692,26 @@ class AsynchronousComputeService(SynchronousComputeService):
     _child_env: dict[str, str]
 
     def __init__(self, settings: ComputeServiceSettings):
-        self._child_env = dict()
+        self.settings = settings
+
+        # asynccomputeservice specific data structures and resource
+        # monitors.
+        self._child_env = dict()  # mods to child process env
         self._task_data = dict()
         self._initialize_dag_tree()
-        self._resource_monitors = None
-        self._initialize_resource_monitors(settings)
-
-        self.settings = settings
+        self._initialize_resource_monitors()
 
         self.api_url = self.settings.api_url
         self.name = self.settings.name
+        self.compute_manager_id = self.settings.compute_manager_id
         self.sleep_interval = self.settings.sleep_interval
+        self.deep_sleep_interval = self.settings.deep_sleep_interval
         self.heartbeat_interval = self.settings.heartbeat_interval
         self.claim_limit = self.settings.claim_limit
 
-        self.scheduler = sched.scheduler(time.monotonic, time.sleep)
-
-        self.client = AlchemiscaleComputeClient(
-            self.settings.api_url,
-            self.settings.identifier,
-            self.settings.key,
-            cache_directory=self.settings.client_cache_directory,
-            cache_size_limit=self.settings.client_cache_size_limit,
-            use_local_cache=self.settings.client_use_local_cache,
-            max_retries=self.settings.client_max_retries,
-            retry_base_seconds=self.settings.client_retry_base_seconds,
-            retry_max_seconds=self.settings.client_retry_max_seconds,
-            verify=self.settings.client_verify,
-        )
+        self.client = self._initialize_client()
         self.scopes = self.settings.scopes or [Scope()]
+
         self.shared_basedir = Path(self.settings.shared_basedir).absolute()
         self.shared_basedir.mkdir(exist_ok=True)
         self.keep_shared = self.settings.keep_shared
@@ -731,19 +722,59 @@ class AsynchronousComputeService(SynchronousComputeService):
 
         self.compute_service_id = ComputeServiceID.new_from_name(self.name)
 
-    def _initialize_resource_monitors(self, settings):
+        self.int_sleep = InterruptableSleep()
+        self._initialize_logger()
+
+    def _initialize_logger(self):
+        extra = {"compute_service_id": str(self.compute_service_id)}
+        logger = logging.getLogger("AlchemiscaleAsynchronousComputeService")
+        logger.setLevel(self.settings.loglevel)
+
+        formatter = logging.Formatter(
+            "[%(asctime)s] [%(compute_service_id)s] [%(levelname)s] %(message)s"
+        )
+        formatter.converter = time.gmtime  # use utc time for logging timestamps
+
+        sh = logging.StreamHandler()
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
+
+        if self.settings.logfile is not None:
+            fh = logging.FileHandler(self.settings.logfile)
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
+
+        self.logger = logging.LoggerAdapter(logger, extra)
+
+    def _initialize_client(self):
+        return AlchemiscaleComputeClient(
+            api_url=self.settings.api_url,
+            identifier=self.settings.identifier,
+            key=self.settings.key,
+            cache_directory=self.settings.client_cache_directory,
+            cache_size_limit=self.settings.client_cache_size_limit,
+            use_local_cache=self.settings.client_use_local_cache,
+            max_retries=self.settings.client_max_retries,
+            retry_base_seconds=self.settings.client_retry_base_seconds,
+            retry_max_seconds=self.settings.client_retry_max_seconds,
+            verify=self.settings.client_verify,
+        )
+
+    def _initialize_resource_monitors(self):
         self._resource_monitors = []
 
-        if settings.memory_monitor_enabled:
-            self._resource_monitors.append(MemoryMonitor(settings))
+        if self.settings.memory_monitor_enabled:
+            self._resource_monitors.append(MemoryMonitor(self.settings))
 
-        if settings.cpu_monitor_enabled:
-            self._resource_monitors.append(CPUMonitor(settings))
+        if self.settings.cpu_monitor_enabled:
+            self._resource_monitors.append(CPUMonitor(self.settings))
 
-        if settings.gpu_monitor_enabled:
-            self._resource_monitors.append(GPUMonitor(settings))
+        if self.settings.gpu_monitor_enabled:
+            self._resource_monitors.append(GPUMonitor(self.settings))
             # reliable monitoring of the GPU requires pinning the GPU index
-            self._child_env |= {"CUDA_VISIBLE_DEVICES": settings.gpu_monitor_gpu_id}
+            self._child_env |= {
+                "CUDA_VISIBLE_DEVICES": self.settings.gpu_monitor_gpu_id
+            }
 
         for monitor in self._resource_monitors:
             threading.Thread(target=monitor.monitor_cycle, daemon=True).start()

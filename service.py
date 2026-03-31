@@ -8,18 +8,45 @@ from alchemiscale.storage.models import ComputeServiceID
 @dataclass
 class MockSettings:
     memory_monitor_enabled: bool
+    memory_monitor_sample_time: int
+    memory_monitor_sample_history_size: int
+    memory_monitor_grow_limit: float
+    memory_monitor_maintain_limit: float
     cpu_monitor_enabled: bool
+    cpu_monitor_sample_time: int
+    cpu_monitor_sample_history_size: int
+    cpu_monitor_grow_limit: float
+    cpu_monitor_maintain_limit: float
     gpu_monitor_enabled: bool
     gpu_monitor_gpu_id: int
+    gpu_monitor_sample_time: int
+    gpu_monitor_sample_history_size: int
+    gpu_monitor_grow_limit: float
+    gpu_monitor_maintain_limit: float
 
 class MockService(AsynchronousComputeService):
 
     def __init__(self, scratch_basedir, shared_basedir, stack_size, keep_scratch, keep_shared, n_retries, claim_limit, task_generator):
         self._child_env = dict()
         self._initialize_dag_tree()
-        settings = MockSettings(memory_monitor_enabled=True, cpu_monitor_enabled=True, gpu_monitor_enabled=False, gpu_monitor_gpu_id="0")
-        #settings = MockSettings(memory_monitor_enabled=False, cpu_monitor_enabled=False, gpu_monitor_enabled=False, gpu_monitor_gpu_id="0")
-        self._initialize_resource_monitors(settings)
+        self.settings = MockSettings(memory_monitor_enabled=True,
+                                     cpu_monitor_enabled=True,
+                                     gpu_monitor_enabled=False,
+                                     gpu_monitor_gpu_id="0",
+                                     gpu_monitor_sample_time=1,
+                                     gpu_monitor_sample_history_size=60,
+                                     gpu_monitor_grow_limit=0.7,
+                                     gpu_monitor_maintain_limit=0.9,
+                                     memory_monitor_sample_time=1,
+                                     memory_monitor_sample_history_size=60,
+                                     memory_monitor_grow_limit=0.7,
+                                     memory_monitor_maintain_limit=0.9,
+                                     cpu_monitor_sample_time=1,
+                                     cpu_monitor_sample_history_size=60,
+                                     cpu_monitor_grow_limit=0.9,
+                                     cpu_monitor_maintain_limit=1.2,
+                                     )
+        self._initialize_resource_monitors()
         self._task_data = dict()
         self._executor_stack = ExecutorStack(stack_size)
 
