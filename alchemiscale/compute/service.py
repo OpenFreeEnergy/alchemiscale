@@ -10,13 +10,32 @@ import time
 import logging
 from uuid import uuid4
 import threading
+import os
 from pathlib import Path
+import queue
 import shutil
+from typing import Any
+from multiprocessing import Process, Queue, Lock
+from dataclasses import dataclass
 
 from gufe import Transformation
-from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
+from gufe.protocols.protocoldag import (
+    _pu_to_pur,
+    execute_DAG,
+    ProtocolDAG,
+    ProtocolDAGResult,
+)
+from gufe.protocols.protocolunit import (
+    Context,
+    ProtocolUnitFailure,
+    ProtocolUnitResult,
+    ProtocolUnit,
+)
+from gufe.tokenization import GufeKey
+import networkx as nx
 
 from .client import AlchemiscaleComputeClient
+from .monitor import ResourceSignal, MemoryMonitor, GPUMonitor, CPUMonitor
 from .settings import ComputeServiceSettings
 from ..storage.models import ComputeServiceID
 from ..models import Scope, ScopedKey
@@ -402,6 +421,274 @@ class SynchronousComputeService:
         self._stop = True
 
 
+## Asynchronous compute
+
+type TaskKey = ScopedKey
+
+# ProtocolUnits are paired with their parent task for book keeping
+# purposes
+type NodeKey = tuple[
+    TaskKey | None,
+    ProtocolUnit | str,
+]  # None covers root node condition
+
+
+class Executor(Process):
+    """Custom Process subclass for execution of protocol units.
+
+    Executors are responsible for creation of unit attempt directories
+    and data given a unit Context.
+    """
+
+    def __init__(self, key, queue, lock, context, inputs, n_retries, env=None):
+        super().__init__()
+        self._key = key
+        self._queue = queue
+        self._lock = lock
+        self._unit_context = context
+        self._inputs = inputs
+        self._n_retries = n_retries
+
+        # mechanism to modify child process environment variables
+        # through an update during `run`
+        self._env = env or {}
+        self._validate()
+
+    def _validate(self):
+        if not self._n_retries >= 0:
+            raise ValueError("n_retries must be greater than or equal to 0")
+
+    def run(self):
+        """Attempt to run a complete ProtocolUnit.
+
+        The resulting ``ProtocolUnitResult`` or
+        ``ProtocolUnitFailure`` is put into the result queue at the
+        end of execution.
+
+        """
+        # update environment before running unit
+        os.environ |= self._env
+        attempt = 0
+        while attempt <= self._n_retries:
+            # create attempt specific directories
+            shared_dir = self._unit_context.shared / str(attempt)
+            scratch_dir = self._unit_context.scratch / str(attempt)
+            attempt_context = Context(shared=shared_dir, scratch=scratch_dir)
+            attempt_context.shared.mkdir()
+            attempt_context.scratch.mkdir()
+            result = self.execute_unit(attempt_context)
+            if result.ok():
+                break
+            attempt = attempt + 1
+        # put the result in the queue using a lock
+        self.put_result(result)
+
+    @property
+    def unit(self) -> ProtocolUnit:
+        """The unit this Executor runs."""
+        return self._key[1]
+
+    @property
+    def key(self) -> NodeKey:
+        """The key assigned to the executor."""
+        return self._key
+
+    def put_result(self, result: ProtocolUnitResult):
+        """Acquire lock, push key and result into the queue, release lock."""
+        with self._lock:
+            self._queue.put((self._key, result))
+
+    def execute_unit(self, context) -> ProtocolUnitResult | ProtocolUnitFailure:
+        """Unit execution method.
+
+        This method assumes the context directories are already in place.
+        """
+        import warnings
+
+        warnings.filterwarnings("ignore", message=r".*RDKit does not preserve.*")
+        return self.unit.execute(context=context, **self._inputs)
+
+
+class JailedKeyError(Exception):
+    pass
+
+
+class ExecutorStack:
+    """Structure for coordinating the creation and management of
+    ``Executor`` processes.
+    """
+
+    def __init__(self, stack_size: int):
+        self._stack: int = []
+        self._stack_size: list[Executor] = stack_size
+        self._jail: dict[NodeKey, set[NodeKey]] = {}
+        self._queue: Queue = Queue()
+        self._lock: Lock = Lock()
+        self._validate()
+
+    def _validate(self):
+        if not self._stack_size >= 1:
+            raise ValueError("stack_size must be greater than or equal to 1")
+
+    def terminate_all(self):
+        """Terminate all processes in the stack.
+
+        This method waits to acquire the lock before terminating
+        tasks, meaning results being written to the queue during the
+        time of the call will still be available for processing after
+        the process is terminated.
+
+        """
+        with self._lock:
+            for proc in self._stack:
+                proc.terminate()
+            self._stack.clear()
+
+    def terminate_task(self, task_key: TaskKey):
+        """Terminate any processes from a ``Task``."""
+        with self._lock:
+            to_remove = set()
+            for proc in self._stack:
+                _task_key, _ = proc.key
+                if task_key == _task_key:
+                    to_remove.add(proc)
+            for proc in to_remove:
+                proc.terminate()
+                self._stack.remove(proc)
+
+    def push(
+        self,
+        node: NodeKey,
+        unit_context: Context,
+        inputs: dict,
+        n_retries: int,
+        env: dict[str, str],
+    ):
+        """Push a node to the stack.
+
+        Parameters
+        ----------
+        node
+            The ``Task`` ``ScopedKey`` and the ``ProtocolUnit`` to
+            push to the stack.
+        unit_context
+            The ``Context`` for running the ``ProtocolUnit``.
+        inputs
+            Inputs ``dict`` for running the ``ProtocolUnit``.
+        n_retries
+            The number of times to attempt to rerun a ``ProtocolUnit``
+            that raises an exception.
+        env
+            Updates to the environment of the child process.
+        """
+        with self._lock:
+            # node may be blocked from execution
+            if node in self._jail.keys():
+                raise JailedKeyError(node)
+
+            unit_context.scratch.mkdir()
+            unit_context.shared.mkdir()
+
+            import warnings
+
+            warnings.filterwarnings(
+                "ignore", message=r".*This process.*is multi-threaded,.*"
+            )
+            executor = Executor(
+                node, self._queue, self._lock, unit_context, inputs, n_retries, env=env
+            )
+            self._stack.append(executor)
+            self._stack[-1].start()
+
+    def full(self):
+        return len(self._stack) >= self._stack_size
+
+    def pop(self):
+        """Remove last process in the stack. This also clears the node
+        from the jail."""
+        with self._lock:
+            if len(self._stack) == 0:
+                raise IndexError("pop from empty stack")
+
+            popped_executor = self._stack.pop()
+            popped_executor.terminate()
+
+            unblocked = set()
+            for blocked_key in self._jail.keys():
+                if popped_executor.key in self._jail[blocked_key]:
+                    self._jail[blocked_key].remove(popped_executor.key)
+                if not self._jail[blocked_key]:
+                    unblocked.add(key)
+
+            for key in unblocked:
+                self._jail.pop(key)
+
+            self._jail[popped_executor.key] = {proc.key for proc in self._stack}
+            shutil.rmtree(popped_executor._unit_context.shared)
+            shutil.rmtree(popped_executor._unit_context.scratch)
+
+            return popped_executor
+
+    def get_result(
+        self,
+    ) -> tuple[NodeKey, ProtocolUnitResult | ProtocolUnitFailure] | None:
+        if self._queue.qsize():
+            with self._lock:
+                # since qsize is not always reliable, we tentatively
+                # accept there might be results
+                try:
+                    res = self._queue.get_nowait()
+                except queue.Empty:
+                    return None
+                node_key, _ = res
+                self._remove_by_node_key(node_key)
+                return res
+
+    def _remove_by_node_key(self, node_key: NodeKey):
+        to_remove = None
+        for proc in self._stack:
+            if proc.key == node_key:
+                to_remove = proc
+                break
+
+        unblock = set()
+        for key in self._jail.keys():
+            if node_key in self._jail[key]:
+                self._jail[key].remove(node_key)
+                if not self._jail[key]:
+                    unblock.add(key)
+        for key in unblock:
+            self._jail.pop(key)
+        if to_remove:
+            self._stack.remove(proc)
+
+    def _get_statuses(self) -> tuple[set[Executor], set[Executor]]:
+        running = set()
+        terminated = set()
+        for proc in self._stack:
+            if proc.is_alive():
+                running.add(proc)
+            else:
+                terminated.add(proc)
+        return running, terminated
+
+
+@dataclass
+class TaskData:
+    protocol_dag: ProtocolDAG
+    results: dict[GufeKey, ProtocolUnitResult]
+    context: Context
+
+    def to_ProtocolDAGResult(self) -> ProtocolDAGResult:
+        return ProtocolDAGResult(
+            name=self.protocol_dag.name,
+            protocol_units=self.protocol_dag.protocol_units,
+            protocol_unit_results=list(self.results.values()),
+            transformation_key=self.protocol_dag.transformation_key,
+            extends_key=self.protocol_dag.extends_key,
+        )
+
+
 class AsynchronousComputeService(SynchronousComputeService):
     """Asynchronous compute service.
 
@@ -410,21 +697,356 @@ class AsynchronousComputeService(SynchronousComputeService):
 
     """
 
-    def __init__(self, api_url):
-        self.scheduler = sched.scheduler(time.monotonic, time.sleep)
-        # self.loop = asyncio.get_event_loop()
+    _dag_tree: nx.DiGraph
+    _executor_stack: ExecutorStack
+    _task_data: dict[TaskKey, TaskData]
+    _child_env: dict[str, str]
 
+    def __init__(self, settings: ComputeServiceSettings):
+        self.settings = settings
+
+        # asynccomputeservice specific data structures and resource
+        # monitors.
+        self._child_env = dict()  # mods to child process env
+        self._task_data = dict()
+        self._executor_stack = ExecutorStack(self.settings.stack_size)
+        self.tasks_claimed = 0
+        self.tasks_finished = 0
+        self._initialize_dag_tree()
+        self._initialize_resource_monitors()
+
+        self.api_url = self.settings.api_url
+        self.name = self.settings.name
+        self.compute_manager_id = self.settings.compute_manager_id
+        self.sleep_interval = self.settings.sleep_interval
+        self.deep_sleep_interval = self.settings.deep_sleep_interval
+        self.heartbeat_interval = self.settings.heartbeat_interval
+        self.claim_limit = self.settings.claim_limit
+
+        self.client = self._initialize_client()
+        self.scopes = self.settings.scopes or [Scope()]
+
+        self.shared_basedir = Path(self.settings.shared_basedir).absolute()
+        self.shared_basedir.mkdir(exist_ok=True)
+        self.keep_shared = self.settings.keep_shared
+
+        self.scratch_basedir = Path(self.settings.scratch_basedir).absolute()
+        self.scratch_basedir.mkdir(exist_ok=True)
+        self.keep_scratch = self.settings.keep_scratch
+
+        self.compute_service_id = ComputeServiceID.new_from_name(self.name)
+
+        self.int_sleep = InterruptableSleep()
         self._stop = False
+        self._initialize_logger()
 
-    def get_new_tasks(self): ...
+    def _initialize_logger(self):
+        extra = {"compute_service_id": str(self.compute_service_id)}
+        logger = logging.getLogger("AlchemiscaleAsynchronousComputeService")
+        logger.setLevel(self.settings.loglevel)
 
-    def start(self):
-        """Start the service; will keep going until told to stop."""
-        self._stop = False
+        formatter = logging.Formatter(
+            "[%(asctime)s] [%(compute_service_id)s] [%(levelname)s] %(message)s"
+        )
+        formatter.converter = time.gmtime  # use utc time for logging timestamps
 
-        while True:
-            if self._stop:
-                return
+        sh = logging.StreamHandler()
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
+
+        if self.settings.logfile is not None:
+            fh = logging.FileHandler(self.settings.logfile)
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
+
+        self.logger = logging.LoggerAdapter(logger, extra)
+
+    def _initialize_client(self):
+        return AlchemiscaleComputeClient(
+            api_url=self.settings.api_url,
+            identifier=self.settings.identifier,
+            key=self.settings.key,
+            cache_directory=self.settings.client_cache_directory,
+            cache_size_limit=self.settings.client_cache_size_limit,
+            use_local_cache=self.settings.client_use_local_cache,
+            max_retries=self.settings.client_max_retries,
+            retry_base_seconds=self.settings.client_retry_base_seconds,
+            retry_max_seconds=self.settings.client_retry_max_seconds,
+            verify=self.settings.client_verify,
+        )
+
+    def _initialize_resource_monitors(self):
+        self._resource_monitors = []
+
+        if self.settings.memory_monitor_enabled:
+            self._resource_monitors.append(MemoryMonitor(self.settings))
+
+        if self.settings.cpu_monitor_enabled:
+            self._resource_monitors.append(CPUMonitor(self.settings))
+
+        if self.settings.gpu_monitor_enabled:
+            self._resource_monitors.append(GPUMonitor(self.settings))
+            # reliable monitoring of the GPU requires pinning the GPU index
+            self._child_env |= {
+                "CUDA_VISIBLE_DEVICES": self.settings.gpu_monitor_gpu_id
+            }
+
+        for monitor in self._resource_monitors:
+            threading.Thread(target=monitor.monitor_cycle, daemon=True).start()
+
+    def _initialize_dag_tree(self):
+        self._dag_tree = nx.DiGraph()
+        root_node: NodeKey = (None, "ROOT")
+        self._dag_tree.add_node(root_node)
+
+    def has_tasks(self) -> bool:
+        return bool(self._task_data)
+
+    def consume_terminated_tasks(self):
+        for terminating_nodes in self.next_terminating_nodes():
+            task_scoped_key, _ = terminating_nodes
+            pdr = self._consume_results(task_scoped_key)
+            self.push_result(task_scoped_key, pdr)
+            self.tasks_finished = 1 + self.tasks_finished
+
+    def process_results(self):
+        failed_tasks = set()
+        while result := self._executor_stack.get_result():
+            node_key, res = result
+            task_scoped_key, pu = node_key
+            self._task_data[task_scoped_key].results[pu.key] = res
+            unit_context = Context(
+                shared=self._task_data[task_scoped_key].context.shared / f"{pu.key}",
+                scratch=self._task_data[task_scoped_key].context.scratch / f"{pu.key}",
+            )
+
+            match res:
+                case ProtocolUnitFailure():
+                    self._executor_stack.terminate_task(task_scoped_key)
+                    failed_tasks.add(task_scoped_key)
+
+                case ProtocolUnitResult():
+                    self._dag_tree.remove_node(node_key)
+            if not self.keep_scratch:
+                shutil.rmtree(unit_context.scratch)
+
+        for failed_task in failed_tasks:
+            pdr = self._consume_results(failed_task)
+            self.push_result(task_scoped_key, pdr)
+            self.tasks_finished = 1 + tasks_finished
 
     def stop(self):
-        self._stop = True
+        if self.has_tasks():
+            self.logger.info("Cleaning up")
+            self.process_results()
+            self._executor_stack.terminate_all()  # may corrupt queue, pull results out first
+            self.consume_terminated_tasks()
+            self.remove_all()
+        super().stop()
+
+    def _get_resource_signal(self) -> ResourceSignal:
+        # without monitors, signal that the stack can always grow if there is room
+        if len(self._resource_monitors) == 0:
+            return ResourceSignal.GROW
+        # otherwise respect the highest priority signal from all monitors
+        return min(monitor.signal() for monitor in self._resource_monitors)
+
+    def cycle(self, max_tasks, max_time) -> bool:
+        # collect unit results
+        self.process_results()  # removes unit scratch
+        self.consume_terminated_tasks()  # only removes if task is done
+
+        # check if max tasks have been exceeded
+        if max_tasks is not None and self.tasks_finished >= max_tasks:
+            self.logger.info("Exceeded maximum tasks")
+            self.stop()
+            return False
+
+        # Check if max time has been exceeded
+        if max_time is not None and (time.time() - self._start_time) >= max_time:
+            self.logger.info("Exceeded maximum time")
+            self.stop()
+            return False
+
+        # determine next actions based on resource usage
+        signal = self._get_resource_signal()
+        match signal:
+            case ResourceSignal.MAINTAIN:
+                return True
+            case ResourceSignal.SHRINK:
+                try:
+                    self._executor_stack.pop()
+                except IndexError:
+                    logger.info("Attempted to pop from an empty stack")
+                return True
+            case ResourceSignal.TERMINATE:
+                self.stop()
+                return False
+            case ResourceSignal.GROW:
+                pass
+            case _:
+                raise RuntimeError("Received unknown ResourceSignal")
+
+        # determine how many tasks can be claimed and claim that many
+        n_claim = self.claim_limit - len(self._task_data)
+        if max_tasks is not None:
+            max_less_claimed = max_tasks - self.tasks_claimed
+            n_claim = min(n_claim, max_less_claimed)
+        tasks = self.claim_tasks(count=n_claim)
+
+        if tasks is None:
+            self.logger.info("No tasks claimed. Compute API denied request.")
+            time.sleep(self.deep_sleep_interval)
+            return
+
+        self.logger.info("Claimed %d tasks", len([t for t in tasks if t is not None]))
+
+        # add claimed tasks to tree
+        for task in tasks:
+            if task is not None:
+                self.add_task(task)
+                self.tasks_claimed = 1 + self.tasks_claimed
+
+        # return early if no room in stack
+        if self._executor_stack.full():
+            time.sleep(self.sleep_interval)
+            return True
+
+        # iterate over all nodes that are available, less those that
+        # are already running
+        for key in filter(lambda k: k[1] not in ("TERM", "ROOT"), self.next()):
+            tsk, unit = key
+            task_data = self._task_data[tsk]
+
+            inputs = _pu_to_pur(unit.inputs, task_data.results)
+            unit_scratch_dir = task_data.context.scratch / f"{str(unit.key)}"
+            unit_shared_dir = task_data.context.shared / f"{str(unit.key)}"
+            context = Context(scratch=unit_scratch_dir, shared=unit_shared_dir)
+
+            try:
+                self._executor_stack.push(
+                    key, context, inputs, self.settings.n_retries, env=self._child_env
+                )
+                self.logger.info(f"Pushing {key[1]} to the execution stack")
+                break
+            except JailedKeyError:
+                continue
+
+        time.sleep(self.sleep_interval)
+        return True
+
+    def available_units(self) -> set[NodeKey]:
+        """All units with no parents."""
+        available = set()
+        for node, degree in self._dag_tree.out_degree():
+            if degree == 0:
+                available.add(node)
+
+        return available
+
+    def next(self) -> set[NodeKey]:
+        """Available units, less those already running or terminated."""
+        running, terminated = self._executor_stack._get_statuses()
+        running = {r.key for r in running}
+        terminated = {t.key for t in terminated}
+        next_units = self.available_units() - (running | terminated)
+        return next_units
+
+    def next_terminating_nodes(self) -> set[NodeKey]:
+        """All terminating nodes whose parents are complete."""
+        completed = {node for node in self.available_units() if node[1] == "TERM"}
+        return completed
+
+    def add_task(self, task_scoped_key: ScopedKey):
+        """Get a ``ProtocolDAG`` given a ``ScopedKey`` and add it to the DAG tree."""
+        protocol_dag, _, _ = self.task_to_protocoldag(task_scoped_key)
+        self.graft_dag(task_scoped_key, protocol_dag)
+
+    def graft_dag(self, task_scoped_key: ScopedKey, dag):
+        """Add a ``Task`` to the ``AsynchronousComputeService``
+        internal DAG. Additionally, create the ``Context`` directories
+        for the ``Task`` and create a ``TaskData`` record.
+
+        """
+
+        # tag a node with the Task it belongs to
+        def node_transformation(
+            node: ProtocolUnit | str | None,
+        ) -> (TaskKey, ProtocolUnit):
+            nonlocal task_scoped_key
+            return (task_scoped_key, node)
+
+        # create the terminating node for this DAG
+        tagged_dag = nx.DiGraph()
+        terminating = node_transformation("TERM")
+        tagged_dag.add_node(terminating)
+
+        # go over all previous nodes and add their tagged variants to
+        # the new graph
+        for child, parent in dag.graph.edges:
+            tagged_child = node_transformation(child)
+            tagged_parent = node_transformation(parent)
+            tagged_dag.add_edge(tagged_child, tagged_parent)
+
+        # find all "end" nodes and attach them to the terminating node
+        for node, in_degree in dag.graph.in_degree:
+            if in_degree == 0:
+                tagged_dag.add_edge(terminating, node_transformation(node))
+
+        self._dag_tree.add_edges_from(tagged_dag.edges)
+        # connect the new graph to the dag tree
+        self._dag_tree.add_edge((None, "ROOT"), terminating)
+
+        # establish the scratch and shared directories
+        context = Context(
+            scratch=self.scratch_basedir / str(task_scoped_key),
+            shared=self.shared_basedir / str(task_scoped_key),
+        )
+        context.scratch.mkdir(exist_ok=True)
+        context.shared.mkdir(exist_ok=True)
+
+        # add TaskData record for later result collection and input
+        # generation
+        self._task_data[task_scoped_key] = TaskData(
+            results={}, context=context, protocol_dag=dag
+        )
+
+    def remove_task(self, task_scoped_key):
+        """Remove nodes in the DAG tree that belong to the given task
+        and remove their context directories.
+
+        """
+        # TODO: check executor stack
+        # avoid deleting the root node
+        # if task_scoped_key is None:
+        # raise ValueError
+
+        for node in tuple(self._dag_tree.nodes):
+            key, _ = node
+            if key == task_scoped_key:
+                self._dag_tree.remove_node(node)
+
+        context = self._task_data[task_scoped_key].context
+
+        if not self.keep_shared:
+            shutil.rmtree(context.shared)
+        if not self.keep_scratch:
+            shutil.rmtree(context.scratch)
+
+    def remove_all(self):
+        """Remove all nodes from the DAG tree (except to root) and any
+        task data.
+
+        """
+        for task_scoped_key in self._task_data.keys():
+            self.remove_task(task_scoped_key)
+        self._task_data.clear()
+
+    def _consume_results(self, task_scoped_key) -> ProtocolDAGResult:
+        """Return a ``ProtocolDAGResult`` from the collected data up
+        until this point and delete its TaskData.
+        """
+        self.remove_task(task_scoped_key)
+        data = self._task_data.pop(task_scoped_key)
+        pdr = data.to_ProtocolDAGResult()
+        return pdr

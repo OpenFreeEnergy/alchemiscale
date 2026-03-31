@@ -11,8 +11,14 @@ from alchemiscale.storage.models import ComputeManagerID
 from alchemiscale.storage.statestore import Neo4jStore
 from alchemiscale.storage.objectstore import S3ObjectStore
 from alchemiscale.compute.client import AlchemiscaleComputeClientError
-from alchemiscale.compute.service import SynchronousComputeService
-from alchemiscale.compute.settings import ComputeServiceSettings
+from alchemiscale.compute.service import (
+    AsynchronousComputeService,
+    SynchronousComputeService,
+)
+from alchemiscale.compute.settings import (
+    AsynchronousComputeServiceSettings,
+    ComputeServiceSettings,
+)
 
 
 class TestSynchronousComputeService:
@@ -255,3 +261,101 @@ class TestSynchronousComputeService:
             match="Could not find ComputeManagerRegistration",
         ):
             service._register()
+
+
+class TestAsynchronousComputeService:
+
+    @pytest.fixture
+    def service(self, n4js_preloaded, compute_client, tmpdir):
+        with tmpdir.as_cwd():
+            return AsynchronousComputeService(
+                AsynchronousComputeServiceSettings(
+                    gpu_monitor_enabled=False,
+                    api_url=compute_client.api_url,
+                    identifier=compute_client.identifier,
+                    key=compute_client.key,
+                    name="test_compute_service",
+                    shared_basedir=Path("shared").absolute(),
+                    scratch_basedir=Path("scratch").absolute(),
+                    heartbeat_interval=1,
+                    sleep_interval=1,
+                    deep_sleep_interval=1,
+                )
+            )
+
+    def test_heartbeat(self, n4js_preloaded, service):
+        n4js: Neo4jStore = n4js_preloaded
+
+        # register service; normally happens on service start, but needed
+        # for heartbeats
+        service._register()
+
+        # start up heartbeat thread
+        heartbeat_thread = threading.Thread(target=service.heartbeat, daemon=True)
+        heartbeat_thread.start()
+
+        # give time for a heartbeat
+        time.sleep(2)
+
+        q = f"""
+        match (csreg:ComputeServiceRegistration {{identifier: '{service.compute_service_id}'}})
+        return csreg
+        """
+        csreg = n4js.execute_query(q).records[0]["csreg"]
+
+        assert csreg["registered"] < csreg["heartbeat"]
+
+        # stop the service; should trigger heartbeat to stop
+        service.stop()
+        time.sleep(2)
+        assert not heartbeat_thread.is_alive()
+
+    def test_cycle(self, n4js_preloaded, s3os_server_fresh, service):
+        service._register()
+
+        q = """
+        match (pdr:ProtocolDAGResultRef)
+        return pdr
+        """
+
+        # preconditions
+        protocoldagresultref = n4js_preloaded.execute_query(q)
+        assert not protocoldagresultref.records
+
+        # note that non-None max_time will fail due to _start_time
+        # never being set
+        while service.cycle(max_tasks=1, max_time=None):
+            pass
+
+        # postconditions
+        protocoldagresultref = n4js_preloaded.execute_query(q)
+        assert protocoldagresultref.records
+        assert protocoldagresultref.records[0]["pdr"]["ok"] is True
+
+        q = """
+        match (t:Task {status: 'complete'})
+        return t
+        """
+
+        results = n4js_preloaded.execute_query(q)
+
+        assert results.records
+
+    def test_max_time_termination(self, n4js_preloaded, s3os_server_fresh, service):
+        allowed_time = 8  # cycle sleeping and shutdown allowance
+        max_time = 5
+
+        service.start(max_time=max_time)
+        time.sleep(2)  # give time to claim tasks
+
+        start = time.time()
+        while not service._stop:
+            assert service.has_tasks()
+            if (time.time() - start) > allowed_time:
+                raise ValueError
+            time.sleep(1)
+
+        time.sleep(2)  # give time for full termination
+
+        assert not service.has_tasks()
+        assert len(service._dag_tree.nodes) == 1  # only root is left

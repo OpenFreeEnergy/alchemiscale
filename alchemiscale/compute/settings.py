@@ -136,6 +136,74 @@ class ComputeServiceSettings(BaseModel):
         return _values
 
 
+class AsynchronousComputeServiceSettings(ComputeServiceSettings):
+
+    stack_size: int = Field(
+        2,
+        description="The number of concurrent protocol units that are able to run at once.",
+    )
+
+    gpu_monitor_enabled: bool = Field(
+        True, description="If the GPU monitor is enabled."
+    )
+    gpu_monitor_gpu_index: str = Field(
+        "0",
+        description="The GPU index to perform calculations on. This sets the CUDA_VISIBLE_DEVICES environment variable for spawned compute tasks.",
+    )
+    gpu_monitor_grow_limit: float = Field(
+        0.7,
+        description="GPU utilization percentage below this value will allow greater concurrency. See utilization.gpu in nvidia-smi for more information.",
+    )
+    gpu_monitor_maintain_limit: float = Field(
+        1.1,
+        description="GPU utilization percentage above this value will scale back concurrency. See utilization.gpu in nvidia-smi for more information.",
+    )
+    gpu_monitor_sample_time: int = Field(
+        1,
+        description="Number of seconds between collecting GPU utilization measurements.",
+    )
+    gpu_monitor_sample_history_size: int = Field(
+        60,
+        description="Maximum number of samples to use when considering reactive concurrency behavior.",
+    )
+    memory_monitor_enabled: bool = Field(
+        True, description="If the memory monitor is enabled."
+    )
+    memory_monitor_grow_limit: float = Field(
+        0.7,
+        description="Memory usage percentage below this value will allow greater concurrency.",
+    )
+    memory_monitor_maintain_limit: float = Field(
+        0.9,
+        description="Memory usage percentage above this value will scale back concurrency.",
+    )
+    memory_monitor_sample_time: int = Field(
+        1, description="Number of seconds between collecting memory usage measurements."
+    )
+    memory_monitor_sample_history_size: int = Field(
+        60,
+        description="Maximum number of samples to use when considering reactive concurrency behavior.",
+    )
+    cpu_monitor_enabled: bool = Field(
+        True, description="If the CPU monitor is enabled."
+    )
+    cpu_monitor_grow_limit: float = Field(
+        0.8,
+        description="CPU usage percentage below this value will allow greater concurrency.",
+    )
+    cpu_monitor_maintain_limit: float = Field(
+        1.2,
+        description="CPU usage percentage above this value will scale back concurrency.",
+    )
+    cpu_monitor_sample_time: int = Field(
+        1, description="Number of seconds between collecting CPU usage measurements."
+    )
+    cpu_monitor_sample_history_size: int = Field(
+        60,
+        description="Maximum number of samples to use when considering reactive concurrency behavior.",
+    )
+
+
 class ComputeManagerSettings(BaseModel):
     name: str = Field(
         ...,
