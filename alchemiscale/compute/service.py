@@ -698,6 +698,9 @@ class AsynchronousComputeService(SynchronousComputeService):
         # monitors.
         self._child_env = dict()  # mods to child process env
         self._task_data = dict()
+        self._executor_stack = ExecutorStack(self.settings.stack_size)
+        self.tasks_claimed = 0
+        self.tasks_finished = 0
         self._initialize_dag_tree()
         self._initialize_resource_monitors()
 
@@ -723,6 +726,7 @@ class AsynchronousComputeService(SynchronousComputeService):
         self.compute_service_id = ComputeServiceID.new_from_name(self.name)
 
         self.int_sleep = InterruptableSleep()
+        self._stop = False
         self._initialize_logger()
 
     def _initialize_logger(self):
@@ -792,6 +796,7 @@ class AsynchronousComputeService(SynchronousComputeService):
             task_scoped_key, _ = terminating_nodes
             pdr = self._consume_results(task_scoped_key)
             self.push_result(task_scoped_key, pdr)
+            self.tasks_finished = 1 + self.tasks_finished
 
     def process_results(self):
         failed_tasks = set()
@@ -817,6 +822,7 @@ class AsynchronousComputeService(SynchronousComputeService):
         for failed_task in failed_tasks:
             pdr = self._consume_results(failed_task)
             self.push_result(task_scoped_key, pdr)
+            self.tasks_finished = 1 + tasks_finished
 
     def stop(self):
         if self.has_tasks():
@@ -909,9 +915,17 @@ class AsynchronousComputeService(SynchronousComputeService):
             max_less_claimed = max_tasks - self.tasks_claimed
             n_claim = min(n_claim, max_less_claimed)
         tasks = self.claim_tasks(count=n_claim)
+
+        if tasks is None:
+            self.logger.info("No tasks claimed. Compute API denied request.")
+            time.sleep(self.deep_sleep_interval)
+            return
+
+        self.logger.info("Claimed %d tasks", len([t for t in tasks if t is not None]))
+
         for task in tasks:
             if task is not None:
-                self.add_task(*task)
+                self.add_task(task)
                 self.tasks_claimed = 1 + self.tasks_claimed
 
         for key in filter(lambda k: k[1] not in ("TERM", "ROOT"), self.next()):
@@ -925,13 +939,14 @@ class AsynchronousComputeService(SynchronousComputeService):
 
             try:
                 self._executor_stack.push(
-                    key, context, inputs, self.n_retries, env=self._child_env
+                    key, context, inputs, self.settings.n_retries, env=self._child_env
                 )
                 self.logger.info(f"Pushing {key[1]} to the execution stack")
                 break
             except JailedKeyError:
                 continue
 
+        time.sleep(self.sleep_interval)
         return True
 
     def available_units(self) -> set[NodeKey]:
