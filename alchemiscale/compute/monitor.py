@@ -1,3 +1,9 @@
+"""
+:mod:`alchemiscale.compute.monitor` --- resource monitoring for compute services
+================================================================================
+
+"""
+
 from abc import abstractmethod
 from enum import auto, IntEnum
 import os
@@ -6,6 +12,14 @@ import time
 from threading import Lock
 
 
+# Signal to be issued by a resource manager to a compute
+# service. These signals are suggestions and are meant to inform the
+# service but will not force a particular behavior.
+#
+#    1. TERMINATE: tool/resource failure, shut stop all calculations
+#    2. SHRINK: resource is oversubscribed, scale down
+#    3. MAINTAIN: keep at current subscription
+#    4. GROW: resource is undersubscribed
 class ResourceSignal(IntEnum):
     # order matters, higher priority signals should appear at top
     TERMINATE = auto()
@@ -15,8 +29,25 @@ class ResourceSignal(IntEnum):
 
 
 class Monitor:
+    """Base class for a resource monitor.
 
-    def __init__(self, settings):
+    This class handles provides three abstract methods for developers to define.
+
+    1. _setup: uses ComputeServiceSettings to set up datastructures
+               needed for monitoring. Note that this method must
+               define the ``sample_time`` attribute.
+    2. _monitor_cycle: method that updates the above data structures
+               to later be analyzed.
+    3. _signal: from the data collected by _monitor_cycle, return a
+               ResourceSignal.
+
+    Thread locking is handled automatically by the wrapping ``signal``
+    and ``monitor_cycle`` methods to settle race conditions and data
+    corruption.
+
+    """
+
+    def __init__(self, settings: ComputeServiceSettings):
         self._setup(settings)
         self._lock = Lock()
         self._terminate = False
@@ -27,12 +58,13 @@ class Monitor:
             )
 
     def signal(self) -> ResourceSignal:
+        """Issue signal based on collected measurements."""
         with self._lock:
             return self._signal()
 
     def monitor_cycle(self):
-        """Method to be run in a thread, changing state of the monitor
-        such that the signal method can process the results.
+        """Continuously cycle, collecting results as defined by the
+        derived class _monitor_cycle implementation.
         """
         while not self._terminate:
             with self._lock:
@@ -41,15 +73,27 @@ class Monitor:
 
     @abstractmethod
     def _setup(self, settings):
+        """Abstract method for setting up data structures needed for
+        storing resource measurements. These structures should be
+        mutated by ``_monitor_cycle`` and read ``_signal`` for issuing
+        resource signals.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def _monitor_cycle(self):
-        """Mutating method"""
+        """Abstract method for collecting and updating internal data
+        to later be analyzed by ``_signal``.
+
+        """
         raise NotImplementedError
 
     @abstractmethod
     def _signal(self) -> ResourceSignal:
+        """Abstract method for analyzing data collected by
+        ``_monitor_cycle``.
+
+        """
         raise NotImplementedError
 
 
@@ -65,6 +109,7 @@ class GPUMonitor(Monitor):
 
     @staticmethod
     def _nvidia_smi() -> int:
+        """Collect utilization of the GPU."""
         fields = ["index", "utilization.gpu"]
         cmd = [
             "nvidia-smi",
