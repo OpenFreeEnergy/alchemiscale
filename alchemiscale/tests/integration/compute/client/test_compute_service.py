@@ -340,3 +340,22 @@ class TestAsynchronousComputeService:
         results = n4js_preloaded.execute_query(q)
 
         assert results.records
+
+    def test_max_time_termination(self, n4js_preloaded, s3os_server_fresh, service):
+        allowed_time = 8  # cycle sleeping and shutdown allowance
+        max_time = 5
+
+        service.start(max_time=max_time)
+        time.sleep(2)  # give time to claim tasks
+
+        start = time.time()
+        while not service._stop:
+            assert service.has_tasks()
+            if (time.time() - start) > allowed_time:
+                raise ValueError
+            time.sleep(1)
+
+        time.sleep(2)  # give time for full termination
+
+        assert not service.has_tasks()
+        assert len(service._dag_tree.nodes) == 1  # only root is left
