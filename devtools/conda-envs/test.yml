@@ -7,7 +7,7 @@ dependencies:
   - cuda-version >=12
 
   # alchemiscale dependencies
-  - gufe =1.9.0
+  - gufe =1.8.0
   - openfe =1.10.0
   - pydantic >2
   - pydantic-settings
