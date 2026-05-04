@@ -149,6 +149,15 @@ class ComputeManagerSettings(BaseModel):
         ...,
         description="Maximum number of compute services the manager is allowed to have running at a time.",
     )
+    max_submit_per_cycle: int = Field(
+        1,
+        description=(
+            "Maximum number of compute services to create in a single manager "
+            "cycle. Acts as a rate limit on ramp-up; combined with "
+            "``sleep_interval`` it determines how aggressively the manager "
+            "scales up toward ``max_compute_services``."
+        ),
+    )
     sleep_interval: int = Field(
         1800,
         description="Time in seconds to sleep before requesting another instruction.",

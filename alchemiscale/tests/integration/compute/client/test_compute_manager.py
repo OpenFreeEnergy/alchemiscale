@@ -30,7 +30,7 @@ class LocalTestingComputeManager(ComputeManager):
     service_max_time = None
     service_max_tasks = None
 
-    def create_compute_services(self, data):
+    def create_compute_services(self, data, target):
         if exception := LocalTestingComputeManager.exception:
             raise exception
 
@@ -39,14 +39,20 @@ class LocalTestingComputeManager(ComputeManager):
             "max_tasks": self.service_max_tasks or 2,
         }
 
-        proc = Process(
-            target=LocalTestingComputeManager._create_compute_service,
-            args=(self.service_settings, params_start),
-        )
-        proc.start()
-        LocalTestingComputeManager.service_processes.append(proc)
+        # Honor ``target`` rather than always creating a single service. The
+        # existing tests configure max_compute_services=2 and claim_limit=2,
+        # so under the new sizing rule a 3-task fixture starting from zero
+        # services would have target=ceil(3/2)=1 the first cycle, then
+        # target=1 the second cycle, matching the test's expected ramp-up.
+        for _ in range(target):
+            proc = Process(
+                target=LocalTestingComputeManager._create_compute_service,
+                args=(self.service_settings, params_start),
+            )
+            proc.start()
+            LocalTestingComputeManager.service_processes.append(proc)
         time.sleep(2)
-        return 1
+        return target
 
     @staticmethod
     def _create_compute_service(service_settings, params_start):
