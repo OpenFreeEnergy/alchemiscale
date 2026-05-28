@@ -17,8 +17,8 @@ from .client import (
     AlchemiscaleComputeManagerClient,
     AlchemiscaleComputeManagerClientError,
 )
-from .service import InterruptableSleep, SleepInterrupted
 from .settings import ComputeManagerSettings, ComputeServiceSettings
+from ..sleep import InterruptableSleep, SleepInterrupted
 
 
 class ComputeManager:
