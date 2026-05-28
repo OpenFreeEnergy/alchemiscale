@@ -1,6 +1,7 @@
 import datetime
 from uuid import uuid4
 import logging
+import threading
 import time
 import sys
 import signal
@@ -245,3 +246,43 @@ class TestComputeManager:
         manager.cycle()
 
         assert "Received shutdown message" in caplog.text
+
+    def test_manager_interruptible_sleep(
+        self,
+        n4js_preloaded,
+        manager: LocalTestingComputeManager,
+        caplog,
+    ):
+        caplog.set_level(logging.INFO, logger=manager.logger.name)
+
+        # use a long sleep interval; if the sleep were *not* interruptible,
+        # stop() would not take effect until this elapsed and this test would
+        # time out waiting on the thread to join
+        manager.settings.sleep_interval = 300
+
+        thread = threading.Thread(target=manager.start)
+        thread.start()
+
+        try:
+            # wait until the manager has entered its (interruptible) sleep
+            deadline = time.monotonic() + 30
+            while "Sleeping for" not in caplog.text:
+                assert time.monotonic() < deadline, "manager never reached its sleep"
+                time.sleep(0.05)
+
+            # interrupting the sleep should let start() return promptly rather
+            # than blocking for the full sleep_interval
+            interrupt_time = time.monotonic()
+            manager.stop()
+            thread.join(timeout=30)
+
+            assert not thread.is_alive()
+            assert (time.monotonic() - interrupt_time) < 30
+            assert "Compute manager stopping." in caplog.text
+        finally:
+            manager.stop()
+            thread.join(timeout=30)
+
+        # the manager should have deregistered itself on the way out
+        query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
+        assert not n4js_preloaded.execute_query(query).records

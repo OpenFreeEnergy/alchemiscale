@@ -5,7 +5,6 @@
 """
 
 import gc
-import sched
 import time
 import logging
 from uuid import uuid4
@@ -40,8 +39,9 @@ class InterruptableSleep:
     This class uses threading Events to wake up from a sleep before the entire sleep
     duration has run. If the sleep is interrupted, then an SleepInterrupted exception is raised.
 
-    This class is a functor, so an instance can be passed as the delay function to a python
-    sched.scheduler
+    This class is a functor: call an instance with a delay in seconds to sleep for that
+    duration (e.g. ``int_sleep(30)``), and call :meth:`interrupt` from another thread to
+    wake it early.
     """
 
     def __init__(self):
@@ -104,8 +104,6 @@ class SynchronousComputeService:
         self.scratch_basedir = Path(self.settings.scratch_basedir).absolute()
         self.scratch_basedir.mkdir(exist_ok=True)
         self.keep_scratch = self.settings.keep_scratch
-
-        self.scheduler = sched.scheduler(time.monotonic, time.sleep)
 
         self.compute_service_id = ComputeServiceID.new_from_name(self.name)
 
@@ -302,7 +300,7 @@ class SynchronousComputeService:
 
         if tasks is None:
             self.logger.info("No tasks claimed. Compute API denied request.")
-            time.sleep(self.deep_sleep_interval)
+            self.int_sleep(self.deep_sleep_interval)
             return
 
         self.logger.info("Claimed %d tasks", len([t for t in tasks if t is not None]))
@@ -312,7 +310,7 @@ class SynchronousComputeService:
             self.logger.info(
                 "No tasks claimed; sleeping for %d seconds", self.sleep_interval
             )
-            time.sleep(self.sleep_interval)
+            self.int_sleep(self.sleep_interval)
             return
 
         # otherwise, process tasks
@@ -354,6 +352,7 @@ class SynchronousComputeService:
 
         """
         self._stop = False
+        self.int_sleep.clear()
 
         # add ComputeServiceRegistration
         self.logger.info("Starting up service '%s'", self.name)
@@ -411,7 +410,6 @@ class AsynchronousComputeService(SynchronousComputeService):
     """
 
     def __init__(self, api_url):
-        self.scheduler = sched.scheduler(time.monotonic, time.sleep)
         # self.loop = asyncio.get_event_loop()
 
         self._stop = False

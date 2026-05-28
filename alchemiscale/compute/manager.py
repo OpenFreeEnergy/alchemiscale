@@ -17,6 +17,7 @@ from .client import (
     AlchemiscaleComputeManagerClient,
     AlchemiscaleComputeManagerClientError,
 )
+from .service import InterruptableSleep, SleepInterrupted
 from .settings import ComputeManagerSettings, ComputeServiceSettings
 
 
@@ -44,6 +45,7 @@ class ComputeManager:
         )
 
         self._stop = False
+        self.int_sleep = InterruptableSleep()
 
         logger = logging.getLogger("AlchemiscaleComputeManager")
         logger.setLevel(self.settings.loglevel)
@@ -80,6 +82,7 @@ class ComputeManager:
         self._register(steal=steal)
         self.logger.info(f"Registered compute manager '{self.compute_manager_id}'")
         self._stop = False
+        self.int_sleep.clear()
         try:
             count = 0
             self.logger.info("Starting main loop")
@@ -89,7 +92,9 @@ class ComputeManager:
                     self.logger.info("Reached maximum number of cycles")
                     break
                 self.logger.info(f"Sleeping for {self.settings.sleep_interval} seconds")
-                time.sleep(self.settings.sleep_interval)
+                self.int_sleep(self.settings.sleep_interval)
+        except SleepInterrupted:
+            self.logger.info("Compute manager stopping.")
         except Exception as e:
             self.logger.error(f"Unknown exception raised: '{str(e)}'")
             self.logger.info(f"Updating manager status to 'ERROR'")
@@ -113,6 +118,7 @@ class ComputeManager:
         raise NotImplementedError
 
     def stop(self):
+        self.int_sleep.interrupt()
         self._stop = True
 
     def cycle(self) -> bool:

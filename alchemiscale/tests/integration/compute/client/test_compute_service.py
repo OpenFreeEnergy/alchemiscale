@@ -1,3 +1,4 @@
+import logging
 import threading
 import time
 import os
@@ -225,6 +226,65 @@ class TestSynchronousComputeService:
 
         results = n4js.execute_query(q)
         assert results.records
+
+    def test_start_interruptible_sleep(
+        self, n4js_preloaded, compute_client, tmpdir, caplog
+    ):
+        n4js: Neo4jStore = n4js_preloaded
+
+        # a service whose sleep interval is long enough that, were the sleep
+        # *not* interruptible, stop() would block until it elapsed and this
+        # test would time out joining the thread
+        with tmpdir.as_cwd():
+            service = SynchronousComputeService(
+                ComputeServiceSettings(
+                    api_url=compute_client.api_url,
+                    identifier=compute_client.identifier,
+                    key=compute_client.key,
+                    name="test_compute_service_interruptible",
+                    shared_basedir=Path("shared").absolute(),
+                    scratch_basedir=Path("scratch").absolute(),
+                    heartbeat_interval=300,
+                    sleep_interval=300,
+                    deep_sleep_interval=300,
+                )
+            )
+
+        # force the "no tasks claimed; sleeping" branch every cycle so the
+        # service parks itself in an interruptible sleep rather than executing
+        service.claim_tasks = lambda count=1: [None]
+
+        caplog.set_level(logging.INFO, logger=service.logger.name)
+
+        service_thread = threading.Thread(target=service.start, daemon=True)
+        service_thread.start()
+
+        try:
+            # wait until the service has actually entered its sleep
+            deadline = time.monotonic() + 30
+            while "No tasks claimed; sleeping" not in caplog.text:
+                assert time.monotonic() < deadline, "service never reached its sleep"
+                time.sleep(0.05)
+
+            # interrupting the sleep should let start() return promptly rather
+            # than blocking for the full sleep_interval
+            interrupt_time = time.monotonic()
+            service.stop()
+            service_thread.join(timeout=30)
+
+            assert not service_thread.is_alive()
+            assert (time.monotonic() - interrupt_time) < 30
+            assert "Service stopping." in caplog.text
+        finally:
+            service.stop()
+            service_thread.join(timeout=30)
+
+        # the service should have deregistered itself on the way out
+        q = f"""
+        match (csreg:ComputeServiceRegistration {{identifier: '{service.compute_service_id}'}})
+        return csreg
+        """
+        assert not n4js.execute_query(q).records
 
     @pytest.mark.xfail(raises=NotImplementedError)
     def test_stop(self):
