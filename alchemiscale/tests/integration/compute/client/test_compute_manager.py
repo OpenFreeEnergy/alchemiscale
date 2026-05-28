@@ -34,14 +34,14 @@ class LocalTestingComputeManager(ComputeManager):
         if exception := LocalTestingComputeManager.exception:
             raise exception
 
-        params_start = {
-            "max_time": self.service_max_time or 10,
-            "max_tasks": self.service_max_tasks or 2,
-        }
+        # service lifetime limits now live on the ComputeServiceSettings the
+        # manager hands to each service, rather than being passed to start()
+        self.service_settings.max_time = self.service_max_time or 10
+        self.service_settings.max_tasks = self.service_max_tasks or 2
 
         proc = Process(
             target=LocalTestingComputeManager._create_compute_service,
-            args=(self.service_settings, params_start),
+            args=(self.service_settings,),
         )
         proc.start()
         LocalTestingComputeManager.service_processes.append(proc)
@@ -49,7 +49,7 @@ class LocalTestingComputeManager(ComputeManager):
         return 1
 
     @staticmethod
-    def _create_compute_service(service_settings, params_start):
+    def _create_compute_service(service_settings):
 
         from alchemiscale.compute.service import SynchronousComputeService
 
@@ -65,7 +65,7 @@ class LocalTestingComputeManager(ComputeManager):
             signal.signal(getattr(signal, signame), stop)
 
         try:
-            service.start(**params_start)
+            service.start()
         except KeyboardInterrupt:
             pass
 

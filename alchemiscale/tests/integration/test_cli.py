@@ -154,16 +154,14 @@ def compute_service_config(compute_api_args):
     host, port, _ = compute_api_args
 
     config = {
-        "init": {
-            "api_url": f"http://{host}:{port}",
-            "identifier": "test-compute-user",
-            "key": "test-comute-user-key",
-            "name": "test-compute-service",
-            "shared_basedir": "./shared",
-            "scratch_basedir": "./scratch",
-            "loglevel": "INFO",
-        },
-        "start": {"max_time": None},
+        "api_url": f"http://{host}:{port}",
+        "identifier": "test-compute-user",
+        "key": "test-comute-user-key",
+        "name": "test-compute-service",
+        "shared_basedir": "./shared",
+        "scratch_basedir": "./scratch",
+        "loglevel": "INFO",
+        "max_time": None,
     }
 
     return config
@@ -190,8 +188,8 @@ def test_compute_synchronous(
 
     # create compute identity; add all scope access
     identity = CredentialedComputeIdentity(
-        identifier=compute_service_config["init"]["identifier"],
-        hashed_key=hash_key(compute_service_config["init"]["key"]),
+        identifier=compute_service_config["identifier"],
+        hashed_key=hash_key(compute_service_config["key"]),
     )
 
     n4js.create_credentialed_entity(identity)
@@ -216,7 +214,7 @@ def test_compute_synchronous(
 
             q = f"""
             match (csreg:ComputeServiceRegistration)
-            where csreg.identifier =~ "{compute_service_config['init']['name']}.*"
+            where csreg.identifier =~ "{compute_service_config['name']}.*"
             return csreg
             """
             while True:

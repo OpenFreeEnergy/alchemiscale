@@ -385,16 +385,13 @@ def synchronous(config_file, name, compute_manager_id):
 
     params = yaml.safe_load(config_file)
 
-    params_init = params.get("init", {})
-    params_start = params.get("start", {})
-
     if name is not None:
-        params_init["name"] = name
+        params["name"] = name
 
     if compute_manager_id is not None:
-        params_init["compute_manager_id"] = compute_manager_id
+        params["compute_manager_id"] = compute_manager_id
 
-    service = SynchronousComputeService(ComputeServiceSettings(**params_init))
+    service = SynchronousComputeService(ComputeServiceSettings(**params))
 
     # add signal handling
     for signame in {"SIGHUP", "SIGINT", "SIGTERM"}:
@@ -406,7 +403,7 @@ def synchronous(config_file, name, compute_manager_id):
         signal.signal(getattr(signal, signame), stop)
 
     try:
-        service.start(**params_start)
+        service.start()
     except KeyboardInterrupt:
         pass
 
