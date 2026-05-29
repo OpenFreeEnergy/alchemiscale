@@ -247,9 +247,6 @@ class TestComputeManager:
 
         assert "Received shutdown message" in caplog.text
 
-    @pytest.mark.skip(
-        reason="bisect: temporarily skipped to isolate CI hang on 3.11/3.13 (PR #503)"
-    )
     def test_manager_interruptible_sleep(
         self,
         n4js_preloaded,
