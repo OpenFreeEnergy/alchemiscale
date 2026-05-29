@@ -247,15 +247,19 @@ class TestComputeManager:
 
         assert "Received shutdown message" in caplog.text
 
-    @pytest.mark.skip(
-        reason="bisect: confirmed culprit of CI hang on 3.11/3.13 (PR #503); fork-from-thread interaction"
-    )
     def test_manager_interruptible_sleep(
         self,
-        n4js_preloaded,
+        n4js_fresh,
         manager: LocalTestingComputeManager,
         caplog,
     ):
+        # use n4js_fresh (no preloaded tasks) rather than n4js_preloaded so
+        # cycle() returns without calling create_compute_services. The latter
+        # forks a Process from this test's worker, which is already
+        # multi-threaded (the manager.start thread below) — and fork from a
+        # multi-threaded Python process inherits other threads' locks as held,
+        # deadlocking the child. That deadlock hung the xdist worker on 3.11
+        # and 3.13 (3.12 happens to dodge it). See PR #503 discussion.
         caplog.set_level(logging.INFO, logger=manager.logger.name)
 
         # use a long sleep interval; if the sleep were *not* interruptible,
@@ -288,4 +292,4 @@ class TestComputeManager:
 
         # the manager should have deregistered itself on the way out
         query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
-        assert not n4js_preloaded.execute_query(query).records
+        assert not n4js_fresh.execute_query(query).records
