@@ -249,18 +249,22 @@ class TestComputeManager:
 
     def test_manager_interruptible_sleep(
         self,
-        n4js_fresh,
+        n4js_preloaded,
         manager: LocalTestingComputeManager,
         caplog,
     ):
-        # use n4js_fresh (no preloaded tasks) rather than n4js_preloaded so
-        # cycle() returns without calling create_compute_services. The latter
-        # forks a Process from this test's worker, which is already
-        # multi-threaded (the manager.start thread below) — and fork from a
-        # multi-threaded Python process inherits other threads' locks as held,
-        # deadlocking the child. That deadlock hung the xdist worker on 3.11
-        # and 3.13 (3.12 happens to dodge it). See PR #503 discussion.
         caplog.set_level(logging.INFO, logger=manager.logger.name)
+
+        # suppress the subprocess spawn. The default create_compute_services
+        # forks a multiprocessing.Process; combined with the background
+        # thread below, that makes this test fork from a multi-threaded
+        # parent. POSIX fork only carries the calling thread, so locks held
+        # by other threads (logging, requests pools, ...) are inherited as
+        # held-with-no-owner in the child, which then deadlocks. That hung
+        # the xdist worker on 3.11/3.13 (3.12 happens to miss it). The test
+        # is about stop() interrupting the sleep, not about spawning, so
+        # we cut the spawn path here. See PR #503 discussion.
+        manager.create_compute_services = lambda data: 0
 
         # use a long sleep interval; if the sleep were *not* interruptible,
         # stop() would not take effect until this elapsed and this test would
@@ -292,4 +296,4 @@ class TestComputeManager:
 
         # the manager should have deregistered itself on the way out
         query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
-        assert not n4js_fresh.execute_query(query).records
+        assert not n4js_preloaded.execute_query(query).records
