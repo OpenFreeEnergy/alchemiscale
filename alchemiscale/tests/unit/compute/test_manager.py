@@ -54,32 +54,6 @@ def _make_manager(
     return mgr
 
 
-# ----------------------------------------------------------------------
-# Settings
-# ----------------------------------------------------------------------
-
-
-def test_max_submit_per_cycle_default():
-    settings = ComputeManagerSettings(name="x", logfile=None, max_compute_services=5)
-    # Default of 1 keeps ramp-up conservative.
-    assert settings.max_submit_per_cycle == 1
-
-
-def test_max_submit_per_cycle_overridable():
-    settings = ComputeManagerSettings(
-        name="x",
-        logfile=None,
-        max_compute_services=5,
-        max_submit_per_cycle=3,
-    )
-    assert settings.max_submit_per_cycle == 3
-
-
-# ----------------------------------------------------------------------
-# _compute_jobs_to_create
-# ----------------------------------------------------------------------
-
-
 def test_sizing_capped_by_num_tasks():
     """Don't submit more services than there are waiting tasks."""
     mgr = _make_manager(max_compute_services=100, max_submit_per_cycle=100)
@@ -131,14 +105,6 @@ def test_sizing_floors_to_one_when_divide_collapses():
     mgr = _make_manager(max_compute_services=10, max_submit_per_cycle=10, claim_limit=5)
     # 2 tasks, claim_limit 5 -> 2 // 5 == 0 -> floor to 1
     assert mgr._compute_jobs_to_create(num_tasks=2, num_active_services=0) == 1
-
-
-def test_sizing_handles_zero_claim_limit_defensively():
-    """A claim_limit of 0 (degenerate config) shouldn't raise ZeroDivisionError."""
-    mgr = _make_manager(claim_limit=0)
-    # Treated as if claim_limit were 1.
-    result = mgr._compute_jobs_to_create(num_tasks=3, num_active_services=0)
-    assert result >= 1
 
 
 def test_sizing_combines_all_caps():

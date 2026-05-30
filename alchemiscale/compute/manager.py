@@ -181,8 +181,8 @@ class ComputeManager:
 
         # Each compute service claims up to claim_limit tasks at a time, so
         # we need fewer services than tasks to cover the queue.
-        claim_limit = max(1, self.service_settings.claim_limit)
-        jobs //= claim_limit
+        # ``claim_limit`` is validated as PositiveInt at config load.
+        jobs //= self.service_settings.claim_limit
 
         # Floor at one: the parent has decided we should scale up, so create
         # at least one service even if the divide collapsed to zero.
