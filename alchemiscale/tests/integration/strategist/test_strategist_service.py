@@ -385,9 +385,6 @@ class TestStrategistService:
         strategist_service.stop()
         assert strategist_service._stop is True
 
-    @pytest.mark.skip(
-        reason="bisect: temporarily skipped to isolate CI hang on 3.11/3.13 (PR #503)"
-    )
     def test_service_interruptible_sleep(self, strategist_service, caplog):
         """stop() should interrupt the inter-cycle sleep promptly."""
         caplog.set_level(logging.DEBUG, logger="AlchemiscaleStrategistService")

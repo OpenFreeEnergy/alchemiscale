@@ -227,9 +227,6 @@ class TestSynchronousComputeService:
         results = n4js.execute_query(q)
         assert results.records
 
-    @pytest.mark.skip(
-        reason="bisect: temporarily skipped to isolate CI hang on 3.11/3.13 (PR #503)"
-    )
     def test_start_interruptible_sleep(
         self, n4js_preloaded, compute_client, tmpdir, caplog
     ):
