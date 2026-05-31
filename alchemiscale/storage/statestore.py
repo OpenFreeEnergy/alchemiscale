@@ -212,12 +212,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         for label, values in self.constraints.items():
-            self.execute_query(
-                f"""
+            self.execute_query(f"""
                 CREATE CONSTRAINT {values['name']} IF NOT EXISTS
                 FOR (n:{label}) REQUIRE n.{values['property']} is unique
-            """
-            )
+            """)
 
     def check(self):
         """Check consistency of database.
@@ -259,11 +257,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         self.execute_query("MATCH (n) DETACH DELETE n")
 
         for label, values in self.constraints.items():
-            self.execute_query(
-                f"""
+            self.execute_query(f"""
                 DROP CONSTRAINT {values['name']} IF EXISTS
-            """
-            )
+            """)
 
     ## gufe object handling
 
