@@ -112,11 +112,12 @@ class SynchronousComputeService:
 
     def heartbeat(self):
         """Start up the heartbeat, sleeping for `self.heartbeat_interval`"""
-        while True:
-            if self._stop:
-                break
+        while not self._stop:
             self.beat()
-            time.sleep(self.heartbeat_interval)
+            try:
+                self.int_sleep(self.heartbeat_interval)
+            except SleepInterrupted:
+                break
 
     def claim_tasks(self, count=1) -> list[ScopedKey | None]:
         """Get a Task to execute from compute API.
