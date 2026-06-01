@@ -30,7 +30,15 @@ Homepage = "https://github.com/OpenFreeEnergy/alchemiscale"
 test = [
     "pytest",
     "pytest-xdist",
+    "pytest-timeout",
 ]
+
+[tool.pytest.ini_options]
+# Fail fast on hangs (e.g. native deps deadlocking) instead of letting CI burn
+# its full wall-clock budget. Override per-test with @pytest.mark.timeout(...)
+# if a specific test legitimately needs longer.
+timeout = 600
+timeout_method = "thread"
 
 [project.scripts]
 alchemiscale = "alchemiscale.cli:cli"
