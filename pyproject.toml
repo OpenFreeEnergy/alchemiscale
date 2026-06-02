@@ -37,8 +37,13 @@ test = [
 # Fail fast on hangs (e.g. native deps deadlocking) instead of letting CI burn
 # its full wall-clock budget. Override per-test with @pytest.mark.timeout(...)
 # if a specific test legitimately needs longer.
+#
+# `signal` method is POSIX-only but more aggressive than `thread`: it can
+# interrupt blocking syscalls, whereas `thread` cannot fire while a C
+# extension holds the GIL. The workflow also enforces a step-level
+# `timeout-minutes` as a final watchdog for anything signal can't break.
 timeout = 600
-timeout_method = "thread"
+timeout_method = "signal"
 
 [project.scripts]
 alchemiscale = "alchemiscale.cli:cli"
