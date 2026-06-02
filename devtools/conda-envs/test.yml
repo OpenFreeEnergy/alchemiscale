@@ -49,6 +49,7 @@ dependencies:
   - pytest
   - pytest-xdist
   - pytest-cov
+  - pytest-timeout
   - coverage
   - moto
 
