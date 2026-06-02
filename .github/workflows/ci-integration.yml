@@ -50,6 +50,7 @@ jobs:
           micromamba list
 
       - name: "Run tests"
+        timeout-minutes: 60
         run: |
           pytest -n auto -v --cov=alchemiscale --cov-report=xml alchemiscale/tests
 
