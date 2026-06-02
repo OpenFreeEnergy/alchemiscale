@@ -21,7 +21,7 @@ from ..models import ScopedKey, Scope
 
 class ComputeIDBase(str):
 
-    _allowed = r"^[a-zA-Z][a-zA-Z0-9_\.\:]*$"
+    _allowed_name_pattern = r"^[a-zA-Z][a-zA-Z0-9_\.\:]*$"
 
     def __init__(self, _value):
         # don't need to process _value, handled by str.__new__
@@ -35,7 +35,7 @@ class ComputeIDBase(str):
         self._name = parts[0]
         self._uuid = parts[1]
 
-        if not re.fullmatch(self._allowed, self.name):
+        if not re.fullmatch(self._allowed_name_pattern, self.name):
             raise ValueError(
                 f"{self.__class__.__name__} must either start with an alphabetical and contain "
                 "only alphanumeric, underscores ('_'), periods ('.'), or colons (':') thereafter"
