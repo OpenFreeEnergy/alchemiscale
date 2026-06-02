@@ -243,6 +243,37 @@ class TestComputeClient:
 
         assert task_sks == [None]
 
+    def test_claim_tasks_scopes_exclude_filters(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        fully_scoped_compute_client: client.AlchemiscaleComputeClient,
+        compute_service_id,
+        uvicorn_server,
+    ):
+        """Demonstrate that ``scopes_exclude`` filters (rather than blocks) when
+        multiple scopes are eligible: tasks from the non-excluded scopes are
+        still claimed, but none come from the excluded scope.
+        """
+        fully_scoped_compute_client.register(compute_service_id)
+
+        # claim well beyond the total number of available tasks so we end up
+        # drawing from every non-excluded taskhub — removes dependency on the
+        # random weighted choice of taskhub.
+        task_sks = fully_scoped_compute_client.claim_tasks(
+            scopes=multiple_scopes,
+            scopes_exclude=[scope_test],
+            compute_service_id=compute_service_id,
+            count=100,
+        )
+
+        claimed = [sk for sk in task_sks if sk is not None]
+        # tasks exist in the other scopes, so the filter must not block everything
+        assert len(claimed) > 0
+        # and none of them may come from the excluded scope
+        assert all(sk.scope != scope_test for sk in claimed)
+
     def test_get_task_transformation(
         self,
         scope_test,
