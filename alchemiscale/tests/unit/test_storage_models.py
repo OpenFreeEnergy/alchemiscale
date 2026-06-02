@@ -2,7 +2,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import MagicMock
 
-from uuid import uuid4
+from uuid import uuid4, UUID
 
 from alchemiscale.storage.models import (
     NetworkStateEnum,
@@ -14,6 +14,7 @@ from alchemiscale.storage.models import (
     StrategyStatusEnum,
     StrategyTaskScalingEnum,
     ComputeManagerID,
+    ComputeServiceID,
 )
 from alchemiscale import ScopedKey
 
@@ -418,33 +419,80 @@ class TestStrategyState:
             assert state.task_scaling == scaling
 
 
-class TestComputeManagerID:
+@pytest.mark.parametrize("cls", [ComputeServiceID, ComputeManagerID])
+class TestComputeIDBase:
+    """Validation behavior shared by ComputeIDBase subclasses.
 
-    name = "testmanager"
+    Both `ComputeServiceID` and `ComputeManagerID` inherit their validation
+    from `ComputeIDBase`, so each test is parametrized over both subclasses
+    to guard against accidental divergence.
+    """
 
-    def test_to_from_dict(self):
-        manager_id = ComputeManagerID.new_from_name(self.name)
-        dct_form = manager_id.to_dict()
-        assert ComputeManagerID.from_dict(dct_form) == manager_id
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "abc",  # simple alphabetical
+            "abc123",  # alphanumeric
+            "Z",  # single uppercase
+            "AbCdEf",  # mixed case
+            "abc_123",  # underscore
+            "abc.123",  # period
+            "abc:123",  # colon
+            "a.b_c:d",  # mix of all allowed delimiters
+        ],
+    )
+    def test_valid_names_roundtrip(self, cls, name):
+        cid = cls.new_from_name(name)
+        assert cid.name == name
+        # constructed UUID portion is a parseable hex UUID
+        UUID(cid.uuid)
+        # to_dict/from_dict round-trips identically
+        assert cls.from_dict(cid.to_dict()) == cid
 
-    def test_invalid_uuid_form(self):
-        # try using the int form of the uuid
-        manager_uuid = str(int(uuid4()))
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "1abc",  # starts with digit
+            "_abc",  # starts with underscore (delimiter, not letter)
+            ".abc",  # starts with period
+            ":abc",  # starts with colon
+            "abc!",  # disallowed char
+            "abc def",  # space
+            "abc-def",  # embedded dash (reserved as the name/uuid delimiter)
+            "abc/def",  # slash
+            "",  # empty
+        ],
+    )
+    def test_invalid_names_rejected(self, cls, name):
+        with pytest.raises(ValueError):
+            cls.new_from_name(name)
 
-        with pytest.raises(ValueError, match="ComputeManagerID must have the form"):
-            manager_id = ComputeManagerID(self.name + "-" + manager_uuid)
-
-    def test_broken_uuid(self):
-        original = "676b919a-a206-4f24-9134-3cb326ad127b"
-        manager_uuid = "Z" + original
-
-        with pytest.raises(ValueError, match="Could not interpret the provided UUID"):
-            manager_id = ComputeManagerID(self.name + "-" + manager_uuid)
-
-    def test_bad_name(self):
-        name = "test_manager"
-
+    def test_error_message_includes_class_name(self, cls):
+        # bad name should surface the actual subclass name, not a hardcoded one
         with pytest.raises(
-            ValueError, match="ComputeManagerID only allows alpha-numeric names"
+            ValueError, match=f"{cls.__name__} must either start with an alphabetical"
         ):
-            ComputeManagerID.new_from_name(name)
+            cls.new_from_name("1bad")
+
+    def test_too_few_parts(self, cls):
+        # missing the `-{uuid}` portion entirely
+        with pytest.raises(ValueError, match="must have the form"):
+            cls("noseparator")
+
+    def test_too_many_parts(self, cls):
+        # legacy dashed-uuid form (six fields) is no longer accepted; the
+        # name/uuid delimiter is now `-` and only `-` once
+        with pytest.raises(ValueError, match="must have the form"):
+            cls("name-12345678-1234-1234-1234-123456789012")
+
+    def test_invalid_uuid_form(self, cls):
+        # int-form UUID is not a hex UUID
+        bad_uuid = str(int(uuid4()))
+        with pytest.raises(ValueError, match="Could not interpret the provided UUID"):
+            cls("validname-" + bad_uuid)
+
+    def test_broken_uuid(self, cls):
+        # hex-shaped but contains a non-hex character
+        bad_uuid = "Z676b919aa2064f2491343cb326ad127b"
+        with pytest.raises(ValueError, match="Could not interpret the provided UUID"):
+            cls("validname-" + bad_uuid)

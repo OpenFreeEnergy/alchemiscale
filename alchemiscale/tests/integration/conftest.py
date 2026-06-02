@@ -28,7 +28,6 @@ from alchemiscale.storage.objectstore import get_s3os
 from alchemiscale.storage.models import ComputeServiceID
 from stratocaster.base import Strategy, StrategyResult, StrategySettings
 
-
 # Removed NEO4J_PROCESS global dict - not used and would cause race conditions in parallel execution
 NEO4J_VERSION = os.getenv("NEO4J_VERSION", "")
 
@@ -556,7 +555,7 @@ def multiple_scopes(scope_test):
 
 @fixture(scope="module")
 def compute_service_id():
-    return ComputeServiceID("compute-service-123")
+    return ComputeServiceID.new_from_name("compute.service.123")
 
 
 @fixture(scope="module")

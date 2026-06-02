@@ -1575,7 +1575,7 @@ class TestNeo4jStore(TestStateStore):
         random.shuffle(task_sks)
 
         # try to claim from an empty hub
-        csid = ComputeServiceID("early bird task handler")
+        csid = ComputeServiceID.new_from_name("early_bird_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         nothing = n4js.claim_taskhub_tasks(taskhub_sk, csid)
 
@@ -1586,7 +1586,7 @@ class TestNeo4jStore(TestStateStore):
 
         # claim a single task; there is no deterministic ordering of tasks, so
         # simply test that the claimed task is one of the actioned tasks
-        csid = ComputeServiceID("the best task handler")
+        csid = ComputeServiceID.new_from_name("the_best_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed = n4js.claim_taskhub_tasks(taskhub_sk, csid)
 
@@ -1602,7 +1602,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.set_task_priority(remaining_tasks, 5)
         n4js.set_task_priority([remaining_tasks[0]], 1)
 
-        csid = ComputeServiceID("another task handler")
+        csid = ComputeServiceID.new_from_name("another_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed2 = n4js.claim_taskhub_tasks(taskhub_sk, csid)
         assert claimed2[0] == remaining_tasks[0]
@@ -1611,7 +1611,7 @@ class TestNeo4jStore(TestStateStore):
         remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
         # next task claimed should be one of the remaining tasks
-        csid = ComputeServiceID("yet another task handler")
+        csid = ComputeServiceID.new_from_name("yet_another_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed3 = n4js.claim_taskhub_tasks(taskhub_sk, csid)
         assert claimed3[0] in remaining_tasks
@@ -1620,7 +1620,7 @@ class TestNeo4jStore(TestStateStore):
         remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
         # try to claim multiple tasks
-        csid = ComputeServiceID("last task handler")
+        csid = ComputeServiceID.new_from_name("last_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed4 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=4)
         assert len(claimed4) == 4
@@ -1666,7 +1666,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.action_tasks(task_sks, taskhub_sk)
         assert len(n4js.get_taskhub_unclaimed_tasks(taskhub_sk)) == 9
 
-        csid = ComputeServiceID("another task handler")
+        csid = ComputeServiceID.new_from_name("another_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 
         claimedA = n4js.claim_taskhub_tasks(
@@ -1699,18 +1699,16 @@ class TestNeo4jStore(TestStateStore):
         n4js.action_tasks(task_sks, taskhub_sk)
 
         # try to claim multiple tasks
-        csid = ComputeServiceID("task handler")
+        csid = ComputeServiceID.new_from_name("task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed4 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=4)
         assert len(claimed4) == 4
 
-        res = n4js.execute_query(
-            f"""
+        res = n4js.execute_query(f"""
         match (cs:ComputeServiceRegistration {{identifier: '{csid}'}})-[:CLAIMS]->(t:Task)
         with t.status as status
         return status
-        """
-        )
+        """)
 
         # check that all tasks in a running state
         statuses = [rec["status"] for rec in res.records]
@@ -1720,13 +1718,11 @@ class TestNeo4jStore(TestStateStore):
         _ = n4js.deregister_computeservice(csid)
 
         # check that all tasks are in a waiting state after deregistering
-        res = n4js.execute_query(
-            """
+        res = n4js.execute_query("""
         match (t:Task) where t.status = 'waiting'
         with t._scoped_key as sk
         return sk
-        """
-        )
+        """)
 
         task_scoped_keys = [rec["sk"] for rec in res.records]
         assert len(set(task_scoped_keys)) == 10
@@ -1755,7 +1751,7 @@ class TestNeo4jStore(TestStateStore):
         actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
         assert set(actioned_task_sks) == set(collected_sks)
 
-        csid = ComputeServiceID("task handler")
+        csid = ComputeServiceID.new_from_name("task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 
         # claim the first task
@@ -1805,7 +1801,7 @@ class TestNeo4jStore(TestStateStore):
         actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
         assert set(actioned_task_sks) == set(collected_sks)
 
-        csid = ComputeServiceID("task handler")
+        csid = ComputeServiceID.new_from_name("task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 
         # claim the first task **3** tasks, this set should be the first extends
@@ -1862,7 +1858,7 @@ class TestNeo4jStore(TestStateStore):
         actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
         assert set(actioned_task_sks) == set(collected_sks)
 
-        csid = ComputeServiceID("task handler")
+        csid = ComputeServiceID.new_from_name("task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 
         # claim the first task
@@ -1912,7 +1908,7 @@ class TestNeo4jStore(TestStateStore):
         weight_dict = {task_sks[0]: 1.0}
         n4js.set_task_weights(weight_dict, taskhub_sk)
 
-        csid = ComputeServiceID("the best task handler")
+        csid = ComputeServiceID.new_from_name("the_best_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 
         # check that the claimed task is the first task
@@ -2085,12 +2081,10 @@ class TestNeo4jStore(TestStateStore):
         # try to push the result
         n4js.set_task_result(task_sk, pdr_ref)
 
-        n = n4js.execute_query(
-            """
+        n = n4js.execute_query("""
                 match (n:ProtocolDAGResultRef)<-[:RESULTS_IN]-(t:Task)
                 return n
-                """
-        ).records[0]["n"]
+                """).records[0]["n"]
 
         assert n["location"] == pdr_ref.location
         assert n["obj_key"] == str(protocoldagresult.key)
@@ -2751,12 +2745,10 @@ class TestNeo4jStore(TestStateStore):
 
         n4js.create_credentialed_entity(user)
 
-        n = n4js.execute_query(
-            f"""
+        n = n4js.execute_query(f"""
             match (n:{cls_name} {{identifier: '{user.identifier}'}})
             return n
-            """
-        ).records[0]["n"]
+            """).records[0]["n"]
 
         assert n["identifier"] == user.identifier
         assert n["hashed_key"] == user.hashed_key
@@ -3269,7 +3261,7 @@ class TestNeo4jStore(TestStateStore):
 
         n4js.action_tasks(task_sks, taskhub_sk)
 
-        csid = ComputeServiceID("claimer")
+        csid = ComputeServiceID.new_from_name("claimer")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 
         # claim all the tasks
@@ -3657,7 +3649,7 @@ class TestNeo4jStore(TestStateStore):
             failure_times = list(map(lambda td: creation_time + td, failure_deltas))
 
             registration = ComputeServiceRegistration(
-                identifier=ComputeServiceID(f"compute-service-{uuid.uuid4()}"),
+                identifier=ComputeServiceID.new_from_name("compute_service"),
                 registered=creation_time,
                 heartbeat=creation_time,
                 failure_times=failure_times,
@@ -3697,7 +3689,7 @@ class TestNeo4jStore(TestStateStore):
 
             with pytest.raises(
                 ValueError,
-                match="ComputeManager with this name is already registered",
+                match="ComputeManager with this name is already registered with status",
             ):
                 n4js.register_computemanager(cmr_2)
 
@@ -3712,9 +3704,13 @@ class TestNeo4jStore(TestStateStore):
             # now expected to fail in the same way as before
             with pytest.raises(
                 ValueError,
-                match="ComputeManager with this name is already registered",
+                match="ComputeManager with this name is already registered with status",
             ):
                 n4js.register_computemanager(cmr_1)
+
+            # however, providing the steal kwarg will allow registration
+            n4js.register_computemanager(cmr_1, steal=True)
+            assert self.confirm_registration_contents(n4js, cmr_1)
 
         def test_deregister(self, n4js: Neo4jStore):
             cmr: ComputeManagerRegistration = (
@@ -3829,7 +3825,7 @@ class TestNeo4jStore(TestStateStore):
             compute_manager_id = cmr.to_compute_manager_id()
             n4js.register_computemanager(cmr)
 
-            def get_instruction(forgive_seconds=-60, failures=2):
+            def get_instruction(forgive_seconds=-60, failures=2, protocols=[]):
                 nonlocal n4js, compute_manager_id
                 now = datetime.datetime.now(tz=datetime.UTC)
                 instruction, instruction_data = n4js.get_computemanager_instruction(
@@ -3837,6 +3833,7 @@ class TestNeo4jStore(TestStateStore):
                     forgive_time=now + timedelta(seconds=forgive_seconds),
                     max_failures=failures,
                     scopes=[scope_test],
+                    protocols=protocols,
                 )
                 return instruction, instruction_data
 
@@ -3887,6 +3884,31 @@ class TestNeo4jStore(TestStateStore):
             n4js.action_tasks(task_sks, taskhub_sk)
 
             instruction, data = get_instruction(forgive_seconds=0)
+
+            assert data == {
+                "compute_service_ids": [compute_service_id],
+                "num_tasks": 5,
+            }
+
+            # protocol filtration
+            instruction, data = get_instruction(
+                forgive_seconds=0, protocols=["FakeProtocol"]
+            )
+
+            assert data == {
+                "compute_service_ids": [compute_service_id],
+                "num_tasks": 0,
+            }
+
+            instruction, data = get_instruction(
+                forgive_seconds=0,
+                protocols=[
+                    "FakeProtocol",
+                    "DummyProtocolA",
+                    "DummyProtocolB",
+                    "DummyProtocolC",
+                ],
+            )
 
             assert data == {
                 "compute_service_ids": [compute_service_id],

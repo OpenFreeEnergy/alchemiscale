@@ -29,6 +29,7 @@ jobs:
         python-version:
           - "3.11"
           - "3.12"
+          - "3.13"
 
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +50,7 @@ jobs:
           micromamba list
 
       - name: "Run tests"
+        timeout-minutes: 60
         run: |
           pytest -n auto -v --cov=alchemiscale --cov-report=xml alchemiscale/tests
 

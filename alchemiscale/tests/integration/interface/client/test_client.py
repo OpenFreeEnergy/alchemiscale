@@ -8,6 +8,7 @@ import json
 
 from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey, JSON_HANDLER
+from gufe.protocols import ProtocolResult
 from gufe.protocols.protocoldag import execute_DAG
 import networkx as nx
 
@@ -23,7 +24,7 @@ from alchemiscale.interface import client
 from alchemiscale.tests.integration.interface.utils import (
     get_user_settings_override,
 )
-from alchemiscale.interface.client import AlchemiscaleClientError
+from alchemiscale.interface.client import AlchemiscaleClientError, ResultFormat
 
 
 class TestClient:
@@ -219,7 +220,7 @@ class TestClient:
         # check that we get an exception when we try a malformed key
         with pytest.raises(
             AlchemiscaleClientError,
-            match="Status Code 422 : Unprocessable Entity : input does not appear to be a `ScopedKey`",
+            match=r"Status Code 422 : Unprocessable .* : input does not appear to be a `ScopedKey`",
         ):
             user_client.check_exists("lol")
 
@@ -2289,7 +2290,7 @@ class TestClient:
 
         # get back protocoldagresults instead
         protocoldagresults_r = user_client.get_transformation_results(
-            transformation_sk, return_protocoldagresults=True
+            transformation_sk, return_as=ResultFormat.PROTOCOL_DAG_RESULTS
         )
 
         assert set(protocoldagresults_r) == set(protocoldagresults)
@@ -2312,7 +2313,7 @@ class TestClient:
                 assert pr is None
 
         network_results = user_client.get_network_results(
-            network_sk, return_protocoldagresults=True
+            network_sk, return_as=ResultFormat.PROTOCOL_DAG_RESULTS
         )
         for tf_sk, pdrs in network_results.items():
             if tf_sk == transformation_sk:
@@ -2325,6 +2326,79 @@ class TestClient:
                     assert pdr.ok()
             else:
                 assert pdrs == []
+
+        # Test new return_as parameter with 'ProtocolResults'
+        protocolresults_list = user_client.get_transformation_results(
+            transformation_sk, return_as="ProtocolResults"
+        )
+
+        assert isinstance(protocolresults_list, list)
+        assert (
+            len(protocolresults_list) == 3
+        )  # Should have 3 individual ProtocolResults
+
+        for pr in protocolresults_list:
+            assert isinstance(pr, ProtocolResult)
+            # Each individual ProtocolResult should have one key_result
+            assert len(pr.data["key_results"]) == 1
+
+        # Test backward compatibility: old parameter should still work with deprecation warning
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            protocoldagresults_old = user_client.get_transformation_results(
+                transformation_sk, return_protocoldagresults=True
+            )
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "deprecated" in str(w[0].message).lower()
+
+        assert set(protocoldagresults_old) == set(protocoldagresults)
+
+        # Test using ResultFormat enum
+        protocolresults_enum = user_client.get_transformation_results(
+            transformation_sk, return_as=ResultFormat.PROTOCOL_RESULTS
+        )
+        assert isinstance(protocolresults_enum, list)
+        assert len(protocolresults_enum) == 3
+        for pr in protocolresults_enum:
+            assert isinstance(pr, ProtocolResult)
+            assert len(pr.data["key_results"]) == 1
+
+        # Test with ResultFormat.PROTOCOL_DAG_RESULTS
+        protocoldagresults_enum = user_client.get_transformation_results(
+            transformation_sk, return_as=ResultFormat.PROTOCOL_DAG_RESULTS
+        )
+        assert set(protocoldagresults_enum) == set(protocoldagresults)
+
+        # Test network-level return_as='ProtocolResults'
+        network_results_list = user_client.get_network_results(
+            network_sk, return_as="ProtocolResults"
+        )
+        for tf_sk, prs in network_results_list.items():
+            if tf_sk == transformation_sk:
+                assert isinstance(prs, list)
+                assert len(prs) == 3
+                for pr in prs:
+                    assert isinstance(pr, ProtocolResult)
+                    assert len(pr.data["key_results"]) == 1
+            else:
+                assert prs == []
+
+        # Test network-level with ResultFormat enum
+        network_results_enum = user_client.get_network_results(
+            network_sk, return_as=ResultFormat.PROTOCOL_RESULTS
+        )
+        for tf_sk, prs in network_results_enum.items():
+            if tf_sk == transformation_sk:
+                assert isinstance(prs, list)
+                assert len(prs) == 3
+                for pr in prs:
+                    assert isinstance(pr, ProtocolResult)
+                    assert len(pr.data["key_results"]) == 1
+            else:
+                assert prs == []
 
     def test_get_transformation_and_network_failures(
         self,

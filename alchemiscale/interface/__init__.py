@@ -1,1 +1,1 @@
-from .client import AlchemiscaleClient
+from .client import AlchemiscaleClient, ResultFormat

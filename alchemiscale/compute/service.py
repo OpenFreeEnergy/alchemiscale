@@ -107,7 +107,7 @@ class SynchronousComputeService:
 
         self.scheduler = sched.scheduler(time.monotonic, time.sleep)
 
-        self.compute_service_id = ComputeServiceID(f"{self.name}-{uuid4()}")
+        self.compute_service_id = ComputeServiceID.new_from_name(self.name)
 
         self.int_sleep = InterruptableSleep()
 

@@ -229,11 +229,14 @@ def cli(): ...
 @s3os_params
 @jwt_params
 def api(
+    # fmt: off
     workers, host, port, loglevel, config_file, config_json,  # API
     url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  # JWT
-    access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
-):  # fmt: skip
+    access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region
+    # AWS
+    # fmt: on
+):
     from alchemiscale.interface.api import app
     from .settings import APISettings, get_base_api_settings
 
@@ -301,11 +304,14 @@ def compute(): ...
 @s3os_params
 @jwt_params
 def api(
+    # fmt: off
     workers, host, port, loglevel, config_file, config_json, registration_expire_seconds, # API
     url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  #JWT
-    access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
-):  # fmt: skip
+    access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region
+    # AWS
+    # fmt: on
+):
     from alchemiscale.compute.api import app
     from .settings import ComputeAPISettings, get_base_api_settings
 
@@ -364,7 +370,15 @@ def api(
     help="The compute service name. This value overrides any value provided through the configuration file.",
     required=False,
 )
-def synchronous(config_file, name):
+@click.option(
+    "--compute-manager-id",
+    "-m",
+    type=str,
+    default=None,
+    help="The identifier for the compute manager responsible for running the compute service. Ignore this option unless automating startups on a compute platform.",
+    required=False,
+)
+def synchronous(config_file, name, compute_manager_id):
     from alchemiscale.models import Scope
     from alchemiscale.compute.service import SynchronousComputeService
     from alchemiscale.compute.settings import ComputeServiceSettings
@@ -376,6 +390,9 @@ def synchronous(config_file, name):
 
     if name is not None:
         params_init["name"] = name
+
+    if compute_manager_id is not None:
+        params_init["compute_manager_id"] = compute_manager_id
 
     service = SynchronousComputeService(ComputeServiceSettings(**params_init))
 

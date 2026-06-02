@@ -38,6 +38,9 @@ class ComputeManager:
             api_url=self.service_settings.api_url,
             identifier=self.service_settings.identifier,
             key=self.service_settings.key,
+            max_retries=self.settings.client_max_retries,
+            retry_base_seconds=self.settings.client_retry_base_seconds,
+            retry_max_seconds=self.settings.client_retry_max_seconds,
         )
 
         self._stop = False
@@ -62,19 +65,19 @@ class ComputeManager:
 
         self.logger = logging.LoggerAdapter(logger, extra)
 
-    def _register(self):
+    def _register(self, steal=False):
         try:
-            self.client.register(self.compute_manager_id)
+            self.client.register(self.compute_manager_id, steal=steal)
         except AlchemiscaleComputeManagerClientError as e:
-            self.logger.error(f"Registration failed: '{e.detail}'")
+            self.logger.error(f"Registration failed: '{e}'")
             raise e
 
     def _deregister(self):
         self.client.deregister(self.compute_manager_id)
 
-    def start(self, max_cycles: int | None = None):
+    def start(self, max_cycles: int | None = None, steal=False):
         self.logger.info(f"Starting up compute manager '{self.settings.name}'")
-        self._register()
+        self._register(steal=steal)
         self.logger.info(f"Registered compute manager '{self.compute_manager_id}'")
         self._stop = False
         try:
@@ -119,13 +122,17 @@ class ComputeManager:
 
         self.logger.info(f"Requesting instruction from '{self.client.api_url}'")
         instruction, data = self.client.get_instruction(
-            self.service_settings.scopes or [], self.compute_manager_id
+            self.service_settings.scopes or [],
+            self.service_settings.protocols,
+            self.compute_manager_id,
         )
-        self.logger.info(f"Recieved instruction '{instruction}'")
         match instruction:
             case ComputeManagerInstruction.OK:
                 total_services = len(data["compute_service_ids"])
                 num_tasks = data["num_tasks"]
+                self.logger.info(
+                    f"Received instruction '{instruction}', {num_tasks} tasks available"
+                )
                 if (
                     total_services < self.settings.max_compute_services
                     and num_tasks > 0
