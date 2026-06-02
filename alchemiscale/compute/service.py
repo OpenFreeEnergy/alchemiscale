@@ -97,10 +97,7 @@ class SynchronousComputeService:
         else:
             self.scopes = self.settings.scopes
 
-        if self.settings.scopes_exclude is None:
-            self.scopes_exclude = []
-        else:
-            self.scopes_exclude = self.settings.scopes_exclude
+        self.scopes_exclude = self.settings.scopes_exclude
 
         self.shared_basedir = Path(self.settings.shared_basedir).absolute()
         self.shared_basedir.mkdir(exist_ok=True)

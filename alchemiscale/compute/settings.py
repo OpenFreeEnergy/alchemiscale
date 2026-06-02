@@ -126,25 +126,11 @@ class ComputeServiceSettings(BaseModel):
         description="Whether to verify SSL certificate presented by the API server.",
     )
 
-    @field_validator("scopes", mode="before")
+    @field_validator("scopes", "scopes_exclude", mode="before")
     @classmethod
     def validate_scopes(cls, values) -> list[Scope] | None:
-        if values is None:
-            return None
-        _values = values[:]
-        for idx, value in enumerate(_values):
-            if isinstance(value, Scope):
-                continue
-            if isinstance(value, str):
-                _values[idx] = Scope.from_str(value)
-            else:
-                raise ValueError("Unable to parse input as a Scope")
-        return _values
-
-    @field_validator("scopes_exclude", mode="before")
-    @classmethod
-    def validate_scopes_exclude(cls, values) -> list[Scope] | None:
-        if values is None:
+        # treat ``None`` and empty list equivalently; both mean "no filter"
+        if not values:
             return None
         _values = values[:]
         for idx, value in enumerate(_values):

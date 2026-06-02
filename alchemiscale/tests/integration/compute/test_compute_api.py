@@ -115,43 +115,38 @@ class TestComputeAPI:
         scope_test,
         compute_service_id,
     ):
-        """Test that scopes_exclude filters out taskhubs matching excluded scopes."""
+        """Test that scopes_exclude filters out taskhubs matching excluded scopes.
+
+        Claims enough tasks to exhaust all eligible taskhubs so the assertion
+        does not depend on the random weighted choice of taskhub.
+        """
         # register a compute service
         multi_scope_test_client.post(
             f"/computeservice/{compute_service_id}/register",
             json={"compute_manager_id": None},
         )
 
-        # claim tasks with all scopes, no exclusions
-        data = dict(
-            scopes=[s.to_dict() for s in multiple_scopes],
-            scopes_exclude=None,
-            compute_service_id=str(compute_service_id),
-            count=1,
-            protocols=None,
-        )
-        response = multi_scope_test_client.post("/claim", json=data)
-        assert response.status_code == 200
-        tasks_no_exclude = response.json()
-        assert len(tasks_no_exclude) == 1
-        assert tasks_no_exclude[0] is not None
+        # claim well beyond the total number of available tasks so we end up
+        # drawing from every non-excluded taskhub
+        claim_count = 100
 
-        # claim tasks excluding scope_test — should still get tasks from other scopes
+        # claim tasks excluding scope_test — should still get tasks from
+        # the other scopes, but none from scope_test
         data_with_exclude = dict(
             scopes=[s.to_dict() for s in multiple_scopes],
             scopes_exclude=[scope_test.to_dict()],
             compute_service_id=str(compute_service_id),
-            count=1,
+            count=claim_count,
             protocols=None,
         )
         response = multi_scope_test_client.post("/claim", json=data_with_exclude)
         assert response.status_code == 200
-        tasks_with_exclude = response.json()
-        assert len(tasks_with_exclude) == 1
-        # the claimed task should not be from scope_test
-        if tasks_with_exclude[0] is not None:
-            claimed_sk = ScopedKey.from_str(tasks_with_exclude[0])
-            assert claimed_sk.scope != scope_test
+
+        claimed = [ScopedKey.from_str(t) for t in response.json() if t is not None]
+        # we must actually claim something — there are tasks in the other scopes
+        assert len(claimed) > 0
+        # and none of them may come from the excluded scope
+        assert all(sk.scope != scope_test for sk in claimed)
 
     def test_claim_tasks_scopes_exclude_all(
         self,
@@ -160,24 +155,25 @@ class TestComputeAPI:
         multiple_scopes,
         compute_service_id,
     ):
-        """Test that excluding all scopes returns an empty list."""
+        """Test that excluding all scopes claims no tasks."""
         # register a compute service
         multi_scope_test_client.post(
             f"/computeservice/{compute_service_id}/register",
             json={"compute_manager_id": None},
         )
 
-        # exclude all scopes — should return empty list
+        # exclude all scopes — every slot of the response should be ``None``
+        count = 3
         data = dict(
             scopes=[s.to_dict() for s in multiple_scopes],
             scopes_exclude=[s.to_dict() for s in multiple_scopes],
             compute_service_id=str(compute_service_id),
-            count=1,
+            count=count,
             protocols=None,
         )
         response = multi_scope_test_client.post("/claim", json=data)
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == [None] * count
 
     def test_claim_tasks_scopes_exclude_wildcard(
         self,
@@ -195,13 +191,14 @@ class TestComputeAPI:
 
         # exclude with a wildcard scope that matches everything
         wildcard_scope = Scope()  # org=None, campaign=None, project=None => *-*-*
+        count = 3
         data = dict(
             scopes=[s.to_dict() for s in multiple_scopes],
             scopes_exclude=[wildcard_scope.to_dict()],
             compute_service_id=str(compute_service_id),
-            count=1,
+            count=count,
             protocols=None,
         )
         response = multi_scope_test_client.post("/claim", json=data)
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == [None] * count

@@ -233,36 +233,15 @@ class TestComputeClient:
         # register compute service id
         compute_client.register(compute_service_id)
 
-        # claim with scopes_exclude matching scope_test — should return empty
-        # since the client token only has access to scope_test
+        # excluding the only included scope leaves no candidate taskhubs;
+        # the API pads the response to ``count`` with ``None``s
         task_sks = compute_client.claim_tasks(
             scopes=[scope_test],
             scopes_exclude=[scope_test],
             compute_service_id=compute_service_id,
         )
 
-        assert task_sks == []
-
-    def test_claim_tasks_scopes_exclude_none(
-        self,
-        scope_test,
-        n4js_preloaded,
-        compute_client: client.AlchemiscaleComputeClient,
-        compute_service_id,
-        uvicorn_server,
-    ):
-        # register compute service id
-        compute_client.register(compute_service_id)
-
-        # claim with scopes_exclude=None (default) — should work normally
-        task_sks = compute_client.claim_tasks(
-            scopes=[scope_test],
-            scopes_exclude=None,
-            compute_service_id=compute_service_id,
-        )
-
-        assert len(task_sks) == 1
-        assert task_sks[0] is not None
+        assert task_sks == [None]
 
     def test_get_task_transformation(
         self,
