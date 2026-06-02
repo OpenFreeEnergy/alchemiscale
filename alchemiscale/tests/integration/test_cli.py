@@ -157,7 +157,7 @@ def compute_service_config(compute_api_args):
         "api_url": f"http://{host}:{port}",
         "identifier": "test-compute-user",
         "key": "test-comute-user-key",
-        "name": "test-compute-service",
+        "name": "test_compute_service",
         "shared_basedir": "./shared",
         "scratch_basedir": "./scratch",
         "loglevel": "INFO",

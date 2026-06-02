@@ -1575,7 +1575,7 @@ class TestNeo4jStore(TestStateStore):
         random.shuffle(task_sks)
 
         # try to claim from an empty hub
-        csid = ComputeServiceID("early bird task handler")
+        csid = ComputeServiceID.new_from_name("early_bird_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         nothing = n4js.claim_taskhub_tasks(taskhub_sk, csid)
 
@@ -1586,7 +1586,7 @@ class TestNeo4jStore(TestStateStore):
 
         # claim a single task; there is no deterministic ordering of tasks, so
         # simply test that the claimed task is one of the actioned tasks
-        csid = ComputeServiceID("the best task handler")
+        csid = ComputeServiceID.new_from_name("the_best_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed = n4js.claim_taskhub_tasks(taskhub_sk, csid)
 
@@ -1602,7 +1602,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.set_task_priority(remaining_tasks, 5)
         n4js.set_task_priority([remaining_tasks[0]], 1)
 
-        csid = ComputeServiceID("another task handler")
+        csid = ComputeServiceID.new_from_name("another_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed2 = n4js.claim_taskhub_tasks(taskhub_sk, csid)
         assert claimed2[0] == remaining_tasks[0]
@@ -1611,7 +1611,7 @@ class TestNeo4jStore(TestStateStore):
         remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
         # next task claimed should be one of the remaining tasks
-        csid = ComputeServiceID("yet another task handler")
+        csid = ComputeServiceID.new_from_name("yet_another_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed3 = n4js.claim_taskhub_tasks(taskhub_sk, csid)
         assert claimed3[0] in remaining_tasks
@@ -1620,7 +1620,7 @@ class TestNeo4jStore(TestStateStore):
         remaining_tasks = n4js.get_taskhub_unclaimed_tasks(taskhub_sk)
 
         # try to claim multiple tasks
-        csid = ComputeServiceID("last task handler")
+        csid = ComputeServiceID.new_from_name("last_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed4 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=4)
         assert len(claimed4) == 4
@@ -1666,7 +1666,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.action_tasks(task_sks, taskhub_sk)
         assert len(n4js.get_taskhub_unclaimed_tasks(taskhub_sk)) == 9
 
-        csid = ComputeServiceID("another task handler")
+        csid = ComputeServiceID.new_from_name("another_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 
         claimedA = n4js.claim_taskhub_tasks(
@@ -1699,7 +1699,7 @@ class TestNeo4jStore(TestStateStore):
         n4js.action_tasks(task_sks, taskhub_sk)
 
         # try to claim multiple tasks
-        csid = ComputeServiceID("task handler")
+        csid = ComputeServiceID.new_from_name("task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
         claimed4 = n4js.claim_taskhub_tasks(taskhub_sk, csid, count=4)
         assert len(claimed4) == 4
@@ -1751,7 +1751,7 @@ class TestNeo4jStore(TestStateStore):
         actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
         assert set(actioned_task_sks) == set(collected_sks)
 
-        csid = ComputeServiceID("task handler")
+        csid = ComputeServiceID.new_from_name("task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 
         # claim the first task
@@ -1801,7 +1801,7 @@ class TestNeo4jStore(TestStateStore):
         actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
         assert set(actioned_task_sks) == set(collected_sks)
 
-        csid = ComputeServiceID("task handler")
+        csid = ComputeServiceID.new_from_name("task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 
         # claim the first task **3** tasks, this set should be the first extends
@@ -1858,7 +1858,7 @@ class TestNeo4jStore(TestStateStore):
         actioned_task_sks = n4js.action_tasks(collected_sks, taskhub_sk)
         assert set(actioned_task_sks) == set(collected_sks)
 
-        csid = ComputeServiceID("task handler")
+        csid = ComputeServiceID.new_from_name("task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 
         # claim the first task
@@ -1908,7 +1908,7 @@ class TestNeo4jStore(TestStateStore):
         weight_dict = {task_sks[0]: 1.0}
         n4js.set_task_weights(weight_dict, taskhub_sk)
 
-        csid = ComputeServiceID("the best task handler")
+        csid = ComputeServiceID.new_from_name("the_best_task_handler")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 
         # check that the claimed task is the first task
@@ -3261,7 +3261,7 @@ class TestNeo4jStore(TestStateStore):
 
         n4js.action_tasks(task_sks, taskhub_sk)
 
-        csid = ComputeServiceID("claimer")
+        csid = ComputeServiceID.new_from_name("claimer")
         n4js.register_computeservice(ComputeServiceRegistration.from_now(csid))
 
         # claim all the tasks
@@ -3649,7 +3649,7 @@ class TestNeo4jStore(TestStateStore):
             failure_times = list(map(lambda td: creation_time + td, failure_deltas))
 
             registration = ComputeServiceRegistration(
-                identifier=ComputeServiceID(f"compute-service-{uuid.uuid4()}"),
+                identifier=ComputeServiceID.new_from_name("compute_service"),
                 registered=creation_time,
                 heartbeat=creation_time,
                 failure_times=failure_times,
