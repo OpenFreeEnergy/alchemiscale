@@ -76,3 +76,19 @@ def test_install_stop_handlers_skips_unknown_signals(restore_handlers):
     with pytest.raises(KeyboardInterrupt):
         handler(signal.SIGINT, None)
     assert recorder.stop_count == 1
+
+
+def test_handler_without_keyboard_interrupt_calls_stop_only(
+    available_signals, restore_handlers
+):
+    recorder = StopRecorder()
+
+    install_stop_handlers(recorder, raise_keyboard_interrupt=False)
+
+    # invoking each handler should call stop() but NOT raise KeyboardInterrupt
+    for name in available_signals:
+        handler = signal.getsignal(getattr(signal, name))
+        # no pytest.raises: handler must return normally
+        handler(getattr(signal, name), None)
+
+    assert recorder.stop_count == len(available_signals)

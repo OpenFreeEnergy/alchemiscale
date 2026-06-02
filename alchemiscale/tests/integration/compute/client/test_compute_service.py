@@ -227,8 +227,8 @@ class TestSynchronousComputeService:
         results = n4js.execute_query(q)
         assert results.records
 
-    def test_start_interruptible_sleep(
-        self, n4js_preloaded, compute_client, tmpdir, caplog
+    def test_service_interruptible_sleep(
+        self, n4js_preloaded, compute_client, tmpdir, caplog, monkeypatch
     ):
         n4js: Neo4jStore = n4js_preloaded
 
@@ -252,7 +252,7 @@ class TestSynchronousComputeService:
 
         # force the "no tasks claimed; sleeping" branch every cycle so the
         # service parks itself in an interruptible sleep rather than executing
-        service.claim_tasks = lambda count=1: [None]
+        monkeypatch.setattr(service, "claim_tasks", lambda count=1: [None])
 
         caplog.set_level(logging.INFO, logger=service.logger.name)
 

@@ -72,6 +72,12 @@ class SynchronousComputeService:
 
         self.compute_service_id = ComputeServiceID.new_from_name(self.name)
 
+        # shared between the main loop and the heartbeat thread; both wake
+        # on a single ``stop()`` (which calls ``int_sleep.interrupt()``).
+        # If you split these into separate functors, be sure to interrupt
+        # both from ``stop()`` --- otherwise the heartbeat thread stays
+        # alive (and the worker stays multi-threaded) until its sleep
+        # naturally expires.
         self.int_sleep = InterruptableSleep()
 
         self._stop = False

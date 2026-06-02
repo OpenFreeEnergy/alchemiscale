@@ -252,6 +252,7 @@ class TestComputeManager:
         n4js_preloaded,
         manager: LocalTestingComputeManager,
         caplog,
+        monkeypatch,
     ):
         caplog.set_level(logging.INFO, logger=manager.logger.name)
 
@@ -264,7 +265,7 @@ class TestComputeManager:
         # the xdist worker on 3.11/3.13 (3.12 happens to miss it). The test
         # is about stop() interrupting the sleep, not about spawning, so
         # we cut the spawn path here. See PR #503 discussion.
-        manager.create_compute_services = lambda data: 0
+        monkeypatch.setattr(manager, "create_compute_services", lambda data: 0)
 
         # use a long sleep interval; if the sleep were *not* interruptible,
         # stop() would not take effect until this elapsed and this test would
