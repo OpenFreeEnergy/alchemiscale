@@ -44,6 +44,10 @@ init:
   scopes:
     - '*-*-*'
 
+  # Scopes to exclude from Task claiming; applied as a filter after `scopes`.
+  # can be a list of Scopes of the same form as `scopes`
+  scopes_exclude: null
+
   # Names of Protocols to run with this service; `None` means no restriction
   protocols: null
 
