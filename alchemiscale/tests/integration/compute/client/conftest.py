@@ -77,6 +77,21 @@ def compute_client_wrong_credential(uvicorn_server, compute_api_port, compute_id
 
 
 @pytest.fixture(scope="module")
+def fully_scoped_compute_client(
+    uvicorn_server,
+    compute_api_port,
+    compute_identity,
+    fully_scoped_credentialed_compute,
+):
+    """A client whose identity has access to every scope in ``multiple_scopes``."""
+    return client.AlchemiscaleComputeClient(
+        api_url=f"http://127.0.0.1:{compute_api_port}/",
+        identifier=fully_scoped_credentialed_compute.identifier,
+        key=compute_identity["key"],
+    )
+
+
+@pytest.fixture(scope="module")
 def compute_manager_client(
     uvicorn_server,
     compute_api_port,

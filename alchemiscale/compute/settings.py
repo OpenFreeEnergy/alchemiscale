@@ -66,6 +66,10 @@ class ComputeServiceSettings(BaseModel):
         None,
         description="Scopes to limit Task claiming to; defaults to all Scopes accessible by compute identity.",
     )
+    scopes_exclude: list[Scope] | None = Field(
+        None,
+        description="Scopes to exclude from Task claiming; applied as a filter after `scopes`.",
+    )
     protocols: list[str] | None = Field(
         None,
         description="Names of Protocols to run with this service; `None` means no restriction.",
@@ -136,9 +140,12 @@ class ComputeServiceSettings(BaseModel):
         description="Whether to verify SSL certificate presented by the API server.",
     )
 
-    @field_validator("scopes", mode="before")
+    @field_validator("scopes", "scopes_exclude", mode="before")
     @classmethod
-    def validate_scopes(cls, values) -> list[Scope]:
+    def validate_scopes(cls, values) -> list[Scope] | None:
+        # treat ``None`` and empty list equivalently; both mean "no filter"
+        if not values:
+            return None
         _values = values[:]
         for idx, value in enumerate(_values):
             if isinstance(value, Scope):
