@@ -217,6 +217,7 @@ def claim_taskhub_tasks(
 @router.post("/claim")
 def claim_tasks(
     scopes: list[Scope] = Body(),
+    scopes_exclude: list[Scope] | None = Body(None, embed=True),
     compute_service_id: str = Body(),
     count: int = Body(),
     protocols: list[str] | None = Body(None, embed=True),
@@ -255,11 +256,24 @@ def claim_tasks(
     for single_query_scope in set(query_scopes):
         taskhubs.update(n4js.query_taskhubs(scope=single_query_scope, return_gufe=True))
 
+    # filter out taskhubs whose scope is covered by any excluded scope
+    if scopes_exclude:
+        scopes_exclude_reduced = minimize_scope_space(scopes_exclude)
+
+        def is_excluded(taskhub_scope: Scope) -> bool:
+            return any(
+                excluded.is_superset(taskhub_scope)
+                for excluded in scopes_exclude_reduced
+            )
+
+        taskhubs = {sk: th for sk, th in taskhubs.items() if not is_excluded(sk.scope)}
+
     # list of tasks to return
     tasks = []
 
     if len(taskhubs) == 0:
-        return []
+        # match the pad-with-``None`` behavior of the normal return path below
+        return [None] * count
 
     # claim tasks from taskhubs based on weight; keep going till we hit our
     # total desired task count, or we run out of taskhubs to draw from
