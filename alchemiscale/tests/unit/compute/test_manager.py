@@ -8,8 +8,6 @@ API. Integration coverage of the cycle loop lives in
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from alchemiscale.compute.manager import ComputeManager
 from alchemiscale.compute.settings import (
     ComputeManagerSettings,

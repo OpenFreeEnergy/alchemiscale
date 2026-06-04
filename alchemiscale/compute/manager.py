@@ -226,7 +226,7 @@ class ComputeManager:
                         f"-> target={target}"
                     )
                     if target > 0:
-                        new_services = self.create_compute_services(data, target=target)
+                        new_services = self.create_compute_services(data, target)
                         total_services += new_services
                         if new_services:
                             self.logger.info(
