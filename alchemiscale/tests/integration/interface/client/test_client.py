@@ -248,6 +248,34 @@ class TestClient:
             t.key for t in network_tyk2.edges
         }
 
+    @pytest.mark.parametrize("state", ["active", "inactive"])
+    def test_merge_networks_respects_state(
+        self,
+        state,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        """The state parameter must control the NetworkMark on the merged
+        AlchemicalNetwork the same way it does on create_network."""
+        source_sks = user_client.query_networks(scope=scope_test, state=None)
+        assert source_sks
+
+        merge_scope = Scope(
+            org=scope_test.org,
+            campaign=scope_test.campaign,
+            project=f"merged_state_{state}",
+        )
+        merged_sk = user_client.merge_networks(
+            networks=source_sks,
+            name=f"merged_state_{state}",
+            scope=merge_scope,
+            state=state,
+            visualize=False,
+        )
+
+        assert user_client.get_network_state(merged_sk) == state
+
     def test_merge_networks_rejects_wildcard_scope(
         self,
         n4js_preloaded,

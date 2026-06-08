@@ -147,7 +147,7 @@ class TestAPI:
         }
 
     def test_merge_networks_bad_scope(
-        self, n4js_preloaded, test_client, network_tyk2, scope_test, multiple_scopes
+        self, n4js_preloaded, test_client, scope_test, multiple_scopes
     ):
         # destination scope the test_client's token does not have access to
         bad_scope = multiple_scopes[1]
@@ -171,7 +171,7 @@ class TestAPI:
         assert str(bad_scope) in details["detail"]
 
     def test_merge_networks_bad_source_scope(
-        self, n4js_preloaded, test_client, network_tyk2, scope_test, multiple_scopes
+        self, n4js_preloaded, test_client, scope_test, multiple_scopes
     ):
         # source network in a scope the test_client's token does not authorize
         unauth_scope = multiple_scopes[1]

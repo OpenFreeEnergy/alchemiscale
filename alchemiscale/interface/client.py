@@ -192,6 +192,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         networks: list[ScopedKey],
         name: str,
         scope: Scope,
+        state: NetworkStateEnum | str = NetworkStateEnum.active,
         visualize: bool = True,
     ) -> ScopedKey:
         """Merge multiple existing AlchemicalNetworks into a new AlchemicalNetwork.
@@ -203,7 +204,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         their associated ProtocolDAGResultRefs, so previously-computed results
         do not need to be re-run.
 
-        The new AlchemicalNetwork is created in the active state.
+        Cloned Tasks are wired to their Transformations via ``PERFORMS`` and
+        are reachable through standard network traversals
+        (``get_network_tasks``, ``get_network_results``, etc.). They are
+        intentionally **not** actioned to the new network's TaskHub; to
+        retry errored Tasks on the merged network, call
+        :meth:`action_tasks` with the merged network's ScopedKey after the
+        merge completes.
 
         Parameters
         ----------
@@ -216,6 +223,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         scope
             The Scope in which to create the new AlchemicalNetwork.
             This must be a *specific* Scope; it must not contain wildcards.
+        state
+            The starting state of the new AlchemicalNetwork in the database.
+            See :meth:`AlchemiscaleClient.set_network_state` for valid states.
+            Defaults to ``"active"``.
         visualize
             If ``True``, show submission progress indicator.
 
@@ -243,10 +254,13 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     f"ScopedKey '{network_sk}' does not refer to an AlchemicalNetwork"
                 )
 
+        state = NetworkStateEnum(state)
+
         data = dict(
             networks=[str(sk) for sk in network_sks],
             name=name,
             scope=scope.to_dict(),
+            state=state.value,
         )
 
         def post():

@@ -31,7 +31,7 @@ from ..settings import get_api_settings
 from ..settings import get_base_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import TaskStatusEnum, StrategyState
+from ..storage.models import NetworkStateEnum, TaskStatusEnum, StrategyState
 from ..models import Scope, ScopedKey
 from ..security.models import TokenData, CredentialedUserIdentity
 
@@ -139,11 +139,12 @@ async def create_network(
 
 
 @router.post("/networks/merge", response_model=ScopedKey)
-def merge_networks(
+async def merge_networks(
     *,
     networks: list[str] = Body(embed=True),
     name: str = Body(embed=True),
     scope: dict = Body(embed=True),
+    state: str = Body(embed=True, default=NetworkStateEnum.active.value),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -175,6 +176,7 @@ def merge_networks(
             network_scoped_keys=network_sks,
             name=name,
             scope=target_scope,
+            state=state,
         )
     except ValueError as e:
         raise HTTPException(
