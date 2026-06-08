@@ -1,5 +1,5 @@
 from pathlib import Path
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, PositiveInt, field_validator
 
 from ..models import Scope
 
@@ -74,7 +74,7 @@ class ComputeServiceSettings(BaseModel):
         None,
         description="Names of Protocols to run with this service; `None` means no restriction.",
     )
-    claim_limit: int = Field(
+    claim_limit: PositiveInt = Field(
         1, description="Maximum number of Tasks to claim at a time from a TaskHub."
     )
     max_tasks: int | None = Field(
@@ -166,9 +166,18 @@ class ComputeManagerSettings(BaseModel):
         ),
     )
     logfile: Path | None = Field(..., description="File path to write logs to.")
-    max_compute_services: int = Field(
+    max_compute_services: PositiveInt = Field(
         ...,
         description="Maximum number of compute services the manager is allowed to have running at a time.",
+    )
+    max_submit_per_cycle: PositiveInt = Field(
+        1,
+        description=(
+            "Maximum number of compute services to create in a single manager "
+            "cycle. Acts as a rate limit on ramp-up; combined with "
+            "``sleep_interval`` it determines how aggressively the manager "
+            "scales up toward ``max_compute_services``."
+        ),
     )
     sleep_interval: int = Field(
         1800,
