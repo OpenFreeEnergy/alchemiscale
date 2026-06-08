@@ -12,6 +12,7 @@ dependencies:
   - pydantic >2
   - pydantic-settings
   - async-lru
+  - nest-asyncio
   - diskcache
   - libsqlite<3.49  # newer versions cause diskcache to fail
   - zstandard

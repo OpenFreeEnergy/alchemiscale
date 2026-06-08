@@ -110,12 +110,88 @@ class ComputeManager:
             self.logger.info(f"Deregistration successful")
 
     @abstractmethod
-    def create_compute_services(self, data: dict) -> int:
-        """Method responsible for creating compute services based on
-        data returned with an OK ComputeManagerInstruction. This must
-        return the number of compute services started.
+    def create_compute_services(self, data: dict, target: int) -> int:
+        """Submit up to ``target`` new compute services and return the actual
+        number created.
+
+        Called by :meth:`cycle` when scaling up is warranted. ``target`` is the
+        per-cycle sizing decision computed by :meth:`_compute_jobs_to_create`,
+        which already accounts for the number of waiting tasks, the per-cycle
+        rate limit (``max_submit_per_cycle``), the remaining capacity
+        (``max_compute_services - len(compute_service_ids)``), and the
+        per-service ``claim_limit``.
+
+        Subclasses still own backend-specific gating (e.g. checking whether
+        any previously submitted jobs are still pending in the batch system,
+        running health checks). ``target`` is an upper bound, not a guarantee.
+
+        Parameters
+        ----------
+        data
+            Payload from the OK ``ComputeManagerInstruction``. Includes
+            ``compute_service_ids`` and ``num_tasks`` at minimum.
+        target
+            Upper bound on the number of services to create this cycle.
+            Always ``>= 1`` when this method is called; the cycle short-
+            circuits and never calls in if there is no work or no capacity.
+
+        Returns
+        -------
+        int
+            Number of compute services actually created.
         """
         raise NotImplementedError
+
+    def _compute_jobs_to_create(self, num_tasks: int, num_active_services: int) -> int:
+        """Decide how many new compute services to create this cycle.
+
+        The formula:
+
+            ``min(num_tasks, max_submit_per_cycle, remaining_capacity)
+            // claim_limit``
+
+        with a floor of one when the cycle has decided we should be scaling
+        up (i.e. ``num_tasks > 0`` and ``remaining_capacity > 0``). The
+        floor handles the case where the ``claim_limit`` divide collapses
+        to zero (e.g. a single task with ``claim_limit=2``): rather than
+        stalling, create one service and let the next cycle catch up.
+
+        Subclasses should rarely override this. The default rule is the
+        universal autoscaling sizing logic; backend-specific gating (e.g.
+        "skip this cycle if any submitted jobs are still pending") belongs
+        in :meth:`create_compute_services`, not here.
+
+        Parameters
+        ----------
+        num_tasks
+            Number of tasks waiting on the server.
+        num_active_services
+            Number of compute services currently registered with the server.
+
+        Returns
+        -------
+        int
+            Target number of new services to create. May be ``0`` if there is
+            no work or no remaining capacity.
+        """
+        remaining_capacity = self.settings.max_compute_services - num_active_services
+        if remaining_capacity <= 0 or num_tasks <= 0:
+            return 0
+
+        jobs = min(
+            num_tasks,
+            self.settings.max_submit_per_cycle,
+            remaining_capacity,
+        )
+
+        # Each compute service claims up to claim_limit tasks at a time, so
+        # we need fewer services than tasks to cover the queue.
+        # ``claim_limit`` is validated as PositiveInt at config load.
+        jobs //= self.service_settings.claim_limit
+
+        # Floor at one: the parent has decided we should scale up, so create
+        # at least one service even if the divide collapsed to zero.
+        return jobs or 1
 
     def stop(self):
         self.int_sleep.interrupt()
@@ -143,14 +219,31 @@ class ComputeManager:
                     total_services < self.settings.max_compute_services
                     and num_tasks > 0
                 ):
-                    new_services = self.create_compute_services(data)
-                    total_services += new_services
-                    if new_services:
-                        self.logger.info(
-                            f"Created {new_services} new compute service(s)"
-                        )
+                    target = self._compute_jobs_to_create(
+                        num_tasks=num_tasks,
+                        num_active_services=total_services,
+                    )
+                    self.logger.info(
+                        f"Sizing: num_tasks={num_tasks}, "
+                        f"max_submit_per_cycle={self.settings.max_submit_per_cycle}, "
+                        f"remaining_capacity="
+                        f"{self.settings.max_compute_services - total_services}, "
+                        f"claim_limit={self.service_settings.claim_limit} "
+                        f"-> target={target}"
+                    )
+                    if target > 0:
+                        new_services = self.create_compute_services(data, target)
+                        total_services += new_services
+                        if new_services:
+                            self.logger.info(
+                                f"Created {new_services} new compute service(s)"
+                            )
+                        else:
+                            self.logger.info("No new compute services created")
                     else:
-                        self.logger.info("No new compute services created")
+                        self.logger.info(
+                            "Sizing returned 0; no compute services created"
+                        )
             case ComputeManagerInstruction.SKIP:
                 total_services = len(data["compute_service_ids"])
                 self.logger.info("Received skip instruction")
