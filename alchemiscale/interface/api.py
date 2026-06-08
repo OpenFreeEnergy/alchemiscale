@@ -138,6 +138,53 @@ async def create_network(
     return an_sk
 
 
+@router.post("/networks/merge", response_model=ScopedKey)
+def merge_networks(
+    *,
+    networks: list[str] = Body(embed=True),
+    name: str = Body(embed=True),
+    scope: dict = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    # validate the destination scope first
+    try:
+        target_scope = Scope(**scope)
+    except (TypeError, ValidationError) as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+    validate_scopes(target_scope, token)
+
+    # validate each source network's scope is accessible to the token
+    network_sks = []
+    for network in networks:
+        try:
+            network_sk = ScopedKey.from_str(network)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=e.args[0],
+            )
+        validate_scopes(network_sk.scope, token)
+        network_sks.append(network_sk)
+
+    try:
+        an_sk = n4js.merge_networks(
+            network_scoped_keys=network_sks,
+            name=name,
+            scope=target_scope,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=e.args[0],
+        )
+
+    return an_sk
+
+
 @router.post("/bulk/networks/state/set")
 def set_networks_state(
     *,
