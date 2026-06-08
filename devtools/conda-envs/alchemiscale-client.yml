@@ -23,7 +23,6 @@ dependencies:
 
   ## user client
   - rich
-  - nest-asyncio
 
   # openmm protocols
   - feflow=0.1.4
