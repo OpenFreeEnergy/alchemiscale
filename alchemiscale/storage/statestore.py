@@ -30,7 +30,6 @@ from gufe.tokenization import (
     GufeKey,
     JSON_HANDLER,
     KeyedChain,
-    key_decode_dependencies,
 )
 from gufe.protocols import ProtocolUnitFailure
 
@@ -83,6 +82,141 @@ def get_n4js(settings: Neo4jStoreSettings):
 
 
 class Neo4JStoreError(Exception): ...
+
+
+def _is_transformation_keyed_dict(keyed_dict: dict) -> bool:
+    """Return ``True`` if ``keyed_dict`` represents a ``Transformation`` or ``NonTransformation``.
+
+    Used as the predicate for ``KeyedChain.decode_subchains`` when walking
+    an ``AlchemicalNetwork``'s keyed chain inside :meth:`Neo4jStore.merge_networks`.
+    """
+    return keyed_dict.get("__qualname__") in ("Transformation", "NonTransformation")
+
+
+@dataclass
+class _TransformationData:
+    """Bookkeeping for one Transformation as it is reconstructed during
+    :meth:`Neo4jStore.merge_networks`.
+
+    Attributes
+    ----------
+    transformation
+        The decoded ``Transformation`` (or ``NonTransformation``)
+        ``GufeTokenizable``.
+    task_tree
+        Flat list of Neo4j records, one per ``Task`` associated with this
+        ``Transformation`` in any of the source networks. Each record carries:
+
+        - ``tf_key``: this ``Transformation``'s decoded gufe key (string)
+        - ``task``: the full ``Task`` node
+        - ``extended_task``: optional ``Task`` node that this ``Task`` extends
+        - ``pdrrs``: list of ``ProtocolDAGResultRef`` nodes for this ``Task``
+    known_scoped_keys
+        All ``ScopedKey``\\ s representing this ``Transformation`` across the
+        source networks. Multiple ``ScopedKey``\\ s can map to a single
+        decoded ``Transformation`` if the same content was serialized under
+        different gufe versions.
+    """
+
+    transformation: Transformation
+    task_tree: list = field(default_factory=list)
+    known_scoped_keys: list = field(default_factory=list)
+
+    def add_known_scoped_key(self, key, scope):
+        self.known_scoped_keys.append(
+            ScopedKey(gufe_key=GufeKey(key), **scope.to_dict())
+        )
+
+    @staticmethod
+    def update_task_trees(transformation_data: list, statestore):
+        """Given a list of ``_TransformationData``, extract all necessary
+        info from Neo4j and load the task trees.
+        """
+        key_to_data_map = {str(td.transformation.key): td for td in transformation_data}
+        # prepare for unwind clause, include transformation key
+        # for updating each entry of transformation_data for
+        # each scoped key
+        transformation_sk_pairs = [
+            [str(td.transformation.key), str(sk)]
+            for td in transformation_data
+            for sk in td.known_scoped_keys
+        ]
+        query = """
+        UNWIND $tf_sk_pairs as pairs
+        WITH pairs[0] AS tf_key, pairs[1] AS tf_scoped_key
+        MATCH (task:Task)-[:PERFORMS]->(:Transformation|NonTransformation {`_scoped_key`: tf_scoped_key})
+        WHERE task.status IN ["complete", "error"]
+        OPTIONAL MATCH (task)-[:EXTENDS]->(extended_task:Task)
+        OPTIONAL MATCH (task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)
+        RETURN tf_key, task, extended_task as extended_task, collect(pdrr) as pdrrs
+        """
+        results = statestore.execute_query(
+            query, tf_sk_pairs=transformation_sk_pairs
+        ).records
+
+        for record in results:
+            key_to_data_map[record["tf_key"]].task_tree.append(record)
+
+    def to_subgraph(self, target_scope, statestore, subchain_cache):
+        """Create a subgraph where the "central" node is the
+        transformation and iteratively add Task and PDRR
+        nodes with their corresponding relationships.
+        """
+        # if there are no tasks, can return an empty subgraph; no
+        # need to make a transformation node because it already exists
+        # in the surrounding merged-network subgraph
+        if not self.task_tree:
+            return Subgraph()
+
+        # create the transformation node. With ``decode_subchains``
+        # available upstream (gufe >=1.8.0), ``subchain_cache`` holds the
+        # re-serialized chain for the decoded ``Transformation``; the
+        # resulting Node's ``_scoped_key`` matches the one already produced
+        # by the combined AlchemicalNetwork's keyed chain and will dedupe
+        # against it during ``merge_subgraph``.
+        _, tf_node, _ = statestore._keyed_chain_to_subgraph(
+            subchain_cache[self.transformation], target_scope
+        )
+        subgraph = Subgraph() | tf_node
+
+        scope_props = {
+            "_org": target_scope.org,
+            "_campaign": target_scope.campaign,
+            "_project": target_scope.project,
+        }
+
+        def record_to_node(record):
+            # create node from a neo4j record with updated scoped key
+            scoped_key = ScopedKey(
+                gufe_key=record["_gufe_key"], **target_scope.to_dict()
+            )
+            return Node(
+                *record.labels,
+                **record._properties | scope_props | {"_scoped_key": str(scoped_key)},
+            )
+
+        # process each task found. Each record represents a single task.
+        for record in self.task_tree:
+            # update task node to have new scoped key
+            task_node = record_to_node(record["task"])
+            # create the task node this task extends if it exists
+            etask_node = (
+                None
+                if not record["extended_task"]
+                else record_to_node(record["extended_task"])
+            )
+            if etask_node:
+                subgraph |= Relationship.type("EXTENDS")(
+                    etask_node, task_node, **scope_props
+                )
+            # clone all result refs for the task
+            for pdrr_record in record["pdrrs"]:
+                pdrr_node = record_to_node(pdrr_record)
+                subgraph |= Relationship.type("RESULTS_IN")(
+                    task_node, pdrr_node, **scope_props
+                )
+
+        return subgraph
 
 
 class AlchemiscaleStateStore(abc.ABC): ...
@@ -916,175 +1050,40 @@ class Neo4jStore(AlchemiscaleStateStore):
                 f"ScopedKey ({network_scoped_key}) not found in the database."
             )
 
-        # Helper dataclass for managing transformations and tasks that
-        # perform them.
-        @dataclass
-        class TransformationData:
-            """
-            transformation
-
-            task_tree
-                flat representation of tasks associated with the transformation, each entry has:
-                - transformation gufe key
-                - full task neo4j node
-                - optional: full task neo4j node that this task extends
-                - list of ProtocolDAGResultRef nodes
-            known_scoped_keys
-                All scoped keys that represent the transformation across networks
-            """
-
-            transformation: Transformation
-            task_tree: list = field(
-                default_factory=list
-            )  # flat represenation of task tree with results
-            known_scoped_keys: list = field(default_factory=list)
-
-            def add_known_scoped_key(self, key, scope):
-                self.known_scoped_keys.append(
-                    ScopedKey(gufe_key=GufeKey(key), **scope.to_dict())
-                )
-
-            @staticmethod
-            def update_task_trees(transformation_data: list, statestore):
-                """Given a list of TransformationData, extract all
-                necessary info from Neo4j and load the task trees.
-                """
-
-                key_to_data_map = {
-                    str(td.transformation.key): td for td in transformation_data
-                }
-                # prepare for unwind claus, include transformation key
-                # for updating each entry of transformation_data for
-                # each scoped key
-                transformation_sk_pairs = [
-                    [str(td.transformation.key), str(sk)]
-                    for td in transformation_data
-                    for sk in td.known_scoped_keys
-                ]
-                query = """
-                UNWIND $tf_sk_pairs as pairs
-                WITH pairs[0] AS tf_key, pairs[1] AS tf_scoped_key
-                MATCH (task:Task)-[:PERFORMS]->(:Transformation|NonTransformation {`_scoped_key`: tf_scoped_key})
-                WHERE task.status IN ["complete", "error"]
-                OPTIONAL MATCH (task)-[:EXTENDS]->(extended_task:Task)
-                OPTIONAL MATCH (task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)
-                RETURN tf_key, task, extended_task as extended_task, collect(pdrr) as pdrrs
-                """
-                results = statestore.execute_query(
-                    query, tf_sk_pairs=transformation_sk_pairs
-                ).records
-
-                for record in results:
-                    key_to_data_map[record["tf_key"]].task_tree.append(record)
-
-            def to_subgraph(self, target_scope, statestore, subchain_cache):
-                """Create a subgraph where the "central" node is the
-                transformation and iteratively add Task and PDRRs
-                nodes with their corresponding relationships.
-
-                """
-                # if there are no tasks, can return an subgraph, no
-                # need to make transformation node because it exists
-                # already outside of this method
-                if not self.task_tree:
-                    return Subgraph()
-
-                # create the transformation node from its keyed chain,
-                # this allows later nodes to be easily connected to
-                # the subgraph outside of this method. subchain_cache
-                # is a nonlocal dict[Transformation, KeyedChain] that
-                # removes the need to find the transformation within a
-                # larger KeyedChain. This will likely be unnecessary
-                # with later versions of gufe when decode_subchains is
-                # added.
-                # (https://github.com/OpenFreeEnergy/gufe/pull/634)
-                _, tf_node, _ = statestore._keyed_chain_to_subgraph(
-                    subchain_cache[self.transformation], target_scope
-                )
-                subgraph = Subgraph() | tf_node
-
-                scope_props = {
-                    "_org": target_scope.org,
-                    "_campaign": target_scope.campaign,
-                    "_project": target_scope.project,
-                }
-
-                def record_to_node(record):
-                    # create node from a neo4j record with updated scoped key
-                    scoped_key = ScopedKey(
-                        gufe_key=record["_gufe_key"], **scope.to_dict()
-                    )
-                    return Node(
-                        *record.labels,
-                        **record._properties
-                        | scope_props
-                        | {"_scoped_key": str(scoped_key)},
-                    )
-
-                # process each task found. Each record represents a
-                # single task.
-                for record in self.task_tree:
-                    etask_record = record["extended_task"]
-                    pdrr_records = record["pdrrs"]
-                    # update task node to have new scoped key
-                    task_node = record_to_node(record["task"])
-                    # create the task node this task extends if it exists
-                    etask_node = (
-                        None
-                        if not record["extended_task"]
-                        else record_to_node(record["extended_task"])
-                    )
-                    if etask_node:
-                        subgraph |= Relationship.type("EXTENDS")(
-                            etask_node, task_node, **scope_props
-                        )
-                    # clone all result refs for the task
-                    for pdrr_record in record["pdrrs"]:
-                        pdrr_node = record_to_node(pdrr_record)
-                        subgraph |= Relationship.type("RESULTS_IN")(
-                            task_node, pdrr_node, **scope_props
-                        )
-
-                return subgraph
-
-        # TODO: upstream to gufe
-        def kc_to_gufe(kc, gts):
-            for gufe_key, keyed_dict in kc:
-                if gt := gts.get(gufe_key):
-                    continue
-                gt = key_decode_dependencies(keyed_dict, registry=gts)
-                gts[gufe_key] = gt
-            return gt
-
-        # Map Transformation and NonTransformation objects to their
-        # potentially duplicated database gufe keys. This may happen
-        # due to minor version changes between serialization
-        # times. These keys are then used to get all results for Tasks
-        # associated with them.
-        transformation_data: list[TransformationData] = []
-        subchain_cache = {}
+        # Map decoded Transformation / NonTransformation objects to all of
+        # their original database GufeKeys (potentially across multiple
+        # source networks, and including duplicates introduced by minor
+        # serialization-version drift). These original keys are needed to
+        # locate Tasks associated with each Transformation in the source
+        # networks.
+        transformation_data: list[_TransformationData] = []
+        subchain_cache: dict[GufeTokenizable, KeyedChain] = {}
         for network_scope, network_keyed_chain in network_keyed_chains:
-            gts = {}
-            for index, (database_key, _) in enumerate(network_keyed_chain):
-                # only process Transformation or NonTransformation keys
-                if (
-                    "Transformation" in database_key
-                    or "NonTransformation" in database_key
-                ):
-                    # get the tokenizable at the index along with all previous data
-                    subchain = KeyedChain(network_keyed_chain[: index + 1])
-                    transformation = kc_to_gufe(subchain, gts)
-                    subchain_cache[transformation] = subchain
-                    try:
-                        idx = transformation_data.index(transformation)
-                        data = transformation_data[idx]
-                    except ValueError:
-                        data = TransformationData(transformation)
-                        transformation_data.append(data)
-                    data.add_known_scoped_key(database_key, network_scope)
+            # database keys for Transformations / NonTransformations in this
+            # source network's chain, in chain order
+            database_keys = [
+                gufe_key
+                for gufe_key, keyed_dict in network_keyed_chain
+                if _is_transformation_keyed_dict(keyed_dict)
+            ]
+            # decoded Transformation / NonTransformation objects in the same
+            # order; decode_subchains shares a tokenizable_map across yields
+            # so common dependencies are decoded only once per source network
+            transformations = network_keyed_chain.decode_subchains(
+                _is_transformation_keyed_dict
+            )
+            for database_key, transformation in zip(database_keys, transformations):
+                subchain_cache[transformation] = KeyedChain.from_gufe(transformation)
+                try:
+                    idx = transformation_data.index(transformation)
+                    data = transformation_data[idx]
+                except ValueError:
+                    data = _TransformationData(transformation)
+                    transformation_data.append(data)
+                data.add_known_scoped_key(database_key, network_scope)
 
         # Collect all transformation gufe objects and collect into a new set of edges
-        TransformationData.update_task_trees(transformation_data, self)
+        _TransformationData.update_task_trees(transformation_data, self)
         new_edges = [td.transformation for td in transformation_data]
         # Make new alchemiscale network with these edges
         combined_alchemical_network = AlchemicalNetwork(edges=new_edges, name=name)
