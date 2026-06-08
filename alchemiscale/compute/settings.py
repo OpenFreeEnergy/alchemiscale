@@ -77,6 +77,20 @@ class ComputeServiceSettings(BaseModel):
     claim_limit: PositiveInt = Field(
         1, description="Maximum number of Tasks to claim at a time from a TaskHub."
     )
+    max_tasks: int | None = Field(
+        None,
+        description=(
+            "Maximum number of Tasks to execute before the service shuts down. "
+            "If `None`, the service has no task limit."
+        ),
+    )
+    max_time: int | None = Field(
+        None,
+        description=(
+            "Maximum number of seconds to run before the service shuts down. "
+            "If `None`, the service has no time limit."
+        ),
+    )
     loglevel: str = Field(
         "WARN",
         description="The loglevel at which to report; see the :mod:`logging` docs for available levels.",
