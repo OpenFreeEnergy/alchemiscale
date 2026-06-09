@@ -187,6 +187,103 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return ScopedKey.from_dict(scoped_key)
 
+    def merge_networks(
+        self,
+        networks: list[ScopedKey],
+        name: str,
+        scope: Scope,
+        state: NetworkStateEnum | str = NetworkStateEnum.active,
+        visualize: bool = True,
+    ) -> ScopedKey:
+        """Merge multiple existing AlchemicalNetworks into a new AlchemicalNetwork.
+
+        The resulting AlchemicalNetwork contains the union of all
+        Transformations and NonTransformations from the source networks.
+        Existing Tasks for those transformations that are in ``complete`` or
+        ``error`` state are cloned into the new network's scope along with
+        their associated ProtocolDAGResultRefs, so previously-computed results
+        do not need to be re-run.
+
+        Cloned Tasks are wired to their Transformations via ``PERFORMS`` and
+        are reachable through standard network traversals
+        (``get_network_tasks``, ``get_network_results``, etc.). They are
+        intentionally **not** actioned to the new network's TaskHub; to
+        retry errored Tasks on the merged network, call
+        :meth:`action_tasks` with the merged network's ScopedKey after the
+        merge completes.
+
+        Parameters
+        ----------
+        networks
+            The ScopedKeys of the AlchemicalNetworks to merge. The source
+            networks may live in different Scopes; the caller must have access
+            to each.
+        name
+            The name of the new AlchemicalNetwork.
+        scope
+            The Scope in which to create the new AlchemicalNetwork.
+            This must be a *specific* Scope; it must not contain wildcards.
+        state
+            The starting state of the new AlchemicalNetwork in the database.
+            See :meth:`AlchemiscaleClient.set_network_state` for valid states.
+            Defaults to ``"active"``.
+        visualize
+            If ``True``, show submission progress indicator.
+
+        Returns
+        -------
+        ScopedKey
+            The ScopedKey of the new, merged AlchemicalNetwork.
+        """
+        if not scope.specific():
+            raise ValueError(
+                f"`scope` '{scope}' contains wildcards ('*'); `scope` must be *specific*"
+            )
+
+        if not networks:
+            raise ValueError("`networks` must contain at least one ScopedKey")
+
+        network_sks = [
+            sk if isinstance(sk, ScopedKey) else ScopedKey.from_str(sk)
+            for sk in networks
+        ]
+
+        for network_sk in network_sks:
+            if network_sk.qualname not in ("AlchemicalNetwork",):
+                raise ValueError(
+                    f"ScopedKey '{network_sk}' does not refer to an AlchemicalNetwork"
+                )
+
+        state = NetworkStateEnum(state)
+
+        data = dict(
+            networks=[str(sk) for sk in network_sks],
+            name=name,
+            scope=scope.to_dict(),
+            state=state.value,
+        )
+
+        def post():
+            return self._post_resource("/networks/merge", data)
+
+        if visualize:
+            from rich.progress import Progress
+
+            with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+                task = progress.add_task(
+                    f"Merging [bold]{len(network_sks)}[/bold] networks into "
+                    f"[bold]'{name}'[/bold] in scope [bold]'{scope}'[/bold]...",
+                    total=None,
+                )
+
+                scoped_key = post()
+                progress.start_task(task)
+                progress.update(task, total=1, completed=1)
+        else:
+            scoped_key = post()
+
+        return ScopedKey.from_dict(scoped_key)
+
     def set_network_state(
         self, network: ScopedKey, state: NetworkStateEnum | str
     ) -> ScopedKey | None:

@@ -2,6 +2,7 @@ import pytest
 import datetime
 from time import sleep
 import os
+import uuid
 from pathlib import Path
 from itertools import chain
 import json
@@ -198,6 +199,230 @@ class TestClient:
         # TODO: make a network in a scope that doesn't have any components in
         # common with an existing network
         # user_client.create_network(
+
+    def test_merge_networks(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        # gather source AlchemicalNetwork ScopedKeys across all scopes
+        # n4js_preloaded creates `network_tyk2` and a trimmed copy named
+        # "incomplete" in each of `multiple_scopes`
+        source_sks = user_client.query_networks(state=None)
+
+        # destination scope: a new project under the existing org/campaign
+        merge_scope = Scope(
+            org=scope_test.org,
+            campaign=scope_test.campaign,
+            project="merged_project",
+        )
+
+        merged_sk = user_client.merge_networks(
+            networks=source_sks,
+            name="merged_tyk2",
+            scope=merge_scope,
+            visualize=False,
+        )
+
+        assert isinstance(merged_sk, ScopedKey)
+        assert merged_sk.scope == merge_scope
+        assert merged_sk.qualname == "AlchemicalNetwork"
+
+        # the merged network should exist
+        assert user_client.check_exists(merged_sk)
+
+        # the merged network should appear in queries (defaults to active state)
+        all_active_sks = user_client.query_networks()
+        assert merged_sk in all_active_sks
+
+        # the merged network should contain the union of all source edges;
+        # since `network_tyk2` is a superset of `incomplete`, the union equals
+        # `network_tyk2.edges`
+        merged_network = user_client.get_network(merged_sk)
+        assert merged_network.name == "merged_tyk2"
+        assert len(merged_network.edges) == len(network_tyk2.edges)
+        assert {t.key for t in merged_network.edges} == {
+            t.key for t in network_tyk2.edges
+        }
+
+    @pytest.mark.parametrize("state", ["active", "inactive"])
+    def test_merge_networks_respects_state(
+        self,
+        state,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        """The state parameter must control the NetworkMark on the merged
+        AlchemicalNetwork the same way it does on create_network."""
+        source_sks = user_client.query_networks(scope=scope_test, state=None)
+        assert source_sks
+
+        merge_scope = Scope(
+            org=scope_test.org,
+            campaign=scope_test.campaign,
+            project=f"merged_state_{state}",
+        )
+        merged_sk = user_client.merge_networks(
+            networks=source_sks,
+            name=f"merged_state_{state}",
+            scope=merge_scope,
+            state=state,
+            visualize=False,
+        )
+
+        assert user_client.get_network_state(merged_sk) == state
+
+    def test_merge_networks_rejects_wildcard_scope(
+        self,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        source_sks = user_client.query_networks(state=None)
+        with pytest.raises(ValueError, match="wildcards"):
+            user_client.merge_networks(
+                networks=source_sks,
+                name="should_fail",
+                scope=Scope(org="test_org"),
+                visualize=False,
+            )
+
+    def test_merge_networks_rejects_empty_list(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        with pytest.raises(ValueError, match="at least one"):
+            user_client.merge_networks(
+                networks=[],
+                name="should_fail",
+                scope=scope_test,
+                visualize=False,
+            )
+
+    def test_merge_networks_rejects_non_network_scoped_key(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        # pass a Transformation ScopedKey rather than an AlchemicalNetwork one
+        tf_sks = user_client.query_transformations(scope=scope_test)
+        assert tf_sks
+        with pytest.raises(ValueError, match="does not refer to an AlchemicalNetwork"):
+            user_client.merge_networks(
+                networks=[tf_sks[0]],
+                name="should_fail",
+                scope=scope_test,
+                visualize=False,
+            )
+
+    def test_merge_networks_preserves_tasks_and_results(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        """The merged network must carry over Tasks in complete/error state
+        along with their ProtocolDAGResultRefs, cloned into the new scope."""
+        # pick a source network in scope_test
+        source_sks = user_client.query_networks(scope=scope_test, state=None)
+        assert source_sks
+        source_sk = source_sks[0]
+
+        # create Tasks on two of its Transformations directly through n4js so
+        # we can drive them to completed/errored states with PDRRs without
+        # actually executing protocols
+        transformation_sks = n4js_preloaded.get_network_transformations(source_sk)
+        assert len(transformation_sks) >= 2
+
+        task_sks = n4js_preloaded.create_tasks(transformation_sks[:2])
+
+        # task 0: complete, ok result
+        n4js_preloaded.set_task_running(task_sks[:1])
+        n4js_preloaded.set_task_complete(task_sks[:1])
+        ok_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=task_sks[0].scope,
+            ok=True,
+        )
+        n4js_preloaded.set_task_result(task_sks[0], ok_pdrr)
+
+        # task 1: error, failure result
+        n4js_preloaded.set_task_running(task_sks[1:2])
+        n4js_preloaded.set_task_error(task_sks[1:2])
+        err_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=task_sks[1].scope,
+            ok=False,
+        )
+        n4js_preloaded.set_task_result(task_sks[1], err_pdrr)
+
+        # merge into a fresh project under the same org/campaign
+        merge_scope = Scope(
+            org=scope_test.org,
+            campaign=scope_test.campaign,
+            project="merged_with_results",
+        )
+        merged_sk = user_client.merge_networks(
+            networks=[source_sk],
+            name="merged_with_results",
+            scope=merge_scope,
+            visualize=False,
+        )
+        assert user_client.check_exists(merged_sk)
+
+        # both Tasks should appear in the new scope, with their original statuses
+        task_records = n4js_preloaded.execute_query(
+            """
+            MATCH (t:Task {`_project`: $project})
+            RETURN t.status AS status
+            """,
+            project=merge_scope.project,
+        ).records
+        assert sorted(r["status"] for r in task_records) == ["complete", "error"]
+
+        # one ok and one not-ok PDRR should appear in the new scope, with their
+        # original object keys preserved
+        pdrr_records = n4js_preloaded.execute_query(
+            """
+            MATCH (pdrr:ProtocolDAGResultRef {`_project`: $project})
+            RETURN pdrr.ok AS ok, pdrr.obj_key AS obj_key
+            """,
+            project=merge_scope.project,
+        ).records
+        assert len(pdrr_records) == 2
+        oks = sorted(r["ok"] for r in pdrr_records)
+        assert oks == [False, True]
+        obj_keys = {r["obj_key"] for r in pdrr_records}
+        assert obj_keys == {ok_pdrr.obj_key, err_pdrr.obj_key}
+
+        # cloned PDRRs must be wired to the cloned Tasks in the new scope
+        linked = n4js_preloaded.execute_query(
+            """
+            MATCH (t:Task {`_project`: $project})-[:RESULTS_IN]->
+                  (pdrr:ProtocolDAGResultRef {`_project`: $project})
+            RETURN t.status AS status, pdrr.ok AS ok
+            """,
+            project=merge_scope.project,
+        ).records
+        pairs = sorted((r["status"], r["ok"]) for r in linked)
+        assert pairs == [("complete", True), ("error", False)]
+
+        # the cloned Tasks must be reachable from the merged AlchemicalNetwork
+        # via the standard PERFORMS traversal that the user-facing API uses;
+        # this catches any case where Tasks are written to the new scope but
+        # not wired back to their Transformations in the merged network
+        merged_task_sks = user_client.get_network_tasks(merged_sk)
+        assert len(merged_task_sks) == 2
+        assert all(sk.scope == merge_scope for sk in merged_task_sks)
+        statuses = sorted(user_client.get_tasks_status(merged_task_sks))
+        assert statuses == ["complete", "error"]
 
     def test_check_exists(
         self,

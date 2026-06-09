@@ -31,7 +31,7 @@ from ..settings import get_api_settings
 from ..settings import get_base_api_settings
 from ..storage.statestore import Neo4jStore
 from ..storage.objectstore import S3ObjectStore
-from ..storage.models import TaskStatusEnum, StrategyState
+from ..storage.models import NetworkStateEnum, TaskStatusEnum, StrategyState
 from ..models import Scope, ScopedKey
 from ..security.models import TokenData, CredentialedUserIdentity
 
@@ -129,6 +129,55 @@ async def create_network(
 
     try:
         an_sk, _, _ = n4js.assemble_network(network=an, scope=scope, state=state)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=e.args[0],
+        )
+
+    return an_sk
+
+
+@router.post("/networks/merge", response_model=ScopedKey)
+async def merge_networks(
+    *,
+    networks: list[str] = Body(embed=True),
+    name: str = Body(embed=True),
+    scope: dict = Body(embed=True),
+    state: str = Body(embed=True, default=NetworkStateEnum.active.value),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    # validate the destination scope first
+    try:
+        target_scope = Scope(**scope)
+    except (TypeError, ValidationError) as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+    validate_scopes(target_scope, token)
+
+    # validate each source network's scope is accessible to the token
+    network_sks = []
+    for network in networks:
+        try:
+            network_sk = ScopedKey.from_str(network)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=e.args[0],
+            )
+        validate_scopes(network_sk.scope, token)
+        network_sks.append(network_sk)
+
+    try:
+        an_sk = n4js.merge_networks(
+            network_scoped_keys=network_sks,
+            name=name,
+            scope=target_scope,
+            state=state,
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
