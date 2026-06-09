@@ -3606,11 +3606,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         return statuses
 
     def _set_task_status(
-        self, tasks, q: str, err_msg_func, raise_error
+        self, tasks, q: str, err_msg_func, raise_error, **kwargs
     ) -> list[ScopedKey | None]:
         tasks_statused = []
         with self.transaction() as tx:
-            res = tx.run(q, scoped_keys=[str(t) for t in tasks])
+            res = tx.run(q, scoped_keys=[str(t) for t in tasks], **kwargs)
 
             for record in res:
                 task_i = record["t"]
@@ -3736,16 +3736,25 @@ class Neo4jStore(AlchemiscaleStateStore):
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_error(
-        self, tasks: list[ScopedKey], raise_error: bool = False
+        self, tasks: list[ScopedKey], reason: str | None = None, raise_error: bool = False
     ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks to `error`.
 
         Only `running` Tasks can be set to `error`.
 
+        Parameters
+        ----------
+        tasks
+            List of task ScopedKeys to set to error status.
+        reason
+            Optional reason for the error (e.g., exception traceback).
+        raise_error
+            Whether to raise an error if the task cannot be set to error.
+
         """
 
         q = f"""
-        WITH $scoped_keys AS batch
+        WITH $scoped_keys AS batch, $reason AS reason
         UNWIND batch AS scoped_key
 
         OPTIONAL MATCH (t:Task {{_scoped_key: scoped_key}})
@@ -3753,6 +3762,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
         WHERE t_.status IN ['{TaskStatusEnum.error.value}', '{TaskStatusEnum.running.value}']
         SET t_.status = '{TaskStatusEnum.error.value}'
+        SET t_.reason = reason
 
         WITH scoped_key, t, t_
 
@@ -3767,15 +3777,24 @@ class Neo4jStore(AlchemiscaleStateStore):
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `error` as it is not currently `running`."
 
-        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
+        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error, reason=reason)
 
     def set_task_invalid(
-        self, tasks: list[ScopedKey], raise_error: bool = False
+        self, tasks: list[ScopedKey], reason: str | None = None, raise_error: bool = False
     ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks to `invalid`.
 
         Any Task can be set to `invalid`; an `invalid` Task cannot change to
         any other status.
+
+        Parameters
+        ----------
+        tasks
+            List of task ScopedKeys to set to invalid status.
+        reason
+            Optional reason for invalidating the task (e.g., user-provided explanation).
+        raise_error
+            Whether to raise an error if the task cannot be set to invalid.
 
         """
 
@@ -3783,7 +3802,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # make sure we follow the extends chain and set all tasks to invalid
         # and remove actions relationships
         q = f"""
-        WITH $scoped_keys AS batch
+        WITH $scoped_keys AS batch, $reason AS reason
         UNWIND batch AS scoped_key
 
         OPTIONAL MATCH (t:Task {{_scoped_key: scoped_key}})
@@ -3791,11 +3810,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
         WHERE NOT t_.status IN ['{TaskStatusEnum.deleted.value}']
         SET t_.status = '{TaskStatusEnum.invalid.value}'
+        SET t_.reason = reason
 
         WITH scoped_key, t, t_
 
         OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
         SET extends_task.status = '{TaskStatusEnum.invalid.value}'
+        SET extends_task.reason = reason
 
         WITH scoped_key, t, t_, extends_task
 
@@ -3821,15 +3842,24 @@ class Neo4jStore(AlchemiscaleStateStore):
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `invalid` as it is `deleted`."
 
-        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
+        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error, reason=reason)
 
     def set_task_deleted(
-        self, tasks: list[ScopedKey], raise_error: bool = False
+        self, tasks: list[ScopedKey], reason: str | None = None, raise_error: bool = False
     ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks to `deleted`.
 
         Any Task can be set to `deleted`; a `deleted` Task cannot change to
         any other status.
+
+        Parameters
+        ----------
+        tasks
+            List of task ScopedKeys to set to deleted status.
+        reason
+            Optional reason for deleting the task (e.g., user-provided explanation).
+        raise_error
+            Whether to raise an error if the task cannot be set to deleted.
 
         """
 
@@ -3837,7 +3867,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         # make sure we follow the extends chain and set all tasks to deleted
         # and remove actions relationships
         q = f"""
-        WITH $scoped_keys AS batch
+        WITH $scoped_keys AS batch, $reason AS reason
         UNWIND batch AS scoped_key
 
         OPTIONAL MATCH (t:Task {{_scoped_key: scoped_key}})
@@ -3845,11 +3875,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
         WHERE NOT t_.status IN ['{TaskStatusEnum.invalid.value}']
         SET t_.status = '{TaskStatusEnum.deleted.value}'
+        SET t_.reason = reason
 
         WITH scoped_key, t, t_
 
         OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
         SET extends_task.status = '{TaskStatusEnum.deleted.value}'
+        SET extends_task.reason = reason
 
         WITH scoped_key, t, t_, extends_task
 
@@ -3875,7 +3907,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `deleted` as it is `invalid`."
 
-        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
+        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error, reason=reason)
 
     ## task restart policies
 
