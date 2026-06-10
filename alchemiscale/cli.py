@@ -229,11 +229,14 @@ def cli(): ...
 @s3os_params
 @jwt_params
 def api(
+    # fmt: off
     workers, host, port, loglevel, config_file, config_json,  # API
     url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  # JWT
-    access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
-):  # fmt: skip
+    access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region
+    # AWS
+    # fmt: on
+):
     from alchemiscale.interface.api import app
     from .settings import APISettings, get_base_api_settings
 
@@ -301,11 +304,14 @@ def compute(): ...
 @s3os_params
 @jwt_params
 def api(
+    # fmt: off
     workers, host, port, loglevel, config_file, config_json, registration_expire_seconds, # API
     url, user, password, dbname,  # DB
     jwt_secret, jwt_expire_seconds, jwt_algorithm,  #JWT
-    access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region  # AWS
-):  # fmt: skip
+    access_key_id, secret_access_key, session_token, s3_bucket, s3_prefix, default_region
+    # AWS
+    # fmt: on
+):
     from alchemiscale.compute.api import app
     from .settings import ComputeAPISettings, get_base_api_settings
 

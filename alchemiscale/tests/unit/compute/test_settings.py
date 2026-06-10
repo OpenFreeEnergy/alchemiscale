@@ -30,3 +30,8 @@ class TestComputeServiceSettings:
         with pytest.raises(ValueError):
             scopes = ["*.*.*", "*-*-*"]
             ComputeServiceSettings.validate_scopes(scopes)
+
+    @pytest.mark.parametrize("values", [None, []])
+    def test_validate_scopes_empty(self, values):
+        # ``None`` and an empty list are both treated as "no filter"
+        assert ComputeServiceSettings.validate_scopes(values) is None

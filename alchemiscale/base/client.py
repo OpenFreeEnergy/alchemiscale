@@ -116,6 +116,7 @@ class AlchemiscaleBaseClient:
 
     _exception = AlchemiscaleBaseClientError
     _retry_status_codes = [404, 502, 503, 504]
+    _shared_event_loop = None
 
     _PARAMS = {
         "api_url": AlchemiscaleBaseClientParam(
@@ -261,6 +262,28 @@ class AlchemiscaleBaseClient:
 
     def __repr__(self):
         return f"{self.__class__.__name__}('{self.api_url}')"
+
+    def _run_async(self, coro):
+        """Run an async coroutine, reusing event loop for alru_cache compatibility.
+
+        ``alru_cache`` binds to the event loop it is first used with and rejects
+        calls from different loops. ``asyncio.run()`` creates a new loop each time,
+        which is incompatible. This method maintains a single shared event loop
+        per class to match ``alru_cache``'s class-level loop tracking.
+
+        We apply ``nest_asyncio`` proactively so the loop also works in
+        environments where an event loop is already running (e.g. Jupyter).
+
+        """
+        import nest_asyncio
+
+        cls = type(self)
+        if cls._shared_event_loop is None or cls._shared_event_loop.is_closed():
+            cls._shared_event_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(cls._shared_event_loop)
+            nest_asyncio.apply(cls._shared_event_loop)
+
+        return cls._shared_event_loop.run_until_complete(coro)
 
     def _retry(f):
         """Automatically retry with exponential backoff if API service is
