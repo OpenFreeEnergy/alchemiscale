@@ -3547,9 +3547,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
-    def get_task_tracebacks(
-        self, task: ScopedKey
-    ) -> list[dict[str, str]]:
+    def get_task_tracebacks(self, task: ScopedKey) -> list[dict[str, str]]:
         """Get all stored tracebacks associated with a given Task.
 
         This method retrieves traceback information from failed ProtocolDAGResults
