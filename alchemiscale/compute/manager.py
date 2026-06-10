@@ -79,35 +79,61 @@ class ComputeManager:
 
     def start(self, max_cycles: int | None = None, steal=False):
         self.logger.info(f"Starting up compute manager '{self.settings.name}'")
-        self._register(steal=steal)
-        self.logger.info(f"Registered compute manager '{self.compute_manager_id}'")
-        self._stop = False
-        self.int_sleep.clear()
+        registered = False
+
         try:
+            self._register(steal=steal)
+            registered = True
+
+            self.logger.info(f"Registered compute manager '{self.compute_manager_id}'")
+
+            self._stop = False
+            self.int_sleep.clear()
+
             count = 0
             self.logger.info("Starting main loop")
+
             while self.cycle():
                 count += 1
+
                 if max_cycles and count >= max_cycles:
                     self.logger.info("Reached maximum number of cycles")
                     break
+
                 self.logger.info(f"Sleeping for {self.settings.sleep_interval} seconds")
                 self.int_sleep(self.settings.sleep_interval)
+
         except SleepInterrupted:
             self.logger.info("Compute manager stopping.")
-        except Exception as e:
-            self.logger.error(f"Unknown exception raised: '{str(e)}'")
-            self.logger.info(f"Updating manager status to 'ERROR'")
-            self.client.update_status(
-                self.compute_manager_id, ComputeManagerStatus.ERROR, detail=repr(e)
-            )
-            raise e
+
         except KeyboardInterrupt:
             self.logger.info("Caught SIGINT/Keyboard interrupt.")
+
+        except Exception as e:
+            self.logger.error(f"Unknown exception raised: '{str(e)}'")
+
+            if registered:
+                self.logger.info("Updating manager status to 'ERROR'")
+                self.client.update_status(
+                    self.compute_manager_id,
+                    ComputeManagerStatus.ERROR,
+                    detail=repr(e),
+                )
+
+            raise
+
         finally:
-            self.logger.info(f"Deregistering '{self.compute_manager_id}'")
-            self._deregister()
-            self.logger.info(f"Deregistration successful")
+            if registered:
+                self.logger.info(f"Deregistering '{self.compute_manager_id}'")
+
+                self.stop()
+
+                heartbeat_thread = getattr(self, "heartbeat_thread", None)
+                if heartbeat_thread is not None:
+                    heartbeat_thread.join(timeout=5)
+
+                self._deregister()
+                self.logger.info("Deregistration successful")
 
     @abstractmethod
     def create_compute_services(self, data: dict, target: int) -> int:

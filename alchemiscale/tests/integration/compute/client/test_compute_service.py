@@ -315,3 +315,64 @@ class TestSynchronousComputeService:
             match="Could not find ComputeManagerRegistration",
         ):
             service._register()
+
+    def test_start_non_stop_exit_stops_heartbeat_thread(
+        self, compute_client, tmpdir, monkeypatch
+    ):
+        """start() should stop its heartbeat thread even when it exits without stop().
+
+        This reproduces the max_tasks/max_time-style exit path: the main loop raises
+        KeyboardInterrupt, start() catches it and returns, but service.stop() was
+        never called by the test.
+        """
+        heartbeat_started = threading.Event()
+        deregistered = threading.Event()
+
+        with tmpdir.as_cwd():
+            service = SynchronousComputeService(
+                ComputeServiceSettings(
+                    api_url=compute_client.api_url,
+                    identifier=compute_client.identifier,
+                    key=compute_client.key,
+                    name="test_compute_service_heartbeat_lifecycle",
+                    shared_basedir=Path("shared").absolute(),
+                    scratch_basedir=Path("scratch").absolute(),
+                    heartbeat_interval=300,
+                    sleep_interval=300,
+                    deep_sleep_interval=300,
+                )
+            )
+
+        monkeypatch.setattr(service, "_register", lambda: None)
+        monkeypatch.setattr(service, "_deregister", lambda: deregistered.set())
+
+        # Ensure the heartbeat thread has really started and is about to park in
+        # service.int_sleep(heartbeat_interval).
+        monkeypatch.setattr(service, "beat", lambda: heartbeat_started.set())
+
+        def raise_keyboard_interrupt_after_heartbeat(*args, **kwargs):
+            assert heartbeat_started.wait(timeout=5), "heartbeat thread never started"
+            raise KeyboardInterrupt
+
+        # Simulate the same non-stop exit class as _check_max_tasks/_check_max_time.
+        monkeypatch.setattr(service, "cycle", raise_keyboard_interrupt_after_heartbeat)
+
+        service_thread = threading.Thread(target=service.start, daemon=True)
+        service_thread.start()
+
+        try:
+            service_thread.join(timeout=5)
+
+            assert not service_thread.is_alive()
+            assert deregistered.is_set()
+
+            # This is the assertion that should fail on the current code:
+            # start() returned, but the heartbeat thread is still alive because
+            # nobody called service.stop() / int_sleep.interrupt().
+            service.heartbeat_thread.join(timeout=1)
+            assert not service.heartbeat_thread.is_alive()
+        finally:
+            # Prevent the failing test from leaking a daemon heartbeat thread.
+            service.stop()
+            if hasattr(service, "heartbeat_thread"):
+                service.heartbeat_thread.join(timeout=5)

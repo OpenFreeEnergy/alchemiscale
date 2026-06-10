@@ -310,3 +310,44 @@ class TestComputeManager:
         # the manager should have deregistered itself on the way out
         query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
         assert not n4js_preloaded.execute_query(query).records
+
+    def test_manager_start_deregisters_if_interrupted_during_startup_setup(
+        self,
+        n4js_preloaded,
+        manager: LocalTestingComputeManager,
+        monkeypatch,
+    ):
+        """start() should deregister even if interrupted after registration.
+
+        This simulates a signal/KeyboardInterrupt landing after the manager has
+        registered, but before start() reaches the try/finally that normally
+        performs deregistration.
+        """
+        interrupted = False
+
+        def interrupt_after_registration():
+            nonlocal interrupted
+            interrupted = True
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(manager.int_sleep, "clear", interrupt_after_registration)
+
+        query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
+
+        try:
+            try:
+                manager.start(max_cycles=1)
+            except KeyboardInterrupt:
+                pass
+
+            assert interrupted
+
+            # This should fail without the fix: the manager registered, then the
+            # simulated interrupt skipped the finally block, leaving an orphaned
+            # ComputeManagerRegistration.
+            assert not n4js_preloaded.execute_query(query).records
+
+        finally:
+            # Keep the failing test from poisoning later tests.
+            if n4js_preloaded.execute_query(query).records:
+                manager._deregister()

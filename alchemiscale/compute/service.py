@@ -365,6 +365,8 @@ class SynchronousComputeService:
             self.logger.info("Service stopping.")
         finally:
             # remove ComputeServiceRegistration, drop all claims
+            self.stop()
+            self.heartbeat_thread.join(timeout=5)
             self._deregister()
             self.logger.info(
                 "Deregistered service with registration '%s'",
