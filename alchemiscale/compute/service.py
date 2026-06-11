@@ -4,6 +4,7 @@
 
 """
 
+from contextlib import contextmanager
 import gc
 import time
 import logging
@@ -309,6 +310,65 @@ class SynchronousComputeService:
         self._check_max_tasks(max_tasks)
         self._check_max_time(max_time)
 
+    def _start_heartbeat(self):
+        self.heartbeat_thread = threading.Thread(
+            target=self.heartbeat,
+            daemon=True,
+        )
+        self.heartbeat_thread.start()
+
+    def _stop_heartbeat(self, timeout=5):
+        self.stop()
+
+        heartbeat_thread = getattr(self, "heartbeat_thread", None)
+        if heartbeat_thread is not None:
+            heartbeat_thread.join(timeout=timeout)
+
+            if heartbeat_thread.is_alive():
+                self.logger.warning(
+                    "Heartbeat thread did not stop within %s seconds",
+                    timeout,
+                )
+
+    @contextmanager
+    def _running(self):
+        """Register the service and run heartbeat for the lifetime of the context."""
+        registered = False
+        heartbeat_started = False
+
+        try:
+            self._register()
+            registered = True
+
+            self.logger.info(
+                "Registered service with registration '%s'",
+                str(self.compute_service_id),
+            )
+
+            self._stop = False
+            self.int_sleep.clear()
+
+            self._start_heartbeat()
+            heartbeat_started = True
+
+            yield
+
+        finally:
+            if heartbeat_started:
+                self._stop_heartbeat(timeout=5)
+            else:
+                # If interrupted after registration but before heartbeat startup,
+                # still request a clean stop.
+                self.stop()
+
+            if registered:
+                self.logger.info(
+                    "Deregistering service with registration '%s'",
+                    str(self.compute_service_id),
+                )
+                self._deregister()
+                self.logger.info("Deregistration successful")
+
     def start(self, max_tasks: int | None = None, max_time: int | None = None):
         """Start the service.
 
@@ -326,52 +386,28 @@ class SynchronousComputeService:
             If `None`, the service will have no time limit.
 
         """
-        self._stop = False
-        self.int_sleep.clear()
-
-        # add ComputeServiceRegistration
         self.logger.info("Starting up service '%s'", self.name)
-        self._register()
-        self.logger.info(
-            "Registered service with registration '%s'", str(self.compute_service_id)
-        )
 
-        # start up heartbeat thread
-        self.heartbeat_thread = threading.Thread(target=self.heartbeat, daemon=True)
-        self.heartbeat_thread.start()
+        with self._running():
+            try:
+                self._tasks_counter = 0
+                self._start_time = time.time()
 
-        # stop conditions will use these
-        self._tasks_counter = 0
-        self._start_time = time.time()
+                self.logger.info("Starting main loop")
 
-        try:
-            self.logger.info("Starting main loop")
-            while not self._stop:
-                # check that heartbeat is still alive; if not, resurrect it
-                if not self.heartbeat_thread.is_alive():
-                    self.heartbeat_thread = threading.Thread(
-                        target=self.heartbeat, daemon=True
-                    )
-                    self.heartbeat_thread.start()
+                while not self._stop:
+                    self.cycle(max_tasks=max_tasks, max_time=max_time)
+                    gc.collect()
 
-                # perform main loop cycle
-                self.cycle(max_tasks, max_time)
+            except SleepInterrupted:
+                self.logger.info("Service stopping.")
 
-                # force a garbage collection to avoid consuming too much memory
-                gc.collect()
-        except KeyboardInterrupt:
-            self.logger.info("Caught SIGINT/Keyboard interrupt.")
-        except SleepInterrupted:
-            self.logger.info("Service stopping.")
-        finally:
-            # remove ComputeServiceRegistration, drop all claims
-            self.stop()
-            self.heartbeat_thread.join(timeout=5)
-            self._deregister()
-            self.logger.info(
-                "Deregistered service with registration '%s'",
-                str(self.compute_service_id),
-            )
+            except KeyboardInterrupt:
+                self.logger.info("Caught SIGINT/Keyboard interrupt.")
+
+            except Exception:
+                self.logger.exception("Unknown exception raised")
+                raise
 
     def stop(self):
         self.int_sleep.interrupt()
