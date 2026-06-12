@@ -91,9 +91,7 @@ class ComputeManager:
             self._register(steal=steal)
             registered = True
 
-            self.logger.info(
-                f"Registered compute manager '{self.compute_manager_id}'"
-            )
+            self.logger.info(f"Registered compute manager '{self.compute_manager_id}'")
 
             yield
 
