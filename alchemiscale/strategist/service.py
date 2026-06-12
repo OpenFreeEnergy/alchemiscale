@@ -35,6 +35,7 @@ from ..storage.models import (
 )
 from ..settings import Neo4jStoreSettings, S3ObjectStoreSettings
 from ..compression import compress_keyed_chain_zstd, decompress_gufe_zstd, json_to_gufe
+from ..sleep import InterruptableSleep, SleepInterrupted
 from .settings import StrategistSettings
 
 
@@ -123,6 +124,7 @@ class StrategistService:
             self._cache = None
 
         self._stop = False
+        self.int_sleep = InterruptableSleep()
 
         # logging
         self.logger = logging.getLogger("AlchemiscaleStrategistService")
@@ -679,6 +681,7 @@ class StrategistService:
         """Start the Strategist service."""
 
         self._stop = False
+        self.int_sleep.clear()
         self.logger.info("Starting Strategist service")
 
         try:
@@ -700,8 +703,10 @@ class StrategistService:
 
                 if remaining_sleep > 0:
                     self.logger.debug(f"Sleeping for {remaining_sleep:.1f} seconds")
-                    time.sleep(remaining_sleep)
+                    self.int_sleep(remaining_sleep)
 
+        except SleepInterrupted:
+            self.logger.info("Sleep interrupted; stopping Strategist service")
         except KeyboardInterrupt:
             self.logger.info("Received interrupt signal")
         finally:
@@ -710,6 +715,7 @@ class StrategistService:
 
     def stop(self):
         """Stop the strategist service."""
+        self.int_sleep.interrupt()
         self._stop = True
 
     def close(self):

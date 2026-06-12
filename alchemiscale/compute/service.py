@@ -4,8 +4,8 @@
 
 """
 
+from contextlib import contextmanager
 import gc
-import sched
 import time
 import logging
 from uuid import uuid4
@@ -21,42 +21,8 @@ from .settings import ComputeServiceSettings
 from ..storage.models import ComputeServiceID
 from ..models import Scope, ScopedKey
 
-
-class SleepInterrupted(BaseException):
-    """
-    Exception class used to signal that an InterruptableSleep was interrupted
-
-    This (like KeyboardInterrupt) derives from BaseException to prevent
-    it from being handled with "except Exception".
-    """
-
-    pass
-
-
-class InterruptableSleep:
-    """
-    A class for sleeping, but interruptable
-
-    This class uses threading Events to wake up from a sleep before the entire sleep
-    duration has run. If the sleep is interrupted, then an SleepInterrupted exception is raised.
-
-    This class is a functor, so an instance can be passed as the delay function to a python
-    sched.scheduler
-    """
-
-    def __init__(self):
-        self._event = threading.Event()
-
-    def __call__(self, delay: float):
-        interrupted = self._event.wait(delay)
-        if interrupted:
-            raise SleepInterrupted()
-
-    def interrupt(self):
-        self._event.set()
-
-    def clear(self):
-        self._event.clear()
+# moved to alchemiscale.sleep; re-exported here for backwards compatibility
+from ..sleep import InterruptableSleep, SleepInterrupted
 
 
 class SynchronousComputeService:
@@ -107,10 +73,14 @@ class SynchronousComputeService:
         self.scratch_basedir.mkdir(exist_ok=True)
         self.keep_scratch = self.settings.keep_scratch
 
-        self.scheduler = sched.scheduler(time.monotonic, time.sleep)
-
         self.compute_service_id = ComputeServiceID.new_from_name(self.name)
 
+        # shared between the main loop and the heartbeat thread; both wake
+        # on a single ``stop()`` (which calls ``int_sleep.interrupt()``).
+        # If you split these into separate functors, be sure to interrupt
+        # both from ``stop()`` --- otherwise the heartbeat thread stays
+        # alive (and the worker stays multi-threaded) until its sleep
+        # naturally expires.
         self.int_sleep = InterruptableSleep()
 
         self._stop = False
@@ -151,11 +121,12 @@ class SynchronousComputeService:
 
     def heartbeat(self):
         """Start up the heartbeat, sleeping for `self.heartbeat_interval`"""
-        while True:
-            if self._stop:
-                break
+        while not self._stop:
             self.beat()
-            time.sleep(self.heartbeat_interval)
+            try:
+                self.int_sleep(self.heartbeat_interval)
+            except SleepInterrupted:
+                break
 
     def claim_tasks(self, count=1) -> list[ScopedKey | None]:
         """Get a Task to execute from compute API.
@@ -305,7 +276,7 @@ class SynchronousComputeService:
 
         if tasks is None:
             self.logger.info("No tasks claimed. Compute API denied request.")
-            time.sleep(self.deep_sleep_interval)
+            self.int_sleep(self.deep_sleep_interval)
             return
 
         self.logger.info("Claimed %d tasks", len([t for t in tasks if t is not None]))
@@ -315,7 +286,7 @@ class SynchronousComputeService:
             self.logger.info(
                 "No tasks claimed; sleeping for %d seconds", self.sleep_interval
             )
-            time.sleep(self.sleep_interval)
+            self.int_sleep(self.sleep_interval)
             return
 
         # otherwise, process tasks
@@ -339,6 +310,65 @@ class SynchronousComputeService:
         self._check_max_tasks(max_tasks)
         self._check_max_time(max_time)
 
+    def _start_heartbeat(self):
+        self.heartbeat_thread = threading.Thread(
+            target=self.heartbeat,
+            daemon=True,
+        )
+        self.heartbeat_thread.start()
+
+    def _stop_heartbeat(self, timeout=5):
+        self.stop()
+
+        heartbeat_thread = getattr(self, "heartbeat_thread", None)
+        if heartbeat_thread is not None:
+            heartbeat_thread.join(timeout=timeout)
+
+            if heartbeat_thread.is_alive():
+                self.logger.warning(
+                    "Heartbeat thread did not stop within %s seconds",
+                    timeout,
+                )
+
+    @contextmanager
+    def _running(self):
+        """Register the service and run heartbeat for the lifetime of the context."""
+        registered = False
+        heartbeat_started = False
+
+        try:
+            self._register()
+            registered = True
+
+            self.logger.info(
+                "Registered service with registration '%s'",
+                str(self.compute_service_id),
+            )
+
+            self._stop = False
+            self.int_sleep.clear()
+
+            self._start_heartbeat()
+            heartbeat_started = True
+
+            yield
+
+        finally:
+            if heartbeat_started:
+                self._stop_heartbeat(timeout=5)
+            else:
+                # If interrupted after registration but before heartbeat startup,
+                # still request a clean stop.
+                self.stop()
+
+            if registered:
+                self.logger.info(
+                    "Deregistering service with registration '%s'",
+                    str(self.compute_service_id),
+                )
+                self._deregister()
+                self.logger.info("Deregistration successful")
+
     def start(self, max_tasks: int | None = None, max_time: int | None = None):
         """Start the service.
 
@@ -356,49 +386,28 @@ class SynchronousComputeService:
             If `None`, the service will have no time limit.
 
         """
-        self._stop = False
-
-        # add ComputeServiceRegistration
         self.logger.info("Starting up service '%s'", self.name)
-        self._register()
-        self.logger.info(
-            "Registered service with registration '%s'", str(self.compute_service_id)
-        )
 
-        # start up heartbeat thread
-        self.heartbeat_thread = threading.Thread(target=self.heartbeat, daemon=True)
-        self.heartbeat_thread.start()
+        with self._running():
+            try:
+                self._tasks_counter = 0
+                self._start_time = time.time()
 
-        # stop conditions will use these
-        self._tasks_counter = 0
-        self._start_time = time.time()
+                self.logger.info("Starting main loop")
 
-        try:
-            self.logger.info("Starting main loop")
-            while not self._stop:
-                # check that heartbeat is still alive; if not, resurrect it
-                if not self.heartbeat_thread.is_alive():
-                    self.heartbeat_thread = threading.Thread(
-                        target=self.heartbeat, daemon=True
-                    )
-                    self.heartbeat_thread.start()
+                while not self._stop:
+                    self.cycle(max_tasks=max_tasks, max_time=max_time)
+                    gc.collect()
 
-                # perform main loop cycle
-                self.cycle(max_tasks, max_time)
+            except SleepInterrupted:
+                self.logger.info("Service stopping.")
 
-                # force a garbage collection to avoid consuming too much memory
-                gc.collect()
-        except KeyboardInterrupt:
-            self.logger.info("Caught SIGINT/Keyboard interrupt.")
-        except SleepInterrupted:
-            self.logger.info("Service stopping.")
-        finally:
-            # remove ComputeServiceRegistration, drop all claims
-            self._deregister()
-            self.logger.info(
-                "Deregistered service with registration '%s'",
-                str(self.compute_service_id),
-            )
+            except KeyboardInterrupt:
+                self.logger.info("Caught SIGINT/Keyboard interrupt.")
+
+            except Exception:
+                self.logger.exception("Unknown exception raised")
+                raise
 
     def stop(self):
         self.int_sleep.interrupt()
@@ -414,7 +423,6 @@ class AsynchronousComputeService(SynchronousComputeService):
     """
 
     def __init__(self, api_url):
-        self.scheduler = sched.scheduler(time.monotonic, time.sleep)
         # self.loop = asyncio.get_event_loop()
 
         self._stop = False

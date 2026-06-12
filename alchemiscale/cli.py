@@ -7,7 +7,6 @@
 import click
 import yaml
 import json
-import signal
 
 from .security.models import (
     CredentialedEntity,
@@ -382,6 +381,7 @@ def synchronous(config_file, name, compute_manager_id):
     from alchemiscale.models import Scope
     from alchemiscale.compute.service import SynchronousComputeService
     from alchemiscale.compute.settings import ComputeServiceSettings
+    from alchemiscale.compute.signals import install_stop_handlers
 
     params = yaml.safe_load(config_file)
 
@@ -396,14 +396,8 @@ def synchronous(config_file, name, compute_manager_id):
 
     service = SynchronousComputeService(ComputeServiceSettings(**params_init))
 
-    # add signal handling
-    for signame in {"SIGHUP", "SIGINT", "SIGTERM"}:
-
-        def stop(*args, **kwargs):
-            service.stop()
-            raise KeyboardInterrupt()
-
-        signal.signal(getattr(signal, signame), stop)
+    # install handlers so SIGHUP/SIGINT/SIGTERM stop the service cleanly
+    install_stop_handlers(service)
 
     try:
         service.start(**params_start)
@@ -551,6 +545,7 @@ def strategist(config_file):
     from alchemiscale.models import Scope
     from alchemiscale.strategist.service import StrategistService
     from alchemiscale.strategist.settings import StrategistSettings
+    from alchemiscale.compute.signals import install_stop_handlers
 
     params = yaml.safe_load(config_file)
 
@@ -559,18 +554,12 @@ def strategist(config_file):
 
     service = StrategistService(StrategistSettings(**params))
 
-    # add signal handling
-    for signame in {"SIGHUP", "SIGINT", "SIGTERM"}:
+    # install handlers so SIGHUP/SIGINT/SIGTERM stop the service cleanly.
+    # do *not* raise KeyboardInterrupt --- the strategist's stop() triggers a
+    # ProcessPoolExecutor shutdown that must not be interrupted partway through.
+    install_stop_handlers(service, raise_keyboard_interrupt=False)
 
-        def stop(*args, **kwargs):
-            service.stop()
-
-        signal.signal(getattr(signal, signame), stop)
-
-    try:
-        service.start()
-    except KeyboardInterrupt:
-        pass
+    service.start()
 
 
 @cli.group(help="Subcommands for managing identities")

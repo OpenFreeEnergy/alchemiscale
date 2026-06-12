@@ -1,5 +1,6 @@
 """Integration tests for StrategistService."""
 
+import logging
 import pytest
 import threading
 import time
@@ -383,3 +384,34 @@ class TestStrategistService:
 
         strategist_service.stop()
         assert strategist_service._stop is True
+
+    def test_service_interruptible_sleep(self, strategist_service, caplog):
+        """stop() should interrupt the inter-cycle sleep promptly."""
+        caplog.set_level(logging.DEBUG, logger="AlchemiscaleStrategistService")
+
+        # a long sleep interval; if the sleep were *not* interruptible, stop()
+        # would not take effect until it elapsed and this test would time out
+        # joining the thread. With no strategies actioned, the first cycle
+        # returns immediately and the service parks in the interruptible sleep.
+        strategist_service.sleep_interval = 300
+
+        thread = threading.Thread(target=strategist_service.start)
+        thread.start()
+
+        try:
+            # wait until the service has entered its (interruptible) sleep
+            deadline = time.monotonic() + 30
+            while "Sleeping for" not in caplog.text:
+                assert time.monotonic() < deadline, "service never reached its sleep"
+                time.sleep(0.05)
+
+            interrupt_time = time.monotonic()
+            strategist_service.stop()
+            thread.join(timeout=30)
+
+            assert not thread.is_alive()
+            assert (time.monotonic() - interrupt_time) < 30
+            assert "Sleep interrupted; stopping Strategist service" in caplog.text
+        finally:
+            strategist_service.stop()
+            thread.join(timeout=30)
