@@ -122,9 +122,23 @@ class SynchronousComputeService:
         self.logger.debug("Updated heartbeat")
 
     def heartbeat(self):
-        """Start up the heartbeat, sleeping for `self.heartbeat_interval`"""
+        """Start up the heartbeat, sleeping for `self.heartbeat_interval`.
+
+        A failing ``beat()`` is logged and the loop continues; the thread
+        only exits on ``stop()`` (via ``SleepInterrupted``) or process
+        teardown. The compute API exposes its own retry policy on the
+        underlying client call, but if those retries are ever exhausted ---
+        e.g. a sustained outage or auth-token expiry --- a raised exception
+        here would otherwise silently kill the heartbeat thread while the
+        main loop kept processing tasks. Swallow per-beat failures so a
+        transient problem doesn't deregister the service from the API's
+        point of view.
+        """
         while not self._stop:
-            self.beat()
+            try:
+                self.beat()
+            except Exception:
+                self.logger.exception("Heartbeat failed; will retry next interval")
             try:
                 self.int_sleep(self.heartbeat_interval)
             except SleepInterrupted:

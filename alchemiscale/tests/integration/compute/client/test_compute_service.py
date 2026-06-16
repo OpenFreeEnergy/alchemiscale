@@ -63,6 +63,46 @@ class TestSynchronousComputeService:
         time.sleep(2)
         assert not heartbeat_thread.is_alive()
 
+    def test_heartbeat_survives_beat_exception(self, service, monkeypatch, caplog):
+        """A failing beat() must not kill the heartbeat thread.
+
+        Without per-beat exception handling, a sustained outage or any
+        exhausted-retry path in client.heartbeat would silently kill the
+        thread while the main loop kept claiming tasks --- letting the API
+        expire the service registration and orphan the claimed tasks.
+        """
+        caplog.set_level(logging.INFO, logger=service.logger.name)
+
+        beats: list[bool] = []
+
+        def flaky_beat():
+            beats.append(True)
+            if len(beats) == 1:
+                raise RuntimeError("simulated transient heartbeat failure")
+
+        monkeypatch.setattr(service, "beat", flaky_beat)
+
+        heartbeat_thread = threading.Thread(target=service.heartbeat, daemon=True)
+        heartbeat_thread.start()
+
+        try:
+            # heartbeat_interval=1 from the ``service`` fixture, so this wait
+            # comfortably covers 3 beats: the first raises, the next two succeed
+            time.sleep(3.5)
+
+            assert heartbeat_thread.is_alive(), (
+                "heartbeat thread died after the first failed beat; "
+                "beat exception was not swallowed"
+            )
+            assert len(beats) >= 2, (
+                f"only {len(beats)} beat(s) attempted; thread did not resume "
+                "after the failure"
+            )
+            assert "Heartbeat failed" in caplog.text
+        finally:
+            service.stop()
+            heartbeat_thread.join(timeout=5)
+
     def test_claim_tasks(self, n4js_preloaded, service):
 
         service._register()
