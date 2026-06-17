@@ -1,3 +1,4 @@
+import logging
 import threading
 import time
 import os
@@ -61,6 +62,46 @@ class TestSynchronousComputeService:
         service.stop()
         time.sleep(2)
         assert not heartbeat_thread.is_alive()
+
+    def test_heartbeat_survives_beat_exception(self, service, monkeypatch, caplog):
+        """A failing beat() must not kill the heartbeat thread.
+
+        Without per-beat exception handling, a sustained outage or any
+        exhausted-retry path in client.heartbeat would silently kill the
+        thread while the main loop kept claiming tasks --- letting the API
+        expire the service registration and orphan the claimed tasks.
+        """
+        caplog.set_level(logging.INFO, logger=service.logger.name)
+
+        beats: list[bool] = []
+
+        def flaky_beat():
+            beats.append(True)
+            if len(beats) == 1:
+                raise RuntimeError("simulated transient heartbeat failure")
+
+        monkeypatch.setattr(service, "beat", flaky_beat)
+
+        heartbeat_thread = threading.Thread(target=service.heartbeat, daemon=True)
+        heartbeat_thread.start()
+
+        try:
+            # heartbeat_interval=1 from the ``service`` fixture, so this wait
+            # comfortably covers 3 beats: the first raises, the next two succeed
+            time.sleep(3.5)
+
+            assert heartbeat_thread.is_alive(), (
+                "heartbeat thread died after the first failed beat; "
+                "beat exception was not swallowed"
+            )
+            assert len(beats) >= 2, (
+                f"only {len(beats)} beat(s) attempted; thread did not resume "
+                "after the failure"
+            )
+            assert "Heartbeat failed" in caplog.text
+        finally:
+            service.stop()
+            heartbeat_thread.join(timeout=5)
 
     def test_claim_tasks(self, n4js_preloaded, service):
 
@@ -226,6 +267,65 @@ class TestSynchronousComputeService:
         results = n4js.execute_query(q)
         assert results.records
 
+    def test_service_interruptible_sleep(
+        self, n4js_preloaded, compute_client, tmpdir, caplog, monkeypatch
+    ):
+        n4js: Neo4jStore = n4js_preloaded
+
+        # a service whose sleep interval is long enough that, were the sleep
+        # *not* interruptible, stop() would block until it elapsed and this
+        # test would time out joining the thread
+        with tmpdir.as_cwd():
+            service = SynchronousComputeService(
+                ComputeServiceSettings(
+                    api_url=compute_client.api_url,
+                    identifier=compute_client.identifier,
+                    key=compute_client.key,
+                    name="test_compute_service_interruptible",
+                    shared_basedir=Path("shared").absolute(),
+                    scratch_basedir=Path("scratch").absolute(),
+                    heartbeat_interval=300,
+                    sleep_interval=300,
+                    deep_sleep_interval=300,
+                )
+            )
+
+        # force the "no tasks claimed; sleeping" branch every cycle so the
+        # service parks itself in an interruptible sleep rather than executing
+        monkeypatch.setattr(service, "claim_tasks", lambda count=1: [None])
+
+        caplog.set_level(logging.INFO, logger=service.logger.name)
+
+        service_thread = threading.Thread(target=service.start, daemon=True)
+        service_thread.start()
+
+        try:
+            # wait until the service has actually entered its sleep
+            deadline = time.monotonic() + 30
+            while "No tasks claimed; sleeping" not in caplog.text:
+                assert time.monotonic() < deadline, "service never reached its sleep"
+                time.sleep(0.05)
+
+            # interrupting the sleep should let start() return promptly rather
+            # than blocking for the full sleep_interval
+            interrupt_time = time.monotonic()
+            service.stop()
+            service_thread.join(timeout=30)
+
+            assert not service_thread.is_alive()
+            assert (time.monotonic() - interrupt_time) < 30
+            assert "Service stopping." in caplog.text
+        finally:
+            service.stop()
+            service_thread.join(timeout=30)
+
+        # the service should have deregistered itself on the way out
+        q = f"""
+        match (csreg:ComputeServiceRegistration {{identifier: '{service.compute_service_id}'}})
+        return csreg
+        """
+        assert not n4js.execute_query(q).records
+
     @pytest.mark.xfail(raises=NotImplementedError)
     def test_stop(self):
         # tested as part of tests above to stop threaded components that
@@ -255,3 +355,64 @@ class TestSynchronousComputeService:
             match="Could not find ComputeManagerRegistration",
         ):
             service._register()
+
+    def test_start_non_stop_exit_stops_heartbeat_thread(
+        self, compute_client, tmpdir, monkeypatch
+    ):
+        """start() should stop its heartbeat thread even when it exits without stop().
+
+        This reproduces the max_tasks/max_time-style exit path: the main loop raises
+        KeyboardInterrupt, start() catches it and returns, but service.stop() was
+        never called by the test.
+        """
+        heartbeat_started = threading.Event()
+        deregistered = threading.Event()
+
+        with tmpdir.as_cwd():
+            service = SynchronousComputeService(
+                ComputeServiceSettings(
+                    api_url=compute_client.api_url,
+                    identifier=compute_client.identifier,
+                    key=compute_client.key,
+                    name="test_compute_service_heartbeat_lifecycle",
+                    shared_basedir=Path("shared").absolute(),
+                    scratch_basedir=Path("scratch").absolute(),
+                    heartbeat_interval=300,
+                    sleep_interval=300,
+                    deep_sleep_interval=300,
+                )
+            )
+
+        monkeypatch.setattr(service, "_register", lambda: None)
+        monkeypatch.setattr(service, "_deregister", lambda: deregistered.set())
+
+        # Ensure the heartbeat thread has really started and is about to park in
+        # service.int_sleep(heartbeat_interval).
+        monkeypatch.setattr(service, "beat", lambda: heartbeat_started.set())
+
+        def raise_keyboard_interrupt_after_heartbeat(*args, **kwargs):
+            assert heartbeat_started.wait(timeout=5), "heartbeat thread never started"
+            raise KeyboardInterrupt
+
+        # Simulate the same non-stop exit class as _check_max_tasks/_check_max_time.
+        monkeypatch.setattr(service, "cycle", raise_keyboard_interrupt_after_heartbeat)
+
+        service_thread = threading.Thread(target=service.start, daemon=True)
+        service_thread.start()
+
+        try:
+            service_thread.join(timeout=5)
+
+            assert not service_thread.is_alive()
+            assert deregistered.is_set()
+
+            # This is the assertion that should fail on the current code:
+            # start() returned, but the heartbeat thread is still alive because
+            # nobody called service.stop() / int_sleep.interrupt().
+            service.heartbeat_thread.join(timeout=1)
+            assert not service.heartbeat_thread.is_alive()
+        finally:
+            # Prevent the failing test from leaking a daemon heartbeat thread.
+            service.stop()
+            if hasattr(service, "heartbeat_thread"):
+                service.heartbeat_thread.join(timeout=5)
