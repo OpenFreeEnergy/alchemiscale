@@ -79,7 +79,7 @@ class ComputeManager:
         self.client.deregister(self.compute_manager_id)
 
     @contextmanager
-    def _registered(self, steal=False):
+    def _running(self, steal=False):
         """Register this compute manager for the lifetime of the context.
 
         This guarantees that if anything interrupts startup after registration,
@@ -93,22 +93,17 @@ class ComputeManager:
 
             self.logger.info(f"Registered compute manager '{self.compute_manager_id}'")
 
+            self._stop = False
+            self.int_sleep.clear()
+
             yield
 
         finally:
             if registered:
                 self.logger.info(f"Deregistering '{self.compute_manager_id}'")
 
+                # kept here in case we add additional cleanup to stop later, such as other threads
                 self.stop()
-
-                heartbeat_thread = getattr(self, "heartbeat_thread", None)
-                if heartbeat_thread is not None:
-                    heartbeat_thread.join(timeout=5)
-
-                    if heartbeat_thread.is_alive():
-                        self.logger.warning(
-                            "Heartbeat thread did not stop within 5 seconds"
-                        )
 
                 self._deregister()
                 self.logger.info("Deregistration successful")
@@ -116,11 +111,8 @@ class ComputeManager:
     def start(self, max_cycles: int | None = None, steal=False):
         self.logger.info(f"Starting up compute manager '{self.settings.name}'")
 
-        with self._registered(steal=steal):
+        with self._running(steal=steal):
             try:
-                self._stop = False
-                self.int_sleep.clear()
-
                 count = 0
                 self.logger.info("Starting main loop")
 
