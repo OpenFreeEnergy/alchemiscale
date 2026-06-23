@@ -102,29 +102,23 @@ The ``envsubst`` line in particular will make a config specific to this job, wit
 A subset of options used in the config file are given below::
 
     ---
-    # options for service initialization
-    init:
-    
-      # Filesystem path to use for `ProtocolDAG` `shared` space.
-      shared_basedir: "/scratch/${USER}/${JOBID}-${JOBINDEX}/shared"
-    
-      # Filesystem path to use for `ProtocolUnit` `scratch` space.
-      scratch_basedir: "/scratch/${USER}/${JOBID}-${JOBINDEX}/scratch"
-    
-      # Path to file for logging output; if not set, logging will only go to
-      # STDOUT.
-      logfile: /home/${USER}/logs/service.${JOBID}.log
-    
-    # options for service execution
-    start:
-    
-      # Max number of Tasks to execute before exiting. If `null`, the service will
-      # have no task limit.
-      max_tasks: 1
-    
-      # Max number of seconds to run before exiting. If `null`, the service will
-      # have no time limit.
-      max_time: 300
+    # Filesystem path to use for `ProtocolDAG` `shared` space.
+    shared_basedir: "/scratch/${USER}/${JOBID}-${JOBINDEX}/shared"
+
+    # Filesystem path to use for `ProtocolUnit` `scratch` space.
+    scratch_basedir: "/scratch/${USER}/${JOBID}-${JOBINDEX}/scratch"
+
+    # Path to file for logging output; if not set, logging will only go to
+    # STDOUT.
+    logfile: /home/${USER}/logs/service.${JOBID}.log
+
+    # Max number of Tasks to execute before exiting. If `null`, the service will
+    # have no task limit.
+    max_tasks: 1
+
+    # Max number of seconds to run before exiting. If `null`, the service will
+    # have no time limit.
+    max_time: 300
 
 
 For HPC job-based execution, we recommend limiting the number of :py:class:`~alchemiscale.storage.models.Task`\s the compute service executes to a small number, preferrably 1, and setting a time limit beyond which the compute service will shut down.

@@ -5,6 +5,7 @@
 """
 
 from abc import abstractmethod
+from contextlib import contextmanager
 import logging
 import time
 
@@ -18,6 +19,7 @@ from .client import (
     AlchemiscaleComputeManagerClientError,
 )
 from .settings import ComputeManagerSettings, ComputeServiceSettings
+from ..sleep import InterruptableSleep, SleepInterrupted
 
 
 class ComputeManager:
@@ -44,6 +46,7 @@ class ComputeManager:
         )
 
         self._stop = False
+        self.int_sleep = InterruptableSleep()
 
         logger = logging.getLogger("AlchemiscaleComputeManager")
         logger.setLevel(self.settings.loglevel)
@@ -75,34 +78,73 @@ class ComputeManager:
     def _deregister(self):
         self.client.deregister(self.compute_manager_id)
 
+    @contextmanager
+    def _running(self, steal=False):
+        """Register this compute manager for the lifetime of the context.
+
+        This guarantees that if anything interrupts startup after registration,
+        including int_sleep.clear(), the manager is still deregistered.
+        """
+        registered = False
+
+        try:
+            self._register(steal=steal)
+            registered = True
+
+            self.logger.info(f"Registered compute manager '{self.compute_manager_id}'")
+
+            self._stop = False
+            self.int_sleep.clear()
+
+            yield
+
+        finally:
+            if registered:
+                self.logger.info(f"Deregistering '{self.compute_manager_id}'")
+
+                # kept here in case we add additional cleanup to stop later, such as other threads
+                self.stop()
+
+                self._deregister()
+                self.logger.info("Deregistration successful")
+
     def start(self, max_cycles: int | None = None, steal=False):
         self.logger.info(f"Starting up compute manager '{self.settings.name}'")
-        self._register(steal=steal)
-        self.logger.info(f"Registered compute manager '{self.compute_manager_id}'")
-        self._stop = False
-        try:
-            count = 0
-            self.logger.info("Starting main loop")
-            while self.cycle():
-                count += 1
-                if max_cycles and count >= max_cycles:
-                    self.logger.info("Reached maximum number of cycles")
-                    break
-                self.logger.info(f"Sleeping for {self.settings.sleep_interval} seconds")
-                time.sleep(self.settings.sleep_interval)
-        except Exception as e:
-            self.logger.error(f"Unknown exception raised: '{str(e)}'")
-            self.logger.info(f"Updating manager status to 'ERROR'")
-            self.client.update_status(
-                self.compute_manager_id, ComputeManagerStatus.ERROR, detail=repr(e)
-            )
-            raise e
-        except KeyboardInterrupt:
-            self.logger.info("Caught SIGINT/Keyboard interrupt.")
-        finally:
-            self.logger.info(f"Deregistering '{self.compute_manager_id}'")
-            self._deregister()
-            self.logger.info(f"Deregistration successful")
+
+        with self._running(steal=steal):
+            try:
+                count = 0
+                self.logger.info("Starting main loop")
+
+                while self.cycle():
+                    count += 1
+
+                    if max_cycles and count >= max_cycles:
+                        self.logger.info("Reached maximum number of cycles")
+                        break
+
+                    self.logger.info(
+                        f"Sleeping for {self.settings.sleep_interval} seconds"
+                    )
+                    self.int_sleep(self.settings.sleep_interval)
+
+            except SleepInterrupted:
+                self.logger.info("Compute manager stopping.")
+
+            except KeyboardInterrupt:
+                self.logger.info("Caught SIGINT/Keyboard interrupt.")
+
+            except Exception as e:
+                self.logger.error(f"Unknown exception raised: '{str(e)}'")
+                self.logger.info("Updating manager status to 'ERROR'")
+
+                self.client.update_status(
+                    self.compute_manager_id,
+                    ComputeManagerStatus.ERROR,
+                    detail=repr(e),
+                )
+
+                raise
 
     @abstractmethod
     def create_compute_services(self, data: dict, target: int) -> int:
@@ -189,6 +231,7 @@ class ComputeManager:
         return jobs or 1
 
     def stop(self):
+        self.int_sleep.interrupt()
         self._stop = True
 
     def cycle(self) -> bool:
