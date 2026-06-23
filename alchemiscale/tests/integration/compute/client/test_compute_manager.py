@@ -1,6 +1,7 @@
 import datetime
 from uuid import uuid4
 import logging
+import threading
 import time
 import sys
 import signal
@@ -34,10 +35,10 @@ class LocalTestingComputeManager(ComputeManager):
         if exception := LocalTestingComputeManager.exception:
             raise exception
 
-        params_start = {
-            "max_time": self.service_max_time or 10,
-            "max_tasks": self.service_max_tasks or 2,
-        }
+        # service lifetime limits now live on the ComputeServiceSettings the
+        # manager hands to each service, rather than being passed to start()
+        self.service_settings.max_time = self.service_max_time or 10
+        self.service_settings.max_tasks = self.service_max_tasks or 2
 
         # Honor ``target`` rather than always creating a single service.
         # ``_compute_jobs_to_create`` computes
@@ -51,7 +52,7 @@ class LocalTestingComputeManager(ComputeManager):
         for _ in range(target):
             proc = Process(
                 target=LocalTestingComputeManager._create_compute_service,
-                args=(self.service_settings, params_start),
+                args=(self.service_settings,),
             )
             proc.start()
             LocalTestingComputeManager.service_processes.append(proc)
@@ -59,7 +60,7 @@ class LocalTestingComputeManager(ComputeManager):
         return target
 
     @staticmethod
-    def _create_compute_service(service_settings, params_start):
+    def _create_compute_service(service_settings):
 
         from alchemiscale.compute.service import SynchronousComputeService
 
@@ -75,7 +76,7 @@ class LocalTestingComputeManager(ComputeManager):
             signal.signal(getattr(signal, signame), stop)
 
         try:
-            service.start(**params_start)
+            service.start()
         except KeyboardInterrupt:
             pass
 
@@ -255,3 +256,98 @@ class TestComputeManager:
         manager.cycle()
 
         assert "Received shutdown message" in caplog.text
+
+    def test_manager_interruptible_sleep(
+        self,
+        n4js_preloaded,
+        manager: LocalTestingComputeManager,
+        caplog,
+        monkeypatch,
+    ):
+        caplog.set_level(logging.INFO, logger=manager.logger.name)
+
+        # suppress the subprocess spawn. The default create_compute_services
+        # forks a multiprocessing.Process; combined with the background
+        # thread below, that makes this test fork from a multi-threaded
+        # parent. POSIX fork only carries the calling thread, so locks held
+        # by other threads (logging, requests pools, ...) are inherited as
+        # held-with-no-owner in the child, which then deadlocks. That hung
+        # the xdist worker on 3.11/3.13 (3.12 happens to miss it). The test
+        # is about stop() interrupting the sleep, not about spawning, so
+        # we cut the spawn path here. See PR #503 discussion.
+        # signature is (data, target) since #502 moved autoscaling sizing
+        # into ComputeManager; the no-op still returns 0 (no services created)
+        monkeypatch.setattr(manager, "create_compute_services", lambda data, target: 0)
+
+        # use a long sleep interval; if the sleep were *not* interruptible,
+        # stop() would not take effect until this elapsed and this test would
+        # time out waiting on the thread to join
+        manager.settings.sleep_interval = 300
+
+        thread = threading.Thread(target=manager.start)
+        thread.start()
+
+        try:
+            # wait until the manager has entered its (interruptible) sleep
+            deadline = time.monotonic() + 30
+            while "Sleeping for" not in caplog.text:
+                assert time.monotonic() < deadline, "manager never reached its sleep"
+                time.sleep(0.05)
+
+            # interrupting the sleep should let start() return promptly rather
+            # than blocking for the full sleep_interval
+            interrupt_time = time.monotonic()
+            manager.stop()
+            thread.join(timeout=30)
+
+            assert not thread.is_alive()
+            assert (time.monotonic() - interrupt_time) < 30
+            assert "Compute manager stopping." in caplog.text
+        finally:
+            manager.stop()
+            thread.join(timeout=30)
+
+        # the manager should have deregistered itself on the way out
+        query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
+        assert not n4js_preloaded.execute_query(query).records
+
+    def test_manager_start_deregisters_if_interrupted_during_startup_setup(
+        self,
+        n4js_preloaded,
+        manager: LocalTestingComputeManager,
+        monkeypatch,
+    ):
+        """start() should deregister even if interrupted after registration.
+
+        This simulates a signal/KeyboardInterrupt landing after the manager has
+        registered, but before start() reaches the try/finally that normally
+        performs deregistration.
+        """
+        interrupted = False
+
+        def interrupt_after_registration():
+            nonlocal interrupted
+            interrupted = True
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(manager.int_sleep, "clear", interrupt_after_registration)
+
+        query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
+
+        try:
+            try:
+                manager.start(max_cycles=1)
+            except KeyboardInterrupt:
+                pass
+
+            assert interrupted
+
+            # This should fail without the fix: the manager registered, then the
+            # simulated interrupt skipped the finally block, leaving an orphaned
+            # ComputeManagerRegistration.
+            assert not n4js_preloaded.execute_query(query).records
+
+        finally:
+            # Keep the failing test from poisoning later tests.
+            if n4js_preloaded.execute_query(query).records:
+                manager._deregister()
