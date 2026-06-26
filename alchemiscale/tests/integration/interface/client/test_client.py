@@ -213,12 +213,10 @@ class TestClient:
         # "incomplete" in each of `multiple_scopes`
         source_sks = user_client.query_networks(state=None)
 
-        # destination scope: a new project under the existing org/campaign
-        merge_scope = Scope(
-            org=scope_test.org,
-            campaign=scope_test.campaign,
-            project="merged_project",
-        )
+        # destination scope: reuse `scope_test`, which is authorized for
+        # the test identity. The merged network's name differs from the
+        # pre-loaded networks, so there is no _scoped_key collision.
+        merge_scope = scope_test
 
         merged_sk = user_client.merge_networks(
             networks=source_sks,
@@ -261,11 +259,10 @@ class TestClient:
         source_sks = user_client.query_networks(scope=scope_test, state=None)
         assert source_sks
 
-        merge_scope = Scope(
-            org=scope_test.org,
-            campaign=scope_test.campaign,
-            project=f"merged_state_{state}",
-        )
+        # destination scope: reuse `scope_test`, which is authorized for
+        # the test identity; the unique network name keeps each parametrize
+        # case from colliding on _scoped_key.
+        merge_scope = scope_test
         merged_sk = user_client.merge_networks(
             networks=source_sks,
             name=f"merged_state_{state}",
@@ -324,6 +321,7 @@ class TestClient:
     def test_merge_networks_preserves_tasks_and_results(
         self,
         scope_test,
+        multiple_scopes,
         n4js_preloaded,
         user_client: client.AlchemiscaleClient,
         network_tyk2,
@@ -363,12 +361,11 @@ class TestClient:
         )
         n4js_preloaded.set_task_result(task_sks[1], err_pdrr)
 
-        # merge into a fresh project under the same org/campaign
-        merge_scope = Scope(
-            org=scope_test.org,
-            campaign=scope_test.campaign,
-            project="merged_with_results",
-        )
+        # merge into a different authorized scope from where we set up the
+        # source Tasks, so the per-scope counts below remain clean (the
+        # destination scope has pre-loaded networks but no Tasks/PDRRs).
+        merge_scope = multiple_scopes[1]
+        assert merge_scope != scope_test
         merged_sk = user_client.merge_networks(
             networks=[source_sk],
             name="merged_with_results",

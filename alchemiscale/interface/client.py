@@ -204,13 +204,10 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         their associated ProtocolDAGResultRefs, so previously-computed results
         do not need to be re-run.
 
-        Cloned Tasks are wired to their Transformations via ``PERFORMS`` and
-        are reachable through standard network traversals
-        (``get_network_tasks``, ``get_network_results``, etc.). They are
-        intentionally **not** actioned to the new network's TaskHub; to
-        retry errored Tasks on the merged network, call
-        :meth:`action_tasks` with the merged network's ScopedKey after the
-        merge completes.
+        Cloned Tasks are intentionally **not** actioned; to retry errored Tasks
+        on the merged network, call :meth:`action_tasks` with the merged
+        network's ScopedKey after the merge completes, and set the Tasks'
+        status to back to `waiting` with :meth:`set_tasks_status`.
 
         Parameters
         ----------
@@ -224,11 +221,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The Scope in which to create the new AlchemicalNetwork.
             This must be a *specific* Scope; it must not contain wildcards.
         state
-            The starting state of the new AlchemicalNetwork in the database.
-            See :meth:`AlchemiscaleClient.set_network_state` for valid states.
+            The starting state of the new AlchemicalNetwork. See
+            :meth:`AlchemiscaleClient.set_network_state` for valid states.
             Defaults to ``"active"``.
         visualize
-            If ``True``, show submission progress indicator.
+            If ``True``, show progress indicator.
 
         Returns
         -------
