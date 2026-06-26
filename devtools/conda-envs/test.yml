@@ -7,8 +7,8 @@ dependencies:
   - cuda-version >=12
 
   # alchemiscale dependencies
-  - gufe =1.8.0
-  - openfe =1.8.0
+  - gufe =1.10.0
+  - openfe =1.11.1
   - pydantic >2
   - pydantic-settings
   - async-lru
@@ -41,7 +41,7 @@ dependencies:
   - cryptography
 
   # openmm protocols
-  - feflow>=0.1.4
+  - feflow =0.2.1
 
   ## cli
   - click
