@@ -187,6 +187,52 @@ async def merge_networks(
     return an_sk
 
 
+@router.post("/networks/{network_scoped_key}/copy", response_model=ScopedKey)
+async def copy_network(
+    network_scoped_key,
+    *,
+    scope: dict = Body(embed=True),
+    name: str | None = Body(embed=True, default=None),
+    state: str = Body(embed=True, default=NetworkStateEnum.active.value),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    # validate the source ScopedKey + its scope
+    try:
+        source_sk = ScopedKey.from_str(network_scoped_key)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=e.args[0],
+        )
+    validate_scopes(source_sk.scope, token)
+
+    # validate the destination scope
+    try:
+        target_scope = Scope(**scope)
+    except (TypeError, ValidationError) as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+    validate_scopes(target_scope, token)
+
+    try:
+        an_sk = n4js.copy_network(
+            network_scoped_key=source_sk,
+            scope=target_scope,
+            name=name,
+            state=state,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=e.args[0],
+        )
+
+    return an_sk
+
+
 @router.post("/bulk/networks/state/set")
 def set_networks_state(
     *,

@@ -421,6 +421,222 @@ class TestClient:
         statuses = sorted(user_client.get_tasks_status(merged_task_sks))
         assert statuses == ["complete", "error"]
 
+    def test_copy_network(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        """copy_network must duplicate the source AlchemicalNetwork into the
+        target scope and carry over Tasks of *every* status, with their
+        PDRRs, EXTENDS relationships, and PERFORMS wiring intact."""
+        source_sks = user_client.query_networks(scope=scope_test, state=None)
+        assert source_sks
+        source_sk = source_sks[0]
+        source_an = user_client.get_network(source_sk)
+
+        transformation_sks = n4js_preloaded.get_network_transformations(source_sk)
+        assert len(transformation_sks) >= 3
+
+        # Stage four tasks across three statuses so we can prove copy_network
+        # is not silently filtering by status the way merge_networks does:
+        #   task 0: complete + ok PDRR
+        #   task 1: error    + not-ok PDRR
+        #   task 2: waiting  (no result)
+        #   task 3: running  (no result)
+        task_sks = n4js_preloaded.create_tasks(transformation_sks[:4])
+
+        n4js_preloaded.set_task_running(task_sks[:1])
+        n4js_preloaded.set_task_complete(task_sks[:1])
+        ok_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=task_sks[0].scope,
+            ok=True,
+        )
+        n4js_preloaded.set_task_result(task_sks[0], ok_pdrr)
+
+        n4js_preloaded.set_task_running(task_sks[1:2])
+        n4js_preloaded.set_task_error(task_sks[1:2])
+        err_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=task_sks[1].scope,
+            ok=False,
+        )
+        n4js_preloaded.set_task_result(task_sks[1], err_pdrr)
+
+        # task_sks[2] stays waiting (default after create_tasks)
+        n4js_preloaded.set_task_running(task_sks[3:4])
+
+        # copy into a scope distinct from the source, so per-_project counts
+        # are clean
+        target_scope = multiple_scopes[2]
+        assert target_scope != scope_test
+        copied_sk = user_client.copy_network(
+            network=source_sk,
+            scope=target_scope,
+            visualize=False,
+        )
+
+        # name is preserved → gufe key is preserved → only the scope changes
+        assert copied_sk.gufe_key == source_sk.gufe_key
+        assert copied_sk.scope == target_scope
+        assert user_client.check_exists(copied_sk)
+        assert user_client.get_network(copied_sk).name == source_an.name
+
+        # every cloned Task must be reachable via the standard PERFORMS
+        # traversal from the new network
+        copied_task_sks = user_client.get_network_tasks(copied_sk)
+        assert len(copied_task_sks) == 4
+        assert all(sk.scope == target_scope for sk in copied_task_sks)
+        statuses = sorted(user_client.get_tasks_status(copied_task_sks))
+        assert statuses == ["complete", "error", "running", "waiting"]
+
+        # both PDRRs land in the target scope with their object keys intact
+        pdrr_records = n4js_preloaded.execute_query(
+            """
+            MATCH (pdrr:ProtocolDAGResultRef {`_project`: $project})
+            RETURN pdrr.ok AS ok, pdrr.obj_key AS obj_key
+            """,
+            project=target_scope.project,
+        ).records
+        assert len(pdrr_records) == 2
+        assert sorted(r["ok"] for r in pdrr_records) == [False, True]
+        assert {r["obj_key"] for r in pdrr_records} == {
+            ok_pdrr.obj_key,
+            err_pdrr.obj_key,
+        }
+
+    def test_copy_network_with_rename(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        """copy_network with a non-default `name` must produce a distinct
+        gufe key while still copying into the target scope."""
+        source_sks = user_client.query_networks(scope=scope_test, state=None)
+        source_sk = source_sks[0]
+        source_an = user_client.get_network(source_sk)
+
+        target_scope = multiple_scopes[2]
+        new_name = source_an.name + "_renamed_copy"
+
+        copied_sk = user_client.copy_network(
+            network=source_sk,
+            scope=target_scope,
+            name=new_name,
+            visualize=False,
+        )
+
+        assert copied_sk.gufe_key != source_sk.gufe_key
+        assert copied_sk.scope == target_scope
+        copied_an = user_client.get_network(copied_sk)
+        assert copied_an.name == new_name
+
+    def test_copy_network_rejects_wildcard_scope(
+        self,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        source_sks = user_client.query_networks(state=None)
+        with pytest.raises(ValueError, match="wildcards"):
+            user_client.copy_network(
+                network=source_sks[0],
+                scope=Scope(org="test_org"),
+                visualize=False,
+            )
+
+    def test_copy_network_rejects_non_network_scoped_key(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        tf_sks = user_client.query_transformations(scope=scope_test)
+        assert tf_sks
+        with pytest.raises(ValueError, match="does not refer to an AlchemicalNetwork"):
+            user_client.copy_network(
+                network=tf_sks[0],
+                scope=scope_test,
+                visualize=False,
+            )
+
+    def test_merge_scopes(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        """merge_scopes must copy every AlchemicalNetwork in the listed
+        source scopes into the target scope, preserving names (and
+        therefore gufe keys)."""
+        source_scopes = [scope_test, multiple_scopes[1]]
+        target_scope = multiple_scopes[2]
+
+        # baseline: 2 networks pre-loaded in target_scope
+        baseline_target_sks = user_client.query_networks(scope=target_scope, state=None)
+        assert len(baseline_target_sks) == 2
+
+        expected_source_count = sum(
+            len(user_client.query_networks(scope=sc, state=None))
+            for sc in source_scopes
+        )
+        # 2 source networks per scope, 2 source scopes
+        assert expected_source_count == 4
+
+        new_sks = user_client.merge_scopes(
+            scopes=source_scopes,
+            target_scope=target_scope,
+            visualize=False,
+        )
+
+        # one returned ScopedKey per source network
+        assert len(new_sks) == expected_source_count
+        assert all(sk.scope == target_scope for sk in new_sks)
+
+        # every copy preserves the source network's gufe key, so each copy's
+        # ScopedKey is just (source_gufe_key, target_scope). Since the source
+        # scopes contain the same set of networks (preloaded with the same
+        # names), the returned ScopedKeys collapse to the same 2 unique keys.
+        assert len(set(new_sks)) == 2
+
+        # target scope ends up with the union of its baseline networks and
+        # the copied networks; baseline and copies share the same gufe keys
+        # (assemble_network preloaded the same names everywhere), so the
+        # final count is unchanged from baseline
+        final_target_sks = user_client.query_networks(scope=target_scope, state=None)
+        assert set(baseline_target_sks) == set(final_target_sks)
+
+    def test_merge_scopes_rejects_empty(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        with pytest.raises(ValueError, match="at least one"):
+            user_client.merge_scopes(
+                scopes=[],
+                target_scope=scope_test,
+                visualize=False,
+            )
+
+    def test_merge_scopes_rejects_wildcard_target(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        with pytest.raises(ValueError, match="wildcards"):
+            user_client.merge_scopes(
+                scopes=[scope_test],
+                target_scope=Scope(org="test_org"),
+                visualize=False,
+            )
+
     def test_check_exists(
         self,
         scope_test,
