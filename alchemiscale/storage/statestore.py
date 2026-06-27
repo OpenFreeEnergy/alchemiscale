@@ -230,10 +230,28 @@ class _TransformationData:
                 **record._properties | scope_props | {"_scoped_key": str(scoped_key)},
             )
 
+        # Memoize Task Nodes by gufe key across iterations of ``task_tree``.
+        # If ``record[i]["task"]`` is the same Task as
+        # ``record[j]["extended_task"]``, we must reuse the same Python
+        # Node object -- otherwise ``merge_subgraph`` assigns a Neo4j
+        # ``elementId`` only to the first Python Node it sees per primary
+        # key and the EXTENDS Relationship's endpoint (pointing at the
+        # duplicate) is silently dropped on commit. Same bug pattern as
+        # the AN's Transformation Node vs. the to_subgraph anchor.
+        task_node_cache: dict[str, Node] = {}
+
+        def get_or_create_task_node(record):
+            gufe_key = record["_gufe_key"]
+            node = task_node_cache.get(gufe_key)
+            if node is None:
+                node = record_to_node(record)
+                task_node_cache[gufe_key] = node
+            return node
+
         # process each task found. Each record represents a single task.
         for record in self.task_tree:
             # update task node to have new scoped key
-            task_node = record_to_node(record["task"])
+            task_node = get_or_create_task_node(record["task"])
             # wire the cloned Task back to its Transformation; without
             # this edge the Task is unreachable from get_network_tasks
             # and every other PERFORMS-based traversal
@@ -248,7 +266,7 @@ class _TransformationData:
             etask_node = (
                 None
                 if not record["extended_task"]
-                else record_to_node(record["extended_task"])
+                else get_or_create_task_node(record["extended_task"])
             )
             if etask_node:
                 subgraph |= Relationship.type("EXTENDS")(
