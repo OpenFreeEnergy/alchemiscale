@@ -536,6 +536,66 @@ class TestClient:
         copied_an = user_client.get_network(copied_sk)
         assert copied_an.name == new_name
 
+    def test_copy_network_preserves_extends_direction(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        """The cloned EXTENDS edge must match the source direction:
+        ``(task)-[:EXTENDS]->(extended_task)``. Regressing this direction
+        would silently invert every EXTENDS chain on copied networks and
+        break the downstream traversals that read it forward (e.g.
+        ``get_task_extends``, ``get_task_results``)."""
+        source_sks = user_client.query_networks(scope=scope_test, state=None)
+        source_sk = source_sks[0]
+
+        transformation_sks = n4js_preloaded.get_network_transformations(source_sk)
+        assert transformation_sks
+
+        # base Task: complete with ok PDRR
+        base_task_sks = n4js_preloaded.create_tasks(transformation_sks[:1])
+        n4js_preloaded.set_task_running(base_task_sks)
+        n4js_preloaded.set_task_complete(base_task_sks)
+        base_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=base_task_sks[0].scope,
+            ok=True,
+        )
+        n4js_preloaded.set_task_result(base_task_sks[0], base_pdrr)
+
+        # extending Task: extends the base, also complete; the EXTENDS edge
+        # in the source graph is ``(extending)-[:EXTENDS]->(base)``
+        extending_task_sks = n4js_preloaded.create_tasks(
+            transformation_sks[:1], extends=base_task_sks
+        )
+        n4js_preloaded.set_task_running(extending_task_sks)
+        n4js_preloaded.set_task_complete(extending_task_sks)
+        ext_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=extending_task_sks[0].scope,
+            ok=True,
+        )
+        n4js_preloaded.set_task_result(extending_task_sks[0], ext_pdrr)
+
+        target_scope = multiple_scopes[2]
+        user_client.copy_network(network=source_sk, scope=target_scope, visualize=False)
+
+        # exactly one EXTENDS edge between the two cloned Tasks must exist
+        # in the target scope, with the same direction as the source:
+        # extending -> EXTENDS -> base
+        edges = n4js_preloaded.execute_query(
+            """
+            MATCH (a:Task {`_project`: $project})-[:EXTENDS]->(b:Task {`_project`: $project})
+            RETURN a._gufe_key AS extender, b._gufe_key AS extended
+            """,
+            project=target_scope.project,
+        ).records
+        assert len(edges) == 1
+        assert edges[0]["extender"] == str(extending_task_sks[0].gufe_key)
+        assert edges[0]["extended"] == str(base_task_sks[0].gufe_key)
+
     def test_copy_network_rejects_wildcard_scope(
         self,
         n4js_preloaded,

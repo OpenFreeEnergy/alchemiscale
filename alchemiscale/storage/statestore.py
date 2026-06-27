@@ -238,7 +238,13 @@ class _TransformationData:
             # this edge the Task is unreachable from get_network_tasks
             # and every other PERFORMS-based traversal
             subgraph |= Relationship.type("PERFORMS")(task_node, tf_node, **scope_props)
-            # create the task node this task extends if it exists
+            # create the task node this task extends if it exists. The
+            # source query returns ``record["extended_task"]`` as the Task
+            # that ``record["task"]`` extends -- i.e. in the source graph,
+            # ``(task)-[:EXTENDS]->(extended_task)``. The relationship's
+            # direction must be preserved on the clone so the standard
+            # downstream traversals (e.g. lines 2392, 3152, 3547, 3634:
+            # ``(task)-[:EXTENDS]->(other_task)``) keep working.
             etask_node = (
                 None
                 if not record["extended_task"]
@@ -246,7 +252,7 @@ class _TransformationData:
             )
             if etask_node:
                 subgraph |= Relationship.type("EXTENDS")(
-                    etask_node, task_node, **scope_props
+                    task_node, etask_node, **scope_props
                 )
             # clone all result refs for the task
             for pdrr_record in record["pdrrs"]:

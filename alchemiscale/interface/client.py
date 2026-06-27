@@ -293,13 +293,11 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         existing Task (regardless of status) and its associated
         ProtocolDAGResultRefs.
 
-        Cloned Tasks are wired to their Transformations via ``PERFORMS`` and
-        are reachable through standard network traversals
-        (``get_network_tasks``, ``get_network_results``, etc.). They are
-        intentionally **not** actioned to the new network's TaskHub; to
-        pick up errored or waiting Tasks for execution on the merged
-        network, call :meth:`action_tasks` with the new network's
-        ``ScopedKey`` after the copy completes.
+        Cloned Tasks are intentionally **not** actioned; to pick up errored or
+        waiting Tasks for execution on the merged network, call
+        :meth:`action_tasks` with the new network's ``ScopedKey`` after the
+        copy completes, and set the Tasks' status to back to `waiting` with
+        :meth:`set_tasks_status`.
 
         Parameters
         ----------
@@ -377,7 +375,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         Each source AlchemicalNetwork is copied via :meth:`copy_network`,
         preserving its name, Tasks, and ProtocolDAGResultRefs. Cloned
-        Tasks are not actioned to the target network's TaskHub.
+        Tasks are not actioned.
 
         Parameters
         ----------
