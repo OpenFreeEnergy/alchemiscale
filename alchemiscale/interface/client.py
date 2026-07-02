@@ -209,6 +209,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         network's ScopedKey after the merge completes, and set the Tasks'
         status to back to `waiting` with :meth:`set_tasks_status`.
 
+        The source networks' execution-orchestration state is intentionally
+        **not** carried over -- these govern how Tasks run rather than the
+        results themselves. Specifically:
+
+        - Any ``Strategy`` set on a source network via
+          :meth:`set_network_strategy` is not copied.
+        - Any ``TaskRestartPattern`` s added to a source network's TaskHub
+          via :meth:`add_task_restart_patterns` are not copied.
+
+        Set these on the merged network yourself after the merge if needed.
+
         Parameters
         ----------
         networks
@@ -296,8 +307,19 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         Cloned Tasks are intentionally **not** actioned; to pick up errored or
         waiting Tasks for execution on the merged network, call
         :meth:`action_tasks` with the new network's ``ScopedKey`` after the
-        copy completes, and set the Tasks' status to back to `waiting` with
+        copy completes, and set errored Tasks' status to back to `waiting` with
         :meth:`set_tasks_status`.
+
+        The source network's execution-orchestration state is intentionally
+        **not** carried over -- these govern how Tasks run rather than the
+        results themselves. Specifically:
+
+        - Any ``Strategy`` set on the source network via
+          :meth:`set_network_strategy` is not copied.
+        - Any ``TaskRestartPattern`` s added to the source network's TaskHub
+          via :meth:`add_task_restart_patterns` are not copied.
+
+        Set these on the copy yourself after :meth:`copy_network` if needed.
 
         Parameters
         ----------

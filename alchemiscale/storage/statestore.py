@@ -1103,6 +1103,18 @@ class Neo4jStore(AlchemiscaleStateStore):
         with the merged network's ``TaskHub`` ``ScopedKey`` and reset
         the ``Task`` statuses back to `waiting`.
 
+        Execution-orchestration state on the source networks is
+        intentionally **not** carried over -- these govern *how* Tasks
+        run rather than the results themselves:
+
+        - ``Strategy`` (``PROGRESSES`` relationship on the source AN)
+        - ``TaskRestartPattern``\\ s (``ENFORCES`` on the source
+          ``TaskHub``, ``APPLIES`` on individual ``Task``\\ s)
+
+        Callers wanting either on the merged network should set them
+        explicitly after the merge via :meth:`set_network_strategy` and
+        :meth:`add_task_restart_patterns`.
+
         Parameters
         ----------
         network_scoped_keys
@@ -1230,6 +1242,18 @@ class Neo4jStore(AlchemiscaleStateStore):
         (consistent with :meth:`merge_networks`); callers wanting cloned
         ``Task``\\ s to be picked up by compute services should call
         :meth:`action_tasks` against the new network's ``TaskHub``.
+
+        Execution-orchestration state on the source network is
+        intentionally **not** carried over -- these govern *how* Tasks
+        run rather than the results themselves:
+
+        - ``Strategy`` (``PROGRESSES`` relationship on the source AN)
+        - ``TaskRestartPattern``\\ s (``ENFORCES`` on the source
+          ``TaskHub``, ``APPLIES`` on individual ``Task``\\ s)
+
+        Callers wanting either on the copy should set them explicitly
+        after :meth:`copy_network` via :meth:`set_network_strategy` and
+        :meth:`add_task_restart_patterns`.
 
         Parameters
         ----------
