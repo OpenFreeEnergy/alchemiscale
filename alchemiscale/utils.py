@@ -8,6 +8,7 @@ from gufe.tokenization import (
 )
 from itertools import chain
 import networkx as nx
+import zstandard as zstd
 
 from .compression import decompress_gufe_zstd, json_to_gufe
 
@@ -120,8 +121,8 @@ def gufe_to_digraph(gufe_obj):
 def pdr_from_bytes(buffer: bytes) -> ProtocolDAGResult:
     try:
         # Attempt to decompress the ProtocolDAGresult object
-        pdr = decompress_gufe_zstd(pdr_bytes)
+        pdr = decompress_gufe_zstd(buffer)
     except zstd.ZstdError:
         # If decompress fails, assume it's a UTF-8 encoded JSON string
-        pdr = json_to_gufe(pdr_bytes.decode("utf-8"))
+        pdr = json_to_gufe(buffer.decode("utf-8"))
     return pdr

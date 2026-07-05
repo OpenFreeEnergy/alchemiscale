@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from enum import StrEnum
 from typing import Any, Literal
 from collections.abc import Iterable
@@ -1765,96 +1766,162 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
     def get_network_archives(
-        self, networks: list[ScopedKey], metadata: list[dict | None] = None
+        self,
+        networks: list[ScopedKey | str],
+        metadata: list[dict | None] | None = None,
+        compress: bool = True,
+        visualize: bool = True,
     ) -> list[AlchemicalArchive | None]:
-        """Get the archives for the given ``AlchemicalNetwork`` objects.
+        r"""Produce archival-quality extracts for the given ``AlchemicalNetwork``\s.
+
+        Each returned ``AlchemicalArchive`` bundles an
+        ``AlchemicalNetwork`` together with all successful
+        ``ProtocolDAGResult``\s currently available for its
+        ``Transformation``\s, in a form suitable for long-term storage,
+        sharing, and downstream analysis.
 
         Parameters
         ----------
         networks
-            A list of ``AlchemicalNetwork`` ``ScopedKey`` values. The list must contain unique values.
+            A list of ``AlchemicalNetwork`` ``ScopedKey`` values. The
+            list must not contain duplicate entries.
         metadata
-            Metadata to attach to the ``AlchemicalArchive``
+            Metadata to attach to the produced ``AlchemicalArchive``
             objects. This must be a list of dictionaries that are
             compatible with ``GufeTokenizable`` serialization, in the
-            order of the provided ``AlchemicalNetwork`` ``ScopedKey``
-            values. A ``None`` entry in the list will attach no
-            metadata to the corresponding ``AlchemicalArchive``. A
-            ``None`` in place of the list is interpretted as a list of
-            ``None``, which is the default.
+            same order as ``networks``. A ``None`` entry in the list
+            attaches no metadata to the corresponding
+            ``AlchemicalArchive``. Passing ``None`` in place of the
+            list is interpreted as a list of ``None``, which is the
+            default.
+        compress
+            If ``True``, compress objects server-side before shipping
+            them to the client. This is a performance optimization; it
+            has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicators.
 
         Returns
         -------
-        A list of ``AlchemicalArchive`` instances matching the order
-        of ``networks``. If a network was not found, ``None`` is
-        returned in its place.
+        A list of ``AlchemicalArchive`` instances matching the order of
+        ``networks``. If a network was not found, ``None`` is returned
+        in its place.
 
         Raises
         ------
-        A ``ValueError`` is raised if the provided metadata is not serializable or the lenghts of the metadata and networks lists are not the same.
+        ValueError
+            If the provided metadata is not serializable, if the
+            lengths of the ``metadata`` and ``networks`` lists differ,
+            or if ``networks`` contains duplicate entries.
 
         """
+        network_sks = [
+            ScopedKey.from_str(network) if isinstance(network, str) else network
+            for network in networks
+        ]
 
-        metadata = metadata or [None] * len(networks)
+        if len(set(network_sks)) != len(network_sks):
+            raise ValueError("`networks` list must not contain duplicate entries")
 
-        if len(metadata) != len(networks):
-            raise ValueError("metadata and networks list must be the same length")
+        metadata = [None] * len(network_sks) if metadata is None else metadata
 
-        for network, meta in zip(networks, metadata):
-            if meta:
-                try:
-                    _ = json.dumps(meta, cls=JSON_HANDLER)
-                except:
-                    raise ValueError(f"Unable to serialize metadata for {network}")
+        if len(metadata) != len(network_sks):
+            raise ValueError("`metadata` and `networks` lists must be the same length")
 
-        data = {"networks": list(map(str, networks))}
-        raw_archives = self._post_resource(f"/bulk/networks/archive", data)
+        # validate that all metadata is serializable up-front, before
+        # performing any (potentially expensive) retrieval
+        for network_sk, meta in zip(network_sks, metadata):
+            if meta is None:
+                continue
+            try:
+                json.dumps(meta, cls=JSON_HANDLER.encoder)
+            except TypeError as e:
+                raise ValueError(
+                    f"Unable to serialize metadata for '{network_sk}': {e}"
+                )
 
-        archives = []
-        for archive, meta in zip(raw_archives, metadata):
-            _archive = AlchemicalArchive.from_json(archive)
-            archives.append(
-                _archive.copy_with_replacements(metadata=meta) if metadata else _archive
+        return [
+            self._get_network_archive(
+                network_sk, meta, compress=compress, visualize=visualize
             )
-
-        return archives
+            for network_sk, meta in zip(network_sks, metadata)
+        ]
 
     def get_network_archive(
-        self, network: ScopedKey, metadata: dict | None = None
+        self,
+        network: ScopedKey | str,
+        metadata: dict | None = None,
+        compress: bool = True,
+        visualize: bool = True,
     ) -> AlchemicalArchive | None:
-        """Get the archive for a given ``AlchemicalNetwork``.
+        r"""Produce an archival-quality extract for a given ``AlchemicalNetwork``.
+
+        The returned ``AlchemicalArchive`` bundles the
+        ``AlchemicalNetwork`` together with all successful
+        ``ProtocolDAGResult``\s currently available for its
+        ``Transformation``\s, in a form suitable for long-term storage,
+        sharing, and downstream analysis.
 
         Parameters
         ----------
         network
-            The ``AlchemicalNetwork`` to archive.
+            The ``ScopedKey`` of the ``AlchemicalNetwork`` to archive.
         metadata
-            Metadata to attach to the ``AlchemicalArchive``. This must
-            be a dictionary that is compatible with
+            Metadata to attach to the produced ``AlchemicalArchive``.
+            This must be a dictionary that is compatible with
             ``GufeTokenizable`` serialization.
+        compress
+            If ``True``, compress objects server-side before shipping
+            them to the client. This is a performance optimization; it
+            has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicators.
 
         Returns
         -------
-        An ``AlchemicalArchive`` for the provided
-        ``AlchemicalNetwork``. If the ntwork was not found, ``None``
-        is returned.
+        An ``AlchemicalArchive`` for the provided ``AlchemicalNetwork``.
+        If the network was not found, ``None`` is returned.
 
         Raises
         ------
-        A ``ValueError`` is raised if the provided metadata is not
-        serializable.
-        """
-        match metadata:
-            case {}:
-                metadata = None
-            case dict():
-                metadata = [metadata]
-            case None:
-                pass
-            case _:
-                raise ValueError("metadata must be a dictionary or None")
+        ValueError
+            If the provided metadata is not serializable.
 
-        return self.get_network_archives([network], metadata)[0]
+        """
+        return self.get_network_archives(
+            [network],
+            metadata=None if metadata is None else [metadata],
+            compress=compress,
+            visualize=visualize,
+        )[0]
+
+    def _get_network_archive(
+        self,
+        network: ScopedKey,
+        metadata: dict | None,
+        compress: bool = True,
+        visualize: bool = True,
+    ) -> AlchemicalArchive | None:
+        # returns None if the network does not exist in the given Scope
+        if not self.check_exists(network):
+            return None
+
+        an = self.get_network(network, compress=compress, visualize=visualize)
+
+        transformation_results = []
+        for transformation in an.edges:
+            transformation_sk = ScopedKey(
+                gufe_key=transformation.key, **network.scope.to_dict()
+            )
+            pdrs = self.get_transformation_results(
+                transformation_sk,
+                return_as=ResultFormat.PROTOCOL_DAG_RESULTS,
+                compress=compress,
+                visualize=visualize,
+            )
+            transformation_results.append((transformation, pdrs))
+
+        return AlchemicalArchive(an, transformation_results, metadata=metadata)
 
     def get_transformation_results(
         self,
