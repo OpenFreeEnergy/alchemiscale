@@ -281,6 +281,161 @@ class TestNeo4jStore(TestStateStore):
         )
         assert len(results.records) == 1
 
+    def test_copy_network_partial_preload_target(self, n4js, network_tyk2, scope_test):
+        """copy_network must correctly place cloned Tasks in a target
+        scope that has only a *partial* overlap with the source's
+        Transformations.
+
+        Transformations already present in the target scope must
+        dedup onto the preexisting nodes; Transformations missing from
+        the target must be created fresh. Either way, cloned Tasks
+        must land wired to the correct target-scope Transformation via
+        PERFORMS, EXTENDS chains must be preserved, and
+        ProtocolDAGResultRefs must land in the target scope.
+
+        This case is not reachable through the interface tests, which
+        always start from ``n4js_preloaded`` -- a fixture that seeds
+        the same networks (and therefore the same Transformations)
+        into every scope, so every copy is either pure dedup or pure
+        fresh-write, never a mix.
+        """
+        all_edges = sorted(network_tyk2.edges, key=lambda e: e.key)
+        overlap_edges = all_edges[:2]
+
+        # source: full network
+        source_scope = Scope(**(scope_test.to_dict() | {"project": "source"}))
+        source_sk, _, _ = n4js.assemble_network(network_tyk2, source_scope)
+
+        # target: preload an AN carrying only the overlap subset of
+        # Transformations. This produces the partial-preload shape.
+        target_scope = Scope(**(scope_test.to_dict() | {"project": "target"}))
+        partial_an = AlchemicalNetwork(edges=overlap_edges, name="target_preexisting")
+        n4js.assemble_network(partial_an, target_scope)
+
+        def target_tf_count():
+            return n4js.execute_query(
+                """
+                MATCH (tf)
+                WHERE (tf:Transformation OR tf:NonTransformation)
+                  AND tf._project = $project
+                RETURN count(tf) AS n
+                """,
+                project=target_scope.project,
+            ).records[0]["n"]
+
+        # baseline: target scope holds exactly the overlap Transformations
+        assert target_tf_count() == len(overlap_edges)
+
+        # hang Tasks off one overlap Transformation and one non-overlap
+        # Transformation so both sides of the boundary get exercised
+        overlap_tf_sk = n4js.get_scoped_key(overlap_edges[0], source_scope)
+        fresh_tf_sk = n4js.get_scoped_key(all_edges[-1], source_scope)
+
+        # overlap side: 2 tasks -- one complete+ok PDRR, one waiting
+        overlap_tasks = n4js.create_tasks([overlap_tf_sk, overlap_tf_sk])
+        n4js.set_task_running(overlap_tasks[:1])
+        n4js.set_task_complete(overlap_tasks[:1])
+        overlap_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=overlap_tasks[0].scope,
+            ok=True,
+        )
+        n4js.set_task_result(overlap_tasks[0], overlap_pdrr)
+
+        # fresh side: 1 complete base + 1 running EXTENDS on top
+        fresh_base = n4js.create_tasks([fresh_tf_sk])
+        n4js.set_task_running(fresh_base)
+        n4js.set_task_complete(fresh_base)
+        fresh_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=fresh_base[0].scope,
+            ok=True,
+        )
+        n4js.set_task_result(fresh_base[0], fresh_pdrr)
+
+        fresh_ext = n4js.create_tasks([fresh_tf_sk], extends=fresh_base)
+        n4js.set_task_running(fresh_ext)
+
+        # --- copy ---
+        copied_sk = n4js.copy_network(source_sk, target_scope)
+
+        # 1) exactly one AN node in target with the copied ScopedKey
+        an_count = n4js.execute_query(
+            "MATCH (an:AlchemicalNetwork {_scoped_key: $sk}) RETURN count(an) AS n",
+            sk=str(copied_sk),
+        ).records[0]["n"]
+        assert an_count == 1
+
+        # 2) Transformation node count in target rises to the full
+        # source count -- overlap subset stays deduplicated, non-overlap
+        # subset is freshly created
+        assert target_tf_count() == len(all_edges)
+
+        # 3) every source Transformation appears exactly once in target
+        # (proves no duplication of overlap nodes, no missed fresh nodes)
+        for edge in all_edges:
+            cnt = n4js.execute_query(
+                """
+                MATCH (tf)
+                WHERE (tf:Transformation OR tf:NonTransformation)
+                  AND tf._project = $project
+                  AND tf._gufe_key = $gufe_key
+                RETURN count(tf) AS n
+                """,
+                project=target_scope.project,
+                gufe_key=str(edge.key),
+            ).records[0]["n"]
+            assert cnt == 1
+
+        # 4) every source Task lands in target wired via PERFORMS to a
+        # target-scope Transformation
+        def target_key(source_task_sk):
+            return ScopedKey(
+                gufe_key=source_task_sk.gufe_key,
+                org=target_scope.org,
+                campaign=target_scope.campaign,
+                project=target_scope.project,
+            )
+
+        for source_task_sk in overlap_tasks + fresh_base + fresh_ext:
+            target_sk_ = target_key(source_task_sk)
+            perf = n4js.execute_query(
+                """
+                MATCH (t:Task {_scoped_key: $sk})-[:PERFORMS]->(tf)
+                WHERE (tf:Transformation OR tf:NonTransformation)
+                  AND tf._project = $project
+                RETURN count(tf) AS n
+                """,
+                sk=str(target_sk_),
+                project=target_scope.project,
+            ).records[0]["n"]
+            assert perf == 1
+
+        # 5) EXTENDS preserved for the fresh_ext → fresh_base pair
+        ext_edge = n4js.execute_query(
+            """
+            MATCH (a:Task {_scoped_key: $a})-[:EXTENDS]->(b:Task {_scoped_key: $b})
+            RETURN count(*) AS n
+            """,
+            a=str(target_key(fresh_ext[0])),
+            b=str(target_key(fresh_base[0])),
+        ).records[0]["n"]
+        assert ext_edge == 1
+
+        # 6) both PDRRs land in target scope with their obj_keys intact
+        pdrr_records = n4js.execute_query(
+            """
+            MATCH (pdrr:ProtocolDAGResultRef {_project: $project})
+            RETURN pdrr.ok AS ok, pdrr.obj_key AS obj_key
+            """,
+            project=target_scope.project,
+        ).records
+        assert len(pdrr_records) == 2
+        assert {r["obj_key"] for r in pdrr_records} == {
+            overlap_pdrr.obj_key,
+            fresh_pdrr.obj_key,
+        }
+
     def test_set_network_state(self, n4js, network_tyk2, scope_test):
         valid_states = [state.value for state in NetworkStateEnum]
         network_sks = []
