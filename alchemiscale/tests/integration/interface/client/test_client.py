@@ -680,6 +680,78 @@ class TestClient:
         final_target_sks = user_client.query_networks(scope=target_scope, state=None)
         assert set(baseline_target_sks) == set(final_target_sks)
 
+    def test_merge_scopes_creates_new_networks_in_target(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        """merge_scopes must create fresh AlchemicalNetwork nodes in the
+        target scope for source networks that don't already exist there --
+        not just dedup onto preexisting ones.
+
+        n4js_preloaded seeds the same 2 networks (network_tyk2 + an2) into
+        every scope in multiple_scopes, so we first add a *third*
+        AlchemicalNetwork to the source scope only. After merge_scopes,
+        the target scope must contain that third network as a new node,
+        alongside the 2 that dedup onto its preexisting entries.
+        """
+        source_scope = scope_test
+        target_scope = multiple_scopes[2]
+
+        # add a fresh AN to the source scope that does not exist in the
+        # target; a unique name → unique gufe key
+        fresh_an = AlchemicalNetwork(
+            edges=list(network_tyk2.edges)[:2],
+            name="fresh_source_only",
+        )
+        fresh_source_sk = user_client.create_network(fresh_an, source_scope)
+        fresh_expected_target_sk = ScopedKey(
+            gufe_key=fresh_source_sk.gufe_key,
+            org=target_scope.org,
+            campaign=target_scope.campaign,
+            project=target_scope.project,
+        )
+
+        # sanity: fresh AN exists in source, does not exist in target
+        assert user_client.check_exists(fresh_source_sk)
+        assert not user_client.check_exists(fresh_expected_target_sk)
+
+        baseline_target_sks = set(
+            user_client.query_networks(scope=target_scope, state=None)
+        )
+        # baseline: network_tyk2 + an2 preloaded in target
+        assert len(baseline_target_sks) == 2
+        assert fresh_expected_target_sk not in baseline_target_sks
+
+        new_sks = user_client.merge_scopes(
+            scopes=[source_scope],
+            target_scope=target_scope,
+            visualize=False,
+        )
+
+        # source scope holds 3 networks now (2 preloaded + 1 fresh) → 3
+        # returned ScopedKeys, all anchored to target_scope
+        assert len(new_sks) == 3
+        assert all(sk.scope == target_scope for sk in new_sks)
+        assert fresh_expected_target_sk in new_sks
+
+        # target scope now holds the baseline union the fresh AN as a
+        # genuinely new node
+        final_target_sks = set(
+            user_client.query_networks(scope=target_scope, state=None)
+        )
+        assert final_target_sks == baseline_target_sks | {fresh_expected_target_sk}
+
+        # exactly one AN node backs the fresh copy in the target scope
+        fresh_count = n4js_preloaded.execute_query(
+            "MATCH (an:AlchemicalNetwork {_scoped_key: $sk}) RETURN count(an) AS n",
+            sk=str(fresh_expected_target_sk),
+        ).records[0]["n"]
+        assert fresh_count == 1
+
     def test_merge_scopes_rejects_empty(
         self,
         scope_test,
