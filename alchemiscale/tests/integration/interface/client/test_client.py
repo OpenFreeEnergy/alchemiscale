@@ -485,6 +485,15 @@ class TestClient:
         assert user_client.check_exists(copied_sk)
         assert user_client.get_network(copied_sk).name == source_an.name
 
+        # the target scope is preloaded with this same AlchemicalNetwork, so
+        # the copy must dedup onto the existing node rather than create a
+        # duplicate; the copy is additive to the preexisting network
+        an_count = n4js_preloaded.execute_query(
+            "MATCH (an:AlchemicalNetwork {_scoped_key: $sk}) RETURN count(an) AS n",
+            sk=str(copied_sk),
+        ).records[0]["n"]
+        assert an_count == 1
+
         # every cloned Task must be reachable via the standard PERFORMS
         # traversal from the new network
         copied_task_sks = user_client.get_network_tasks(copied_sk)
