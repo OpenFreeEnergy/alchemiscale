@@ -145,10 +145,9 @@ class _TransformationData:
         task_statuses
             If provided, only ``Task``\\ s whose ``status`` is in this list
             are loaded. If ``None`` (the default), ``Task``\\ s of any
-            status are loaded. ``merge_networks`` passes
-            ``["complete", "error"]`` to clone only successfully-completed
-            or errored work; ``copy_network`` passes ``None`` so the
-            entire ``Task`` tree of the source network is preserved.
+            status are loaded. Both ``merge_networks`` and
+            ``copy_network`` pass ``["complete"]`` so only ``Task``\\ s
+            carrying successful results are preserved.
         """
         key_to_data_map = {str(td.transformation.key): td for td in transformation_data}
         # prepare for unwind clause, include transformation key
@@ -1091,17 +1090,18 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Each ``Transformation`` / ``NonTransformation`` in the input
         networks is included exactly once in the new network. ``Task``\\ s
-        on the source networks that are in ``complete`` or ``error``
-        state are cloned into the new network's ``Scope`` along with
-        their ``ProtocolDAGResultRef``\\ s and ``EXTENDS`` relationships,
-        and are wired to their ``Transformation`` via ``PERFORMS`` so
-        they are reachable from the standard network traversals.
+        on the source networks that are in ``complete`` state are cloned
+        into the new network's ``Scope`` along with their
+        ``ProtocolDAGResultRef``\\ s and ``EXTENDS`` relationships, and
+        are wired to their ``Transformation`` via ``PERFORMS`` so they
+        are reachable from the standard network traversals. ``Task``\\ s
+        in any other status (``waiting``, ``running``, ``error``,
+        ``invalid``, ``deleted``) are not carried over.
 
         Cloned ``Task``\\ s are intentionally **not** actioned to the new
-        network's ``TaskHub``. Users wanting to retry errored tasks on
-        the merged network should call :meth:`action_tasks` themselves
-        with the merged network's ``TaskHub`` ``ScopedKey`` and reset
-        the ``Task`` statuses back to `waiting`.
+        network's ``TaskHub``. Users wanting the cloned ``Task``\\ s
+        picked up by compute services should call :meth:`action_tasks`
+        against the new network's ``TaskHub`` after the merge.
 
         Execution-orchestration state on the source networks is
         intentionally **not** carried over -- these govern *how* Tasks
@@ -1182,13 +1182,13 @@ class Neo4jStore(AlchemiscaleStateStore):
                 data.add_known_scoped_key(database_key, network_scope)
 
         # Collect all transformation gufe objects and collect into a new set of edges.
-        # ``merge_networks`` carries over only completed or errored Tasks so the
-        # new network reflects "results to keep"; in-flight or invalid Tasks are
-        # not preserved.
+        # Only ``complete`` Tasks carry over -- the new network reflects the
+        # results the user has already computed; in-flight, errored, or
+        # tombstoned Tasks are not preserved.
         _TransformationData.update_task_trees(
             list(transformation_data.values()),
             self,
-            task_statuses=["complete", "error"],
+            task_statuses=["complete"],
         )
         new_edges = [td.transformation for td in transformation_data.values()]
         # Make new alchemiscale network with these edges
@@ -1233,8 +1233,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         state: NetworkStateEnum | str = NetworkStateEnum.active,
     ) -> ScopedKey:
         """Copy an ``AlchemicalNetwork`` to a new ``Scope``, carrying over
-        every ``Task`` (regardless of status) and its associated
-        ``ProtocolDAGResultRef``\\ s.
+        every ``complete`` ``Task`` and its associated
+        ``ProtocolDAGResultRef``\\ s. ``Task``\\ s in any other status
+        (``waiting``, ``running``, ``error``, ``invalid``, ``deleted``)
+        are not carried over.
 
         ``Task`` clones are wired to their ``Transformation`` via
         ``PERFORMS`` and to one another via ``EXTENDS`` where applicable.
@@ -1307,12 +1309,13 @@ class Neo4jStore(AlchemiscaleStateStore):
                 transformation_data[transformation.key] = data
             data.add_known_scoped_key(database_key, source_scope)
 
-        # ``copy_network`` preserves the entire Task tree of the source
-        # network; pass ``task_statuses=None`` so the status filter is dropped.
+        # Only ``complete`` Tasks carry over -- the copy reflects the
+        # results the user has already computed; in-flight, errored, or
+        # tombstoned Tasks are not preserved.
         _TransformationData.update_task_trees(
             list(transformation_data.values()),
             self,
-            task_statuses=None,
+            task_statuses=["complete"],
         )
 
         # build the new AlchemicalNetwork's subgraph + NetworkMark + TaskHub

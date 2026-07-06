@@ -13,13 +13,17 @@ Three :py:class:`~alchemiscale.interface.client.AlchemiscaleClient` methods supp
 
 The destination :py:class:`~alchemiscale.models.Scope` for each of these must be a *specific* :py:class:`~alchemiscale.models.Scope` (no wildcards), and your user must have permissions on the source and destination :py:class:`~alchemiscale.models.Scope`\s.
 
+All three methods share the same Task-retention policy: **only** :py:class:`~alchemiscale.storage.models.Task`\s in ``complete`` status carry over to the new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, together with their :py:class:`~alchemiscale.storage.models.ProtocolDAGResultRef`\s.
+:py:class:`~alchemiscale.storage.models.Task`\s in any other status (``waiting``, ``running``, ``error``, ``invalid``, ``deleted``) are not carried over.
+This keeps the semantics simple: **the results of computed work are preserved; nothing else is**.
+
 .. note::
 
-   For all three methods, the following execution-orchestration state is intentionally **not** carried over from the source :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s to the new one, since these govern *how* :py:class:`~alchemiscale.storage.models.Task`\s run rather than the results themselves:
+   None of the source :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s' execution-orchestration state is carried over, since it governs *how* :py:class:`~alchemiscale.storage.models.Task`\s run rather than the results themselves:
 
-   * Any :py:class:`~alchemiscale.storage.models.Task`\s that were previously *actioned* on a source :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` are not automatically actioned on the new one; call :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.action_tasks` on the new network afterward for any :py:class:`~alchemiscale.storage.models.Task`\s you want compute services to pick up.
-   * Any ``Strategy`` set via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.set_network_strategy` is not copied.
-   * Any ``TaskRestartPattern``\s added via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.add_task_restart_patterns` are not copied.
+   * Cloned :py:class:`~alchemiscale.storage.models.Task`\s are not *actioned* on the new network; call :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.action_tasks` on the new network afterward for any you want compute services to pick up.
+   * Any ``Strategy`` set on a source network via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.set_network_strategy` is not copied.
+   * Any ``TaskRestartPattern``\s added to a source network via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.add_task_restart_patterns` are not copied.
 
    Set these on the new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` yourself after the merge or copy if you need them.
 
@@ -41,14 +45,9 @@ Use :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.merge_networks` 
 The new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` contains the union of the :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s and ``NonTransformation``\s from every source network.
 The source networks themselves are unchanged.
 
-Existing :py:class:`~alchemiscale.storage.models.Task`\s attached to those source :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s that are in ``complete`` or ``error`` state are cloned onto the merged network's :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s along with their :py:class:`~alchemiscale.storage.models.ProtocolDAGResultRef`\s, so previously-computed results do not need to be re-run.
-:py:class:`~alchemiscale.storage.models.Task`\s in other states (``waiting``, ``running``, ``invalid``, ``deleted``) are **not** carried over.
+The ``complete`` :py:class:`~alchemiscale.storage.models.Task`\s attached to those source :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s are cloned onto the merged network's :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s along with their :py:class:`~alchemiscale.storage.models.ProtocolDAGResultRef`\s, so previously-computed results do not need to be re-run.
 
-To retry the cloned ``error`` :py:class:`~alchemiscale.storage.models.Task`\s on the merged network, first set their status back to ``waiting`` with :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.set_tasks_status`, then :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.action_tasks` them::
-
-    >>> errored = asc.get_network_tasks(merged_sk, status='error')
-    >>> asc.set_tasks_status(errored, 'waiting')
-    >>> asc.action_tasks(errored, merged_sk)
+If you want to add fresh :py:class:`~alchemiscale.storage.models.Task`\s to the merged network -- either to retry a :external+gufe:py:class:`~gufe.transformations.transformation.Transformation` that previously errored, or to gather more repeats -- create new ones with :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.create_tasks` on the relevant :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s and then :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.action_tasks` them on the merged network.
 
 
 **********************************
@@ -62,7 +61,7 @@ Use :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.copy_network` to
     ...     scope=Scope('my_org', 'my_campaign', 'shared_project'),
     ... )
 
-Unlike :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.merge_networks`, :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.copy_network` carries over **every** existing :py:class:`~alchemiscale.storage.models.Task` for the source :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\'s :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s, regardless of status, together with their :py:class:`~alchemiscale.storage.models.ProtocolDAGResultRef`\s.
+Like :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.merge_networks`, only the source :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\'s ``complete`` :py:class:`~alchemiscale.storage.models.Task`\s are carried over, together with their :py:class:`~alchemiscale.storage.models.ProtocolDAGResultRef`\s.
 
 If ``name`` is not given, the source :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\'s name is preserved and the copy has the same ``gufe.key`` as the source (so its :py:class:`~alchemiscale.models.ScopedKey` differs from the source's only in :py:class:`~alchemiscale.models.Scope`).
 Pass ``name`` to rename the copy; this yields a fresh ``gufe.key`` derived from the renamed content::

@@ -326,22 +326,28 @@ class TestClient:
         user_client: client.AlchemiscaleClient,
         network_tyk2,
     ):
-        """The merged network must carry over Tasks in complete/error state
-        along with their ProtocolDAGResultRefs, cloned into the new scope."""
+        """The merged network must carry over ``complete`` Tasks -- and only
+        ``complete`` Tasks -- along with their ProtocolDAGResultRefs, cloned
+        into the new scope.
+
+        Tasks in any other status (``waiting``, ``running``, ``error``,
+        ``invalid``, ``deleted``) must not be cloned.
+        """
         # pick a source network in scope_test
         source_sks = user_client.query_networks(scope=scope_test, state=None)
         assert source_sks
         source_sk = source_sks[0]
 
-        # create Tasks on two of its Transformations directly through n4js so
-        # we can drive them to completed/errored states with PDRRs without
-        # actually executing protocols
+        # create Tasks on four of its Transformations directly through n4js
+        # so we can drive them to distinct statuses without actually
+        # executing protocols. The four statuses cover the "carry"/"drop"
+        # boundary: complete is preserved, error/waiting/running are dropped.
         transformation_sks = n4js_preloaded.get_network_transformations(source_sk)
-        assert len(transformation_sks) >= 2
+        assert len(transformation_sks) >= 4
 
-        task_sks = n4js_preloaded.create_tasks(transformation_sks[:2])
+        task_sks = n4js_preloaded.create_tasks(transformation_sks[:4])
 
-        # task 0: complete, ok result
+        # task 0: complete + ok PDRR -- carried over
         n4js_preloaded.set_task_running(task_sks[:1])
         n4js_preloaded.set_task_complete(task_sks[:1])
         ok_pdrr = ProtocolDAGResultRef(
@@ -351,7 +357,7 @@ class TestClient:
         )
         n4js_preloaded.set_task_result(task_sks[0], ok_pdrr)
 
-        # task 1: error, failure result
+        # task 1: error + failure PDRR -- dropped
         n4js_preloaded.set_task_running(task_sks[1:2])
         n4js_preloaded.set_task_error(task_sks[1:2])
         err_pdrr = ProtocolDAGResultRef(
@@ -360,6 +366,12 @@ class TestClient:
             ok=False,
         )
         n4js_preloaded.set_task_result(task_sks[1], err_pdrr)
+
+        # task 2: waiting -- dropped
+        # (default status after create_tasks)
+
+        # task 3: running -- dropped
+        n4js_preloaded.set_task_running(task_sks[3:4])
 
         # merge into a different authorized scope from where we set up the
         # source Tasks, so the per-scope counts below remain clean (the
@@ -374,7 +386,7 @@ class TestClient:
         )
         assert user_client.check_exists(merged_sk)
 
-        # both Tasks should appear in the new scope, with their original statuses
+        # only the complete Task should appear in the new scope
         task_records = n4js_preloaded.execute_query(
             """
             MATCH (t:Task {`_project`: $project})
@@ -382,10 +394,10 @@ class TestClient:
             """,
             project=merge_scope.project,
         ).records
-        assert sorted(r["status"] for r in task_records) == ["complete", "error"]
+        assert [r["status"] for r in task_records] == ["complete"]
 
-        # one ok and one not-ok PDRR should appear in the new scope, with their
-        # original object keys preserved
+        # only the ok PDRR should appear in the new scope; the error PDRR
+        # is dropped along with its Task
         pdrr_records = n4js_preloaded.execute_query(
             """
             MATCH (pdrr:ProtocolDAGResultRef {`_project`: $project})
@@ -393,13 +405,11 @@ class TestClient:
             """,
             project=merge_scope.project,
         ).records
-        assert len(pdrr_records) == 2
-        oks = sorted(r["ok"] for r in pdrr_records)
-        assert oks == [False, True]
-        obj_keys = {r["obj_key"] for r in pdrr_records}
-        assert obj_keys == {ok_pdrr.obj_key, err_pdrr.obj_key}
+        assert len(pdrr_records) == 1
+        assert pdrr_records[0]["ok"] is True
+        assert pdrr_records[0]["obj_key"] == ok_pdrr.obj_key
 
-        # cloned PDRRs must be wired to the cloned Tasks in the new scope
+        # cloned PDRR must be wired to the cloned Task in the new scope
         linked = n4js_preloaded.execute_query(
             """
             MATCH (t:Task {`_project`: $project})-[:RESULTS_IN]->
@@ -408,18 +418,16 @@ class TestClient:
             """,
             project=merge_scope.project,
         ).records
-        pairs = sorted((r["status"], r["ok"]) for r in linked)
-        assert pairs == [("complete", True), ("error", False)]
+        assert [(r["status"], r["ok"]) for r in linked] == [("complete", True)]
 
-        # the cloned Tasks must be reachable from the merged AlchemicalNetwork
+        # the cloned Task must be reachable from the merged AlchemicalNetwork
         # via the standard PERFORMS traversal that the user-facing API uses;
         # this catches any case where Tasks are written to the new scope but
         # not wired back to their Transformations in the merged network
         merged_task_sks = user_client.get_network_tasks(merged_sk)
-        assert len(merged_task_sks) == 2
-        assert all(sk.scope == merge_scope for sk in merged_task_sks)
-        statuses = sorted(user_client.get_tasks_status(merged_task_sks))
-        assert statuses == ["complete", "error"]
+        assert len(merged_task_sks) == 1
+        assert merged_task_sks[0].scope == merge_scope
+        assert user_client.get_tasks_status(merged_task_sks) == ["complete"]
 
     def test_copy_network(
         self,
@@ -430,22 +438,25 @@ class TestClient:
         network_tyk2,
     ):
         """copy_network must duplicate the source AlchemicalNetwork into the
-        target scope and carry over Tasks of *every* status, with their
-        PDRRs, EXTENDS relationships, and PERFORMS wiring intact."""
+        target scope and carry over only ``complete`` Tasks (with their
+        PDRRs), while dropping Tasks in any other status. EXTENDS
+        relationships and PERFORMS wiring must be intact for the Tasks
+        that do carry over.
+        """
         source_sks = user_client.query_networks(scope=scope_test, state=None)
         assert source_sks
         source_sk = source_sks[0]
         source_an = user_client.get_network(source_sk)
 
         transformation_sks = n4js_preloaded.get_network_transformations(source_sk)
-        assert len(transformation_sks) >= 3
+        assert len(transformation_sks) >= 4
 
-        # Stage four tasks across three statuses so we can prove copy_network
-        # is not silently filtering by status the way merge_networks does:
-        #   task 0: complete + ok PDRR
-        #   task 1: error    + not-ok PDRR
-        #   task 2: waiting  (no result)
-        #   task 3: running  (no result)
+        # Stage four tasks across four statuses so we can prove copy_network
+        # carries over only ``complete`` Tasks and drops the rest:
+        #   task 0: complete + ok PDRR    -- carried
+        #   task 1: error    + not-ok PDRR -- dropped
+        #   task 2: waiting  (no result)  -- dropped
+        #   task 3: running  (no result)  -- dropped
         task_sks = n4js_preloaded.create_tasks(transformation_sks[:4])
 
         n4js_preloaded.set_task_running(task_sks[:1])
@@ -494,15 +505,16 @@ class TestClient:
         ).records[0]["n"]
         assert an_count == 1
 
-        # every cloned Task must be reachable via the standard PERFORMS
-        # traversal from the new network
+        # only the ``complete`` Task must be reachable from the new network
+        # via the standard PERFORMS traversal; the error / waiting / running
+        # Tasks are dropped
         copied_task_sks = user_client.get_network_tasks(copied_sk)
-        assert len(copied_task_sks) == 4
-        assert all(sk.scope == target_scope for sk in copied_task_sks)
-        statuses = sorted(user_client.get_tasks_status(copied_task_sks))
-        assert statuses == ["complete", "error", "running", "waiting"]
+        assert len(copied_task_sks) == 1
+        assert copied_task_sks[0].scope == target_scope
+        assert user_client.get_tasks_status(copied_task_sks) == ["complete"]
 
-        # both PDRRs land in the target scope with their object keys intact
+        # only the ok PDRR lands in the target scope; the error PDRR is
+        # dropped along with its Task
         pdrr_records = n4js_preloaded.execute_query(
             """
             MATCH (pdrr:ProtocolDAGResultRef {`_project`: $project})
@@ -510,12 +522,9 @@ class TestClient:
             """,
             project=target_scope.project,
         ).records
-        assert len(pdrr_records) == 2
-        assert sorted(r["ok"] for r in pdrr_records) == [False, True]
-        assert {r["obj_key"] for r in pdrr_records} == {
-            ok_pdrr.obj_key,
-            err_pdrr.obj_key,
-        }
+        assert len(pdrr_records) == 1
+        assert pdrr_records[0]["ok"] is True
+        assert pdrr_records[0]["obj_key"] == ok_pdrr.obj_key
 
     def test_copy_network_with_rename(
         self,

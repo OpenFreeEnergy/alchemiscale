@@ -270,7 +270,8 @@ class TestNeo4jStore(TestStateStore):
         )
         assert len(results.records) == 7
 
-        # we expect 1 pdrrs from the errored task
+        # errored Task is not cloned (complete-only policy), so its not-ok
+        # PDRR must not appear in the merged scope
         results = n4js.execute_query(
             """
         MATCH (pdrr: ProtocolDAGResultRef {`_project`: $project})
@@ -279,7 +280,7 @@ class TestNeo4jStore(TestStateStore):
         """,
             project=new_scope.project,
         )
-        assert len(results.records) == 1
+        assert len(results.records) == 0
 
     def test_copy_network_partial_preload_target(self, n4js, network_tyk2, scope_test):
         """copy_network must correctly place cloned Tasks in a target
@@ -327,11 +328,16 @@ class TestNeo4jStore(TestStateStore):
         assert target_tf_count() == len(overlap_edges)
 
         # hang Tasks off one overlap Transformation and one non-overlap
-        # Transformation so both sides of the boundary get exercised
+        # Transformation so both sides of the boundary get exercised.
+        # Under the complete-only policy, only complete Tasks carry over;
+        # a waiting Task on the overlap side lets us also verify that
+        # non-complete Tasks are dropped, not leaked into the target.
         overlap_tf_sk = n4js.get_scoped_key(overlap_edges[0], source_scope)
         fresh_tf_sk = n4js.get_scoped_key(all_edges[-1], source_scope)
 
-        # overlap side: 2 tasks -- one complete+ok PDRR, one waiting
+        # overlap side: 2 tasks
+        #   [0]: complete + ok PDRR -- carried
+        #   [1]: waiting            -- dropped
         overlap_tasks = n4js.create_tasks([overlap_tf_sk, overlap_tf_sk])
         n4js.set_task_running(overlap_tasks[:1])
         n4js.set_task_complete(overlap_tasks[:1])
@@ -342,7 +348,8 @@ class TestNeo4jStore(TestStateStore):
         )
         n4js.set_task_result(overlap_tasks[0], overlap_pdrr)
 
-        # fresh side: 1 complete base + 1 running EXTENDS on top
+        # fresh side: 1 complete base + 1 complete EXTENDS on top; both
+        # carried, so we can verify EXTENDS is preserved across the copy
         fresh_base = n4js.create_tasks([fresh_tf_sk])
         n4js.set_task_running(fresh_base)
         n4js.set_task_complete(fresh_base)
@@ -355,9 +362,24 @@ class TestNeo4jStore(TestStateStore):
 
         fresh_ext = n4js.create_tasks([fresh_tf_sk], extends=fresh_base)
         n4js.set_task_running(fresh_ext)
+        n4js.set_task_complete(fresh_ext)
+        fresh_ext_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=fresh_ext[0].scope,
+            ok=True,
+        )
+        n4js.set_task_result(fresh_ext[0], fresh_ext_pdrr)
 
         # --- copy ---
         copied_sk = n4js.copy_network(source_sk, target_scope)
+
+        def target_key(source_task_sk):
+            return ScopedKey(
+                gufe_key=source_task_sk.gufe_key,
+                org=target_scope.org,
+                campaign=target_scope.campaign,
+                project=target_scope.project,
+            )
 
         # 1) exactly one AN node in target with the copied ScopedKey
         an_count = n4js.execute_query(
@@ -387,17 +409,10 @@ class TestNeo4jStore(TestStateStore):
             ).records[0]["n"]
             assert cnt == 1
 
-        # 4) every source Task lands in target wired via PERFORMS to a
-        # target-scope Transformation
-        def target_key(source_task_sk):
-            return ScopedKey(
-                gufe_key=source_task_sk.gufe_key,
-                org=target_scope.org,
-                campaign=target_scope.campaign,
-                project=target_scope.project,
-            )
-
-        for source_task_sk in overlap_tasks + fresh_base + fresh_ext:
+        # 4) every carried (complete) source Task lands in target wired via
+        # PERFORMS to a target-scope Transformation
+        carried_tasks = [overlap_tasks[0], fresh_base[0], fresh_ext[0]]
+        for source_task_sk in carried_tasks:
             target_sk_ = target_key(source_task_sk)
             perf = n4js.execute_query(
                 """
@@ -411,7 +426,16 @@ class TestNeo4jStore(TestStateStore):
             ).records[0]["n"]
             assert perf == 1
 
-        # 5) EXTENDS preserved for the fresh_ext → fresh_base pair
+        # 5) the waiting overlap Task must NOT appear in the target scope
+        # under the complete-only policy
+        dropped_target_sk = target_key(overlap_tasks[1])
+        dropped_count = n4js.execute_query(
+            "MATCH (t:Task {_scoped_key: $sk}) RETURN count(t) AS n",
+            sk=str(dropped_target_sk),
+        ).records[0]["n"]
+        assert dropped_count == 0
+
+        # 6) EXTENDS preserved for the fresh_ext -> fresh_base pair
         ext_edge = n4js.execute_query(
             """
             MATCH (a:Task {_scoped_key: $a})-[:EXTENDS]->(b:Task {_scoped_key: $b})
@@ -422,7 +446,8 @@ class TestNeo4jStore(TestStateStore):
         ).records[0]["n"]
         assert ext_edge == 1
 
-        # 6) both PDRRs land in target scope with their obj_keys intact
+        # 7) exactly the three ok PDRRs land in target scope with obj_keys
+        # intact -- one per carried Task
         pdrr_records = n4js.execute_query(
             """
             MATCH (pdrr:ProtocolDAGResultRef {_project: $project})
@@ -430,10 +455,11 @@ class TestNeo4jStore(TestStateStore):
             """,
             project=target_scope.project,
         ).records
-        assert len(pdrr_records) == 2
+        assert len(pdrr_records) == 3
         assert {r["obj_key"] for r in pdrr_records} == {
             overlap_pdrr.obj_key,
             fresh_pdrr.obj_key,
+            fresh_ext_pdrr.obj_key,
         }
 
     def test_set_network_state(self, n4js, network_tyk2, scope_test):
