@@ -19,12 +19,7 @@ This keeps the semantics simple: **the results of computed work are preserved; n
 
 .. note::
 
-   None of the source :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s' execution-orchestration state is carried over, since it governs *how* :py:class:`~alchemiscale.storage.models.Task`\s run rather than the results themselves:
-
-   * Cloned :py:class:`~alchemiscale.storage.models.Task`\s are not *actioned* on the new network; call :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.action_tasks` on the new network afterward for any you want compute services to pick up.
-   * Any ``Strategy`` set on a source network via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.set_network_strategy` is not copied.
-   * Any ``TaskRestartPattern``\s added to a source network via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.add_task_restart_patterns` are not copied.
-
+   Any ``Strategy`` (via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.set_network_strategy`) or ``TaskRestartPattern``\s (via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.add_task_restart_patterns`) on the source :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s are not copied.
    Set these on the new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` yourself after the merge or copy if you need them.
 
 

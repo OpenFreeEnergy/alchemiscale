@@ -199,27 +199,15 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         The resulting AlchemicalNetwork contains the union of all
         Transformations and NonTransformations from the source networks.
-        Existing Tasks for those Transformations that are in ``complete``
-        state are cloned into the new network's scope along with their
-        associated ProtocolDAGResultRefs, so previously-computed results do
-        not need to be re-run. Tasks in any other status (``waiting``,
-        ``running``, ``error``, ``invalid``, ``deleted``) are not carried
-        over.
+        Only Tasks in ``complete`` state on those Transformations are
+        cloned into the new network's scope along with their
+        ProtocolDAGResultRefs, so previously-computed results do not need
+        to be re-run.
 
-        Cloned Tasks are intentionally **not** actioned; call
-        :meth:`action_tasks` with the merged network's ScopedKey after the
-        merge completes if you want them picked up by compute services.
-
-        The source networks' execution-orchestration state is intentionally
-        **not** carried over -- these govern how Tasks run rather than the
-        results themselves. Specifically:
-
-        - Any ``Strategy`` set on a source network via
-          :meth:`set_network_strategy` is not copied.
-        - Any ``TaskRestartPattern`` s added to a source network's TaskHub
-          via :meth:`add_task_restart_patterns` are not copied.
-
-        Set these on the merged network yourself after the merge if needed.
+        Any ``Strategy`` (:meth:`set_network_strategy`) and
+        ``TaskRestartPattern`` s (:meth:`add_task_restart_patterns`) on
+        the source networks are not carried over; set them on the merged
+        network afterward if needed.
 
         Parameters
         ----------
@@ -303,24 +291,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     ) -> ScopedKey:
         """Copy an AlchemicalNetwork to a new Scope, carrying over every
         existing ``complete`` Task and its associated
-        ProtocolDAGResultRefs. Tasks in any other status (``waiting``,
-        ``running``, ``error``, ``invalid``, ``deleted``) are not carried
-        over.
+        ProtocolDAGResultRefs.
 
-        Cloned Tasks are intentionally **not** actioned; call
-        :meth:`action_tasks` with the new network's ``ScopedKey`` after
-        the copy completes if you want them picked up by compute services.
-
-        The source network's execution-orchestration state is intentionally
-        **not** carried over -- these govern how Tasks run rather than the
-        results themselves. Specifically:
-
-        - Any ``Strategy`` set on the source network via
-          :meth:`set_network_strategy` is not copied.
-        - Any ``TaskRestartPattern`` s added to the source network's TaskHub
-          via :meth:`add_task_restart_patterns` are not copied.
-
-        Set these on the copy yourself after :meth:`copy_network` if needed.
+        Any ``Strategy`` (:meth:`set_network_strategy`) and
+        ``TaskRestartPattern`` s (:meth:`add_task_restart_patterns`) on
+        the source network are not carried over; set them on the copy
+        afterward if needed.
 
         Parameters
         ----------
@@ -398,8 +374,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         Each source AlchemicalNetwork is copied via :meth:`copy_network`,
         preserving its name, its ``complete`` Tasks, and its associated
-        ProtocolDAGResultRefs. Tasks in any other status are not carried
-        over, and cloned Tasks are not actioned.
+        ProtocolDAGResultRefs.
 
         Parameters
         ----------

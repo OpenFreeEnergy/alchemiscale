@@ -190,9 +190,7 @@ class _TransformationData:
         Each cloned Task is wired back to the Transformation via a
         ``PERFORMS`` edge so the standard
         ``(:AlchemicalNetwork)-[:DEPENDS_ON]->(:Transformation)<-[:PERFORMS]-(:Task)``
-        traversal keeps working on the merged network. Note that cloned
-        Tasks are intentionally **not** actioned to the merged network's
-        TaskHub; see :meth:`Neo4jStore.merge_networks` for the rationale.
+        traversal keeps working on the merged network.
 
         Parameters
         ----------
@@ -1089,31 +1087,17 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Merge multiple ``AlchemicalNetwork`` nodes into a new ``AlchemicalNetwork``.
 
         Each ``Transformation`` / ``NonTransformation`` in the input
-        networks is included exactly once in the new network. ``Task``\\ s
-        on the source networks that are in ``complete`` state are cloned
-        into the new network's ``Scope`` along with their
-        ``ProtocolDAGResultRef``\\ s and ``EXTENDS`` relationships, and
-        are wired to their ``Transformation`` via ``PERFORMS`` so they
-        are reachable from the standard network traversals. ``Task``\\ s
-        in any other status (``waiting``, ``running``, ``error``,
-        ``invalid``, ``deleted``) are not carried over.
+        networks is included exactly once in the new network. Only
+        ``Task``\\ s on the source networks in ``complete`` state are
+        cloned into the new network's ``Scope``, along with their
+        ``ProtocolDAGResultRef``\\ s and ``EXTENDS`` relationships,
+        wired to their ``Transformation`` via ``PERFORMS``.
 
-        Cloned ``Task``\\ s are intentionally **not** actioned to the new
-        network's ``TaskHub``. Users wanting the cloned ``Task``\\ s
-        picked up by compute services should call :meth:`action_tasks`
-        against the new network's ``TaskHub`` after the merge.
-
-        Execution-orchestration state on the source networks is
-        intentionally **not** carried over -- these govern *how* Tasks
-        run rather than the results themselves:
-
-        - ``Strategy`` (``PROGRESSES`` relationship on the source AN)
-        - ``TaskRestartPattern``\\ s (``ENFORCES`` on the source
-          ``TaskHub``, ``APPLIES`` on individual ``Task``\\ s)
-
-        Callers wanting either on the merged network should set them
-        explicitly after the merge via :meth:`set_network_strategy` and
-        :meth:`add_task_restart_patterns`.
+        Any ``Strategy`` (``PROGRESSES``) and ``TaskRestartPattern``\\ s
+        (``ENFORCES`` / ``APPLIES``) on the source networks are not
+        carried over; set them on the merged network via
+        :meth:`set_network_strategy` and :meth:`add_task_restart_patterns`
+        if needed.
 
         Parameters
         ----------
@@ -1234,28 +1218,15 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> ScopedKey:
         """Copy an ``AlchemicalNetwork`` to a new ``Scope``, carrying over
         every ``complete`` ``Task`` and its associated
-        ``ProtocolDAGResultRef``\\ s. ``Task``\\ s in any other status
-        (``waiting``, ``running``, ``error``, ``invalid``, ``deleted``)
-        are not carried over.
+        ``ProtocolDAGResultRef``\\ s, wired to their ``Transformation``
+        via ``PERFORMS`` and to one another via ``EXTENDS`` where
+        applicable.
 
-        ``Task`` clones are wired to their ``Transformation`` via
-        ``PERFORMS`` and to one another via ``EXTENDS`` where applicable.
-        They are **not** actioned to the new network's ``TaskHub``
-        (consistent with :meth:`merge_networks`); callers wanting cloned
-        ``Task``\\ s to be picked up by compute services should call
-        :meth:`action_tasks` against the new network's ``TaskHub``.
-
-        Execution-orchestration state on the source network is
-        intentionally **not** carried over -- these govern *how* Tasks
-        run rather than the results themselves:
-
-        - ``Strategy`` (``PROGRESSES`` relationship on the source AN)
-        - ``TaskRestartPattern``\\ s (``ENFORCES`` on the source
-          ``TaskHub``, ``APPLIES`` on individual ``Task``\\ s)
-
-        Callers wanting either on the copy should set them explicitly
-        after :meth:`copy_network` via :meth:`set_network_strategy` and
-        :meth:`add_task_restart_patterns`.
+        Any ``Strategy`` (``PROGRESSES``) and ``TaskRestartPattern``\\ s
+        (``ENFORCES`` / ``APPLIES``) on the source network are not
+        carried over; set them on the copy via
+        :meth:`set_network_strategy` and :meth:`add_task_restart_patterns`
+        if needed.
 
         Parameters
         ----------
