@@ -58,8 +58,8 @@ Use :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.copy_network` to
 
 Like :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.merge_networks`, only the source :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\'s ``complete`` :py:class:`~alchemiscale.storage.models.Task`\s are carried over, together with their :py:class:`~alchemiscale.storage.models.ProtocolDAGResultRef`\s.
 
-If ``name`` is not given, the source :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\'s name is preserved and the copy has the same ``gufe.key`` as the source (so its :py:class:`~alchemiscale.models.ScopedKey` differs from the source's only in :py:class:`~alchemiscale.models.Scope`).
-Pass ``name`` to rename the copy; this yields a fresh ``gufe.key`` derived from the renamed content::
+If ``name`` is not given, the source :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\'s name is preserved.
+Pass ``name`` to rename the copy::
 
     >>> renamed_copy_sk = asc.copy_network(
     ...     network=an_sk,
