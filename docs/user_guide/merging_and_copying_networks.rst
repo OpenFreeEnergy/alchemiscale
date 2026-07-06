@@ -37,7 +37,7 @@ Use :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.merge_networks` 
     >>> merged_sk
     <ScopedKey('AlchemicalNetwork-8f...-my_org-my_campaign-combined_project')>
 
-The new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` contains the union of the :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s and ``NonTransformation``\s from every source network.
+The new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` contains the union of the :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s and :external+gufe:py:class:`~gufe.transformations.transformation.NonTransformation`\s from every source network.
 The source networks themselves are unchanged.
 
 The ``complete`` :py:class:`~alchemiscale.storage.models.Task`\s attached to those source :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s are cloned onto the merged network's :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s along with their :py:class:`~alchemiscale.storage.models.ProtocolDAGResultRef`\s, so previously-computed results do not need to be re-run.
