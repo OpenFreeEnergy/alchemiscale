@@ -1835,7 +1835,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 continue
             try:
                 json.dumps(meta, cls=JSON_HANDLER.encoder)
-            except TypeError as e:
+            except (TypeError, ValueError) as e:
                 raise ValueError(
                     f"Unable to serialize metadata for '{network_sk}': {e}"
                 )
@@ -1908,16 +1908,26 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         an = self.get_network(network, compress=compress, visualize=visualize)
 
+        # retrieve all successful ProtocolDAGResults for the network's
+        # Transformations in parallel, keyed by their authoritative
+        # (server-side) Transformation ScopedKey
+        results = self.get_network_results(
+            network,
+            return_as=ResultFormat.PROTOCOL_DAG_RESULTS,
+            compress=compress,
+            visualize=visualize,
+        )
+
+        # pair each Transformation with its results by fetching the
+        # Transformation via its authoritative ScopedKey. We deliberately do
+        # not derive a ScopedKey from a deserialized Transformation's GufeKey:
+        # a `Transformation` deserialized now may not reproduce the GufeKey it
+        # had when ingested (gufe tokenization can change across versions), so
+        # its key is not a reliable join to the stored ScopedKey.
         transformation_results = []
-        for transformation in an.edges:
-            transformation_sk = ScopedKey(
-                gufe_key=transformation.key, **network.scope.to_dict()
-            )
-            pdrs = self.get_transformation_results(
-                transformation_sk,
-                return_as=ResultFormat.PROTOCOL_DAG_RESULTS,
-                compress=compress,
-                visualize=visualize,
+        for transformation_sk, pdrs in results.items():
+            transformation = self.get_transformation(
+                transformation_sk, compress=compress, visualize=False
             )
             transformation_results.append((transformation, pdrs))
 

@@ -2696,18 +2696,43 @@ class TestClient:
         assert roundtrip == archive
         assert roundtrip.metadata == metadata
 
+        # a string ScopedKey is accepted and produces an equivalent archive
+        archive_from_str = user_client.get_network_archive(
+            str(network_sk), visualize=False
+        )
+        assert archive_from_str.network == an
+        str_results = {
+            tf.key: pdrs for tf, pdrs in archive_from_str.transformation_results
+        }
+        assert set(str_results[transformation.key]) == set(protocoldagresults)
+
+        # the compress=False path produces an equivalent archive
+        archive_uncompressed = user_client.get_network_archive(
+            network_sk, compress=False, visualize=False
+        )
+        assert archive_uncompressed.network == an
+        uncompressed_results = {
+            tf.key: pdrs for tf, pdrs in archive_uncompressed.transformation_results
+        }
+        assert set(uncompressed_results[transformation.key]) == set(protocoldagresults)
+
         # a nonexistent network yields None, both in bulk and singly
         fake_network_sk = ScopedKey(
             gufe_key=GufeKey(f"AlchemicalNetwork-{'0' * 32}"),
             **scope_test.to_dict(),
         )
 
+        # per-network metadata is attached in order, and a not-found network
+        # yields None in its slot
         archives = user_client.get_network_archives(
-            [network_sk, fake_network_sk], visualize=False
+            [network_sk, fake_network_sk],
+            metadata=[metadata, {"unused": "for missing network"}],
+            visualize=False,
         )
         assert len(archives) == 2
         assert isinstance(archives[0], AlchemicalArchive)
         assert archives[0].network == an
+        assert archives[0].metadata == metadata
         assert archives[1] is None
 
         assert user_client.get_network_archive(fake_network_sk, visualize=False) is None
