@@ -464,14 +464,14 @@ Producing archival extracts
 ****************************
 
 ``alchemiscale`` is an execution system, not an archival system.
-When you want a durable, self-contained snapshot of an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` together with its existing results — for example to deposit on a `FAIR <https://en.wikipedia.org/wiki/FAIR_data>`_ data repository such as Zenodo, to share with collaborators, or to feed into downstream analysis tooling — you can produce an :external+gufe:py:class:`~gufe.archival.AlchemicalArchive` with::
+When you want a durable, self-contained snapshot of an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` together with its existing results — for example to deposit on a `FAIR <https://en.wikipedia.org/wiki/FAIR_data>`_ data repository such as Zenodo, to share with collaborators, or to feed into downstream analysis tooling — you can produce an ``AlchemicalArchive`` with::
 
     >>> an_sk: ScopedKey
     >>> archive = asc.get_network_archive(an_sk)
     >>> archive
     <AlchemicalArchive-6f3c...>
 
-The returned :external+gufe:py:class:`~gufe.archival.AlchemicalArchive` bundles the :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` with all successful :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s currently available for its :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s.
+The returned ``AlchemicalArchive`` bundles the :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` with all successful :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s currently available for its :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s.
 If the network is not found in the given :py:class:`~alchemiscale.models.Scope`, ``None`` is returned.
 
 You can attach arbitrary, serializable metadata to the archive::
