@@ -10,7 +10,7 @@ import asyncio
 import json
 from enum import StrEnum
 from typing import Any, Literal
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from itertools import chain
 from functools import lru_cache
 
@@ -1823,7 +1823,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         if len(set(network_sks)) != len(network_sks):
             raise ValueError("`networks` list must not contain duplicate entries")
 
-        metadata = [None] * len(network_sks) if metadata is None else metadata
+        if metadata is None:
+            metadata = [None] * len(network_sks)
+        elif isinstance(metadata, Mapping) or not isinstance(metadata, Sequence):
+            raise ValueError(
+                "`metadata` must be a list/sequence of dictionaries or None"
+            )
 
         if len(metadata) != len(network_sks):
             raise ValueError("`metadata` and `networks` lists must be the same length")
@@ -1833,6 +1838,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         for network_sk, meta in zip(network_sks, metadata):
             if meta is None:
                 continue
+
+            if not isinstance(meta, Mapping):
+                raise ValueError(
+                    f"Metadata for '{network_sk}' must be a dictionary/mapping or None"
+                )
+
             try:
                 json.dumps(meta, cls=JSON_HANDLER.encoder)
             except (TypeError, ValueError) as e:

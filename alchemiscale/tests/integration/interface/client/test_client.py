@@ -2754,6 +2754,31 @@ class TestClient:
         with pytest.raises(ValueError, match="serialize"):
             user_client.get_network_archive(network_sk, metadata={"bad": object()})
 
+        # bulk metadata must be a sequence aligned with networks, not a single dict.
+        # This is a subtle case because a one-key dict has len == len(networks),
+        # so a length-only check would pass and iteration would yield the key string.
+        with pytest.raises(ValueError, match="Metadata.*list|metadata.*sequence"):
+            user_client.get_network_archives(
+                [network_sk],
+                metadata={"project": "tyk2"},
+            )
+
+        # each per-network metadata entry must be a dict or None, even if the value
+        # is otherwise JSON-serializable
+        for bad_meta in ["project", ["project", "tyk2"], 1, 1.5, True]:
+            with pytest.raises(ValueError, match="Metadata.*dict|metadata.*mapping"):
+                user_client.get_network_archives(
+                    [network_sk],
+                    metadata=[bad_meta],
+                )
+
+        # None remains valid as a per-network metadata entry
+        user_client.get_network_archives(
+            [network_sk],
+            metadata=[None],
+            visualize=False,
+        )
+
 
 class TestTaskRestartPolicy:
     default_max_retries = 3
