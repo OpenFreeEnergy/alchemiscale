@@ -83,3 +83,12 @@ Integration tests require Docker (for Neo4j via `grolt`) and use `moto` for AWS 
 ## CLI Entry Point
 
 The `alchemiscale` CLI (defined in `cli.py`) provides subcommands: `api`, `compute synchronous`, `strategist`, `database init/check/reset/migrate`, and `identity add/list/remove/add_scope`.
+
+## Documentation
+
+Always update documentation as part of any PR that warrants it. When a change adds, alters, or removes user-facing behavior:
+
+- Update the relevant Sphinx docs under `docs/` (e.g. `docs/user_guide/`) so guides and API references stay accurate.
+- Add a news fragment under `news/` from `news/TEMPLATE.rst`, filling in only the relevant sections (Added/Changed/Deprecated/Removed/Fixed/Security) and removing the rest.
+
+Treat missing or stale documentation as part of the change, not a follow-up.
