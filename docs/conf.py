@@ -42,7 +42,6 @@ autodoc_mock_imports = [
     "httpx",
     "jose",
     "neo4j",
-    "pydantic",
     "pydantic_settings",
     "starlette",
     "yaml",

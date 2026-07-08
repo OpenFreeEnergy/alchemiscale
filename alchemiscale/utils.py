@@ -1,3 +1,4 @@
+from gufe.protocols import ProtocolDAGResult
 from gufe.tokenization import (
     GufeTokenizable,
     TOKENIZABLE_REGISTRY,
@@ -7,6 +8,9 @@ from gufe.tokenization import (
 )
 from itertools import chain
 import networkx as nx
+import zstandard as zstd
+
+from .compression import decompress_gufe_zstd, json_to_gufe
 
 
 class RegistryBackup:
@@ -112,3 +116,13 @@ def gufe_to_digraph(gufe_obj):
     _ = modify_dependencies(sd, add_edges, is_gufe_obj, mode="encode")
 
     return graph
+
+
+def pdr_from_bytes(buffer: bytes) -> ProtocolDAGResult:
+    try:
+        # Attempt to decompress the ProtocolDAGresult object
+        pdr = decompress_gufe_zstd(buffer)
+    except zstd.ZstdError:
+        # If decompress fails, assume it's a UTF-8 encoded JSON string
+        pdr = json_to_gufe(buffer.decode("utf-8"))
+    return pdr

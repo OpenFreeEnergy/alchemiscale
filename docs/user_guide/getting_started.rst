@@ -457,3 +457,29 @@ If you wish to pull results for only a single :py:class:`~alchemiscale.storage.m
     [<ProtocolDAGResult-54a3ed32cbd3e3d60d87b2a17519e399>]
 
 You can then iteratively create and action new :py:class:`~alchemiscale.storage.models.Task`\s on your desired :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s based on their current estimate and uncertainty, allocating effort where it will be most beneficial.
+
+
+****************************
+Producing archival extracts
+****************************
+
+``alchemiscale`` is an execution system, not an archival system.
+When you want a durable, self-contained snapshot of an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` together with its existing results — for example to deposit on a `FAIR <https://en.wikipedia.org/wiki/FAIR_data>`_ data repository such as Zenodo, to share with collaborators, or to feed into downstream analysis tooling — you can produce an ``AlchemicalArchive`` with::
+
+    >>> an_sk: ScopedKey
+    >>> archive = asc.get_network_archive(an_sk)
+    >>> archive
+    <AlchemicalArchive-6f3c...>
+
+The returned ``AlchemicalArchive`` bundles the :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` with all successful :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s currently available for its :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`\s.
+If the network is not found in the given :py:class:`~alchemiscale.models.Scope`, ``None`` is returned.
+
+You can attach arbitrary, serializable metadata to the archive::
+
+    >>> archive = asc.get_network_archive(an_sk, metadata={"doi": "10.5281/zenodo.1234567"})
+
+To produce archives for several networks at once, use :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_network_archives`, optionally passing a list of per-network metadata dictionaries in the same order.
+
+The archive is a :external+gufe:py:class:`~gufe.tokenization.GufeTokenizable`, so it can be written to and read back from disk with its :external+gufe:py:meth:`~gufe.tokenization.GufeTokenizable.to_json` and :external+gufe:py:meth:`~gufe.tokenization.GufeTokenizable.from_json` methods::
+
+    >>> archive.to_json(file="my_network_archive.json")

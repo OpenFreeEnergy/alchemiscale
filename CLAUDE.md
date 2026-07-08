@@ -75,6 +75,7 @@ The system has four main services communicating through Neo4j and S3:
 - **Frozen Pydantic models**: Core models use `frozen=True` for immutability.
 - **Module docstrings**: Follow the pattern `:mod:\`alchemiscale.module_name\` --- description`.
 - **GUFE integration**: Core chemistry types (`AlchemicalNetwork`, `Transformation`, `ChemicalSystem`, `Protocol`) come from the `gufe` library and are stored/retrieved via their tokenization system (`GufeKey`, `GufeTokenizable`).
+- **`GufeKey` is not stable across `gufe` versions**: A `ScopedKey` is stable once created (it carries the *ingestion-time* `gufe_key`), but a `GufeTokenizable` deserialized later may recompute a *different* `GufeKey` if the `gufe` tokenization has changed since ingestion. Never derive a `ScopedKey` from a freshly-deserialized object's `.key` (e.g. `ScopedKey(gufe_key=obj.key, **scope.to_dict())`) to join against stored data — such a join can silently miss instead of erroring. Instead, obtain the authoritative `ScopedKey` from the server (e.g. `get_network_transformations`, or the keys of `get_network_results`) and fetch the object *by that `ScopedKey`* (e.g. `get_transformation(sk)`). Comparisons purely among objects deserialized in the same process (e.g. "is this transformation in `network.edges`?") are safe, since both sides use the current-stack key consistently.
 
 ## Testing
 
