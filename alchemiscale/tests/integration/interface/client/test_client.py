@@ -7,6 +7,7 @@ from itertools import chain
 import json
 
 from gufe import AlchemicalNetwork
+from gufe.archival import AlchemicalArchive
 from gufe.tokenization import TOKENIZABLE_REGISTRY, GufeKey, JSON_HANDLER
 from gufe.protocols import ProtocolResult
 from gufe.protocols.protocoldag import execute_DAG
@@ -2632,6 +2633,151 @@ class TestClient:
 
         # TODO: can we mix in a success in here somewhere?
         # not possible with current BrokenProtocol, unfortunately
+
+    def test_get_network_archives(
+        self,
+        scope_test,
+        n4js_preloaded,
+        s3os_server_fresh,
+        user_client_no_cache: client.AlchemiscaleClient,
+        network_tyk2,
+        tmpdir,
+    ):
+        user_client = user_client_no_cache
+        n4js = n4js_preloaded
+        s3os_server = s3os_server_fresh
+
+        an = network_tyk2
+        transformation = list(t for t in an.edges if "_solvent" in t.name)[0]
+
+        network_sk = user_client.get_scoped_key(an, scope_test)
+        transformation_sk = user_client.get_scoped_key(transformation, scope_test)
+
+        # create, action, execute, and push results for three tasks on a
+        # single transformation
+        all_tasks = user_client.create_tasks(transformation_sk, count=3)
+        actioned_tasks = user_client.action_tasks(all_tasks, network_sk)
+
+        with tmpdir.as_cwd():
+            protocoldagresults = self._execute_tasks(actioned_tasks, n4js, s3os_server)
+            self._push_results(actioned_tasks, protocoldagresults, n4js, s3os_server)
+
+        # clear local gufe registry of pdr objects so we exercise
+        # deserialization of the objects pulled back from the server
+        for pdr in protocoldagresults:
+            TOKENIZABLE_REGISTRY.pop(pdr.key, None)
+
+        # produce a single-network archive with metadata attached
+        metadata = {"project": "tyk2", "note": "archival extract"}
+        archive = user_client.get_network_archive(
+            network_sk, metadata=metadata, visualize=False
+        )
+
+        assert isinstance(archive, AlchemicalArchive)
+        assert archive.network == an
+        assert archive.metadata == metadata
+
+        # every Transformation in the network should be represented, but only
+        # the one we computed results for should carry ProtocolDAGResults
+        results_by_key = {tf.key: pdrs for tf, pdrs in archive.transformation_results}
+        assert set(results_by_key) == {tf.key for tf in an.edges}
+
+        for tf in an.edges:
+            if tf.key == transformation.key:
+                assert set(results_by_key[tf.key]) == set(protocoldagresults)
+                for pdr in results_by_key[tf.key]:
+                    assert pdr.ok()
+                    assert pdr.transformation_key == transformation.key
+            else:
+                assert results_by_key[tf.key] == []
+
+        # the archive should round-trip through its serialized form
+        roundtrip = AlchemicalArchive.from_json(content=archive.to_json())
+        assert roundtrip == archive
+        assert roundtrip.metadata == metadata
+
+        # a string ScopedKey is accepted and produces an equivalent archive
+        archive_from_str = user_client.get_network_archive(
+            str(network_sk), visualize=False
+        )
+        assert archive_from_str.network == an
+        str_results = {
+            tf.key: pdrs for tf, pdrs in archive_from_str.transformation_results
+        }
+        assert set(str_results[transformation.key]) == set(protocoldagresults)
+
+        # the compress=False path produces an equivalent archive
+        archive_uncompressed = user_client.get_network_archive(
+            network_sk, compress=False, visualize=False
+        )
+        assert archive_uncompressed.network == an
+        uncompressed_results = {
+            tf.key: pdrs for tf, pdrs in archive_uncompressed.transformation_results
+        }
+        assert set(uncompressed_results[transformation.key]) == set(protocoldagresults)
+
+        # a nonexistent network yields None, both in bulk and singly
+        fake_network_sk = ScopedKey(
+            gufe_key=GufeKey(f"AlchemicalNetwork-{'0' * 32}"),
+            **scope_test.to_dict(),
+        )
+
+        # per-network metadata is attached in order, and a not-found network
+        # yields None in its slot
+        archives = user_client.get_network_archives(
+            [network_sk, fake_network_sk],
+            metadata=[metadata, {"unused": "for missing network"}],
+            visualize=False,
+        )
+        assert len(archives) == 2
+        assert isinstance(archives[0], AlchemicalArchive)
+        assert archives[0].network == an
+        assert archives[0].metadata == metadata
+        assert archives[1] is None
+
+        assert user_client.get_network_archive(fake_network_sk, visualize=False) is None
+
+    def test_get_network_archives_validation(
+        self, scope_test, n4js_preloaded, user_client, network_tyk2
+    ):
+        network_sk = user_client.get_scoped_key(network_tyk2, scope_test)
+
+        # duplicate networks are rejected
+        with pytest.raises(ValueError, match="duplicate"):
+            user_client.get_network_archives([network_sk, network_sk])
+
+        # metadata and networks lists must be the same length
+        with pytest.raises(ValueError, match="same length"):
+            user_client.get_network_archives([network_sk], metadata=[{}, {}])
+
+        # unserializable metadata is rejected before any retrieval
+        with pytest.raises(ValueError, match="serialize"):
+            user_client.get_network_archive(network_sk, metadata={"bad": object()})
+
+        # bulk metadata must be a sequence aligned with networks, not a single dict.
+        # This is a subtle case because a one-key dict has len == len(networks),
+        # so a length-only check would pass and iteration would yield the key string.
+        with pytest.raises(ValueError, match="Metadata.*list|metadata.*sequence"):
+            user_client.get_network_archives(
+                [network_sk],
+                metadata={"project": "tyk2"},
+            )
+
+        # each per-network metadata entry must be a dict or None, even if the value
+        # is otherwise JSON-serializable
+        for bad_meta in ["project", ["project", "tyk2"], 1, 1.5, True]:
+            with pytest.raises(ValueError, match="Metadata.*dict|metadata.*mapping"):
+                user_client.get_network_archives(
+                    [network_sk],
+                    metadata=[bad_meta],
+                )
+
+        # None remains valid as a per-network metadata entry
+        user_client.get_network_archives(
+            [network_sk],
+            metadata=[None],
+            visualize=False,
+        )
 
 
 class TestTaskRestartPolicy:

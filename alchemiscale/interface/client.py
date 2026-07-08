@@ -7,16 +7,18 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from enum import StrEnum
 from typing import Any, Literal
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from itertools import chain
 from functools import lru_cache
 
 from async_lru import alru_cache
 import networkx as nx
 from gufe import AlchemicalNetwork, Transformation, ChemicalSystem
-from gufe.tokenization import GufeTokenizable, KeyedChain
+from gufe.archival import AlchemicalArchive
+from gufe.tokenization import GufeTokenizable, KeyedChain, JSON_HANDLER
 from gufe.protocols import ProtocolResult, ProtocolDAGResult
 import zstandard as zstd
 
@@ -34,6 +36,7 @@ from ..storage.models import (
     StrategyState,
 )
 from stratocaster.base import Strategy
+from ..utils import pdr_from_bytes
 from ..validators import validate_network_nonself
 
 from warnings import warn
@@ -1536,12 +1539,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     pdr_bytes,
                 )
 
-        try:
-            # Attempt to decompress the ProtocolDAGResult object
-            pdr = decompress_gufe_zstd(pdr_bytes)
-        except zstd.ZstdError:
-            # If decompress fails, assume it's a UTF-8 encoded JSON string
-            pdr = json_to_gufe(pdr_bytes.decode("utf-8"))
+        pdr = pdr_from_bytes(pdr_bytes)
 
         return pdr
 
@@ -1766,6 +1764,185 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return self._get_network_results(
             network=network, ok=False, compress=compress, visualize=visualize
         )
+
+    def get_network_archives(
+        self,
+        networks: list[ScopedKey | str],
+        metadata: list[dict | None] | None = None,
+        compress: bool = True,
+        visualize: bool = True,
+    ) -> list[AlchemicalArchive | None]:
+        r"""Produce archival-quality extracts for the given ``AlchemicalNetwork``\s.
+
+        Each returned ``AlchemicalArchive`` bundles an
+        ``AlchemicalNetwork`` together with all successful
+        ``ProtocolDAGResult``\s currently available for its
+        ``Transformation``\s, in a form suitable for long-term storage,
+        sharing, and downstream analysis.
+
+        Parameters
+        ----------
+        networks
+            A list of ``AlchemicalNetwork`` ``ScopedKey`` values. The
+            list must not contain duplicate entries.
+        metadata
+            Metadata to attach to the produced ``AlchemicalArchive``
+            objects. This must be a list of dictionaries that are
+            compatible with ``GufeTokenizable`` serialization, in the
+            same order as ``networks``. A ``None`` entry in the list
+            attaches no metadata to the corresponding
+            ``AlchemicalArchive``. Passing ``None`` in place of the
+            list is interpreted as a list of ``None``, which is the
+            default.
+        compress
+            If ``True``, compress objects server-side before shipping
+            them to the client. This is a performance optimization; it
+            has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicators.
+
+        Returns
+        -------
+        A list of ``AlchemicalArchive`` instances matching the order of
+        ``networks``. If a network was not found, ``None`` is returned
+        in its place.
+
+        Raises
+        ------
+        ValueError
+            If the provided metadata is not serializable, if the
+            lengths of the ``metadata`` and ``networks`` lists differ,
+            or if ``networks`` contains duplicate entries.
+
+        """
+        network_sks = [
+            ScopedKey.from_str(network) if isinstance(network, str) else network
+            for network in networks
+        ]
+
+        if len(set(network_sks)) != len(network_sks):
+            raise ValueError("`networks` list must not contain duplicate entries")
+
+        if metadata is None:
+            metadata = [None] * len(network_sks)
+        elif isinstance(metadata, Mapping) or not isinstance(metadata, Sequence):
+            raise ValueError(
+                "`metadata` must be a list/sequence of dictionaries or None"
+            )
+
+        if len(metadata) != len(network_sks):
+            raise ValueError("`metadata` and `networks` lists must be the same length")
+
+        # validate that all metadata is serializable up-front, before
+        # performing any (potentially expensive) retrieval
+        for network_sk, meta in zip(network_sks, metadata):
+            if meta is None:
+                continue
+
+            if not isinstance(meta, Mapping):
+                raise ValueError(
+                    f"Metadata for '{network_sk}' must be a dictionary/mapping or None"
+                )
+
+            try:
+                json.dumps(meta, cls=JSON_HANDLER.encoder)
+            except (TypeError, ValueError) as e:
+                raise ValueError(
+                    f"Unable to serialize metadata for '{network_sk}': {e}"
+                )
+
+        return [
+            self._get_network_archive(
+                network_sk, meta, compress=compress, visualize=visualize
+            )
+            for network_sk, meta in zip(network_sks, metadata)
+        ]
+
+    def get_network_archive(
+        self,
+        network: ScopedKey | str,
+        metadata: dict | None = None,
+        compress: bool = True,
+        visualize: bool = True,
+    ) -> AlchemicalArchive | None:
+        r"""Produce an archival-quality extract for a given ``AlchemicalNetwork``.
+
+        The returned ``AlchemicalArchive`` bundles the
+        ``AlchemicalNetwork`` together with all successful
+        ``ProtocolDAGResult``\s currently available for its
+        ``Transformation``\s, in a form suitable for long-term storage,
+        sharing, and downstream analysis.
+
+        Parameters
+        ----------
+        network
+            The ``ScopedKey`` of the ``AlchemicalNetwork`` to archive.
+        metadata
+            Metadata to attach to the produced ``AlchemicalArchive``.
+            This must be a dictionary that is compatible with
+            ``GufeTokenizable`` serialization.
+        compress
+            If ``True``, compress objects server-side before shipping
+            them to the client. This is a performance optimization; it
+            has no bearing on the result of this method call.
+        visualize
+            If ``True``, show retrieval progress indicators.
+
+        Returns
+        -------
+        An ``AlchemicalArchive`` for the provided ``AlchemicalNetwork``.
+        If the network was not found, ``None`` is returned.
+
+        Raises
+        ------
+        ValueError
+            If the provided metadata is not serializable.
+
+        """
+        return self.get_network_archives(
+            [network],
+            metadata=None if metadata is None else [metadata],
+            compress=compress,
+            visualize=visualize,
+        )[0]
+
+    def _get_network_archive(
+        self,
+        network: ScopedKey,
+        metadata: dict | None,
+        compress: bool = True,
+        visualize: bool = True,
+    ) -> AlchemicalArchive | None:
+        # returns None if the network does not exist in the given Scope
+        if not self.check_exists(network):
+            return None
+
+        an = self.get_network(network, compress=compress, visualize=visualize)
+
+        # retrieve all successful ProtocolDAGResults for the network's
+        # Transformations in parallel, keyed by their authoritative
+        # (server-side) Transformation ScopedKey
+        results = self.get_network_results(
+            network,
+            return_as=ResultFormat.PROTOCOL_DAG_RESULTS,
+            compress=compress,
+            visualize=visualize,
+        )
+
+        # pair each Transformation with its results by fetching the
+        # Transformation via its authoritative ScopedKey. We deliberately do
+        # not derive a ScopedKey from a deserialized Transformation's GufeKey:
+        # a `Transformation` deserialized now may not reproduce the GufeKey it
+        # had when ingested (gufe tokenization can change across versions), so
+        # its key is not a reliable join to the stored ScopedKey.
+        transformation_results = []
+        for transformation_sk, pdrs in results.items():
+            transformation = self.get_transformation(
+                transformation_sk, compress=compress, visualize=False
+            )
+            transformation_results.append((transformation, pdrs))
+
+        return AlchemicalArchive(an, transformation_results, metadata=metadata)
 
     def get_transformation_results(
         self,

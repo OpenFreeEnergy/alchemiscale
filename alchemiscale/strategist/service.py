@@ -37,6 +37,7 @@ from ..settings import Neo4jStoreSettings, S3ObjectStoreSettings
 from ..compression import compress_keyed_chain_zstd, decompress_gufe_zstd, json_to_gufe
 from ..sleep import InterruptableSleep, SleepInterrupted
 from .settings import StrategistSettings
+from ..utils import pdr_from_bytes
 
 
 def execute_strategy_worker(
@@ -173,12 +174,7 @@ class StrategistService:
                 location=result_ref.location, ok=result_ref.ok
             )
 
-        # Decompress the raw bytes to get ProtocolDAGResult
-        try:
-            pdr = decompress_gufe_zstd(pdr_bytes)
-        except zstd.ZstdError:
-            # Fallback to JSON deserialization for uncompressed data
-            pdr = json_to_gufe(pdr_bytes.decode("utf-8"))
+        pdr = pdr_from_bytes(pdr_bytes)
 
         if self._cache_enabled:
             try:
