@@ -12,7 +12,7 @@ from functools import lru_cache
 from gufe.tokenization import GufeKey
 
 from ..models import ScopedKey
-from .models import ProtocolDAGResultRef
+from .models import ProtocolDAGResultRef, ProtocolDAGResultLog
 from ..settings import S3ObjectStoreSettings
 
 # default filename for object store files
@@ -297,3 +297,81 @@ class S3ObjectStore:
         pdr_bytes = self._get_bytes(location)
 
         return pdr_bytes
+
+    def push_protocoldagresult_log(
+        self,
+        log_content: str,
+        stream: str,
+        protocoldagresult_gufekey: GufeKey,
+        transformation: ScopedKey,
+        protocoldagresult_ok: bool,
+        creator: str | None = None,
+    ) -> ProtocolDAGResultLog:
+        """Push stdout or stderr log for a ProtocolDAGResult to this ObjectStore.
+
+        Parameters
+        ----------
+        log_content
+            The log content (stdout or stderr) as a string.
+        stream
+            Either "stdout" or "stderr".
+        protocoldagresult_gufekey
+            The GufeKey of the ProtocolDAGResult this log belongs to.
+        transformation
+            The ScopedKey of the Transformation this log corresponds to.
+        protocoldagresult_ok
+            ``True`` if ProtocolDAGResult completed successfully; ``False`` if failed.
+        creator
+            Identifier of the entity creating this log (usually compute_service_id).
+
+        Returns
+        -------
+        ProtocolDAGResultLog
+            Reference to the log in the object store.
+
+        """
+        ok = protocoldagresult_ok
+        route = "results" if ok else "failures"
+
+        # build `location` based on gufe key
+        location = os.path.join(
+            "protocoldagresult",
+            *transformation.scope.to_tuple(),
+            transformation.gufe_key,
+            route,
+            protocoldagresult_gufekey,
+            f"{stream}.log",
+        )
+
+        # encode log content to bytes (UTF-8)
+        log_bytes = log_content.encode("utf-8")
+        self._store_bytes(location, log_bytes)
+
+        return ProtocolDAGResultLog(
+            location=location,
+            obj_key=protocoldagresult_gufekey,
+            scope=transformation.scope,
+            stream=stream,
+            datetime_created=datetime.datetime.now(tz=datetime.UTC),
+            creator=creator,
+        )
+
+    def pull_protocoldagresult_log(
+        self,
+        location: str,
+    ) -> str:
+        """Pull the log content for a ProtocolDAGResult.
+
+        Parameters
+        ----------
+        location
+            The full path in the object store to the log file.
+
+        Returns
+        -------
+        str
+            The log content as a string.
+
+        """
+        log_bytes = self._get_bytes(location)
+        return log_bytes.decode("utf-8")
