@@ -2179,7 +2179,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         Returns
         -------
         list[TaskAttempt]
-            A list of `TaskAttempt`s, one per execution attempt of the `Task`,
+            A list of `TaskAttempt` records, one per execution attempt of the `Task`,
             most recent first.
         """
         params = dict(limit=limit)
@@ -2211,7 +2211,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_task_tracebacks(
         self, task: ScopedKey, limit: int | None = None
     ) -> list[TaskTracebacks]:
-        """Get the tracebacks from failed `ProtocolDAGResult`s of a `Task`.
+        """Get the tracebacks from failed `ProtocolDAGResult` objects of a `Task`.
 
         Parameters
         ----------
@@ -2234,8 +2234,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_scope_compute_share(self, scope: Scope) -> float:
         """Get this identity's fractional compute share within the given `Scope`.
 
-        The share is computed server-side as this `Scope`'s aggregate fraction
-        relative to its sibling `Scope`s; only the aggregate fraction is
+        The share is computed server-side as the aggregate fraction for this `Scope`
+        relative to its sibling Scopes; only the aggregate fraction is
         returned. The identity must hold the given `Scope`.
 
         Parameters
@@ -2258,7 +2258,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_task_result_recs(
         self, task: ScopedKey, ok: bool | None = None
     ) -> list[ProtocolDAGResultRec]:
-        """Get records describing the `ProtocolDAGResult`s of a `Task`.
+        """Get records describing the `ProtocolDAGResult` objects of a `Task`.
 
         Parameters
         ----------
@@ -2271,7 +2271,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         Returns
         -------
         list[ProtocolDAGResultRec]
-            A list of `ProtocolDAGResultRec`s, one per `ProtocolDAGResult` of
+            A list of `ProtocolDAGResultRec` records, one per `ProtocolDAGResult` of
             the `Task`, most recent first.
         """
         params = dict(ok=ok)
@@ -2281,7 +2281,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_result_unit_recs(
         self, pdrr: ScopedKey | ProtocolDAGResultRec
     ) -> list[ProtocolUnitResultRec]:
-        """Get records describing the `ProtocolUnitResult`s of a `ProtocolDAGResult`.
+        """Get records describing the `ProtocolUnitResult` objects of a `ProtocolDAGResult`.
 
         Parameters
         ----------
@@ -2292,7 +2292,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         Returns
         -------
         list[ProtocolUnitResultRec]
-            A list of `ProtocolUnitResultRec`s, one per `ProtocolUnitResult`,
+            A list of `ProtocolUnitResultRec` records, one per `ProtocolUnitResult`,
             in dependency order.
         """
         pdrr_sk = self._as_scoped_key(pdrr)

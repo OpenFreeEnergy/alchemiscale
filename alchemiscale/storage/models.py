@@ -201,10 +201,10 @@ class TaskProvenance(BaseModel):
     outcome
         The terminal outcome of the attempt; `None` while the attempt is open.
     units_completed
-        The number of distinct `ProtocolUnit`s successfully completed in this
+        The number of distinct `ProtocolUnit` objects successfully completed in this
         attempt, as of the last progress update.
     units_total
-        The total number of `ProtocolUnit`s in the attempt's `ProtocolDAG`.
+        The total number of `ProtocolUnit` objects in the attempt's `ProtocolDAG`.
     """
 
     compute_service_id: ComputeServiceID
@@ -967,7 +967,7 @@ class TaskDetails(BaseModel):
 
 
 class TaskUnitTraceback(BaseModel):
-    """A single `ProtocolUnitFailure`'s traceback within a `TaskTracebacks`."""
+    """A single `ProtocolUnitFailure` traceback within a `TaskTracebacks`."""
 
     failure_key: GufeKey
     source_key: GufeKey

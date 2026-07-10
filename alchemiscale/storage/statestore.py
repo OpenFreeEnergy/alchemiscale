@@ -3747,7 +3747,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Return `TaskDetails` for each given `Task`, in input order.
 
         `None` is returned in place of any `Task` that does not exist. The
-        `current_claim`'s live progress fields stay `None` until a compute
+        The `current_claim` live progress fields stay `None` until a compute
         service reports progress (section 2 of the design).
         """
         q = """
@@ -3818,11 +3818,11 @@ class Neo4jStore(AlchemiscaleStateStore):
     def get_task_tracebacks(
         self, task: ScopedKey, limit: int | None = None
     ) -> list[TaskTracebacks]:
-        """Return tracebacks for the failed `ProtocolDAGResult`s of a `Task`.
+        """Return tracebacks for the failed `ProtocolDAGResult` objects of a `Task`.
 
         One `TaskTracebacks` record per failed `ProtocolDAGResultRef`, most
         recent first (by `datetime_created`). Where per-unit
-        `ProtocolUnitResultRef`s exist (section 3.4), each failure entry carries
+        `ProtocolUnitResultRef` nodes exist (section 3.4), each failure entry carries
         the `ScopedKey` of the corresponding unit ref; otherwise it is `None`.
         """
         q = """

@@ -65,7 +65,7 @@ class GufeKeyLogHandler(logging.Handler):
 
 
 class SynchronousExecutionHooks(ExecutionHooks):
-    """Execution hooks binding one `Task`'s DAG execution to log capture and
+    """Execution hooks binding the DAG execution of one `Task` to log capture and
     progress reporting.
 
     Parameters
