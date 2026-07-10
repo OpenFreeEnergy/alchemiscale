@@ -14,7 +14,6 @@ from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG
 
 from alchemiscale.compression import compress_gufe_zstd
-from alchemiscale.models import Scope
 from alchemiscale.storage.models import (
     ComputeServiceID,
     ComputeServiceRegistration,
@@ -271,9 +270,12 @@ class TestClientIntrospection:
         n4js.update_task_progress(csid, {str(task_sk): (2, 5)})
         assert user_client.get_tasks_progress([task_sk]) == [(2, 5)]
 
-        # compute share: this scope's running Tasks over same-level siblings.
-        # only this scope has a running Task, so the org-level share is 1.0
-        share = user_client.get_scope_compute_share(Scope(org=scope_test.org))
+        # compute share: the project's running Tasks over sibling projects in
+        # the same org-campaign. Query at the fully-specified project scope the
+        # identity actually holds (an org-level query would require org-level
+        # access, which this identity lacks); only this project has a running
+        # Task, so its share is 1.0.
+        share = user_client.get_scope_compute_share(scope_test)
         assert share == pytest.approx(1.0)
 
     def test_set_tasks_status_with_reason(
