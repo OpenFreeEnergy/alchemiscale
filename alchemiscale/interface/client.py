@@ -2187,12 +2187,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return [TaskAttempt.from_dict(attempt) for attempt in attempts]
 
     def get_tasks_details(self, tasks: list[ScopedKey]) -> list[TaskDetails | None]:
-        """Get summary details for multiple `Task`s.
+        """Get summary details for multiple Tasks.
 
         Parameters
         ----------
         tasks
-            The `ScopedKey`s of the `Task`s to retrieve details for.
+            The `ScopedKey` of each `Task` to retrieve details for.
 
         Returns
         -------
@@ -2219,7 +2219,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The `ScopedKey` of the `Task` to retrieve tracebacks for.
         limit
             If given, return tracebacks for at most this many of the most
-            recent failed `ProtocolDAGResult`s.
+            recent failed `ProtocolDAGResult` objects.
 
         Returns
         -------
@@ -2387,8 +2387,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_task_stdout(self, task: ScopedKey) -> str:
         """Get a human-readable rendering of all captured stdout for a `Task`.
 
-        Concatenates stdout across all of the `Task`'s `ProtocolDAGResult`s
-        (most recent first), with section headers identifying each result,
+        Concatenates stdout across all `ProtocolDAGResult` objects of the
+        `Task` (most recent first), with section headers identifying each result,
         unit, and filename.
 
         Parameters
@@ -2406,8 +2406,8 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_task_stderr(self, task: ScopedKey) -> str:
         """Get a human-readable rendering of all captured stderr for a `Task`.
 
-        Concatenates stderr across all of the `Task`'s `ProtocolDAGResult`s
-        (most recent first), with section headers identifying each result,
+        Concatenates stderr across all `ProtocolDAGResult` objects of the
+        `Task` (most recent first), with section headers identifying each result,
         unit, and filename.
 
         Parameters
@@ -2425,12 +2425,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
     def get_tasks_progress(
         self, tasks: list[ScopedKey]
     ) -> list[tuple[int, int] | None]:
-        """Get execution progress for multiple `Task`s.
+        """Get execution progress for multiple Tasks.
 
         Parameters
         ----------
         tasks
-            The `ScopedKey`s of the `Task`s to retrieve progress for.
+            The `ScopedKey` of each `Task` to retrieve progress for.
 
         Returns
         -------

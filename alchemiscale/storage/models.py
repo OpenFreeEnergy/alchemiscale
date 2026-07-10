@@ -659,12 +659,14 @@ class ProtocolUnitResultRef(ObjectStoreRef):
 
     Note
     ----
-    The `has_*` flags and (nothing else) are *mutated in place* via Cypher after
-    the node is created, as artifacts arrive. The node's `_scoped_key`/`_gufe_key`
+    The ``has_logs``, ``has_stdout``, and ``has_stderr`` flags (and nothing
+    else) are mutated in place via Cypher after
+    the node is created, as artifacts arrive. The node's `_scoped_key` and
+    `_gufe_key`
     are computed once at creation and never recomputed, so lookups stay stable
     even though these tokenizable-contributing fields change. This is safe only
-    because `ProtocolUnitResultRef`s are an internal state-store detail, never
-    re-tokenized after creation; keep it that way.
+    because `ProtocolUnitResultRef` nodes are an internal state-store detail,
+    never re-tokenized after creation; keep it that way.
     """
 
     ok: bool

@@ -3884,8 +3884,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         return records
 
     def get_scope_compute_share(self, scope: Scope) -> float:
-        """Return the fraction of currently-`running` `Task`s in `scope`
-        relative to all `Scope`s at the same level.
+        """Return the fraction of currently-`running` Tasks in `scope`
+        relative to all Scopes at the same level.
 
         - `Scope('org')` -> the org's running Tasks / all running Tasks;
         - `Scope('org', 'campaign')` -> the campaign's / all campaigns in that org;
