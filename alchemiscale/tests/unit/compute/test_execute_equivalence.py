@@ -70,14 +70,14 @@ def stateB() -> ChemicalSystem:
 def success_dag(stateA, stateB):
     """A DummyProtocol DAG: every unit succeeds (1 init + 21 sims + 1 finish)."""
     proto = DummyProtocol(settings=DummyProtocol.default_settings())
-    return proto.create(stateA=stateA, stateB=stateB, name="success")
+    return proto.create(stateA=stateA, stateB=stateB, mapping=None, name="success")
 
 
 @pytest.fixture
 def failure_dag(stateA, stateB):
     """A BrokenProtocol DAG: exactly one unit always fails, halting the DAG."""
     proto = BrokenProtocol(settings=BrokenProtocol.default_settings())
-    return proto.create(stateA=stateA, stateB=stateB, name="failure")
+    return proto.create(stateA=stateA, stateB=stateB, mapping=None, name="failure")
 
 
 # ---------------------------------------------------------------------------
@@ -591,7 +591,7 @@ def test_equivalence_interrupt_propagates(
     proto_cls, exc_type, stateA, stateB, tmp_path
 ):
     proto = proto_cls(settings=proto_cls.default_settings())
-    dag = proto.create(stateA=stateA, stateB=stateB, name="interrupt")
+    dag = proto.create(stateA=stateA, stateB=stateB, mapping=None, name="interrupt")
 
     gufe_dir = tmp_path / "gufe"
     alch_dir = tmp_path / "alch"
@@ -645,7 +645,7 @@ def test_equivalence_retry_then_success(stateA, stateB, tmp_path):
     proto = RetryThenSucceedProtocol(
         settings=RetryThenSucceedProtocol.default_settings()
     )
-    dag = proto.create(stateA=stateA, stateB=stateB, name="retry")
+    dag = proto.create(stateA=stateA, stateB=stateB, mapping=None, name="retry")
 
     flaky_key = _flaky_source_key(dag)
     n_retries = _RETRY_FAIL_COUNT + 1  # comfortably >= N
@@ -707,7 +707,7 @@ def test_equivalence_retry_then_success(stateA, stateB, tmp_path):
 
 def test_equivalence_stream_dirs(stateA, stateB, tmp_path):
     proto = StreamProtocol(settings=StreamProtocol.default_settings())
-    dag = proto.create(stateA=stateA, stateB=stateB, name="stream")
+    dag = proto.create(stateA=stateA, stateB=stateB, mapping=None, name="stream")
 
     gufe_dir = tmp_path / "gufe"
     alch_dir = tmp_path / "alch"

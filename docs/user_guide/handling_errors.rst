@@ -119,7 +119,7 @@ Each returns ``""`` when nothing was captured.
 
 .. note::
    Logs and stream capture are opt-in on the compute side and depend on what each :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` chooses to emit and archive.
-   If a :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` writes nothing to its per-unit stdout/stderr, or logs nothing through :external+gufe:py:attr:`~gufe.protocols.protocolunit.ProtocolUnit.logger`, these methods will return empty results even for a :py:class:`~alchemiscale.storage.models.Task` that failed.
+   If a :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` writes nothing to its per-unit stdout/stderr, or logs nothing through ``ProtocolUnit.logger``, these methods will return empty results even for a :py:class:`~alchemiscale.storage.models.Task` that failed.
    See :ref:`compute` for details on the capture mechanism and the settings that govern it.
 
 

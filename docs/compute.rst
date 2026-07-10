@@ -210,7 +210,7 @@ All of them have sensible defaults, so you only need to set them to change the d
     Captured streams are what :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_stdout`, :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_stderr`, :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_stdout`, and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_stderr` return.
 
 ``capture_logs``
-    If ``true`` (the default), log records emitted through ``gufe``'s ``gufekey`` logger namespace (that is, protocol logs written via :external+gufe:py:attr:`~gufe.protocols.protocolunit.ProtocolUnit.logger`) are captured per unit result and uploaded alongside results.
+    If ``true`` (the default), log records emitted through ``gufe``'s ``gufekey`` logger namespace (that is, protocol logs written via ``ProtocolUnit.logger``) are captured per unit result and uploaded alongside results.
     Capture is scoped to the ``gufekey`` namespace only; records from third-party library loggers are **not** captured.
     Captured logs are what :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_logs` and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_logs` return.
 

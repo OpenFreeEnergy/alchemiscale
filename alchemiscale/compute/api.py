@@ -384,6 +384,15 @@ async def set_task_result(
     protocoldagresult_ = body_["protocoldagresult"]
     compute_service_id = body_["compute_service_id"]
 
+    # the compute client serializes a missing id as the string "None"; treat
+    # that (and a genuine null) as "no compute service", so provenance
+    # finalization is simply skipped rather than erroring on an invalid id
+    compute_service_id_ = (
+        ComputeServiceID(compute_service_id)
+        if compute_service_id and compute_service_id != "None"
+        else None
+    )
+
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
 
@@ -409,7 +418,7 @@ async def set_task_result(
     result_sk: ScopedKey = n4js.set_task_result(
         task=task_sk,
         protocoldagresultref=protocoldagresultref,
-        compute_service_id=ComputeServiceID(compute_service_id),
+        compute_service_id=compute_service_id_,
     )
 
     # derive one ProtocolUnitResultRef per unit result, and extract any embedded
