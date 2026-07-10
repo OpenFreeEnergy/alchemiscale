@@ -654,9 +654,20 @@ class TestStateStoreIntrospection:
         running_tasks(scope_a, 3, "a")  # 3 running in orgA
         running_tasks(scope_b, 1, "b")  # 1 running in orgB
 
-        # orgA's share of all running tasks across orgs: 3 / (3 + 1)
-        share = n4js.get_scope_compute_share(Scope(org="orgA"))
-        assert share == pytest.approx(0.75)
+        # org-level: orgA's share of all running tasks across orgs: 3 / (3 + 1)
+        assert n4js.get_scope_compute_share(Scope(org="orgA")) == pytest.approx(0.75)
+
+        # campaign-level: orgA/camp's share of all campaigns in orgA (only one)
+        assert n4js.get_scope_compute_share(Scope("orgA", "camp")) == pytest.approx(1.0)
+
+        # project-level: orgA/camp/proj's share of all projects in orgA-camp
+        assert n4js.get_scope_compute_share(
+            Scope("orgA", "camp", "proj")
+        ) == pytest.approx(1.0)
 
         # empty population -> 0.0
         assert n4js.get_scope_compute_share(Scope(org="orgC")) == 0.0
+
+        # a scope with no org cannot be leveled
+        with pytest.raises(ValueError):
+            n4js.get_scope_compute_share(Scope())

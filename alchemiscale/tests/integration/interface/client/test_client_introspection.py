@@ -171,7 +171,11 @@ class TestClientIntrospection:
         purr_sk = unit_recs[0].scoped_key
         location = n4js.get_gufe(purr_sk).location
 
-        s3os.push_protocol_unit_result_logs(location, "hello from the unit log\n")
+        # a timestamped line plus an untimestamped one, so both the
+        # timestamp-sorted and unsorted paths of get_result_logs(order='time')
+        # are exercised
+        logtext = "[2026-07-10 00:00:00] [gk] [INFO] first line\nsecond line\n"
+        s3os.push_protocol_unit_result_logs(location, logtext)
         n4js.set_protocol_unit_result_ref_artifacts(purr_sk, has_logs=True)
         s3os.push_protocol_unit_result_streams(
             location, "stdout", {"out.txt": b"captured stdout\n"}
@@ -183,7 +187,7 @@ class TestClientIntrospection:
         n4js.set_protocol_unit_result_ref_artifacts(purr_sk, has_stderr=True)
 
         # single-unit retrieval (accepts a ScopedKey or a *Rec)
-        assert user_client.get_result_unit_logs(purr_sk) == "hello from the unit log\n"
+        assert user_client.get_result_unit_logs(purr_sk) == logtext
         assert user_client.get_result_unit_stdout(purr_sk) == {
             "out.txt": "captured stdout\n"
         }
@@ -196,9 +200,11 @@ class TestClientIntrospection:
         if no_logs:
             assert user_client.get_result_unit_logs(no_logs[0].scoped_key) is None
 
-        # rendered aggregations include the captured content
-        rendered = user_client.get_result_logs(pdrr_sk)
-        assert "hello from the unit log" in rendered
+        # rendered aggregations include the captured content, in both orderings
+        rendered_unit = user_client.get_result_logs(pdrr_sk)
+        assert "first line" in rendered_unit
+        rendered_time = user_client.get_result_logs(pdrr_sk, order="time")
+        assert "first line" in rendered_time
         assert "captured stdout" in user_client.get_task_stdout(task_sk)
         assert "captured stderr" in user_client.get_task_stderr(task_sk)
 
