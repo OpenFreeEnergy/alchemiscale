@@ -82,6 +82,7 @@ class ComputeServiceRegistration(BaseModel):
     heartbeat: datetime.datetime
     failure_times: list[datetime.datetime] = []
     manager_name: str | None = None
+    hostname: str | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -150,14 +151,84 @@ class ComputeManagerRegistration(BaseModel):
         return ComputeManagerID("-".join([self.name, self.uuid]))
 
 
+class TaskOutcomeEnum(Enum):
+    """Terminal outcome of a single execution attempt of a `Task`.
+
+    Attributes
+    ----------
+    complete
+        The attempt produced a successful `ProtocolDAGResult`.
+    error
+        The attempt produced a failed `ProtocolDAGResult`, or errored during
+        `ProtocolDAG` creation.
+    expired
+        The attempt's compute service lost its registration (expiry or
+        deregistration) before the attempt produced a result.
+    released
+        A user forced the claimed `Task` to another status (e.g. `waiting`,
+        `invalid`, `deleted`) before the attempt produced a result.
+    """
+
+    complete = "complete"
+    error = "error"
+    expired = "expired"
+    released = "released"
+
+
 class TaskProvenance(BaseModel):
-    computeserviceid: ComputeServiceID
-    datetime_start: datetime.datetime
-    datetime_end: datetime.datetime
+    """An immutable record of a single execution attempt of a `Task`.
+
+    A `TaskProvenance` node is created at claim time and finalized when the
+    attempt ends. It survives claim teardown and registration expiry, so that
+    the history of *who ran what, when* is preserved. The identifying
+    information (compute service id, hostname, manager name) is copied onto the
+    record rather than held as a relationship to the (potentially deleted)
+    `ComputeServiceRegistration`.
+
+    Attributes
+    ----------
+    compute_service_id
+        The identifier of the compute service that claimed the `Task`.
+    hostname
+        The hostname of the compute service, copied from its registration.
+    manager_name
+        The name of the compute manager responsible for the compute service,
+        if any.
+    datetime_claimed
+        When the `Task` was claimed for this attempt.
+    datetime_end
+        When the attempt was finalized; `None` while the attempt is open.
+    outcome
+        The terminal outcome of the attempt; `None` while the attempt is open.
+    units_completed
+        The number of distinct `ProtocolUnit`s successfully completed in this
+        attempt, as of the last progress update.
+    units_total
+        The total number of `ProtocolUnit`s in the attempt's `ProtocolDAG`.
+    """
+
+    compute_service_id: ComputeServiceID
+    hostname: str | None = None
+    manager_name: str | None = None
+    datetime_claimed: datetime.datetime
+    datetime_end: datetime.datetime | None = None
+    outcome: TaskOutcomeEnum | None = None
+    units_completed: int | None = None
+    units_total: int | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    # this should include versions of various libraries
+    def to_dict(self):
+        dct = self.model_dump()
+        dct["compute_service_id"] = str(self.compute_service_id)
+        dct["outcome"] = self.outcome.value if self.outcome is not None else None
+        return dct
+
+    @classmethod
+    def from_dict(cls, dct):
+        dct_ = copy(dct)
+        dct_["compute_service_id"] = ComputeServiceID(dct_["compute_service_id"])
+        return cls(**dct_)
 
 
 class TaskStatusEnum(Enum):
@@ -189,6 +260,8 @@ class Task(GufeTokenizable):
     priority: int
     claim: str | None
     datetime_created: datetime.datetime | None
+    datetime_status_changed: datetime.datetime | None
+    reason: str | None
     creator: str | None
     extends: str | None
 
@@ -198,6 +271,8 @@ class Task(GufeTokenizable):
         status: str | TaskStatusEnum = TaskStatusEnum.waiting,
         priority: int = 10,
         datetime_created: datetime.datetime | None = None,
+        datetime_status_changed: datetime.datetime | None = None,
+        reason: str | None = None,
         creator: str | None = None,
         extends: str | None = None,
         claim: str | None = None,
@@ -215,6 +290,8 @@ class Task(GufeTokenizable):
             else datetime.datetime.now(tz=datetime.UTC)
         )
 
+        self.datetime_status_changed = datetime_status_changed
+        self.reason = reason
         self.creator = creator
         self.extends = extends
         self.claim = claim
@@ -228,6 +305,8 @@ class Task(GufeTokenizable):
             "status": self.status.value,
             "priority": self.priority,
             "datetime_created": self.datetime_created,
+            "datetime_status_changed": self.datetime_status_changed,
+            "reason": self.reason,
             "creator": self.creator,
             "extends": self.extends,
             "claim": self.claim,
@@ -552,6 +631,119 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         return super()._from_dict(d_)
 
 
+class ProtocolUnitResultRef(ObjectStoreRef):
+    """A reference to the artifacts of a single `ProtocolUnitResult` or
+    `ProtocolUnitFailure` within a `ProtocolDAGResult`.
+
+    One `ProtocolUnitResultRef` node is derived per unit result when a
+    `ProtocolDAGResultRef` is stored, keyed by the unit result's gufe key. The
+    `has_*` flags record which per-unit artifacts (logs, stdout, stderr) are
+    present in the object store under `location`.
+
+    Attributes
+    ----------
+    obj_key
+        The gufe key of the `ProtocolUnitResult`/`ProtocolUnitFailure`.
+    source_key
+        The gufe key of the originating `ProtocolUnit`.
+    name
+        The name of the unit result, if any.
+    ok
+        Whether the unit result is a success (`True`) or failure (`False`).
+    start_time, end_time
+        When execution of the unit attempt began and ended.
+    location
+        The object store prefix under which this unit result's artifacts live.
+    has_logs, has_stdout, has_stderr
+        Whether captured log/stdout/stderr artifacts exist for this unit result.
+
+    Note
+    ----
+    The `has_*` flags and (nothing else) are *mutated in place* via Cypher after
+    the node is created, as artifacts arrive. The node's `_scoped_key`/`_gufe_key`
+    are computed once at creation and never recomputed, so lookups stay stable
+    even though these tokenizable-contributing fields change. This is safe only
+    because `ProtocolUnitResultRef`s are an internal state-store detail, never
+    re-tokenized after creation; keep it that way.
+    """
+
+    ok: bool
+    source_key: GufeKey
+    name: str | None
+    start_time: datetime.datetime | None
+    end_time: datetime.datetime | None
+    has_logs: bool
+    has_stdout: bool
+    has_stderr: bool
+
+    def __init__(
+        self,
+        *,
+        location: str | None = None,
+        obj_key: GufeKey,
+        source_key: GufeKey,
+        scope: Scope,
+        ok: bool,
+        name: str | None = None,
+        start_time: datetime.datetime | None = None,
+        end_time: datetime.datetime | None = None,
+        has_logs: bool = False,
+        has_stdout: bool = False,
+        has_stderr: bool = False,
+    ):
+        self.location = location
+        self.obj_key = GufeKey(obj_key)
+        self.source_key = GufeKey(source_key)
+        self.scope = scope
+        self.ok = ok
+        self.name = name
+        self.start_time = start_time
+        self.end_time = end_time
+        self.has_logs = has_logs
+        self.has_stdout = has_stdout
+        self.has_stderr = has_stderr
+
+    def _to_dict(self):
+        return {
+            "location": self.location,
+            "obj_key": str(self.obj_key),
+            "source_key": str(self.source_key),
+            "scope": str(self.scope),
+            "ok": self.ok,
+            "name": self.name,
+            "start_time": (
+                self.start_time.isoformat() if self.start_time is not None else None
+            ),
+            "end_time": (
+                self.end_time.isoformat() if self.end_time is not None else None
+            ),
+            "has_logs": self.has_logs,
+            "has_stdout": self.has_stdout,
+            "has_stderr": self.has_stderr,
+        }
+
+    @classmethod
+    def _from_dict(cls, d):
+        d_ = copy(d)
+        d_["scope"] = Scope.from_str(d["scope"])
+        d_["source_key"] = GufeKey(d["source_key"])
+        d_["start_time"] = (
+            datetime.datetime.fromisoformat(d["start_time"])
+            if d.get("start_time") is not None
+            else None
+        )
+        d_["end_time"] = (
+            datetime.datetime.fromisoformat(d["end_time"])
+            if d.get("end_time") is not None
+            else None
+        )
+        return cls(**d_)
+
+    @classmethod
+    def _defaults(cls):
+        return super()._defaults()
+
+
 class StrategyModeEnum(StrEnum):
     full = "full"
     partial = "partial"
@@ -606,3 +798,320 @@ class StrategyState(BaseModel):
     @classmethod
     def from_dict(cls, d):
         return cls(**d)
+
+
+def _coerce_datetime(v) -> datetime.datetime | None:
+    """Coerce a neo4j ``DateTime``, ISO string, or ``datetime`` to ``datetime``."""
+    if v is None:
+        return None
+    if hasattr(v, "to_native"):
+        return v.to_native()
+    if isinstance(v, str):
+        return datetime.datetime.fromisoformat(v)
+    return v
+
+
+def _iso(v: datetime.datetime | None) -> str | None:
+    return v.isoformat() if v is not None else None
+
+
+# --- client-facing API record models --------------------------------------
+#
+# These models are the user-facing surface for Task introspection. They are
+# deliberately decoupled from the state-store node types (`TaskProvenance`,
+# `ProtocolDAGResultRef`, `ProtocolUnitResultRef`): the two families evolve
+# independently, joined only by `ScopedKey`s. User-level names are used
+# throughout; no storage jargon (`Ref` suffixes, `pdrr`/`purr`) leaks in.
+
+
+class TaskAttempt(BaseModel):
+    """A single execution attempt of a `Task`, as reported by `get_task_history`.
+
+    Bundles a `TaskProvenance` record's properties with the `ScopedKey` of the
+    `ProtocolDAGResultRef` the attempt produced (via `PROVENANCE_OF`), where one
+    exists; `expired`/`released` attempts have none.
+    """
+
+    compute_service_id: str
+    hostname: str | None = None
+    manager_name: str | None = None
+    datetime_claimed: datetime.datetime
+    datetime_end: datetime.datetime | None = None
+    outcome: TaskOutcomeEnum | None = None
+    units_completed: int | None = None
+    units_total: int | None = None
+    protocoldagresultref: ScopedKey | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return {
+            "compute_service_id": self.compute_service_id,
+            "hostname": self.hostname,
+            "manager_name": self.manager_name,
+            "datetime_claimed": _iso(self.datetime_claimed),
+            "datetime_end": _iso(self.datetime_end),
+            "outcome": self.outcome.value if self.outcome is not None else None,
+            "units_completed": self.units_completed,
+            "units_total": self.units_total,
+            "protocoldagresultref": (
+                str(self.protocoldagresultref)
+                if self.protocoldagresultref is not None
+                else None
+            ),
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(
+            compute_service_id=d["compute_service_id"],
+            hostname=d.get("hostname"),
+            manager_name=d.get("manager_name"),
+            datetime_claimed=_coerce_datetime(d["datetime_claimed"]),
+            datetime_end=_coerce_datetime(d.get("datetime_end")),
+            outcome=(
+                TaskOutcomeEnum(d["outcome"]) if d.get("outcome") is not None else None
+            ),
+            units_completed=d.get("units_completed"),
+            units_total=d.get("units_total"),
+            protocoldagresultref=(
+                ScopedKey.from_str(d["protocoldagresultref"])
+                if d.get("protocoldagresultref") is not None
+                else None
+            ),
+        )
+
+
+class TaskClaim(BaseModel):
+    """The live claim currently held on a `running` `Task`."""
+
+    compute_service_id: str
+    hostname: str | None = None
+    datetime_claimed: datetime.datetime | None = None
+    units_completed: int | None = None
+    units_total: int | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return {
+            "compute_service_id": self.compute_service_id,
+            "hostname": self.hostname,
+            "datetime_claimed": _iso(self.datetime_claimed),
+            "units_completed": self.units_completed,
+            "units_total": self.units_total,
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(
+            compute_service_id=d["compute_service_id"],
+            hostname=d.get("hostname"),
+            datetime_claimed=_coerce_datetime(d.get("datetime_claimed")),
+            units_completed=d.get("units_completed"),
+            units_total=d.get("units_total"),
+        )
+
+
+class TaskDetails(BaseModel):
+    """Bulk indicator summary for a `Task`, as returned by `get_tasks_details`."""
+
+    task: ScopedKey
+    status: TaskStatusEnum
+    datetime_status_changed: datetime.datetime | None = None
+    reason: str | None = None
+    num_claims: int = 0
+    current_claim: TaskClaim | None = None
+    most_recent_attempt: TaskAttempt | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return {
+            "task": str(self.task),
+            "status": self.status.value,
+            "datetime_status_changed": _iso(self.datetime_status_changed),
+            "reason": self.reason,
+            "num_claims": self.num_claims,
+            "current_claim": (
+                self.current_claim.to_dict() if self.current_claim is not None else None
+            ),
+            "most_recent_attempt": (
+                self.most_recent_attempt.to_dict()
+                if self.most_recent_attempt is not None
+                else None
+            ),
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(
+            task=ScopedKey.from_str(d["task"]),
+            status=TaskStatusEnum(d["status"]),
+            datetime_status_changed=_coerce_datetime(d.get("datetime_status_changed")),
+            reason=d.get("reason"),
+            num_claims=d.get("num_claims", 0),
+            current_claim=(
+                TaskClaim.from_dict(d["current_claim"])
+                if d.get("current_claim") is not None
+                else None
+            ),
+            most_recent_attempt=(
+                TaskAttempt.from_dict(d["most_recent_attempt"])
+                if d.get("most_recent_attempt") is not None
+                else None
+            ),
+        )
+
+
+class TaskUnitTraceback(BaseModel):
+    """A single `ProtocolUnitFailure`'s traceback within a `TaskTracebacks`."""
+
+    failure_key: GufeKey
+    source_key: GufeKey
+    traceback: str
+    protocolunitresultref: ScopedKey | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return {
+            "failure_key": str(self.failure_key),
+            "source_key": str(self.source_key),
+            "traceback": self.traceback,
+            "protocolunitresultref": (
+                str(self.protocolunitresultref)
+                if self.protocolunitresultref is not None
+                else None
+            ),
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(
+            failure_key=GufeKey(d["failure_key"]),
+            source_key=GufeKey(d["source_key"]),
+            traceback=d["traceback"],
+            protocolunitresultref=(
+                ScopedKey.from_str(d["protocolunitresultref"])
+                if d.get("protocolunitresultref") is not None
+                else None
+            ),
+        )
+
+
+class TaskTracebacks(BaseModel):
+    """Tracebacks for one failed `ProtocolDAGResult` of a `Task`.
+
+    Returned by `get_task_tracebacks`, one record per failed
+    `ProtocolDAGResultRef`, most recent first.
+    """
+
+    protocoldagresultref: ScopedKey
+    datetime_created: datetime.datetime | None = None
+    creator: str | None = None
+    tracebacks: list[TaskUnitTraceback] = []
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return {
+            "protocoldagresultref": str(self.protocoldagresultref),
+            "datetime_created": _iso(self.datetime_created),
+            "creator": self.creator,
+            "tracebacks": [tb.to_dict() for tb in self.tracebacks],
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(
+            protocoldagresultref=ScopedKey.from_str(d["protocoldagresultref"]),
+            datetime_created=_coerce_datetime(d.get("datetime_created")),
+            creator=d.get("creator"),
+            tracebacks=[TaskUnitTraceback.from_dict(tb) for tb in d["tracebacks"]],
+        )
+
+
+class ProtocolDAGResultRec(BaseModel):
+    """A record describing one `ProtocolDAGResult` of a `Task`.
+
+    Returned by `get_task_result_recs`. Carries the `ScopedKey` of the
+    underlying `ProtocolDAGResultRef` as `scoped_key`, which every drill-down
+    method accepts directly.
+    """
+
+    scoped_key: ScopedKey
+    ok: bool
+    datetime_created: datetime.datetime | None = None
+    creator: str | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return {
+            "scoped_key": str(self.scoped_key),
+            "ok": self.ok,
+            "datetime_created": _iso(self.datetime_created),
+            "creator": self.creator,
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(
+            scoped_key=ScopedKey.from_str(d["scoped_key"]),
+            ok=d["ok"],
+            datetime_created=_coerce_datetime(d.get("datetime_created")),
+            creator=d.get("creator"),
+        )
+
+
+class ProtocolUnitResultRec(BaseModel):
+    """A record describing one `ProtocolUnitResult` of a `ProtocolDAGResult`.
+
+    Returned by `get_result_unit_recs`. Carries the `ScopedKey` of the
+    underlying `ProtocolUnitResultRef` as `scoped_key`, plus the `obj_key`/
+    `source_key` that let a user correlate it against a deserialized
+    `ProtocolDAGResult`.
+    """
+
+    scoped_key: ScopedKey
+    obj_key: GufeKey
+    source_key: GufeKey
+    name: str | None = None
+    ok: bool
+    start_time: datetime.datetime | None = None
+    end_time: datetime.datetime | None = None
+    has_logs: bool = False
+    has_stdout: bool = False
+    has_stderr: bool = False
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return {
+            "scoped_key": str(self.scoped_key),
+            "obj_key": str(self.obj_key),
+            "source_key": str(self.source_key),
+            "name": self.name,
+            "ok": self.ok,
+            "start_time": _iso(self.start_time),
+            "end_time": _iso(self.end_time),
+            "has_logs": self.has_logs,
+            "has_stdout": self.has_stdout,
+            "has_stderr": self.has_stderr,
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(
+            scoped_key=ScopedKey.from_str(d["scoped_key"]),
+            obj_key=GufeKey(d["obj_key"]),
+            source_key=GufeKey(d["source_key"]),
+            name=d.get("name"),
+            ok=d["ok"],
+            start_time=_coerce_datetime(d.get("start_time")),
+            end_time=_coerce_datetime(d.get("end_time")),
+            has_logs=d.get("has_logs", False),
+            has_stdout=d.get("has_stdout", False),
+            has_stderr=d.get("has_stderr", False),
+        )

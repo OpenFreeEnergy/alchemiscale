@@ -43,6 +43,112 @@ Note that for some :external+gufe:py:class:`~gufe.protocols.protocol.Protocol`\s
 * :py:class:`openfe.protocols.openmm_rfe.RelativeHybridTopologyProtocol`: NVIDIA GPU if ``settings.platform == 'CUDA'``
 * :py:class:`~feflow.protocols.nonequilibrium_cycling.NonEquilibriumCyclingProtocol`: OpenEye Toolkit license, NVIDIA GPU if ``settings.platform == 'CUDA'``
 
+
+****************************
+Getting tracebacks in bulk
+****************************
+
+Pulling down full :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s with :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_transformation_failures` (as above) transfers every failed result object, which can be slow when you only want to read the exceptions.
+When your goal is fast failure triage for a single :py:class:`~alchemiscale.storage.models.Task`, use :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_tracebacks` instead.
+It returns only the traceback text, one :py:class:`~alchemiscale.storage.models.TaskTracebacks` record per failed :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult` of that :py:class:`~alchemiscale.storage.models.Task`, most recent first::
+
+    >>> task: ScopedKey
+    >>> for attempt in asc.get_task_tracebacks(task):
+    >>>     print(attempt.protocoldagresultref, attempt.datetime_created)
+    >>>     for unit in attempt.tracebacks:
+    >>>         print(unit.source_key)
+    >>>         print(unit.traceback)
+
+Each :py:class:`~alchemiscale.storage.models.TaskTracebacks` carries the :py:class:`~alchemiscale.models.ScopedKey` of the failed result (``protocoldagresultref``) and a list of per-:external+gufe:py:class:`~gufe.protocols.protocolunit.ProtocolUnitFailure` tracebacks; each of those carries the ``source_key`` of the failing :external+gufe:py:class:`~gufe.protocols.protocolunit.ProtocolUnit` and its ``traceback`` string.
+
+If a :py:class:`~alchemiscale.storage.models.Task` has been attempted many times, you can limit the number of failed results returned to just the most recent ones with the ``limit`` keyword argument::
+
+    >>> # only the tracebacks from the most recent failed result
+    >>> asc.get_task_tracebacks(task, limit=1)
+
+
+*******************************
+Drilling into per-unit logs
+*******************************
+
+Tracebacks tell you *where* a :external+gufe:py:class:`~gufe.protocols.protocolunit.ProtocolUnit` failed, but often the surrounding logs and captured stdout/stderr are what tell you *why*.
+These artifacts are captured per :external+gufe:py:class:`~gufe.protocols.protocolunit.ProtocolUnit` at execution time (see :ref:`compute` for the compute-side settings that control capture), and you can drill into them without transferring the full result objects.
+
+Start from a :py:class:`~alchemiscale.storage.models.Task` and list records describing its :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s with :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_result_recs`.
+Pass ``ok=False`` to look only at failures, ``ok=True`` for successes, or leave it unset for all::
+
+    >>> task: ScopedKey
+    >>> pdrrs = asc.get_task_result_recs(task, ok=False)
+    >>> pdrrs
+    [<ProtocolDAGResultRec scoped_key=... ok=False>, ...]
+
+Each :py:class:`~alchemiscale.storage.models.ProtocolDAGResultRec` carries the :py:class:`~alchemiscale.models.ScopedKey` of the underlying result as its ``scoped_key`` attribute.
+For a given record, list the per-unit records with :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_recs`, then pull the captured artifacts for any unit of interest with :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_logs`, :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_stdout`, and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_stderr`::
+
+    >>> for pdrr in pdrrs:
+    >>>     for purr in asc.get_result_unit_recs(pdrr):
+    >>>         # skip units with nothing captured
+    >>>         if purr.has_logs:
+    >>>             print(asc.get_result_unit_logs(purr))
+    >>>         if purr.has_stdout:
+    >>>             print(asc.get_result_unit_stdout(purr))
+    >>>         if purr.has_stderr:
+    >>>             print(asc.get_result_unit_stderr(purr))
+
+Each :py:class:`~alchemiscale.storage.models.ProtocolUnitResultRec` exposes ``has_logs``, ``has_stdout``, and ``has_stderr`` flags so you can skip units that captured nothing.
+:py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_logs` returns the captured log text as a single string (or ``None``), while :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_stdout` and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_stderr` return a mapping of filename to captured text (or ``None``).
+
+.. note::
+   The drill-down methods accept either a :py:class:`~alchemiscale.models.ScopedKey` or the corresponding record object (a :py:class:`~alchemiscale.storage.models.ProtocolDAGResultRec` for ``pdrr`` arguments, a :py:class:`~alchemiscale.storage.models.ProtocolUnitResultRec` for ``purr`` arguments), so the chain above composes naturally.
+   The same :py:class:`~alchemiscale.models.ScopedKey`\s can be copied between Python sessions.
+
+When you don't need per-unit granularity, three convenience methods render everything for you.
+:py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_logs` returns a single human-readable rendering of all unit logs for one :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`; the default ``order='unit'`` groups each unit's logs under a header, while ``order='time'`` interleaves all units' log lines by timestamp::
+
+    >>> pdrr = asc.get_task_result_recs(task, ok=False)[0]
+    >>> print(asc.get_result_logs(pdrr))
+    >>> # or interleave across units by timestamp
+    >>> print(asc.get_result_logs(pdrr, order='time'))
+
+:py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_stdout` and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_stderr` go one level higher, concatenating the captured stdout/stderr across *all* of a :py:class:`~alchemiscale.storage.models.Task`\'s :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s (most recent first), with section headers identifying each result, unit, and filename::
+
+    >>> print(asc.get_task_stdout(task))
+    >>> print(asc.get_task_stderr(task))
+
+Each returns ``""`` when nothing was captured.
+
+.. note::
+   Logs and stream capture are opt-in on the compute side and depend on what each :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` chooses to emit and archive.
+   If a :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` writes nothing to its per-unit stdout/stderr, or logs nothing through :external+gufe:py:attr:`~gufe.protocols.protocolunit.ProtocolUnit.logger`, these methods will return empty results even for a :py:class:`~alchemiscale.storage.models.Task` that failed.
+   See :ref:`compute` for details on the capture mechanism and the settings that govern it.
+
+
+********************************************
+The reason field and DAG-creation failures
+********************************************
+
+Not every failure produces a :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult` with tracebacks to inspect.
+Before any :external+gufe:py:class:`~gufe.protocols.protocolunit.ProtocolUnit` runs, the compute service must first build the :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAG` for a :py:class:`~alchemiscale.storage.models.Task` from its :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`.
+If that construction itself raises, there is no result to store; instead, the :py:class:`~alchemiscale.storage.models.Task` is set directly to ``error``, and the traceback is recorded on the ``reason`` field of the :py:class:`~alchemiscale.storage.models.Task`.
+
+You can read this ``reason`` back through :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_tasks_details` (bulk) or :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_history` (per-attempt); both are covered in :ref:`introspection`::
+
+    >>> (detail,) = asc.get_tasks_details([task])
+    >>> print(detail.status)   # 'error'
+    >>> print(detail.reason)   # the DAG-creation traceback
+
+.. warning::
+   A :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAG`-creation failure is treated as a *systematic* problem with the :external+gufe:py:class:`~gufe.transformations.transformation.Transformation`, not a transient one.
+   Such :py:class:`~alchemiscale.storage.models.Task`\s are **not** eligible for automatic retry via :py:class:`~alchemiscale.storage.models.Task` restart patterns (see below), since re-running them would fail again in exactly the same way.
+   Resolve the underlying problem with the :external+gufe:py:class:`~gufe.transformations.transformation.Transformation` before setting these :py:class:`~alchemiscale.storage.models.Task`\s back to ``waiting``.
+
+Finally, when you mark :py:class:`~alchemiscale.storage.models.Task`\s ``invalid`` or ``deleted`` (see below), you can attach your own ``reason`` for the record::
+
+    >>> asc.set_tasks_status(tasks, 'invalid', reason='superseded by re-parameterized transformation')
+
+The ``reason`` is recorded only for ``invalid`` and ``deleted`` transitions, and surfaces through :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_tasks_details`.
+
+
 ************************
 Re-running errored Tasks
 ************************

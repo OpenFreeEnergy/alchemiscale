@@ -191,6 +191,58 @@ To scale up the number of compute services on the cluster, increase ``replicas``
 
 A more complete example of this type of deployment can be found in `alchemiscale-k8s`_.
 
+*********************************
+Task introspection and capture
+*********************************
+
+The :py:class:`~alchemiscale.compute.settings.ComputeServiceSettings` include several fields that control what execution metadata and artifacts a compute service captures and reports.
+These feed the client-side introspection methods described in :ref:`introspection` and the failure-triage tools in :ref:`handling-errors`.
+All of them have sensible defaults, so you only need to set them to change the default behavior.
+
+``hostname``
+    Hostname to record on this compute service's registration and copy onto every :py:class:`~alchemiscale.storage.models.TaskProvenance` record it creates.
+    This is the ``hostname`` surfaced through :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_history` and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_tasks_details`.
+    If unset (``null``), the service uses ``socket.gethostname()``.
+
+``capture_streams``
+    If ``true`` (the default), each :external+gufe:py:class:`~gufe.protocols.protocolunit.ProtocolUnit`\'s :external+gufe:py:class:`~gufe.protocols.protocolunit.Context` is constructed with per-attempt stdout/stderr directories, so ``gufe``'s native per-unit stream-capture mechanism archives whatever the :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` directs into them.
+    This is *protocol opt-in*: the compute service only provides the capture directories, and each :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` chooses what, if anything, to write there.
+    Captured streams are what :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_stdout`, :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_stderr`, :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_stdout`, and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_stderr` return.
+
+``capture_logs``
+    If ``true`` (the default), log records emitted through ``gufe``'s ``gufekey`` logger namespace (that is, protocol logs written via :external+gufe:py:attr:`~gufe.protocols.protocolunit.ProtocolUnit.logger`) are captured per unit result and uploaded alongside results.
+    Capture is scoped to the ``gufekey`` namespace only; records from third-party library loggers are **not** captured.
+    Captured logs are what :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_logs` and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_logs` return.
+
+``gufekey_loglevel``
+    The level to set the ``gufekey`` logger to for per-unit log capture (default ``"INFO"``).
+    The ``gufekey`` logger otherwise inherits the root logger's level (typically ``WARNING``), which would drop protocol ``INFO`` logs before they could be captured.
+
+``log_cap_bytes``
+    Per-unit-result cap, in bytes, on captured log text (default ``1048576``, i.e. 1 MiB).
+    When a unit's logs exceed the cap, the *tail* is kept — where errors typically live.
+
+``progress_push_timeout``
+    Timeout, in seconds, for a single fire-and-forget progress push (default ``5.0``).
+    Progress (surfaced through :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_tasks_progress`) is best-effort telemetry: pushes are not retried, and failures are logged and swallowed so that a flaky API never stalls a :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAG` between units.
+
+A minimal capture-related config snippet looks like::
+
+    ---
+    # override the auto-detected hostname recorded on TaskProvenance
+    hostname: gpu-node-04.cluster.example.org
+
+    # capture per-unit stdout/stderr (protocol opt-in) and gufekey logs
+    capture_streams: true
+    capture_logs: true
+
+    # capture protocol INFO logs, keeping at most 1 MiB of tail per unit
+    gufekey_loglevel: INFO
+    log_cap_bytes: 1048576
+
+    # best-effort progress telemetry
+    progress_push_timeout: 5.0
+
 ****************
 Compute managers
 ****************

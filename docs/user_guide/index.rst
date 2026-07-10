@@ -11,5 +11,6 @@ If you are making use of an **alchemiscale** instance, this document will famili
    :maxdepth: 1
 
    ./getting_started
+   ./introspection
    ./handling_errors
    ./strategy_automation

@@ -9,6 +9,7 @@ import bisect
 import datetime
 from contextlib import contextmanager
 import json
+import os
 import re
 from functools import lru_cache, update_wrapper
 from collections import defaultdict
@@ -41,16 +42,28 @@ from .models import (
     NetworkMark,
     NetworkStateEnum,
     ProtocolDAGResultRef,
+    ProtocolUnitResultRec,
+    ProtocolUnitResultRef,
+    ProtocolDAGResultRec,
     StrategyState,
     StrategyModeEnum,
     StrategyStatusEnum,
     StrategyTaskScalingEnum,
     Task,
+    TaskAttempt,
+    TaskClaim,
+    TaskDetails,
     TaskHub,
+    TaskOutcomeEnum,
+    TaskProvenance,
     TaskRestartPattern,
     TaskStatusEnum,
+    TaskTracebacks,
+    TaskUnitTraceback,
     Tracebacks,
+    _coerce_datetime,
 )
+from gufe.protocols import ProtocolDAGResult, ProtocolUnitResult
 
 from ..models import Scope, ScopedKey
 from .cypher import cypher_or
@@ -110,6 +123,52 @@ def _select_tasks_from_taskpool(taskpool: list[tuple[str, float]], count) -> lis
     return list(np.random.choice(tasks, count, replace=False, p=prob))
 
 
+def _status_write(
+    var: str,
+    status_value: str,
+    *,
+    time_param: str = "statuschange_time",
+    reason_expr: str = "null",
+) -> str:
+    """Return a Cypher ``SET`` clause writing a ``Task`` status change.
+
+    Every site that mutates ``Task.status`` must also update the
+    ``datetime_status_changed`` indicator and reset ``reason`` (which describes
+    the *current* status). Centralizing those three writes here makes a missed
+    site structurally impossible: any status write routes through this helper.
+
+    Parameters
+    ----------
+    var
+        The Cypher variable bound to the ``Task`` node being mutated.
+    status_value
+        The new status value (a ``TaskStatusEnum`` value string).
+    time_param
+        Name of the query parameter carrying the change timestamp as an ISO
+        string.
+    reason_expr
+        Cypher expression for the new ``reason`` value; ``"null"`` clears it
+        (the default), or a parameter reference such as ``"$reason"``.
+    """
+    # Only refresh `datetime_status_changed` and `reason` when the status
+    # actually changes: several setters admit their own target status for
+    # idempotent-return semantics (e.g. `waiting -> waiting`), and a no-op
+    # re-set must not reset "how long in current status" or wipe a `reason`
+    # (e.g. a DAG-creation traceback, or a user-forced invalid/deleted reason).
+    # The CASE expressions read `{var}.status` *before* this SET clause's
+    # assignments take effect (Cypher evaluates a SET clause's right-hand sides
+    # against the pre-clause state), so they compare against the old status.
+    return (
+        f"SET {var}.datetime_status_changed = CASE "
+        f"WHEN {var}.status = '{status_value}' THEN {var}.datetime_status_changed "
+        f"ELSE datetime(${time_param}) END, "
+        f"{var}.reason = CASE "
+        f"WHEN {var}.status = '{status_value}' THEN {var}.reason "
+        f"ELSE {reason_expr} END, "
+        f"{var}.status = '{status_value}'"
+    )
+
+
 CLAIM_QUERY = f"""
     // only match the task if it doesn't have an existing CLAIMS relationship
     UNWIND $tasks_list AS task_sk
@@ -122,7 +181,21 @@ CLAIM_QUERY = f"""
     MATCH (csreg:ComputeServiceRegistration {{identifier: $compute_service_id}})
     CREATE (t)<-[cl:CLAIMS {{claimed: datetime($datetimestr)}}]-(csreg)
 
-    SET t.status = '{TaskStatusEnum.running.value}'
+    // create an immutable TaskProvenance record for this execution attempt,
+    // copying identifying info off the registration (which may later be
+    // deleted on expiry/deregistration)
+    CREATE (tp:TaskProvenance {{
+        compute_service_id: $compute_service_id,
+        hostname: csreg.hostname,
+        manager_name: csreg.manager_name,
+        datetime_claimed: datetime($datetimestr),
+        _org: t._org,
+        _campaign: t._campaign,
+        _project: t._project
+    }})
+    CREATE (tp)-[:PROVENANCE_OF]->(t)
+
+    {_status_write('t', TaskStatusEnum.running.value, time_param='datetimestr')}
 
     RETURN t
 """
@@ -1494,11 +1567,19 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
+        now = datetime.datetime.now(tz=datetime.UTC).isoformat()
         q = f"""
         MATCH (n:ComputeServiceRegistration {{identifier: $compute_service_id}})
 
         OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: '{TaskStatusEnum.running.value}'}})
-        SET t.status = '{TaskStatusEnum.waiting.value}'
+        {_status_write('t', TaskStatusEnum.waiting.value)}
+
+        // finalize the open provenance attempt of each returned Task as expired
+        WITH n, t
+        OPTIONAL MATCH (t)<-[:PROVENANCE_OF]-(tp:TaskProvenance {{compute_service_id: n.identifier}})
+        WHERE tp.datetime_end IS NULL
+        SET tp.outcome = '{TaskOutcomeEnum.expired.value}',
+            tp.datetime_end = datetime($statuschange_time)
 
         WITH n, n.identifier as identifier
 
@@ -1508,7 +1589,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
 
         with self.transaction() as tx:
-            res = tx.run(q, compute_service_id=str(compute_service_id))
+            res = tx.run(
+                q,
+                compute_service_id=str(compute_service_id),
+                statuschange_time=now,
+            )
             identifier = next(res)["identifier"]
 
         return ComputeServiceID(identifier)
@@ -1530,6 +1615,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     def expire_registrations(self, expire_time: datetime.datetime):
         """Remove all registrations with last heartbeat prior to the given `expire_time`."""
+        now = datetime.datetime.now(tz=datetime.UTC).isoformat()
         q = f"""
         MATCH (n:ComputeServiceRegistration)
         WHERE n.heartbeat < datetime('{expire_time.isoformat()}')
@@ -1537,7 +1623,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         WITH n
 
         OPTIONAL MATCH (n)-[cl:CLAIMS]->(t:Task {{status: '{TaskStatusEnum.running.value}'}})
-        SET t.status = '{TaskStatusEnum.waiting.value}'
+        {_status_write('t', TaskStatusEnum.waiting.value)}
+
+        // finalize the open provenance attempt of each returned Task as expired
+        WITH n, t
+        OPTIONAL MATCH (t)<-[:PROVENANCE_OF]-(tp:TaskProvenance {{compute_service_id: n.identifier}})
+        WHERE tp.datetime_end IS NULL
+        SET tp.outcome = '{TaskOutcomeEnum.expired.value}',
+            tp.datetime_end = datetime($statuschange_time)
 
         WITH n, n.identifier as ident
 
@@ -1546,7 +1639,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         RETURN ident
         """
         with self.transaction() as tx:
-            res = tx.run(q)
+            res = tx.run(q, statuschange_time=now)
 
             identities = set()
             for rec in res:
@@ -3444,9 +3537,24 @@ class Neo4jStore(AlchemiscaleStateStore):
         return counts
 
     def set_task_result(
-        self, task: ScopedKey, protocoldagresultref: ProtocolDAGResultRef
+        self,
+        task: ScopedKey,
+        protocoldagresultref: ProtocolDAGResultRef,
+        compute_service_id: ComputeServiceID | None = None,
     ) -> ScopedKey:
-        """Set a `ProtocolDAGResultRef` pointing to a `ProtocolDAGResult` for the given `Task`."""
+        """Set a `ProtocolDAGResultRef` pointing to a `ProtocolDAGResult` for the given `Task`.
+
+        If `compute_service_id` is given, the `TaskProvenance` attempt for this
+        ``(task, compute_service_id)`` pair is finalized: its `outcome` is set
+        from `protocoldagresultref.ok`, its `datetime_end` recorded, and a
+        `PROVENANCE_OF` edge created to the new `ProtocolDAGResultRef`. The
+        match is scoped to this service's own attempt record — never "whichever
+        record is open" — so a late result (posted after the service's
+        registration expired and the `Task` was reclaimed) finalizes its own
+        attempt without corrupting another service's open record. A record
+        previously closed as `expired` is overwritten to `complete`/`error`,
+        since the attempt did in fact finish.
+        """
 
         if task.qualname != "Task":
             raise ValueError("`task` ScopedKey does not correspond to a `Task`")
@@ -3469,6 +3577,42 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         with self.transaction() as tx:
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+
+            if compute_service_id is not None:
+                outcome = (
+                    TaskOutcomeEnum.complete.value
+                    if protocoldagresultref.ok
+                    else TaskOutcomeEnum.error.value
+                )
+                finalize_q = f"""
+                MATCH (t:Task {{_scoped_key: $task}})
+                MATCH (pdrr:ProtocolDAGResultRef {{_scoped_key: $pdrr}})
+                // this service's own attempt: prefer a still-open record; else a
+                // record prematurely closed as `expired` (which this result
+                // proves finished after all). A record closed as `released` (a
+                // user forced the Task off-attempt) or already `complete`/`error`
+                // is left untouched --- the immutable history stands, and another
+                // service's open record is never matched (scoped to this csid).
+                OPTIONAL MATCH (t)<-[:PROVENANCE_OF]-(tp:TaskProvenance {{compute_service_id: $compute_service_id}})
+                WHERE tp.datetime_end IS NULL
+                   OR tp.outcome = '{TaskOutcomeEnum.expired.value}'
+                WITH t, pdrr, tp
+                ORDER BY (tp.datetime_end IS NULL) DESC, tp.datetime_claimed DESC
+                WITH pdrr, collect(tp)[0] AS tp
+                FOREACH (_ IN CASE WHEN tp IS NULL THEN [] ELSE [1] END |
+                    SET tp.outcome = $outcome,
+                        tp.datetime_end = datetime($now)
+                    MERGE (tp)-[:PROVENANCE_OF]->(pdrr)
+                )
+                """
+                tx.run(
+                    finalize_q,
+                    task=str(task),
+                    pdrr=str(scoped_key),
+                    compute_service_id=str(compute_service_id),
+                    outcome=outcome,
+                    now=datetime.datetime.now(tz=datetime.UTC).isoformat(),
+                )
 
         return scoped_key
 
@@ -3547,8 +3691,561 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
+    @staticmethod
+    def _task_provenance_node_to_attempt(tp, pdrr_sk) -> TaskAttempt:
+        """Build a `TaskAttempt` record from a `TaskProvenance` node and the
+        `ScopedKey` string of its produced `ProtocolDAGResultRef` (or `None`)."""
+        outcome = tp.get("outcome")
+        return TaskAttempt(
+            compute_service_id=tp["compute_service_id"],
+            hostname=tp.get("hostname"),
+            manager_name=tp.get("manager_name"),
+            datetime_claimed=_coerce_datetime(tp.get("datetime_claimed")),
+            datetime_end=_coerce_datetime(tp.get("datetime_end")),
+            outcome=TaskOutcomeEnum(outcome) if outcome is not None else None,
+            units_completed=tp.get("units_completed"),
+            units_total=tp.get("units_total"),
+            protocoldagresultref=(
+                ScopedKey.from_str(pdrr_sk) if pdrr_sk is not None else None
+            ),
+        )
+
+    def get_task_history(
+        self, task: ScopedKey, limit: int | None = None
+    ) -> list[TaskAttempt]:
+        """Return the execution attempts of a `Task`, most recent first.
+
+        Each `TaskAttempt` bundles a `TaskProvenance` record with the
+        `ScopedKey` of the `ProtocolDAGResultRef` it produced (where one
+        exists). If `limit` is given, only the `limit` most recent attempts are
+        returned.
+        """
+        q = """
+        MATCH (t:Task {_scoped_key: $task})<-[:PROVENANCE_OF]-(tp:TaskProvenance)
+        OPTIONAL MATCH (tp)-[:PROVENANCE_OF]->(pdrr:ProtocolDAGResultRef)
+        RETURN tp, pdrr._scoped_key AS pdrr_sk
+        ORDER BY tp.datetime_claimed DESC
+        """
+        if limit is not None:
+            q += "\n        LIMIT $limit"
+
+        params = {"task": str(task)}
+        if limit is not None:
+            params["limit"] = limit
+
+        attempts = []
+        with self.transaction() as tx:
+            for record in tx.run(q, **params):
+                attempts.append(
+                    self._task_provenance_node_to_attempt(
+                        record["tp"], record["pdrr_sk"]
+                    )
+                )
+        return attempts
+
+    def get_tasks_details(self, tasks: list[ScopedKey]) -> list[TaskDetails | None]:
+        """Return `TaskDetails` for each given `Task`, in input order.
+
+        `None` is returned in place of any `Task` that does not exist. The
+        `current_claim`'s live progress fields stay `None` until a compute
+        service reports progress (section 2 of the design).
+        """
+        q = """
+        UNWIND $tasks AS task_sk
+        OPTIONAL MATCH (t:Task {_scoped_key: task_sk})
+
+        CALL {
+            WITH t
+            OPTIONAL MATCH (t)<-[:PROVENANCE_OF]-(tp:TaskProvenance)
+            WITH tp ORDER BY tp.datetime_claimed DESC
+            RETURN count(tp) AS num_claims, collect(tp)[0] AS latest_tp
+        }
+
+        OPTIONAL MATCH (latest_tp)-[:PROVENANCE_OF]->(latest_pdrr:ProtocolDAGResultRef)
+        OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
+        OPTIONAL MATCH (t)<-[:PROVENANCE_OF]-(claim_tp:TaskProvenance {compute_service_id: csreg.identifier})
+        WHERE claim_tp.datetime_end IS NULL
+
+        RETURN task_sk,
+               t,
+               num_claims,
+               latest_tp,
+               latest_pdrr._scoped_key AS latest_pdrr_sk,
+               cl.claimed AS claimed,
+               csreg.identifier AS csid,
+               csreg.hostname AS cs_hostname,
+               claim_tp.units_completed AS units_completed,
+               claim_tp.units_total AS units_total
+        """
+        by_task = {}
+        with self.transaction() as tx:
+            for record in tx.run(q, tasks=[str(t) for t in tasks]):
+                t = record["t"]
+                if t is None:
+                    by_task[record["task_sk"]] = None
+                    continue
+
+                current_claim = None
+                if record["csid"] is not None:
+                    current_claim = TaskClaim(
+                        compute_service_id=record["csid"],
+                        hostname=record["cs_hostname"],
+                        datetime_claimed=_coerce_datetime(record["claimed"]),
+                        units_completed=record["units_completed"],
+                        units_total=record["units_total"],
+                    )
+
+                most_recent_attempt = None
+                if record["latest_tp"] is not None:
+                    most_recent_attempt = self._task_provenance_node_to_attempt(
+                        record["latest_tp"], record["latest_pdrr_sk"]
+                    )
+
+                by_task[record["task_sk"]] = TaskDetails(
+                    task=ScopedKey.from_str(record["task_sk"]),
+                    status=TaskStatusEnum(t["status"]),
+                    datetime_status_changed=_coerce_datetime(
+                        t.get("datetime_status_changed")
+                    ),
+                    reason=t.get("reason"),
+                    num_claims=record["num_claims"],
+                    current_claim=current_claim,
+                    most_recent_attempt=most_recent_attempt,
+                )
+
+        return [by_task.get(str(t)) for t in tasks]
+
+    def get_task_tracebacks(
+        self, task: ScopedKey, limit: int | None = None
+    ) -> list[TaskTracebacks]:
+        """Return tracebacks for the failed `ProtocolDAGResult`s of a `Task`.
+
+        One `TaskTracebacks` record per failed `ProtocolDAGResultRef`, most
+        recent first (by `datetime_created`). Where per-unit
+        `ProtocolUnitResultRef`s exist (section 3.4), each failure entry carries
+        the `ScopedKey` of the corresponding unit ref; otherwise it is `None`.
+        """
+        q = """
+        MATCH (t:Task {_scoped_key: $task})-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef {ok: false})<-[:DETAILS]-(tb:Tracebacks)
+        OPTIONAL MATCH (pdrr)-[:CONTAINS]->(purr:ProtocolUnitResultRef)
+        WITH pdrr, tb, collect(purr) AS purrs
+        RETURN pdrr, tb, purrs
+        ORDER BY pdrr.datetime_created DESC
+        """
+        if limit is not None:
+            q += "\n        LIMIT $limit"
+
+        params = {"task": str(task)}
+        if limit is not None:
+            params["limit"] = limit
+
+        records = []
+        with self.transaction() as tx:
+            for record in tx.run(q, **params):
+                pdrr = record["pdrr"]
+                tb = record["tb"]
+
+                # map unit-result gufe key -> ProtocolUnitResultRef ScopedKey
+                purr_by_obj_key = {
+                    purr["obj_key"]: purr["_scoped_key"] for purr in record["purrs"]
+                }
+
+                tracebacks = tb["tracebacks"]
+                source_keys = tb["source_keys"]
+                failure_keys = tb["failure_keys"]
+
+                unit_tracebacks = []
+                for traceback, source_key, failure_key in zip(
+                    tracebacks, source_keys, failure_keys
+                ):
+                    purr_sk = purr_by_obj_key.get(failure_key)
+                    unit_tracebacks.append(
+                        TaskUnitTraceback(
+                            failure_key=GufeKey(failure_key),
+                            source_key=GufeKey(source_key),
+                            traceback=traceback,
+                            protocolunitresultref=(
+                                ScopedKey.from_str(purr_sk)
+                                if purr_sk is not None
+                                else None
+                            ),
+                        )
+                    )
+
+                records.append(
+                    TaskTracebacks(
+                        protocoldagresultref=ScopedKey.from_str(pdrr["_scoped_key"]),
+                        datetime_created=_coerce_datetime(pdrr.get("datetime_created")),
+                        creator=pdrr.get("creator"),
+                        tracebacks=unit_tracebacks,
+                    )
+                )
+
+        return records
+
+    def get_scope_compute_share(self, scope: Scope) -> float:
+        """Return the fraction of currently-`running` `Task`s in `scope`
+        relative to all `Scope`s at the same level.
+
+        - `Scope('org')` -> the org's running Tasks / all running Tasks;
+        - `Scope('org', 'campaign')` -> the campaign's / all campaigns in that org;
+        - `Scope('org', 'campaign', 'project')` -> the project's / all projects
+          in that org-campaign.
+
+        Only the aggregate fraction is returned; no per-sibling counts are
+        disclosed. Returns 0.0 when there are no running Tasks in the relevant
+        population.
+        """
+        if scope.project is not None:
+            level = "_project"
+            filters = {"_org": scope.org, "_campaign": scope.campaign}
+            target = scope.project
+        elif scope.campaign is not None:
+            level = "_campaign"
+            filters = {"_org": scope.org}
+            target = scope.campaign
+        elif scope.org is not None:
+            level = "_org"
+            filters = {}
+            target = scope.org
+        else:
+            raise ValueError(
+                "`scope` must specify at least an org to compute a compute share"
+            )
+
+        if filters:
+            filter_string = " {" + ", ".join(f"{k}: ${k}" for k in filters) + "}"
+        else:
+            filter_string = ""
+
+        q = f"""
+        MATCH (t:Task{filter_string})
+        WHERE t.status = '{TaskStatusEnum.running.value}'
+        RETURN t.{level} AS grouping, count(t) AS counts
+        """
+
+        with self.transaction() as tx:
+            res = tx.run(q, **filters)
+            counts = {rec["grouping"]: rec["counts"] for rec in res}
+
+        total = sum(counts.values())
+        if total == 0:
+            return 0.0
+        return counts.get(target, 0) / total
+
+    ## live progress reporting (section 2)
+
+    def update_task_progress(
+        self,
+        compute_service_id: ComputeServiceID,
+        progress: dict[str, tuple[int, int]],
+    ) -> None:
+        """Write live progress counts onto the open `TaskProvenance` attempts.
+
+        `progress` maps `Task` ScopedKey strings to
+        ``(units_completed, units_total)``. An update is dropped for any Task
+        the sending service no longer holds a `CLAIMS` relationship to (its
+        claim expired mid-flight) --- there is no live attempt to update.
+        """
+        q = """
+        UNWIND $items AS item
+        MATCH (t:Task {_scoped_key: item.task})<-[:CLAIMS]-(csreg:ComputeServiceRegistration {identifier: $compute_service_id})
+        MATCH (t)<-[:PROVENANCE_OF]-(tp:TaskProvenance {compute_service_id: $compute_service_id})
+        WHERE tp.datetime_end IS NULL
+        SET tp.units_completed = item.units_completed,
+            tp.units_total = item.units_total
+        """
+        items = [
+            {"task": task, "units_completed": uc, "units_total": ut}
+            for task, (uc, ut) in progress.items()
+        ]
+        if not items:
+            return
+        with self.transaction() as tx:
+            tx.run(q, items=items, compute_service_id=str(compute_service_id))
+
+    def get_tasks_progress(
+        self, tasks: list[ScopedKey]
+    ) -> list[tuple[int, int] | None]:
+        """Return ``(units_completed, units_total)`` for each `running` `Task`
+        with reported progress, `None` otherwise, in input order."""
+        q = """
+        UNWIND $tasks AS task_sk
+        OPTIONAL MATCH (t:Task {_scoped_key: task_sk})<-[:CLAIMS]-(csreg:ComputeServiceRegistration)
+        OPTIONAL MATCH (t)<-[:PROVENANCE_OF]-(tp:TaskProvenance {compute_service_id: csreg.identifier})
+        WHERE tp.datetime_end IS NULL AND t.status = '%s'
+        RETURN task_sk, tp.units_completed AS uc, tp.units_total AS ut
+        """ % TaskStatusEnum.running.value
+
+        by_task = {}
+        with self.transaction() as tx:
+            for rec in tx.run(q, tasks=[str(t) for t in tasks]):
+                uc, ut = rec["uc"], rec["ut"]
+                by_task[rec["task_sk"]] = (
+                    (uc, ut) if uc is not None and ut is not None else None
+                )
+        return [by_task.get(str(t)) for t in tasks]
+
+    ## per-unit result refs and artifacts (section 3.4)
+
+    def add_protocol_unit_result_refs(
+        self,
+        protocoldagresultref: ProtocolDAGResultRef,
+        protocoldagresultref_scoped_key: ScopedKey,
+        protocoldagresult: ProtocolDAGResult,
+    ) -> dict[GufeKey, ScopedKey]:
+        """Derive one `ProtocolUnitResultRef` per `ProtocolUnitResult`/`Failure`.
+
+        Creates a `ProtocolUnitResultRef` node for every unit result in the
+        `ProtocolDAGResult` (successes and failures, one per *result* --- so a
+        retried unit yields several), links each to the `ProtocolDAGResultRef`
+        via `CONTAINS`, and reproduces the execution topology from
+        `ProtocolDAGResult.result_graph` as `UNIT_DEPENDS_ON` edges. The
+        dedicated `UNIT_DEPENDS_ON` type is used deliberately (never
+        `DEPENDS_ON`), so these payload-less topology edges are never fed into
+        the generic gufe-object reconstruction machinery.
+
+        Artifact-presence flags start `False`; the object store layout for each
+        unit result's artifacts is recorded on `location`. Returns a mapping of
+        unit-result gufe key -> `ProtocolUnitResultRef` ScopedKey.
+
+        Idempotent: a `ProtocolDAGResult` gufe key is deterministic, so a
+        replayed result push matches the same `ProtocolDAGResultRef`. If unit
+        refs already exist for it, this returns the existing mapping without
+        re-creating them --- a re-merge would reset `has_logs`/`has_stdout`/
+        `has_stderr` (flipped by later, separate requests) back to `False`.
+        """
+        scope = protocoldagresultref_scoped_key.scope
+
+        # short-circuit if unit refs already exist for this ProtocolDAGResultRef
+        existing = {}
+        with self.transaction() as tx:
+            res = tx.run(
+                """
+                MATCH (:ProtocolDAGResultRef {_scoped_key: $pdrr})-[:CONTAINS]->(purr:ProtocolUnitResultRef)
+                RETURN purr.obj_key AS obj_key, purr._scoped_key AS sk
+                """,
+                pdrr=str(protocoldagresultref_scoped_key),
+            )
+            for rec in res:
+                existing[GufeKey(rec["obj_key"])] = ScopedKey.from_str(rec["sk"])
+        if existing:
+            return existing
+
+        pdrr_node = self._get_node(protocoldagresultref_scoped_key)
+
+        base_location = (
+            os.path.dirname(protocoldagresultref.location)
+            if protocoldagresultref.location
+            else None
+        )
+
+        subgraph = Subgraph()
+        result_key_to_node = {}
+        result_key_to_sk: dict[GufeKey, ScopedKey] = {}
+
+        for result in protocoldagresult.protocol_unit_results:
+            unit_location = (
+                os.path.join(base_location, "units", str(result.key))
+                if base_location is not None
+                else None
+            )
+            purr = ProtocolUnitResultRef(
+                location=unit_location,
+                obj_key=result.key,
+                source_key=result.source_key,
+                scope=scope,
+                ok=result.ok(),
+                name=result.name,
+                start_time=result.start_time,
+                end_time=result.end_time,
+            )
+            _, purr_node, purr_sk = self._keyed_chain_to_subgraph(
+                KeyedChain.from_gufe(purr),
+                scope=scope,
+            )
+            subgraph = subgraph | Relationship.type("CONTAINS")(
+                pdrr_node,
+                purr_node,
+                _org=scope.org,
+                _campaign=scope.campaign,
+                _project=scope.project,
+            )
+            result_key_to_node[result.key] = purr_node
+            result_key_to_sk[result.key] = purr_sk
+
+        # reproduce execution topology (result -> its dependency result)
+        for node, dependency in protocoldagresult.result_graph.edges():
+            na = result_key_to_node.get(node.key)
+            nb = result_key_to_node.get(dependency.key)
+            if na is not None and nb is not None:
+                subgraph = subgraph | Relationship.type("UNIT_DEPENDS_ON")(
+                    na,
+                    nb,
+                    _org=scope.org,
+                    _campaign=scope.campaign,
+                    _project=scope.project,
+                )
+
+        with self.transaction() as tx:
+            merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
+
+        return result_key_to_sk
+
+    def get_protocol_unit_result_ref_scoped_key(
+        self,
+        protocoldagresultref_scoped_key: ScopedKey,
+        unit_result_key: GufeKey,
+        task: ScopedKey | None = None,
+    ) -> ScopedKey | None:
+        """Return the `ProtocolUnitResultRef` ScopedKey for a given unit-result
+        gufe key under a `ProtocolDAGResultRef`, or `None` if absent.
+
+        If `task` is given, the `ProtocolDAGResultRef` must be a result of that
+        `Task` (`(task)-[:RESULTS_IN]->(pdrr)`); otherwise `None` is returned.
+        This lets callers refuse a mismatched ``(task, pdrr)`` pair.
+        """
+        if task is not None:
+            q = """
+            MATCH (t:Task {_scoped_key: $task})-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef {_scoped_key: $pdrr})-[:CONTAINS]->(purr:ProtocolUnitResultRef {obj_key: $obj_key})
+            RETURN purr._scoped_key AS sk
+            """
+        else:
+            q = """
+            MATCH (pdrr:ProtocolDAGResultRef {_scoped_key: $pdrr})-[:CONTAINS]->(purr:ProtocolUnitResultRef {obj_key: $obj_key})
+            RETURN purr._scoped_key AS sk
+            """
+        with self.transaction() as tx:
+            res = tx.run(
+                q,
+                task=str(task) if task is not None else None,
+                pdrr=str(protocoldagresultref_scoped_key),
+                obj_key=str(unit_result_key),
+            ).to_eager_result()
+        if not res.records:
+            return None
+        return ScopedKey.from_str(res.records[0]["sk"])
+
+    def set_protocol_unit_result_ref_artifacts(
+        self,
+        protocol_unit_result_ref_scoped_key: ScopedKey,
+        *,
+        has_logs: bool | None = None,
+        has_stdout: bool | None = None,
+        has_stderr: bool | None = None,
+    ) -> None:
+        """Flip artifact-presence flags on a `ProtocolUnitResultRef` as artifacts
+        are stored. Only the flags passed (non-`None`) are written."""
+        sets = []
+        params = {"purr": str(protocol_unit_result_ref_scoped_key)}
+        if has_logs is not None:
+            sets.append("purr.has_logs = $has_logs")
+            params["has_logs"] = has_logs
+        if has_stdout is not None:
+            sets.append("purr.has_stdout = $has_stdout")
+            params["has_stdout"] = has_stdout
+        if has_stderr is not None:
+            sets.append("purr.has_stderr = $has_stderr")
+            params["has_stderr"] = has_stderr
+        if not sets:
+            return
+        q = f"""
+        MATCH (purr:ProtocolUnitResultRef {{_scoped_key: $purr}})
+        SET {', '.join(sets)}
+        """
+        with self.transaction() as tx:
+            tx.run(q, **params)
+
+    def get_task_result_recs(
+        self, task: ScopedKey, ok: bool | None = None
+    ) -> list[ProtocolDAGResultRec]:
+        """Return one `ProtocolDAGResultRec` per `ProtocolDAGResult` of the
+        `Task`, most recent first. `ok` filters to successes/failures."""
+        where = ""
+        params = {"task": str(task)}
+        if ok is not None:
+            where = "WHERE pdrr.ok = $ok"
+            params["ok"] = ok
+        q = f"""
+        MATCH (t:Task {{_scoped_key: $task}})-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)
+        {where}
+        RETURN pdrr
+        ORDER BY pdrr.datetime_created DESC
+        """
+        recs = []
+        with self.transaction() as tx:
+            for rec in tx.run(q, **params):
+                pdrr = rec["pdrr"]
+                recs.append(
+                    ProtocolDAGResultRec(
+                        scoped_key=ScopedKey.from_str(pdrr["_scoped_key"]),
+                        ok=pdrr["ok"],
+                        datetime_created=_coerce_datetime(pdrr.get("datetime_created")),
+                        creator=pdrr.get("creator"),
+                    )
+                )
+        return recs
+
+    def get_result_unit_recs(
+        self, protocoldagresultref: ScopedKey
+    ) -> list[ProtocolUnitResultRec]:
+        """Return one `ProtocolUnitResultRec` per `ProtocolUnitResult` of the
+        `ProtocolDAGResult`, in dependency order (via `UNIT_DEPENDS_ON`)."""
+        q = """
+        MATCH (pdrr:ProtocolDAGResultRef {_scoped_key: $pdrr})-[:CONTAINS]->(purr:ProtocolUnitResultRef)
+        OPTIONAL MATCH (purr)-[:UNIT_DEPENDS_ON]->(dep:ProtocolUnitResultRef)<-[:CONTAINS]-(pdrr)
+        RETURN purr, collect(dep._scoped_key) AS deps
+        """
+        nodes_by_sk = {}
+        deps_by_sk = {}
+        with self.transaction() as tx:
+            for rec in tx.run(q, pdrr=str(protocoldagresultref)):
+                purr = rec["purr"]
+                sk = purr["_scoped_key"]
+                nodes_by_sk[sk] = purr
+                deps_by_sk[sk] = [d for d in rec["deps"] if d is not None]
+
+        # topologically order: a unit result's dependencies come before it
+        g = nx.DiGraph()
+        g.add_nodes_from(nodes_by_sk)
+        for sk, deps in deps_by_sk.items():
+            for dep in deps:
+                # edge dependency -> dependent, so topological_sort yields deps first
+                g.add_edge(dep, sk)
+        try:
+            ordered = list(nx.topological_sort(g))
+        except nx.NetworkXUnfeasible:
+            # cyclic (should never happen for a DAG); fall back to start_time
+            ordered = sorted(
+                nodes_by_sk,
+                key=lambda s: nodes_by_sk[s].get("start_time") or "",
+            )
+
+        recs = []
+        for sk in ordered:
+            purr = nodes_by_sk[sk]
+            recs.append(
+                ProtocolUnitResultRec(
+                    scoped_key=ScopedKey.from_str(sk),
+                    obj_key=GufeKey(purr["obj_key"]),
+                    source_key=GufeKey(purr["source_key"]),
+                    name=purr.get("name"),
+                    ok=purr["ok"],
+                    start_time=_coerce_datetime(purr.get("start_time")),
+                    end_time=_coerce_datetime(purr.get("end_time")),
+                    has_logs=purr.get("has_logs", False),
+                    has_stdout=purr.get("has_stdout", False),
+                    has_stderr=purr.get("has_stderr", False),
+                )
+            )
+        return recs
+
     def set_task_status(
-        self, tasks: list[ScopedKey], status: TaskStatusEnum, raise_error: bool = False
+        self,
+        tasks: list[ScopedKey],
+        status: TaskStatusEnum,
+        raise_error: bool = False,
+        reason: str | None = None,
     ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks.
 
@@ -3563,6 +4260,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             The status to set the Task to.
         raise_error
             If `True`, raise a `ValueError` if the status of a given Task cannot be changed.
+        reason
+            Optional human-readable reason for the status change; only recorded
+            for `invalid`/`deleted` transitions (ignored otherwise).
 
         Returns
         -------
@@ -3572,6 +4272,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
         method = getattr(self, f"set_task_{status.value}")
+        if status in (TaskStatusEnum.invalid, TaskStatusEnum.deleted):
+            return method(tasks, raise_error=raise_error, reason=reason)
         return method(tasks, raise_error=raise_error)
 
     def get_task_status(self, tasks: list[ScopedKey]) -> list[TaskStatusEnum]:
@@ -3606,11 +4308,17 @@ class Neo4jStore(AlchemiscaleStateStore):
         return statuses
 
     def _set_task_status(
-        self, tasks, q: str, err_msg_func, raise_error
+        self, tasks, q: str, err_msg_func, raise_error, extra_params: dict | None = None
     ) -> list[ScopedKey | None]:
         tasks_statused = []
+        params = {"scoped_keys": [str(t) for t in tasks]}
+        # every status-mutation query writes `datetime_status_changed` via the
+        # `_status_write` helper, keyed to the `statuschange_time` parameter
+        params["statuschange_time"] = datetime.datetime.now(tz=datetime.UTC).isoformat()
+        if extra_params:
+            params.update(extra_params)
         with self.transaction() as tx:
-            res = tx.run(q, scoped_keys=[str(t) for t in tasks])
+            res = tx.run(q, **params)
 
             for record in res:
                 task_i = record["t"]
@@ -3648,7 +4356,16 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
         WHERE t_.status IN ['{TaskStatusEnum.waiting.value}', '{TaskStatusEnum.running.value}', '{TaskStatusEnum.error.value}']
-        SET t_.status = '{TaskStatusEnum.waiting.value}'
+        {_status_write('t_', TaskStatusEnum.waiting.value)}
+
+        WITH scoped_key, t, t_
+
+        // if we forced a `running` Task back to `waiting`, its open provenance
+        // attempt was released before it could produce a result
+        OPTIONAL MATCH (t_)<-[:PROVENANCE_OF]-(tp:TaskProvenance)
+        WHERE tp.datetime_end IS NULL
+        SET tp.outcome = '{TaskOutcomeEnum.released.value}',
+            tp.datetime_end = datetime($statuschange_time)
 
         WITH scoped_key, t, t_
 
@@ -3682,7 +4399,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
         WHERE t_.status IN ['{TaskStatusEnum.running.value}', '{TaskStatusEnum.waiting.value}']
-        SET t_.status = '{TaskStatusEnum.running.value}'
+        {_status_write('t_', TaskStatusEnum.running.value)}
 
         RETURN scoped_key, t, t_
         """
@@ -3709,7 +4426,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
         WHERE t_.status IN ['{TaskStatusEnum.complete.value}', '{TaskStatusEnum.running.value}']
-        SET t_.status = '{TaskStatusEnum.complete.value}'
+        {_status_write('t_', TaskStatusEnum.complete.value)}
 
         WITH scoped_key, t, t_
 
@@ -3736,12 +4453,48 @@ class Neo4jStore(AlchemiscaleStateStore):
         return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     def set_task_error(
-        self, tasks: list[ScopedKey], raise_error: bool = False
+        self,
+        tasks: list[ScopedKey],
+        raise_error: bool = False,
+        reason: str | None = None,
+        compute_service_id: ComputeServiceID | None = None,
     ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks to `error`.
 
         Only `running` Tasks can be set to `error`.
 
+        Parameters
+        ----------
+        tasks
+            The Tasks to set to `error`.
+        raise_error
+            If `True`, raise a `ValueError` for any Task whose status cannot be
+            changed.
+        reason
+            If given, recorded on `Task.reason`; used by the `ProtocolDAG`
+            creation-failure path to hand the user the failure traceback. When
+            `None`, `reason` is cleared.
+        compute_service_id
+            If given, the open `TaskProvenance` attempt for this
+            ``(task, compute_service_id)`` pair is finalized with
+            `outcome = error`. Used by the creation-failure path, where no
+            `ProtocolDAGResult` (and hence no `set_task_result`) exists to
+            finalize provenance.
+        """
+
+        reason_expr = "$reason" if reason is not None else "null"
+
+        finalize_provenance = ""
+        if compute_service_id is not None:
+            finalize_provenance = f"""
+        WITH scoped_key, t, t_
+
+        // no result exists in the creation-failure path, so finalize the open
+        // provenance attempt for this service directly
+        OPTIONAL MATCH (t_)<-[:PROVENANCE_OF]-(tp:TaskProvenance {{compute_service_id: $compute_service_id}})
+        WHERE tp.datetime_end IS NULL
+        SET tp.outcome = '{TaskOutcomeEnum.error.value}',
+            tp.datetime_end = datetime($statuschange_time)
         """
 
         q = f"""
@@ -3752,7 +4505,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
         WHERE t_.status IN ['{TaskStatusEnum.error.value}', '{TaskStatusEnum.running.value}']
-        SET t_.status = '{TaskStatusEnum.error.value}'
+        {_status_write('t_', TaskStatusEnum.error.value, reason_expr=reason_expr)}
 
         WITH scoped_key, t, t_
 
@@ -3760,96 +4513,118 @@ class Neo4jStore(AlchemiscaleStateStore):
         // drop CLAIMS relationship
         OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
         DELETE cl
-
+        {finalize_provenance}
         RETURN scoped_key, t, t_
         """
 
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `error` as it is not currently `running`."
 
-        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
+        extra_params = {}
+        if reason is not None:
+            extra_params["reason"] = reason
+        if compute_service_id is not None:
+            extra_params["compute_service_id"] = str(compute_service_id)
+
+        return self._set_task_status(
+            tasks, q, err_msg, raise_error=raise_error, extra_params=extra_params
+        )
 
     def set_task_invalid(
-        self, tasks: list[ScopedKey], raise_error: bool = False
+        self,
+        tasks: list[ScopedKey],
+        raise_error: bool = False,
+        reason: str | None = None,
     ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks to `invalid`.
 
         Any Task can be set to `invalid`; an `invalid` Task cannot change to
         any other status.
 
+        Parameters
+        ----------
+        reason
+            If given, recorded on `Task.reason` for the targeted Tasks;
+            otherwise `reason` is cleared.
         """
 
         # set the status and delete the ACTIONS relationship
         # make sure we follow the extends chain and set all tasks to invalid
         # and remove actions relationships
-        q = f"""
-        WITH $scoped_keys AS batch
-        UNWIND batch AS scoped_key
-
-        OPTIONAL MATCH (t:Task {{_scoped_key: scoped_key}})
-
-        OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
-        WHERE NOT t_.status IN ['{TaskStatusEnum.deleted.value}']
-        SET t_.status = '{TaskStatusEnum.invalid.value}'
-
-        WITH scoped_key, t, t_
-
-        OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
-        SET extends_task.status = '{TaskStatusEnum.invalid.value}'
-
-        WITH scoped_key, t, t_, extends_task
-
-        OPTIONAL MATCH (t_)<-[ar:ACTIONS]-(th:TaskHub)
-        OPTIONAL MATCH (extends_task)<-[ar_e:ACTIONS]-(th:TaskHub)
-        OPTIONAL MATCH (t_)<-[applies:APPLIES]-(:TaskRestartPattern)
-        OPTIONAL MATCH (extends_task)<-[applies_e:APPLIES]-(:TaskRestartPattern)
-
-        DELETE ar
-        DELETE ar_e
-        DELETE applies
-        DELETE applies_e
-
-        WITH scoped_key, t, t_
-
-        // drop CLAIMS relationship if present
-        OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
-        DELETE cl
-
-        RETURN scoped_key, t, t_
-        """
+        q = self._invalidate_or_delete_query(
+            TaskStatusEnum.invalid.value,
+            excluded_status=TaskStatusEnum.deleted.value,
+            reason=reason,
+        )
 
         def err_msg(t, status):
             return f"Cannot set task {t} with current status: {status} to `invalid` as it is `deleted`."
 
-        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
+        extra_params = {"reason": reason} if reason is not None else {}
+        return self._set_task_status(
+            tasks, q, err_msg, raise_error=raise_error, extra_params=extra_params
+        )
 
     def set_task_deleted(
-        self, tasks: list[ScopedKey], raise_error: bool = False
+        self,
+        tasks: list[ScopedKey],
+        raise_error: bool = False,
+        reason: str | None = None,
     ) -> list[ScopedKey | None]:
         """Set the status of a list of Tasks to `deleted`.
 
         Any Task can be set to `deleted`; a `deleted` Task cannot change to
         any other status.
 
+        Parameters
+        ----------
+        reason
+            If given, recorded on `Task.reason` for the targeted Tasks;
+            otherwise `reason` is cleared.
         """
 
         # set the status and delete the ACTIONS relationship
         # make sure we follow the extends chain and set all tasks to deleted
         # and remove actions relationships
-        q = f"""
+        q = self._invalidate_or_delete_query(
+            TaskStatusEnum.deleted.value,
+            excluded_status=TaskStatusEnum.invalid.value,
+            reason=reason,
+        )
+
+        def err_msg(t, status):
+            return f"Cannot set task {t} with current status: {status} to `deleted` as it is `invalid`."
+
+        extra_params = {"reason": reason} if reason is not None else {}
+        return self._set_task_status(
+            tasks, q, err_msg, raise_error=raise_error, extra_params=extra_params
+        )
+
+    @staticmethod
+    def _invalidate_or_delete_query(
+        status_value: str, *, excluded_status: str, reason: str | None
+    ) -> str:
+        """Build the shared Cypher for `set_task_invalid`/`set_task_deleted`.
+
+        Both set a target status on the Task and its `EXTENDS` descendants,
+        drop ACTIONS/APPLIES/CLAIMS, and release any open provenance attempts
+        (the user forced a `running` Task off-attempt).
+        """
+        reason_expr = "$reason" if reason is not None else "null"
+        return f"""
         WITH $scoped_keys AS batch
         UNWIND batch AS scoped_key
 
         OPTIONAL MATCH (t:Task {{_scoped_key: scoped_key}})
 
         OPTIONAL MATCH (t_:Task {{_scoped_key: scoped_key}})
-        WHERE NOT t_.status IN ['{TaskStatusEnum.invalid.value}']
-        SET t_.status = '{TaskStatusEnum.deleted.value}'
+        WHERE NOT t_.status IN ['{excluded_status}']
+        {_status_write('t_', status_value, reason_expr=reason_expr)}
 
         WITH scoped_key, t, t_
 
         OPTIONAL MATCH (t_)<-[er:EXTENDS*]-(extends_task:Task)
-        SET extends_task.status = '{TaskStatusEnum.deleted.value}'
+        {_status_write('extends_task', status_value)}
 
         WITH scoped_key, t, t_, extends_task
 
@@ -3865,17 +4640,27 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         WITH scoped_key, t, t_
 
+        // if a `running` Task (or running descendant) was forced off its
+        // attempt, that attempt was released before producing a result
+        OPTIONAL MATCH (released_task:Task)<-[:PROVENANCE_OF]-(tp:TaskProvenance)
+        WHERE (released_task = t_ OR (t_)<-[:EXTENDS*]-(released_task))
+          AND tp.datetime_end IS NULL
+        SET tp.outcome = '{TaskOutcomeEnum.released.value}',
+            tp.datetime_end = datetime($statuschange_time)
+
+        WITH scoped_key, t, t_
+
         // drop CLAIMS relationship if present
         OPTIONAL MATCH (t_)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
         DELETE cl
 
+        // collapse the row fan-out introduced by the EXTENDS-descendant and
+        // released-provenance matches, so `_set_task_status` returns exactly one
+        // entry per input Task (aligned with the input order)
+        WITH DISTINCT scoped_key, t, t_
+
         RETURN scoped_key, t, t_
         """
-
-        def err_msg(t, status):
-            return f"Cannot set task {t} with current status: {status} to `deleted` as it is `invalid`."
-
-        return self._set_task_status(tasks, q, err_msg, raise_error=raise_error)
 
     ## task restart policies
 
@@ -4186,17 +4971,17 @@ class Neo4jStore(AlchemiscaleStateStore):
             self.cancel_tasks(tasks, taskhub, tx=tx)
 
         # any tasks that are still associated with a TaskHub and a TaskRestartPattern must then be okay to switch to waiting
-        renew_waiting_status_query = """
+        renew_waiting_status_query = f"""
         UNWIND $task_scoped_keys AS task_scoped_key
-        MATCH (task:Task {status: $error, `_scoped_key`: task_scoped_key})<-[app:APPLIES]-(trp:TaskRestartPattern)-[:ENFORCES]->(taskhub:TaskHub)
-        SET task.status = $waiting
+        MATCH (task:Task {{status: $error, `_scoped_key`: task_scoped_key}})<-[app:APPLIES]-(trp:TaskRestartPattern)-[:ENFORCES]->(taskhub:TaskHub)
+        {_status_write('task', TaskStatusEnum.waiting.value)}
         """
 
         tx.run(
             renew_waiting_status_query,
             task_scoped_keys=list(map(str, task_scoped_keys)),
-            waiting=TaskStatusEnum.waiting.value,
             error=TaskStatusEnum.error.value,
+            statuschange_time=datetime.datetime.now(tz=datetime.UTC).isoformat(),
         )
 
     ## authentication

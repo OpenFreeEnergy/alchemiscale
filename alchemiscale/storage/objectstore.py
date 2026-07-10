@@ -9,6 +9,8 @@ import datetime
 from boto3.session import Session
 from functools import lru_cache
 
+import zstandard as zstd
+
 from gufe.tokenization import GufeKey
 
 from ..models import ScopedKey
@@ -17,6 +19,12 @@ from ..settings import S3ObjectStoreSettings
 
 # default filename for object store files
 OBJECT_FILENAME = "obj.json.zst"
+
+# per-unit-result artifact layout, relative to a ProtocolUnitResultRef location
+# (``.../{pdr_key}/units/{unit_result_key}``)
+LOGS_FILENAME = "logs.txt.zst"
+STDOUT_DIRNAME = "stdout"
+STDERR_DIRNAME = "stderr"
 
 
 def get_s3os(settings: S3ObjectStoreSettings) -> "S3ObjectStore":
@@ -297,3 +305,83 @@ class S3ObjectStore:
         pdr_bytes = self._get_bytes(location)
 
         return pdr_bytes
+
+    # --- per-unit-result artifacts (logs, stdout, stderr) -----------------
+    #
+    # These live under the unit result's location prefix
+    # (`ProtocolUnitResultRef.location`), a retrieval-optimized copy so that log
+    # retrieval never requires pulling and deserializing the whole
+    # `ProtocolDAGResult`. Bytes are zstd-compressed, consistent with
+    # `alchemiscale.compression`.
+
+    def push_protocol_unit_result_logs(self, unit_location: str, logtext: str) -> str:
+        """Store captured log text for a unit result. Returns the artifact key.
+
+        `logtext` is already truncated to the per-unit cap by the compute
+        service; here it is simply zstd-compressed and stored.
+        """
+        location = os.path.join(unit_location, LOGS_FILENAME)
+        compressed = zstd.ZstdCompressor().compress(logtext.encode("utf-8"))
+        self._store_bytes(location, compressed)
+        return location
+
+    def pull_protocol_unit_result_logs(self, unit_location: str) -> str:
+        """Return decompressed log text for a unit result."""
+        location = os.path.join(unit_location, LOGS_FILENAME)
+        compressed = self._get_bytes(location)
+        return (
+            zstd.ZstdDecompressor()
+            .decompress(compressed)
+            .decode("utf-8", errors="replace")
+        )
+
+    def push_protocol_unit_result_streams(
+        self, unit_location: str, stream: str, files: dict[str, bytes]
+    ) -> list[str]:
+        """Store a unit result's captured stream files (stdout or stderr).
+
+        `files` maps filename -> raw bytes (the `dict[filename, bytes]` gufe
+        embeds on the `ProtocolUnitResult`). Each is zstd-compressed and stored
+        under the stream subdirectory, keeping the protocol-given filename.
+        """
+        if stream not in (STDOUT_DIRNAME, STDERR_DIRNAME):
+            raise ValueError("`stream` must be 'stdout' or 'stderr'")
+        locations = []
+        compressor = zstd.ZstdCompressor()
+        for filename, data in files.items():
+            location = os.path.join(unit_location, stream, f"{filename}.zst")
+            self._store_bytes(location, compressor.compress(data))
+            locations.append(location)
+        return locations
+
+    def pull_protocol_unit_result_streams(
+        self, unit_location: str, stream: str
+    ) -> dict[str, str]:
+        """Return a unit result's captured stream files, filename -> decoded text.
+
+        Bytes are decoded as UTF-8 with ``errors="replace"``; protocols
+        overwhelmingly archive text (binary outputs are #180 `ResultFile`
+        territory).
+        """
+        if stream not in (STDOUT_DIRNAME, STDERR_DIRNAME):
+            raise ValueError("`stream` must be 'stdout' or 'stderr'")
+        prefix = os.path.join(unit_location, stream) + "/"
+        decompressor = zstd.ZstdDecompressor()
+        out = {}
+        for obj in self._get_filename_prefix_contents(prefix):
+            # key includes self.prefix and the full location; recover the
+            # filename relative to the stream directory, dropping the .zst suffix
+            key = obj.key
+            filename = key.rsplit("/", 1)[-1]
+            if filename.endswith(".zst"):
+                filename = filename[: -len(".zst")]
+            data = obj.get()["Body"].read()
+            out[filename] = decompressor.decompress(data).decode(
+                "utf-8", errors="replace"
+            )
+        return out
+
+    def _get_filename_prefix_contents(self, prefix: str):
+        """Iterate S3 objects under a location prefix (excluding ``self.prefix``)."""
+        filter_prefix = os.path.join(self.prefix, prefix)
+        return self.resource.Bucket(self.bucket).objects.filter(Prefix=filter_prefix)
