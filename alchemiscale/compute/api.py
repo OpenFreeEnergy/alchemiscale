@@ -506,20 +506,24 @@ async def set_task_error(
 def update_task_progress(
     compute_service_id,
     *,
-    progress: dict[str, dict[str, int]] = Body(..., embed=True),
+    progress: dict[str, dict[str, int]] = Body(...),
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     """Record live progress counts for a service's claimed Tasks.
 
-    Body maps `Task` ScopedKey strings to
-    ``{"units_completed": int, "units_total": int}`` --- one batched request per
-    push event, regardless of claim count. Like a heartbeat, this route never
-    rejects: updates for Tasks the service no longer claims are silently dropped
-    server-side (the claim expired mid-flight).
+    The request body is the bare map from `Task` ScopedKey string to
+    ``{"units_completed": int, "units_total": int}`` (per the design's transport
+    spec) --- one batched request per push event, regardless of claim count.
+    NOTE: this is deliberately NOT ``embed``ed; the compute client sends the map
+    as the whole body. Like a heartbeat, this route never rejects: updates for
+    Tasks the service no longer claims are silently dropped server-side (the
+    claim expired mid-flight), and malformed entries are skipped rather than
+    500'd.
     """
     progress_ = {
         task_sk: (counts["units_completed"], counts["units_total"])
         for task_sk, counts in progress.items()
+        if "units_completed" in counts and "units_total" in counts
     }
     n4js.update_task_progress(ComputeServiceID(compute_service_id), progress_)
     return None

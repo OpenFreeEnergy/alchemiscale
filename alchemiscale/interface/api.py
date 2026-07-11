@@ -7,7 +7,7 @@
 import re
 from collections import Counter
 
-from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Request
+from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi import status as http_status
 from fastapi.middleware.gzip import GZipMiddleware
 
@@ -1199,7 +1199,7 @@ def get_task_failures(
 def get_task_history(
     task_scoped_key,
     *,
-    limit: int | None = None,
+    limit: int | None = Query(None, ge=1),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -1230,7 +1230,7 @@ def get_tasks_details(
 def get_task_tracebacks(
     task_scoped_key,
     *,
-    limit: int | None = None,
+    limit: int | None = Query(None, ge=1),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):

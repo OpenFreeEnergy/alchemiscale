@@ -491,16 +491,16 @@ def v03_to_v04(url, user, password, dbname):
 
 @migrate.command()
 @db_params
-def v04_to_v05(url, user, password, dbname):
-    """Perform migration appropriate for transitioning from alchemiscale v0.4
-    to v0.5.
+def v07_to_v08(url, user, password, dbname):
+    """Perform migration appropriate for transitioning from alchemiscale v0.7
+    to v0.8.
 
     Note that options here can be set by environment variables, as shown on
     each option.
     """
     from .storage.statestore import get_n4js
     from .settings import Neo4jStoreSettings
-    from .migrations.v04_to_v05 import migrate
+    from .migrations.v07_to_v08 import migrate
 
     cli_values = url | user | password | dbname
     settings = get_settings_from_options(cli_values, Neo4jStoreSettings)

@@ -1,5 +1,5 @@
 """
-:mod:`alchemiscale.migrations.v04_to_v05` --- migration for v0.4 to v0.5
+:mod:`alchemiscale.migrations.v07_to_v08` --- migration for v0.7 to v0.8
 ========================================================================
 
 """
@@ -8,7 +8,7 @@ from ..storage.statestore import Neo4jStore
 
 
 def migrate(n4js: Neo4jStore):
-    """Migrate state store from alchemiscale v0.4 to v0.5.
+    """Migrate state store from alchemiscale v0.7 to v0.8.
 
     Changes:
     - adds indexes on the new ``TaskProvenance`` node label to support the
