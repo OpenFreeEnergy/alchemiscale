@@ -762,6 +762,59 @@ class TestClient:
         ).records[0]["n"]
         assert fresh_count == 1
 
+    def test_merge_scopes_preserves_source_state(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        """merge_scopes must copy each source network into the target scope
+        with the source network's *state*, not silently default every
+        copy to ``active``. Regressing this would resurrect
+        inactive/invalid/deleted networks as active on the target.
+        """
+        source_scope = scope_test
+        target_scope = multiple_scopes[2]
+
+        # add three fresh networks to source, one per exercised state, so
+        # we can observe the state flowing through cleanly without
+        # interference from n4js_preloaded's baseline
+        fresh_networks = {
+            "active": AlchemicalNetwork(
+                edges=list(network_tyk2.edges)[:2], name="state_test_active"
+            ),
+            "inactive": AlchemicalNetwork(
+                edges=list(network_tyk2.edges)[:2], name="state_test_inactive"
+            ),
+            "deleted": AlchemicalNetwork(
+                edges=list(network_tyk2.edges)[:2], name="state_test_deleted"
+            ),
+        }
+        expected_target_sks: dict[str, ScopedKey] = {}
+        for state, an in fresh_networks.items():
+            sk = user_client.create_network(an, source_scope, state=state)
+            expected_target_sks[state] = ScopedKey(
+                gufe_key=sk.gufe_key,
+                org=target_scope.org,
+                campaign=target_scope.campaign,
+                project=target_scope.project,
+            )
+            # sanity: source got the right state
+            assert user_client.get_network_state(sk) == state
+
+        user_client.merge_scopes(
+            scopes=[source_scope],
+            target_scope=target_scope,
+            visualize=False,
+        )
+
+        # each copy must land in target_scope with the source's state
+        for state, target_sk in expected_target_sks.items():
+            assert user_client.check_exists(target_sk)
+            assert user_client.get_network_state(target_sk) == state
+
     def test_merge_scopes_rejects_empty(
         self,
         scope_test,

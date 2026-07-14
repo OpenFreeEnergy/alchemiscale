@@ -377,7 +377,17 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         Each source AlchemicalNetwork is copied via :meth:`copy_network`,
         preserving its name, its ``complete`` Tasks, and its associated
-        ProtocolDAGResultRefs.
+        ProtocolDAGResultRefs. Each copy also preserves its source
+        network's *state* (``active``, ``inactive``, ``invalid``, or
+        ``deleted``) so that ``merge_scopes`` is a faithful move of the
+        scope's contents rather than a silent reactivation.
+
+        This method is not transactional: if a per-network
+        :meth:`copy_network` call fails partway through, earlier copies
+        are already committed and the failure propagates. Because
+        :meth:`copy_network` is idempotent -- re-copying an already-copied
+        network dedups onto the existing target node -- rerunning after a
+        failure is safe.
 
         Parameters
         ----------
@@ -411,10 +421,26 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                 )
 
         # gather every AlchemicalNetwork across the source scopes up front,
-        # regardless of state, so the progress bar has an accurate total
+        # regardless of state, so the progress bar has an accurate total.
+        # Also fetch each source network's state so the copy preserves it
+        # rather than defaulting every copy to ``active``.
         network_sks: list[ScopedKey] = []
+        network_states: list[str] = []
         for sc in scopes:
-            network_sks.extend(self.query_networks(scope=sc, state=None))
+            sc_sks = self.query_networks(scope=sc, state=None)
+            if not sc_sks:
+                continue
+            sc_states = self.get_networks_state(sc_sks)
+            network_sks.extend(sc_sks)
+            # ``get_networks_state`` returns ``None`` for any network the
+            # server did not find; that should not happen for SKs we just
+            # queried, but be defensive and fall back to ``active``.
+            network_states.extend(
+                s if s is not None else NetworkStateEnum.active.value for s in sc_states
+            )
+
+        def _do_copy(sk: ScopedKey, state: str) -> ScopedKey:
+            return self.copy_network(sk, target_scope, state=state, visualize=False)
 
         if visualize:
             from rich.progress import Progress
@@ -426,13 +452,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
                     total=len(network_sks),
                 )
                 new_sks: list[ScopedKey] = []
-                for sk in network_sks:
-                    new_sks.append(self.copy_network(sk, target_scope, visualize=False))
+                for sk, state in zip(network_sks, network_states):
+                    new_sks.append(_do_copy(sk, state))
                     progress.update(task, advance=1)
         else:
             new_sks = [
-                self.copy_network(sk, target_scope, visualize=False)
-                for sk in network_sks
+                _do_copy(sk, state) for sk, state in zip(network_sks, network_states)
             ]
 
         return new_sks

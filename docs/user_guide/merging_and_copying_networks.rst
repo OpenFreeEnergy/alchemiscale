@@ -82,5 +82,9 @@ Use :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.merge_scopes` to
     >>> len(new_sks)
     17
 
-This is a convenience method: each :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` is copied via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.copy_network` in turn, with names preserved.
+This is a convenience method: each :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` is copied via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.copy_network` in turn, with names *and* source states preserved.
+Networks in ``inactive``, ``invalid``, or ``deleted`` state on a source :py:class:`~alchemiscale.models.Scope` land in the target :py:class:`~alchemiscale.models.Scope` in that same state, rather than being silently reactivated.
 It is useful for consolidating :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s from multiple :py:class:`~alchemiscale.models.Scope`\s into a shared workspace, or for relocating a whole :py:class:`~alchemiscale.models.Scope`\'s worth of :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s.
+
+Note that :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.merge_scopes` is not transactional: if a per-network copy fails partway through, the copies that already succeeded remain in the target :py:class:`~alchemiscale.models.Scope`.
+Because :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.copy_network` is idempotent -- re-copying an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` that already exists in the target :py:class:`~alchemiscale.models.Scope` dedups onto the existing node -- rerunning after a failure is safe.

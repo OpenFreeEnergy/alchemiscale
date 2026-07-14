@@ -194,6 +194,115 @@ class TestAPI:
         assert "detail" in details
         assert str(unauth_scope) in details["detail"]
 
+    def test_merge_networks_bad_qualname(self, n4js_preloaded, test_client, scope_test):
+        """POST /networks/merge with a non-AlchemicalNetwork ScopedKey in
+        ``networks`` must be rejected at the store layer (422)."""
+        # a Transformation ScopedKey masquerading as a network SK
+        tf_sks = n4js_preloaded.query_transformations(scope=scope_test)
+        assert tf_sks
+
+        headers = {"Content-type": "application/json"}
+        data = dict(
+            networks=[str(tf_sks[0])],
+            name="should_fail",
+            scope=scope_test.to_dict(),
+        )
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post("/networks/merge", data=jsondata, headers=headers)
+        assert response.status_code == 422
+        assert "AlchemicalNetwork" in response.json()["detail"]
+
+    def test_copy_network(self, n4js_preloaded, test_client, network_tyk2, scope_test):
+        n4js = n4js_preloaded
+
+        # pick a source network in scope_test (pre-loaded)
+        source_sks = n4js.query_networks(scope=scope_test)
+        assert source_sks
+        source_sk = source_sks[0]
+
+        # destination scope: reuse scope_test since the test_client's token
+        # only authorizes it; the copy dedups onto the preexisting node
+        # (name preserved, so gufe_key preserved, so ScopedKey preserved)
+        headers = {"Content-type": "application/json"}
+        data = dict(scope=scope_test.to_dict())
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post(
+            f"/networks/{source_sk}/copy", data=jsondata, headers=headers
+        )
+        assert response.status_code == 200
+
+        copied_sk = ScopedKey(**response.json())
+        assert copied_sk.scope == scope_test
+        assert copied_sk.gufe_key == source_sk.gufe_key
+        assert n4js.check_existence(copied_sk)
+
+    def test_copy_network_bad_target_scope(
+        self, n4js_preloaded, test_client, scope_test, multiple_scopes
+    ):
+        """POST /networks/{sk}/copy with a destination scope the token
+        does not authorize must be denied (401)."""
+        # source in the authorized scope, destination in an unauthorized one
+        source_sks = n4js_preloaded.query_networks(scope=scope_test)
+        assert source_sks
+        source_sk = source_sks[0]
+
+        bad_scope = multiple_scopes[1]
+        assert bad_scope != scope_test
+
+        headers = {"Content-type": "application/json"}
+        data = dict(scope=bad_scope.to_dict())
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post(
+            f"/networks/{source_sk}/copy", data=jsondata, headers=headers
+        )
+        assert response.status_code == 401
+        details = response.json()
+        assert "detail" in details
+        assert str(bad_scope) in details["detail"]
+
+    def test_copy_network_bad_source_scope(
+        self, n4js_preloaded, test_client, scope_test, multiple_scopes
+    ):
+        """POST /networks/{sk}/copy with a source network in a scope the
+        token does not authorize must be denied (401)."""
+        unauth_scope = multiple_scopes[1]
+        assert unauth_scope != scope_test
+
+        unauth_source_sks = n4js_preloaded.query_networks(scope=unauth_scope)
+        assert unauth_source_sks
+        unauth_source_sk = unauth_source_sks[0]
+
+        headers = {"Content-type": "application/json"}
+        data = dict(scope=scope_test.to_dict())
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post(
+            f"/networks/{unauth_source_sk}/copy", data=jsondata, headers=headers
+        )
+        assert response.status_code == 401
+        details = response.json()
+        assert "detail" in details
+        assert str(unauth_scope) in details["detail"]
+
+    def test_copy_network_bad_qualname(self, n4js_preloaded, test_client, scope_test):
+        """POST /networks/{sk}/copy with a non-AlchemicalNetwork ScopedKey
+        must be rejected at the store layer (422)."""
+        tf_sks = n4js_preloaded.query_transformations(scope=scope_test)
+        assert tf_sks
+
+        headers = {"Content-type": "application/json"}
+        data = dict(scope=scope_test.to_dict())
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post(
+            f"/networks/{tf_sks[0]}/copy", data=jsondata, headers=headers
+        )
+        assert response.status_code == 422
+        assert "AlchemicalNetwork" in response.json()["detail"]
+
     def test_get_network(self, prepared_network, test_client):
         network, scoped_key = prepared_network
         response = test_client.get(f"/networks/{scoped_key}")

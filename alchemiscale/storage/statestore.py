@@ -88,7 +88,8 @@ def _is_transformation_keyed_dict(keyed_dict: dict) -> bool:
     """Return ``True`` if ``keyed_dict`` represents a ``Transformation`` or ``NonTransformation``.
 
     Used as the predicate for ``KeyedChain.decode_subchains`` when walking
-    an ``AlchemicalNetwork``'s keyed chain inside :meth:`Neo4jStore.merge_networks`.
+    an ``AlchemicalNetwork``'s keyed chain in :meth:`Neo4jStore.merge_networks`
+    and :meth:`Neo4jStore.copy_network`.
     """
     return keyed_dict.get("__qualname__") in ("Transformation", "NonTransformation")
 
@@ -96,7 +97,7 @@ def _is_transformation_keyed_dict(keyed_dict: dict) -> bool:
 @dataclass
 class _TransformationData:
     """Bookkeeping for one Transformation as it is reconstructed during
-    :meth:`Neo4jStore.merge_networks`.
+    :meth:`Neo4jStore.merge_networks` or :meth:`Neo4jStore.copy_network`.
 
     Attributes
     ----------
@@ -105,7 +106,7 @@ class _TransformationData:
         ``GufeTokenizable``.
     task_tree
         Flat list of Neo4j records, one per ``Task`` associated with this
-        ``Transformation`` in any of the source networks. Each record carries:
+        ``Transformation`` in the source network(s). Each record carries:
 
         - ``tf_key``: this ``Transformation``'s decoded gufe key (string)
         - ``task``: the full ``Task`` node
@@ -113,7 +114,7 @@ class _TransformationData:
         - ``pdrrs``: list of ``ProtocolDAGResultRef`` nodes for this ``Task``
     known_scoped_keys
         All ``ScopedKey``\\ s representing this ``Transformation`` across the
-        source networks. Multiple ``ScopedKey``\\ s can map to a single
+        source network(s). Multiple ``ScopedKey``\\ s can map to a single
         decoded ``Transformation`` if the same content was serialized under
         different gufe versions.
     """
@@ -257,9 +258,9 @@ class _TransformationData:
             # source query returns ``record["extended_task"]`` as the Task
             # that ``record["task"]`` extends -- i.e. in the source graph,
             # ``(task)-[:EXTENDS]->(extended_task)``. The relationship's
-            # direction must be preserved on the clone so the standard
-            # downstream traversals (e.g. lines 2392, 3152, 3547, 3634:
-            # ``(task)-[:EXTENDS]->(other_task)``) keep working.
+            # direction must be preserved on the clone so downstream
+            # traversals that read ``(task)-[:EXTENDS]->(other_task)``
+            # keep working.
             etask_node = (
                 None
                 if not record["extended_task"]
@@ -1115,6 +1116,18 @@ class Neo4jStore(AlchemiscaleStateStore):
         -------
         The ``ScopedKey`` of the new ``AlchemicalNetwork`` in the database.
         """
+        # reject non-AlchemicalNetwork ScopedKeys up front (both HTTP and
+        # Python callers land here; the client-side check alone would leave
+        # the HTTP endpoint open to Transformation/ChemicalSystem SKs)
+        non_networks = [
+            sk for sk in network_scoped_keys if sk.qualname != "AlchemicalNetwork"
+        ]
+        if non_networks:
+            joined = ", ".join(str(sk) for sk in non_networks)
+            raise ValueError(
+                f"The following ScopedKey(s) do not refer to AlchemicalNetworks: {joined}"
+            )
+
         # Collect keyed chain representation for all alchemical networks,
         # gathering every missing ScopedKey up front so callers passing
         # many SKs get a single, complete error.
@@ -1248,6 +1261,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         -------
         The ``ScopedKey`` of the new ``AlchemicalNetwork`` in the database.
         """
+        # reject non-AlchemicalNetwork ScopedKeys up front (both HTTP and
+        # Python callers land here; the client-side check alone would leave
+        # the HTTP endpoint open to Transformation/ChemicalSystem SKs)
+        if network_scoped_key.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                f"ScopedKey ({network_scoped_key}) does not refer to an AlchemicalNetwork"
+            )
+
         # decode the source network's keyed chain
         try:
             source_kc = self.get_keyed_chain(network_scoped_key)
