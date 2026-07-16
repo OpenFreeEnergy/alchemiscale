@@ -17,6 +17,9 @@ All three methods share the same Task-retention policy: **only** :py:class:`~alc
 :py:class:`~alchemiscale.storage.models.Task`\s in any other status (``waiting``, ``running``, ``error``, ``invalid``, ``deleted``) are not carried over.
 This keeps the semantics simple: **the results of computed work are preserved; nothing else is**.
 
+The ``EXTENDS`` relationship between carried :py:class:`~alchemiscale.storage.models.Task`\s is preserved only when both endpoints are ``complete``.
+A carried retry whose parent is in any non-``complete`` status lands in the target :py:class:`~alchemiscale.models.Scope` on its own -- without the parent :py:class:`~alchemiscale.storage.models.Task`, and without a dangling ``EXTENDS`` edge -- so the target-scope graph stays free of orphan :py:class:`~alchemiscale.storage.models.Task` nodes.
+
 .. note::
 
    Any ``Strategy`` (via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.set_network_strategy`) or ``TaskRestartPattern``\s (via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.add_task_restart_patterns`) on the source :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s are not copied.
