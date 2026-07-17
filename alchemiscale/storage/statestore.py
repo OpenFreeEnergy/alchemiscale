@@ -145,14 +145,10 @@ class _TransformationData:
             The ``Neo4jStore`` to query.
         task_statuses
             If provided, only ``Task``\\ s whose ``status`` is in this list
-            are loaded, and any ``EXTENDS`` parent whose status is not in
-            this list is dropped (the child ``Task``'s row is preserved
-            with a null ``extended_task``). If ``None`` (the default),
-            ``Task``\\ s of any status are loaded and every ``EXTENDS``
-            parent is included. Both ``merge_networks`` and
+            are loaded. If ``None`` (the default), ``Task``\\ s of any
+            status are loaded. Both ``merge_networks`` and
             ``copy_network`` pass ``["complete"]`` so only ``Task``\\ s
-            carrying successful results are preserved and no non-carried
-            ancestor Task leaks into the target scope.
+            carrying successful results are preserved.
         """
         key_to_data_map = {str(td.transformation.key): td for td in transformation_data}
         # prepare for unwind clause, include transformation key
@@ -163,22 +159,13 @@ class _TransformationData:
             for td in transformation_data
             for sk in td.known_scoped_keys
         ]
-        # When task_statuses is provided, filter both the primary Task match
-        # AND the EXTENDS parent by status. Without the second gate a
-        # ``complete`` retry that extends an ``error`` parent would drag
-        # its errored parent into the target scope via
-        # ``to_subgraph``'s ``get_or_create_task_node(record["extended_task"])``
-        # -- and that clone would have no PERFORMS edge, since the
-        # errored parent is filtered out of the primary match. Attaching
-        # the WHERE to the OPTIONAL MATCH null-outs ``extended_task`` for
-        # non-carried parents without dropping the primary Task's row.
+        # When task_statuses is provided, filter the Task match; otherwise
+        # include every Task that PERFORMs on one of the listed Transformations.
         if task_statuses is None:
             status_clause = ""
-            extended_status_clause = ""
             params = {"tf_sk_pairs": transformation_sk_pairs}
         else:
             status_clause = "WHERE task.status IN $task_statuses"
-            extended_status_clause = "WHERE extended_task.status IN $task_statuses"
             params = {
                 "tf_sk_pairs": transformation_sk_pairs,
                 "task_statuses": list(task_statuses),
@@ -189,7 +176,6 @@ class _TransformationData:
         MATCH (task:Task)-[:PERFORMS]->(:Transformation|NonTransformation {{`_scoped_key`: tf_scoped_key}})
         {status_clause}
         OPTIONAL MATCH (task)-[:EXTENDS]->(extended_task:Task)
-        {extended_status_clause}
         OPTIONAL MATCH (task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)
         RETURN tf_key, task, extended_task as extended_task, collect(pdrr) as pdrrs
         """
