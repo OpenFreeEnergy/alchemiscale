@@ -9,6 +9,7 @@ from copy import copy
 import datetime
 from enum import Enum, StrEnum
 from uuid import uuid4, UUID
+import json
 import re
 import hashlib
 
@@ -83,6 +84,7 @@ class ComputeServiceRegistration(BaseModel):
     failure_times: list[datetime.datetime] = []
     manager_name: str | None = None
     hostname: str | None = None
+    environment: dict | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -111,6 +113,78 @@ class ComputeServiceRegistration(BaseModel):
         dct_["identifier"] = ComputeServiceID(dct_["identifier"])
 
         return cls(**dct_)
+
+
+class ComputeEnvironment(BaseModel):
+    """A software environment a compute service executes `Task`\\ s in.
+
+    Content-addressed by `hash` (a digest of the capturing tool plus the
+    ``{package: version}`` map), so that identical environments across services
+    and claims are stored as a single node and referenced from many
+    `TaskProvenance` attempts. It outlives the `ComputeServiceRegistration`\\ s
+    that reference it, so an attempt's environment survives the service's
+    teardown.
+
+    Attributes
+    ----------
+    hash
+        Content digest identifying this environment.
+    tool
+        The package manager that produced the listing (``micromamba``,
+        ``mamba``, ``conda``, or ``pip``).
+    packages
+        Mapping of package name to version.
+    captured_at
+        When the environment was captured on the compute service.
+    """
+
+    hash: str
+    tool: str
+    packages: dict[str, str]
+    captured_at: datetime.datetime | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @staticmethod
+    def content_hash(tool: str, packages: dict[str, str]) -> str:
+        """Deterministic digest of ``(tool, packages)`` for deduplication."""
+        canonical = json.dumps({"tool": tool, "packages": packages}, sort_keys=True)
+        return hashlib.sha256(canonical.encode()).hexdigest()
+
+    @classmethod
+    def from_capture(cls, environment: dict) -> "ComputeEnvironment":
+        """Build from a `capture_environment` result
+        (``{"tool", "packages", "captured_at"}``)."""
+        tool = environment["tool"]
+        packages = {str(k): str(v) for k, v in environment["packages"].items()}
+        captured_at = environment.get("captured_at")
+        if isinstance(captured_at, str):
+            captured_at = datetime.datetime.fromisoformat(captured_at)
+        return cls(
+            hash=cls.content_hash(tool, packages),
+            tool=tool,
+            packages=packages,
+            captured_at=captured_at,
+        )
+
+    def to_capture_dict(self) -> dict:
+        """Render as the client-facing environment mapping."""
+        return {
+            "tool": self.tool,
+            "packages": self.packages,
+            "captured_at": _iso(self.captured_at),
+        }
+
+    @classmethod
+    def from_node(cls, node) -> "ComputeEnvironment":
+        """Build from a raw ``ComputeEnvironment`` Neo4j node (``packages`` is
+        stored as a JSON string property)."""
+        return cls(
+            hash=node["hash"],
+            tool=node["tool"],
+            packages=json.loads(node["packages"]),
+            captured_at=_coerce_datetime(node.get("captured_at")),
+        )
 
 
 class ComputeManagerInstruction(StrEnum):
@@ -843,6 +917,7 @@ class TaskAttempt(BaseModel):
     units_completed: int | None = None
     units_total: int | None = None
     protocoldagresultref: ScopedKey | None = None
+    environment: dict | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -861,6 +936,7 @@ class TaskAttempt(BaseModel):
                 if self.protocoldagresultref is not None
                 else None
             ),
+            "environment": self.environment,
         }
 
     @classmethod
@@ -881,6 +957,7 @@ class TaskAttempt(BaseModel):
                 if d.get("protocoldagresultref") is not None
                 else None
             ),
+            environment=d.get("environment"),
         )
 
 

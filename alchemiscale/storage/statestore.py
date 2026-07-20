@@ -33,6 +33,7 @@ from neo4j import Transaction, GraphDatabase, Driver, NotificationDisabledClassi
 from stratocaster.base import Strategy
 
 from .models import (
+    ComputeEnvironment,
     ComputeServiceID,
     ComputeServiceRegistration,
     ComputeManagerRegistration,
@@ -179,6 +180,7 @@ CLAIM_QUERY = f"""
 
     // create CLAIMS relationship with given compute service
     MATCH (csreg:ComputeServiceRegistration {{identifier: $compute_service_id}})
+    OPTIONAL MATCH (csreg)-[:HAS_ENVIRONMENT]->(ce:ComputeEnvironment)
     CREATE (t)<-[cl:CLAIMS {{claimed: datetime($datetimestr)}}]-(csreg)
 
     // create an immutable TaskProvenance record for this execution attempt,
@@ -194,6 +196,12 @@ CLAIM_QUERY = f"""
         _project: t._project
     }})
     CREATE (tp)-[:PROVENANCE_OF]->(t)
+
+    // link the attempt to the service's (deduplicated) execution environment,
+    // if one was captured; RAN_IN survives the registration's deletion
+    FOREACH (_ IN CASE WHEN ce IS NULL THEN [] ELSE [1] END |
+        CREATE (tp)-[:RAN_IN]->(ce)
+    )
 
     {_status_write('t', TaskStatusEnum.running.value, time_param='datetimestr')}
 
@@ -218,6 +226,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         "ComputeServiceRegistration": {
             "name": "compute_service_registration_identifier",
             "property": "identifier",
+        },
+        "ComputeEnvironment": {
+            "name": "compute_environment_hash",
+            "property": "hash",
         },
     }
 
@@ -1530,9 +1542,12 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-        node = Node(
-            "ComputeServiceRegistration", **compute_service_registration.to_dict()
-        )
+        reg_dict = compute_service_registration.to_dict()
+        # the captured environment is a nested map, not a valid node property;
+        # it is stored on a deduplicated ComputeEnvironment node below
+        environment = reg_dict.pop("environment", None)
+
+        node = Node("ComputeServiceRegistration", **reg_dict)
 
         with self.transaction() as tx:
             create_subgraph(tx, Subgraph() | node)
@@ -1552,6 +1567,33 @@ class Neo4jStore(AlchemiscaleStateStore):
                 )
                 if not len(list(results)):
                     raise ValueError("Could not find ComputeManagerRegistration")
+
+            # deduplicate and link the compute environment, if one was captured.
+            # The ComputeEnvironment node is content-addressed by its hash and
+            # shared across services/claims; it is deliberately not deleted with
+            # the registration, so an attempt's environment survives teardown.
+            if environment:
+                ce = ComputeEnvironment.from_capture(environment)
+                tx.run(
+                    """
+                    MERGE (ce:ComputeEnvironment {hash: $hash})
+                    ON CREATE SET ce.tool = $tool,
+                                  ce.packages = $packages,
+                                  ce.captured_at = $captured_at
+                    WITH ce
+                    MATCH (csr:ComputeServiceRegistration {identifier: $identifier})
+                    MERGE (csr)-[:HAS_ENVIRONMENT]->(ce)
+                    """,
+                    hash=ce.hash,
+                    tool=ce.tool,
+                    packages=json.dumps(ce.packages),
+                    captured_at=(
+                        ce.captured_at.isoformat()
+                        if ce.captured_at is not None
+                        else None
+                    ),
+                    identifier=str(compute_service_registration.identifier),
+                )
 
         return compute_service_registration.identifier
 
@@ -3692,10 +3734,18 @@ class Neo4jStore(AlchemiscaleStateStore):
             merge_subgraph(tx, subgraph, "GufeTokenizable", "_scoped_key")
 
     @staticmethod
-    def _task_provenance_node_to_attempt(tp, pdrr_sk) -> TaskAttempt:
-        """Build a `TaskAttempt` record from a `TaskProvenance` node and the
-        `ScopedKey` string of its produced `ProtocolDAGResultRef` (or `None`)."""
+    def _task_provenance_node_to_attempt(
+        tp, pdrr_sk, environment_node=None
+    ) -> TaskAttempt:
+        """Build a `TaskAttempt` record from a `TaskProvenance` node, the
+        `ScopedKey` string of its produced `ProtocolDAGResultRef` (or `None`),
+        and the linked `ComputeEnvironment` node (or `None`)."""
         outcome = tp.get("outcome")
+        environment = (
+            ComputeEnvironment.from_node(environment_node).to_capture_dict()
+            if environment_node is not None
+            else None
+        )
         return TaskAttempt(
             compute_service_id=tp["compute_service_id"],
             hostname=tp.get("hostname"),
@@ -3708,6 +3758,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             protocoldagresultref=(
                 ScopedKey.from_str(pdrr_sk) if pdrr_sk is not None else None
             ),
+            environment=environment,
         )
 
     def get_task_history(
@@ -3723,7 +3774,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         q = """
         MATCH (t:Task {_scoped_key: $task})<-[:PROVENANCE_OF]-(tp:TaskProvenance)
         OPTIONAL MATCH (tp)-[:PROVENANCE_OF]->(pdrr:ProtocolDAGResultRef)
-        RETURN tp, pdrr._scoped_key AS pdrr_sk
+        OPTIONAL MATCH (tp)-[:RAN_IN]->(ce:ComputeEnvironment)
+        RETURN tp, pdrr._scoped_key AS pdrr_sk, ce
         ORDER BY tp.datetime_claimed DESC
         """
         if limit is not None:
@@ -3738,7 +3790,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             for record in tx.run(q, **params):
                 attempts.append(
                     self._task_provenance_node_to_attempt(
-                        record["tp"], record["pdrr_sk"]
+                        record["tp"], record["pdrr_sk"], record["ce"]
                     )
                 )
         return attempts
@@ -3762,6 +3814,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         }
 
         OPTIONAL MATCH (latest_tp)-[:PROVENANCE_OF]->(latest_pdrr:ProtocolDAGResultRef)
+        OPTIONAL MATCH (latest_tp)-[:RAN_IN]->(latest_ce:ComputeEnvironment)
         OPTIONAL MATCH (t)<-[cl:CLAIMS]-(csreg:ComputeServiceRegistration)
         OPTIONAL MATCH (t)<-[:PROVENANCE_OF]-(claim_tp:TaskProvenance {compute_service_id: csreg.identifier})
         WHERE claim_tp.datetime_end IS NULL
@@ -3771,6 +3824,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                num_claims,
                latest_tp,
                latest_pdrr._scoped_key AS latest_pdrr_sk,
+               latest_ce,
                cl.claimed AS claimed,
                csreg.identifier AS csid,
                csreg.hostname AS cs_hostname,
@@ -3798,7 +3852,9 @@ class Neo4jStore(AlchemiscaleStateStore):
                 most_recent_attempt = None
                 if record["latest_tp"] is not None:
                     most_recent_attempt = self._task_provenance_node_to_attempt(
-                        record["latest_tp"], record["latest_pdrr_sk"]
+                        record["latest_tp"],
+                        record["latest_pdrr_sk"],
+                        record["latest_ce"],
                     )
 
                 by_task[record["task_sk"]] = TaskDetails(

@@ -33,8 +33,10 @@ def _register(
     compute_service_id: ComputeServiceID,
     hostname: str | None = "host-a",
     manager_name: str | None = None,
+    environment: dict | None = None,
 ) -> ComputeServiceID:
-    """Register a compute service carrying a ``hostname`` (and optional manager)."""
+    """Register a compute service carrying a ``hostname`` (and optional manager
+    and captured environment)."""
     now = datetime.datetime.now(tz=datetime.UTC)
     registration = ComputeServiceRegistration(
         identifier=compute_service_id,
@@ -43,6 +45,7 @@ def _register(
         failure_times=[],
         hostname=hostname,
         manager_name=manager_name,
+        environment=environment,
     )
     return n4js.register_computeservice(registration)
 
@@ -75,6 +78,7 @@ class TestStateStoreIntrospection:
         compute_service_id: ComputeServiceID,
         hostname: str | None = "host-a",
         manager_name: str | None = None,
+        environment: dict | None = None,
     ):
         """Assemble a network, create+action a single Task, and claim it.
 
@@ -85,7 +89,7 @@ class TestStateStoreIntrospection:
         transformation_sk = n4js.get_scoped_key(transformation, scope_test)
         task_sk = n4js.create_task(transformation_sk)
         n4js.action_tasks([task_sk], taskhub_sk)
-        _register(n4js, compute_service_id, hostname, manager_name)
+        _register(n4js, compute_service_id, hostname, manager_name, environment)
         claimed = n4js.claim_taskhub_tasks(taskhub_sk, compute_service_id)
         assert claimed[0] == task_sk
         return task_sk, taskhub_sk
@@ -671,3 +675,107 @@ class TestStateStoreIntrospection:
         # a scope with no org cannot be leveled
         with pytest.raises(ValueError):
             n4js.get_scope_compute_share(Scope())
+
+    # --- compute environment (issue #106 comment) -------------------------
+
+    ENV = {
+        "tool": "conda",
+        "packages": {"gufe": "1.10.0", "python": "3.11.9", "openmm": "8.1.1"},
+        "captured_at": "2026-07-20T00:00:00+00:00",
+    }
+
+    def _count_environment_nodes(self, n4js) -> int:
+        return n4js.execute_query(
+            "MATCH (ce:ComputeEnvironment) RETURN count(ce) AS n"
+        ).records[0]["n"]
+
+    def test_environment_surfaced_on_task_history(
+        self, n4js, network_tyk2, transformation, scope_test
+    ):
+        csid = ComputeServiceID.new_from_name("env.history")
+        task_sk, _ = self._claimed_task(
+            n4js,
+            network_tyk2,
+            transformation,
+            scope_test,
+            csid,
+            environment=self.ENV,
+        )
+
+        # one ComputeEnvironment node created, linked to the attempt
+        assert self._count_environment_nodes(n4js) == 1
+
+        attempt = n4js.get_task_history(task_sk)[0]
+        assert attempt.environment is not None
+        assert attempt.environment["tool"] == "conda"
+        assert attempt.environment["packages"] == self.ENV["packages"]
+
+    def test_environment_absent_when_not_captured(
+        self, n4js, network_tyk2, transformation, scope_test
+    ):
+        csid = ComputeServiceID.new_from_name("env.none")
+        task_sk, _ = self._claimed_task(
+            n4js, network_tyk2, transformation, scope_test, csid, environment=None
+        )
+        assert self._count_environment_nodes(n4js) == 0
+        assert n4js.get_task_history(task_sk)[0].environment is None
+
+    def test_environment_deduplicated_across_services(self, n4js):
+        # the ComputeEnvironment node is created at registration and content-
+        # addressed, so two services with the SAME environment share one node
+        for i in range(2):
+            _register(
+                n4js,
+                ComputeServiceID.new_from_name(f"env.dedup.{i}"),
+                hostname=f"h{i}",
+                environment=self.ENV,
+            )
+        assert self._count_environment_nodes(n4js) == 1
+
+        # a service with a DIFFERENT environment gets its own node
+        other_env = {
+            **self.ENV,
+            "packages": {**self.ENV["packages"], "openmm": "8.2.0"},
+        }
+        _register(
+            n4js,
+            ComputeServiceID.new_from_name("env.dedup.other"),
+            environment=other_env,
+        )
+        assert self._count_environment_nodes(n4js) == 2
+
+    def test_environment_survives_registration_expiry(
+        self, n4js, network_tyk2, transformation, scope_test
+    ):
+        csid = ComputeServiceID.new_from_name("env.expire")
+        task_sk, _ = self._claimed_task(
+            n4js,
+            network_tyk2,
+            transformation,
+            scope_test,
+            csid,
+            environment=self.ENV,
+        )
+
+        # expire the registration (deletes it and its HAS_ENVIRONMENT edge)
+        n4js.execute_query(
+            """
+            MATCH (csreg:ComputeServiceRegistration {identifier: $csid})
+            SET csreg.heartbeat = datetime($past)
+            """,
+            csid=str(csid),
+            past=(
+                datetime.datetime.now(tz=datetime.UTC) - timedelta(hours=1)
+            ).isoformat(),
+        )
+        n4js.expire_registrations(
+            datetime.datetime.now(tz=datetime.UTC) - timedelta(minutes=1)
+        )
+
+        # the ComputeEnvironment node and the attempt's RAN_IN link survive, so
+        # the attempt's environment is still reported
+        assert self._count_environment_nodes(n4js) == 1
+        attempt = n4js.get_task_history(task_sk)[0]
+        assert attempt.outcome == TaskOutcomeEnum.expired
+        assert attempt.environment is not None
+        assert attempt.environment["packages"] == self.ENV["packages"]

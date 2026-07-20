@@ -5,12 +5,14 @@ API and client rely on for wire transport.
 """
 
 import datetime
+import json
 
 import pytest
 from gufe.tokenization import GufeKey
 
 from alchemiscale.models import Scope, ScopedKey
 from alchemiscale.storage.models import (
+    ComputeEnvironment,
     ComputeServiceID,
     ProtocolDAGResultRec,
     ProtocolUnitResultRec,
@@ -102,6 +104,7 @@ class TestTaskAttempt:
         ],
     )
     def test_roundtrip(self, outcome, pdrr):
+        env = {"tool": "conda", "packages": {"gufe": "1.10.0"}, "captured_at": None}
         ta = TaskAttempt(
             compute_service_id=str(CSID),
             hostname="h",
@@ -112,11 +115,13 @@ class TestTaskAttempt:
             units_completed=1 if outcome else None,
             units_total=4 if outcome else None,
             protocoldagresultref=pdrr,
+            environment=env if outcome is not None else None,
         )
         ta2 = TaskAttempt.from_dict(ta.to_dict())
         assert ta2.compute_service_id == str(CSID)
         assert ta2.outcome is outcome
         assert ta2.protocoldagresultref == pdrr
+        assert ta2.environment == (env if outcome is not None else None)
         assert ta2.datetime_claimed == NOW
 
 
@@ -306,3 +311,52 @@ class TestProtocolUnitResultRefNode:
         assert purr2.has_logs is True
         assert purr2.start_time == NOW
         assert str(purr2.key) == str(key1)
+
+
+class TestComputeEnvironment:
+    CAP = {
+        "tool": "conda",
+        "packages": {"gufe": "1.10.0", "python": "3.11.9"},
+        "captured_at": "2026-07-20T00:00:00+00:00",
+    }
+
+    def test_content_hash_order_independent(self):
+        h1 = ComputeEnvironment.content_hash("conda", {"a": "1", "b": "2"})
+        h2 = ComputeEnvironment.content_hash("conda", {"b": "2", "a": "1"})
+        assert h1 == h2
+
+    def test_content_hash_distinguishes_tool_and_versions(self):
+        base = ComputeEnvironment.content_hash("conda", {"a": "1"})
+        assert base != ComputeEnvironment.content_hash("pip", {"a": "1"})
+        assert base != ComputeEnvironment.content_hash("conda", {"a": "2"})
+
+    def test_from_capture(self):
+        ce = ComputeEnvironment.from_capture(self.CAP)
+        assert ce.tool == "conda"
+        assert ce.packages == self.CAP["packages"]
+        assert ce.hash == ComputeEnvironment.content_hash("conda", self.CAP["packages"])
+        assert ce.captured_at == datetime.datetime.fromisoformat(
+            self.CAP["captured_at"]
+        )
+
+    def test_to_capture_dict_roundtrip(self):
+        ce = ComputeEnvironment.from_capture(self.CAP)
+        assert ce.to_capture_dict() == self.CAP
+
+    def test_from_node(self):
+        ce = ComputeEnvironment.from_capture(self.CAP)
+
+        class FakeNode(dict):
+            def get(self, k, d=None):
+                return super().get(k, d)
+
+        node = FakeNode(
+            hash=ce.hash,
+            tool="conda",
+            packages=json.dumps(ce.packages),
+            captured_at=self.CAP["captured_at"],
+        )
+        ce2 = ComputeEnvironment.from_node(node)
+        assert ce2.hash == ce.hash
+        assert ce2.packages == ce.packages
+        assert ce2.tool == "conda"

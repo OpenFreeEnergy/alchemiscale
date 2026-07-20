@@ -204,6 +204,11 @@ All of them have sensible defaults, so you only need to set them to change the d
     This is the ``hostname`` surfaced through :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_history` and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_tasks_details`.
     If unset (``null``), the service uses ``socket.gethostname()``.
 
+``capture_environment``
+    If ``true`` (the default), the service captures its software environment (package versions) once at startup, trying ``micromamba``, ``mamba``, ``conda``, then ``pip`` and taking the first that succeeds.
+    The environment each ``Task`` execution attempt ran in is recorded in durable provenance (deduplicated across services) and surfaced on the :py:class:`~alchemiscale.storage.models.TaskAttempt` records returned by :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_history`.
+    Best-effort: if no package manager is available, no environment is recorded.
+
 ``capture_streams``
     If ``true`` (the default), each :external+gufe:py:class:`~gufe.protocols.protocolunit.ProtocolUnit`\'s :external+gufe:py:class:`~gufe.protocols.protocolunit.Context` is constructed with per-attempt stdout/stderr directories, so ``gufe``'s native per-unit stream-capture mechanism archives whatever the :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` directs into them.
     This is *protocol opt-in*: the compute service only provides the capture directories, and each :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` chooses what, if anything, to write there.

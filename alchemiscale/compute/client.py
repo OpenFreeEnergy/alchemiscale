@@ -45,10 +45,15 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         compute_service_id: ComputeServiceID,
         compute_manager_id: ComputeManagerID | None = None,
         hostname: str | None = None,
+        environment: dict | None = None,
     ):
         res = self._post_resource(
             f"/computeservice/{compute_service_id}/register",
-            {"compute_manager_id": compute_manager_id, "hostname": hostname},
+            {
+                "compute_manager_id": compute_manager_id,
+                "hostname": hostname,
+                "environment": environment,
+            },
         )
         return ComputeServiceID(res)
 

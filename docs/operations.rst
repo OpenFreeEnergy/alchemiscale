@@ -171,3 +171,18 @@ Migrate schema from ``alchemiscale`` 0.3 to 0.4
 4. Shut down the ``neo4j`` service (``Ctrl+C`` of running instance in step 2), then bring up the full set of services::
 
     USER_ID=$(id -u) GROUP_ID=$(id -g) docker-compose up -d
+
+
+Migrate schema from ``alchemiscale`` 0.7 to 0.8
+-----------------------------------------------
+``alchemiscale`` 0.8 introduces durable Task execution provenance, including a
+record of the software environment each compute service runs in.
+This requires a lightweight, idempotent schema migration that adds a
+``neo4j`` uniqueness constraint for the new ``ComputeEnvironment`` node label;
+no data migration is required.
+
+Perform the schema migration against your running deployment::
+
+    docker run --rm -it --network alchemiscale-server_db -e NEO4J_URL=bolt://neo4j:7687 -e NEO4J_USER=<USER> -e NEO4J_PASS=<PASSWORD> \
+               ghcr.io/openforcefield/alchemiscale-server:v0.8.0 \
+               database migrate v07-to-v08

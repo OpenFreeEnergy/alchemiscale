@@ -35,6 +35,16 @@ class ComputeServiceSettings(BaseModel):
             "`socket.gethostname()`."
         ),
     )
+    capture_environment: bool = Field(
+        True,
+        description=(
+            "If True, capture the software environment (package versions) this "
+            "service executes in --- via `micromamba`/`mamba`/`conda`/`pip` --- "
+            "once at startup, and record it in durable execution provenance. "
+            "Best-effort: if no package manager is available, no environment is "
+            "recorded."
+        ),
+    )
     compute_manager_id: str | None = Field(
         None,
         description=(

@@ -21,6 +21,7 @@ from gufe.protocols.protocoldag import ProtocolDAG, ProtocolDAGResult
 from .client import AlchemiscaleComputeClient
 from .execute import execute_DAG
 from .capture import SynchronousExecutionHooks
+from .environment import capture_environment
 from .settings import ComputeServiceSettings
 from ..storage.models import ComputeServiceID
 from ..models import Scope, ScopedKey
@@ -85,6 +86,12 @@ class SynchronousComputeService:
         # service creates; falls back to the OS hostname when not set
         self.hostname = self.settings.hostname or socket.gethostname()
 
+        # capture the software environment once (fixed for the service's
+        # lifetime); best-effort, recorded in durable execution provenance
+        self.environment = (
+            capture_environment() if self.settings.capture_environment else None
+        )
+
         # shared between the main loop and the heartbeat thread; both wake
         # on a single ``stop()`` (which calls ``int_sleep.interrupt()``).
         # If you split these into separate functors, be sure to interrupt
@@ -122,6 +129,7 @@ class SynchronousComputeService:
             self.compute_service_id,
             self.settings.compute_manager_id,
             hostname=self.hostname,
+            environment=self.environment,
         )
 
     def _deregister(self):
