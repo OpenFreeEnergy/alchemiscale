@@ -109,6 +109,7 @@ def register_computeservice(
     *,
     compute_manager_id: str | None = Body(None, embed=True),
     hostname: str | None = Body(None, embed=True),
+    environment: dict | None = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     now = datetime.datetime.now(tz=datetime.UTC)
@@ -124,6 +125,7 @@ def register_computeservice(
         failure_times=[],
         manager_name=manager_name,
         hostname=hostname,
+        environment=environment,
     )
 
     try:

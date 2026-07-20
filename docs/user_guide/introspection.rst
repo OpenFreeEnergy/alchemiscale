@@ -34,6 +34,7 @@ Each :py:class:`~alchemiscale.storage.models.TaskAttempt` records:
 * ``outcome`` — one of ``complete``, ``error``, ``expired`` (the compute service lost its registration before producing a result), or ``released`` (you forced the :py:class:`~alchemiscale.storage.models.Task` to another status before it finished)
 * ``units_completed`` and ``units_total`` — how far the attempt progressed through its :external+gufe:py:class:`~gufe.protocols.protocolunit.ProtocolUnit`\s
 * ``protocoldagresultref`` — the :py:class:`~alchemiscale.models.ScopedKey` of the :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult` the attempt produced, where one exists (``expired`` and ``released`` attempts have none)
+* ``environment`` — the software environment the attempt ran in, as ``{"tool": ..., "packages": {name: version, ...}, "captured_at": ...}``, captured by the compute service at startup (``None`` if the service did not capture one; see :ref:`compute`)
 
 You can limit the history to the most recent attempts with the ``limit`` keyword argument::
 
