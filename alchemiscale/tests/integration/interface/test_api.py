@@ -5,6 +5,7 @@ from gufe import AlchemicalNetwork
 from gufe.tokenization import JSON_HANDLER, KeyedChain
 
 from alchemiscale.models import ScopedKey
+from alchemiscale.storage.models import NetworkStateEnum
 
 
 def pre_load_payload(network, scope, name="incomplete 2"):
@@ -212,6 +213,63 @@ class TestAPI:
         response = test_client.post("/networks/merge", data=jsondata, headers=headers)
         assert response.status_code == 422
         assert "AlchemicalNetwork" in response.json()["detail"]
+
+    def test_merge_networks_empty_list(self, n4js_preloaded, test_client, scope_test):
+        """POST /networks/merge with an empty ``networks`` list must be
+        rejected at the store layer (422); a REST caller must not be
+        able to produce an empty AlchemicalNetwork.
+        """
+        headers = {"Content-type": "application/json"}
+        data = dict(networks=[], name="should_fail", scope=scope_test.to_dict())
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post("/networks/merge", data=jsondata, headers=headers)
+        assert response.status_code == 422
+        assert "at least one" in response.json()["detail"]
+
+    def test_merge_networks_non_active_source(
+        self, n4js_preloaded, test_client, network_tyk2, scope_test
+    ):
+        """POST /networks/merge must reject a source network that is
+        not in ``active`` state (422). This keeps consolidation from
+        silently reactivating a soft-deleted or invalidated network.
+        """
+        source_sks = n4js_preloaded.query_networks(scope=scope_test)
+        assert source_sks
+        n4js_preloaded.set_network_state(
+            [source_sks[0]], [NetworkStateEnum.inactive.value]
+        )
+
+        headers = {"Content-type": "application/json"}
+        data = dict(
+            networks=[str(source_sks[0])],
+            name="should_fail",
+            scope=scope_test.to_dict(),
+        )
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post("/networks/merge", data=jsondata, headers=headers)
+        assert response.status_code == 422
+        assert "Only `active`" in response.json()["detail"]
+
+    def test_copy_network_non_active_source(
+        self, n4js_preloaded, test_client, scope_test
+    ):
+        """POST /networks/{sk}/copy must reject a non-``active`` source."""
+        source_sks = n4js_preloaded.query_networks(scope=scope_test)
+        assert source_sks
+        source_sk = source_sks[0]
+        n4js_preloaded.set_network_state([source_sk], [NetworkStateEnum.inactive.value])
+
+        headers = {"Content-type": "application/json"}
+        data = dict(scope=scope_test.to_dict())
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post(
+            f"/networks/{source_sk}/copy", data=jsondata, headers=headers
+        )
+        assert response.status_code == 422
+        assert "Only `active`" in response.json()["detail"]
 
     def test_copy_network(self, n4js_preloaded, test_client, network_tyk2, scope_test):
         n4js = n4js_preloaded

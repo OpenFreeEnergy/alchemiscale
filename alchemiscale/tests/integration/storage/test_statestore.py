@@ -462,6 +462,190 @@ class TestNeo4jStore(TestStateStore):
             fresh_ext_pdrr.obj_key,
         }
 
+        # verify get_transformation_tasks(..., return_as="graph") on a
+        # copied Transformation returns a mapping wholly in the target
+        # scope. This exercises the copied Task nodes' serialized
+        # ``extends`` property, which is what that method reads to build
+        # the graph. If left unrewritten, the target-scope child would
+        # still point at the source-scope parent ScopedKey.
+        target_fresh_tf_sk = ScopedKey(
+            gufe_key=fresh_tf_sk.gufe_key,
+            org=target_scope.org,
+            campaign=target_scope.campaign,
+            project=target_scope.project,
+        )
+        task_graph = n4js.get_transformation_tasks(
+            target_fresh_tf_sk, return_as="graph"
+        )
+        target_base_sk = target_key(fresh_base[0])
+        target_ext_sk = target_key(fresh_ext[0])
+        assert task_graph == {target_base_sk: None, target_ext_sk: target_base_sk}
+        # every key and every non-None value lives in target_scope
+        for child_sk, parent_sk in task_graph.items():
+            assert child_sk.scope == target_scope
+            if parent_sk is not None:
+                assert parent_sk.scope == target_scope
+
+    def test_merge_networks_rejects_empty_list(self, n4js, scope_test):
+        """merge_networks must reject an empty ScopedKey list up front,
+        so direct-store and REST callers cannot produce an empty
+        AlchemicalNetwork.
+        """
+        with pytest.raises(ValueError, match="at least one"):
+            n4js.merge_networks([], "should_fail", scope_test)
+
+    def test_merge_networks_rejects_non_active_source(
+        self, n4js, network_tyk2, scope_test
+    ):
+        """Only ``active`` source networks are eligible for merging.
+
+        A mix of ``active`` + ``inactive`` sources must raise before any
+        target-side writes so consolidation never silently reactivates a
+        soft-deleted or invalidated network.
+        """
+        active_an = network_tyk2.copy_with_replacements(name="merge_active_source")
+        inactive_an = network_tyk2.copy_with_replacements(name="merge_inactive_source")
+        active_sk, _, _ = n4js.assemble_network(active_an, scope_test)
+        inactive_sk, _, _ = n4js.assemble_network(
+            inactive_an, scope_test, state=NetworkStateEnum.inactive
+        )
+
+        target_scope = Scope(**(scope_test.to_dict() | {"project": "mergetarget"}))
+        with pytest.raises(ValueError, match="Only `active`"):
+            n4js.merge_networks([active_sk, inactive_sk], "should_fail", target_scope)
+
+        # no partial write: the target AN was never created
+        target_an_count = n4js.execute_query(
+            """
+            MATCH (an:AlchemicalNetwork {_project: $project, name: "should_fail"})
+            RETURN count(an) AS n
+            """,
+            project=target_scope.project,
+        ).records[0]["n"]
+        assert target_an_count == 0
+
+    def test_copy_network_rejects_non_active_source(
+        self, n4js, network_tyk2, scope_test
+    ):
+        """copy_network must reject a non-``active`` source network."""
+        an = network_tyk2.copy_with_replacements(name="copy_inactive_source")
+        sk, _, _ = n4js.assemble_network(
+            an, scope_test, state=NetworkStateEnum.inactive
+        )
+        target_scope = Scope(**(scope_test.to_dict() | {"project": "copytarget"}))
+        with pytest.raises(ValueError, match="Only `active`"):
+            n4js.copy_network(sk, target_scope)
+
+    def test_update_task_trees_invariant_drops_non_complete_extends_parent(
+        self, n4js, network_tyk2, scope_test
+    ):
+        """``update_task_trees(task_statuses=["complete"])`` must never
+        return an ``extended_task`` whose status is not ``complete``,
+        even under adversarial source-graph states.
+
+        The normal store transitions plus ``claim_taskhub_tasks``'s
+        parent-complete gate ordinarily prevent a ``complete`` child of a
+        non-``complete`` parent from arising. But ``set_task_running``
+        itself does not check the parent's status, so a caller poking
+        the store API directly can force the shape: create an errored
+        parent, create a child extending it, then call
+        ``set_task_running``/``set_task_complete`` on the child to
+        bypass the claim gate. Under this synthetic state, the
+        ``extended_status_clause`` in ``update_task_trees`` still
+        excludes the errored parent from the carry, so ``copy_network``
+        clones only the complete child, no orphan parent lands in the
+        target scope, and no dangling ``EXTENDS`` edge remains.
+        """
+        source_scope = Scope(**(scope_test.to_dict() | {"project": "invsource"}))
+        target_scope = Scope(**(scope_test.to_dict() | {"project": "invtarget"}))
+
+        source_sk, _, _ = n4js.assemble_network(network_tyk2, source_scope)
+
+        tf_sk = n4js.get_scoped_key(
+            sorted(network_tyk2.edges, key=lambda e: e.key)[0], source_scope
+        )
+
+        # errored parent
+        parent = n4js.create_task(tf_sk)
+        n4js.set_task_running([parent])
+        n4js.set_task_error([parent])
+        parent_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=parent.scope,
+            ok=False,
+        )
+        n4js.set_task_result(parent, parent_pdrr)
+
+        # child extending the errored parent; bypass the claim path by
+        # calling set_task_running directly (this is the store-API abuse
+        # that the invariant defends against)
+        retry = n4js.create_task(tf_sk, extends=parent)
+        n4js.set_task_running([retry])
+        n4js.set_task_complete([retry])
+        retry_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=retry.scope,
+            ok=True,
+        )
+        n4js.set_task_result(retry, retry_pdrr)
+
+        n4js.copy_network(source_sk, target_scope)
+
+        def target_key(source_task_sk):
+            return ScopedKey(
+                gufe_key=source_task_sk.gufe_key,
+                org=target_scope.org,
+                campaign=target_scope.campaign,
+                project=target_scope.project,
+            )
+
+        # errored parent must not appear in target
+        parent_count = n4js.execute_query(
+            "MATCH (t:Task {_scoped_key: $sk}) RETURN count(t) AS n",
+            sk=str(target_key(parent)),
+        ).records[0]["n"]
+        assert parent_count == 0
+
+        # complete retry appears wired to its Transformation via PERFORMS
+        perf_count = n4js.execute_query(
+            """
+            MATCH (t:Task {_scoped_key: $sk})-[:PERFORMS]->(tf)
+            WHERE (tf:Transformation OR tf:NonTransformation)
+              AND tf._project = $project
+            RETURN count(tf) AS n
+            """,
+            sk=str(target_key(retry)),
+            project=target_scope.project,
+        ).records[0]["n"]
+        assert perf_count == 1
+
+        # no dangling EXTENDS Neo4j edge, and the retry's serialized
+        # ``extends`` property is rewritten to None since the parent
+        # was not carried
+        ext_count = n4js.execute_query(
+            """
+            MATCH (t:Task {_scoped_key: $sk})-[:EXTENDS]->(other:Task)
+            RETURN count(other) AS n
+            """,
+            sk=str(target_key(retry)),
+        ).records[0]["n"]
+        assert ext_count == 0
+        retry_props = n4js.execute_query(
+            "MATCH (t:Task {_scoped_key: $sk}) RETURN t.extends AS extends",
+            sk=str(target_key(retry)),
+        ).records[0]
+        assert retry_props["extends"] is None
+
+        # only the ok PDRR appears in target
+        pdrrs = n4js.execute_query(
+            """
+            MATCH (pdrr:ProtocolDAGResultRef {_project: $project})
+            RETURN pdrr.ok AS ok, pdrr.obj_key AS obj_key
+            """,
+            project=target_scope.project,
+        ).records
+        assert [(r["ok"], r["obj_key"]) for r in pdrrs] == [(True, retry_pdrr.obj_key)]
+
     def test_set_network_state(self, n4js, network_tyk2, scope_test):
         valid_states = [state.value for state in NetworkStateEnum]
         network_sks = []

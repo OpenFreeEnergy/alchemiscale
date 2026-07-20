@@ -13,7 +13,11 @@ Three :py:class:`~alchemiscale.interface.client.AlchemiscaleClient` methods supp
 
 The destination :py:class:`~alchemiscale.models.Scope` for each of these must be a *specific* :py:class:`~alchemiscale.models.Scope` (no wildcards), and your user must have permissions on the source and destination :py:class:`~alchemiscale.models.Scope`\s.
 
-All three methods share the same Task-retention policy: **only** :py:class:`~alchemiscale.storage.models.Task`\s in ``complete`` status carry over to the new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, together with their :py:class:`~alchemiscale.storage.models.ProtocolDAGResultRef`\s.
+All three methods operate only on :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s in ``active`` state.
+:py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.merge_networks` and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.copy_network` reject a non-``active`` source with an error; :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.merge_scopes` silently skips :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s in ``inactive``, ``invalid``, or ``deleted`` state.
+This keeps consolidation intentional: soft-deleted or invalidated networks are not silently reactivated on the target :py:class:`~alchemiscale.models.Scope`.
+
+All three methods also share the same Task-retention policy: **only** :py:class:`~alchemiscale.storage.models.Task`\s in ``complete`` status carry over to the new :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`, together with their :py:class:`~alchemiscale.storage.models.ProtocolDAGResultRef`\s.
 :py:class:`~alchemiscale.storage.models.Task`\s in any other status (``waiting``, ``running``, ``error``, ``invalid``, ``deleted``) are not carried over.
 This keeps the semantics simple: **the results of computed work are preserved; nothing else is**.
 
@@ -82,9 +86,9 @@ Use :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.merge_scopes` to
     >>> len(new_sks)
     17
 
-This is a convenience method: each :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` is copied via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.copy_network` in turn, with names *and* source states preserved.
-Networks in ``inactive``, ``invalid``, or ``deleted`` state on a source :py:class:`~alchemiscale.models.Scope` land in the target :py:class:`~alchemiscale.models.Scope` in that same state, rather than being silently reactivated.
-It is useful for consolidating :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s from multiple :py:class:`~alchemiscale.models.Scope`\s into a shared workspace, or for relocating a whole :py:class:`~alchemiscale.models.Scope`\'s worth of :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s.
+This is a convenience method: each ``active`` :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` in a source :py:class:`~alchemiscale.models.Scope` is copied via :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.copy_network` in turn, with its name preserved.
+Networks in ``inactive``, ``invalid``, or ``deleted`` state on a source :py:class:`~alchemiscale.models.Scope` are skipped entirely.
+It is useful for consolidating the *live* :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s from multiple :py:class:`~alchemiscale.models.Scope`\s into a shared workspace, or for relocating a :py:class:`~alchemiscale.models.Scope`\'s ``active`` :external+gufe:py:class:`~gufe.network.AlchemicalNetwork`\s.
 
 Note that :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.merge_scopes` is not transactional: if a per-network copy fails partway through, the copies that already succeeded remain in the target :py:class:`~alchemiscale.models.Scope`.
 Because :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.copy_network` is idempotent -- re-copying an :external+gufe:py:class:`~gufe.network.AlchemicalNetwork` that already exists in the target :py:class:`~alchemiscale.models.Scope` dedups onto the existing node -- rerunning after a failure is safe.

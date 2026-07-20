@@ -145,10 +145,14 @@ class _TransformationData:
             The ``Neo4jStore`` to query.
         task_statuses
             If provided, only ``Task``\\ s whose ``status`` is in this list
-            are loaded. If ``None`` (the default), ``Task``\\ s of any
-            status are loaded. Both ``merge_networks`` and
-            ``copy_network`` pass ``["complete"]`` so only ``Task``\\ s
-            carrying successful results are preserved.
+            are loaded, and any ``EXTENDS`` parent whose status is not in
+            this list is null-ed (the child row is preserved without its
+            parent). If ``None`` (the default), ``Task``\\ s of any status
+            are loaded and every ``EXTENDS`` parent is returned. Both
+            ``merge_networks`` and ``copy_network`` pass ``["complete"]``
+            so only ``Task``\\ s carrying successful results are preserved
+            and no non-carried ancestor Task can leak into the target
+            scope regardless of source-graph shape.
         """
         key_to_data_map = {str(td.transformation.key): td for td in transformation_data}
         # prepare for unwind clause, include transformation key
@@ -159,13 +163,27 @@ class _TransformationData:
             for td in transformation_data
             for sk in td.known_scoped_keys
         ]
-        # When task_statuses is provided, filter the Task match; otherwise
-        # include every Task that PERFORMs on one of the listed Transformations.
+        # When task_statuses is provided, filter both the primary Task match
+        # AND any ``EXTENDS`` parent on the same status list. Neo4j's normal
+        # store transitions guarantee that a ``complete`` child's parent is
+        # ``complete`` too *via the compute-service claim path* (see
+        # `claim_taskhub_tasks`'s `other_task.status = 'complete'` gate),
+        # but ``set_task_running`` itself does not check the parent, so a
+        # caller poking the store API directly can produce a ``complete``
+        # child of a non-``complete`` parent. Gating the OPTIONAL MATCH
+        # here makes ``update_task_trees`` itself enforce the invariant --
+        # for non-carried parents, ``extended_task`` is null-ed without
+        # dropping the primary Task's row, so ``to_subgraph`` skips the
+        # parent clone and the ``EXTENDS`` edge, and no non-carried Task
+        # ever leaks into the target scope regardless of source-graph
+        # shape.
         if task_statuses is None:
             status_clause = ""
+            extended_status_clause = ""
             params = {"tf_sk_pairs": transformation_sk_pairs}
         else:
             status_clause = "WHERE task.status IN $task_statuses"
+            extended_status_clause = "WHERE extended_task.status IN $task_statuses"
             params = {
                 "tf_sk_pairs": transformation_sk_pairs,
                 "task_statuses": list(task_statuses),
@@ -176,6 +194,7 @@ class _TransformationData:
         MATCH (task:Task)-[:PERFORMS]->(:Transformation|NonTransformation {{`_scoped_key`: tf_scoped_key}})
         {status_clause}
         OPTIONAL MATCH (task)-[:EXTENDS]->(extended_task:Task)
+        {extended_status_clause}
         OPTIONAL MATCH (task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)
         RETURN tf_key, task, extended_task as extended_task, collect(pdrr) as pdrrs
         """
@@ -218,6 +237,37 @@ class _TransformationData:
             "_project": target_scope.project,
         }
 
+        # Every ``Task`` that will be cloned into the target scope, keyed
+        # by gufe key. Used to rewrite each cloned ``Task``'s serialized
+        # ``extends`` property so it references the target-scope parent's
+        # ``ScopedKey`` (if the parent was carried) rather than the
+        # source-scope ``ScopedKey`` (which would only be a valid pointer
+        # in the source scope). Only primary ``task`` records are guaranteed
+        # to be in the carry set; ``extended_task`` records that survived
+        # the ``update_task_trees`` status gate are equivalently complete
+        # and, since a Task's ``EXTENDS`` parent must PERFORM on the same
+        # Transformation, are also present as a primary row in some other
+        # record.
+        carried_task_gufe_keys = {
+            record["task"]["_gufe_key"] for record in self.task_tree
+        }
+
+        def rewrite_task_extends(props: dict) -> dict:
+            """Return ``props`` with the serialized ``extends`` string
+            rewritten so it points at the target-scope parent ``Task``,
+            or ``None`` if that parent was not carried into the target.
+            """
+            source_extends = props.get("extends")
+            if not source_extends:
+                return props
+            source_extends_sk = ScopedKey.from_str(source_extends)
+            if str(source_extends_sk.gufe_key) in carried_task_gufe_keys:
+                target_extends_sk = ScopedKey(
+                    gufe_key=source_extends_sk.gufe_key, **target_scope.to_dict()
+                )
+                return props | {"extends": str(target_extends_sk)}
+            return props | {"extends": None}
+
         def record_to_node(record):
             # create node from a neo4j record with updated scoped key
             scoped_key = ScopedKey(
@@ -227,6 +277,20 @@ class _TransformationData:
                 *record.labels,
                 **record._properties | scope_props | {"_scoped_key": str(scoped_key)},
             )
+
+        def task_record_to_node(record):
+            # ``Task`` nodes additionally need their serialized ``extends``
+            # property rewritten so it references the target-scope
+            # parent's ``ScopedKey`` rather than the source-scope one --
+            # this property is what ``get_transformation_tasks(...,
+            # return_as='graph')`` returns to callers, and if left
+            # unchanged the graph view would point out-of-scope.
+            scoped_key = ScopedKey(
+                gufe_key=record["_gufe_key"], **target_scope.to_dict()
+            )
+            props = record._properties | scope_props | {"_scoped_key": str(scoped_key)}
+            props = rewrite_task_extends(props)
+            return Node(*record.labels, **props)
 
         # Memoize Task Nodes by gufe key across iterations of ``task_tree``.
         # If ``record[i]["task"]`` is the same Task as
@@ -242,7 +306,7 @@ class _TransformationData:
             gufe_key = record["_gufe_key"]
             node = task_node_cache.get(gufe_key)
             if node is None:
-                node = record_to_node(record)
+                node = task_record_to_node(record)
                 task_node_cache[gufe_key] = node
             return node
 
@@ -1078,6 +1142,31 @@ class Neo4jStore(AlchemiscaleStateStore):
         """
         raise NotImplementedError
 
+    def _require_active_networks(self, network_scoped_keys: list[ScopedKey]) -> None:
+        """Raise ``ValueError`` if any given network is not in ``active`` state.
+
+        Used by :meth:`merge_networks` and :meth:`copy_network` to keep
+        the merge/copy machinery working over ``active`` networks only.
+        ``inactive`` / ``invalid`` / ``deleted`` networks (or networks
+        missing from the database entirely) are rejected up front so the
+        target scope cannot silently receive a copy that reactivates a
+        soft-deleted or invalidated source.
+        """
+        states = self.get_network_state(network_scoped_keys)
+        active = NetworkStateEnum.active.value
+        offenders = [
+            (sk, s) for sk, s in zip(network_scoped_keys, states) if s != active
+        ]
+        if offenders:
+            joined = ", ".join(
+                f"{sk} (state={s!r})" if s is not None else f"{sk} (not found)"
+                for sk, s in offenders
+            )
+            raise ValueError(
+                "Only `active` AlchemicalNetworks are eligible for merging or "
+                f"copying; the following are not: {joined}"
+            )
+
     def merge_networks(
         self,
         network_scoped_keys: list[ScopedKey],
@@ -1094,6 +1183,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         ``ProtocolDAGResultRef``\\ s and ``EXTENDS`` relationships,
         wired to their ``Transformation`` via ``PERFORMS``.
 
+        Only source networks in ``active`` state are eligible; if any of
+        the given ``ScopedKey``\\ s refers to a network in a non-``active``
+        state (``inactive``, ``invalid``, ``deleted``, or missing), a
+        :class:`ValueError` is raised without side effects.
+
         Any ``Strategy`` (``PROGRESSES``) and ``TaskRestartPattern``\\ s
         (``ENFORCES`` / ``APPLIES``) on the source networks are not
         carried over; set them on the merged network via
@@ -1104,6 +1198,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         ----------
         network_scoped_keys
           List of ``AlchemicalNetwork`` ``ScopedKey`` objects to merge.
+          Must be non-empty; every referenced network must be ``active``.
         name
           The name of the new ``AlchemicalNetwork``.
         scope
@@ -1116,6 +1211,13 @@ class Neo4jStore(AlchemiscaleStateStore):
         -------
         The ``ScopedKey`` of the new ``AlchemicalNetwork`` in the database.
         """
+        # reject empty input; no meaningful merge is possible and the
+        # result would be an empty AlchemicalNetwork
+        if not network_scoped_keys:
+            raise ValueError(
+                "`network_scoped_keys` must contain at least one ScopedKey"
+            )
+
         # reject non-AlchemicalNetwork ScopedKeys up front (both HTTP and
         # Python callers land here; the client-side check alone would leave
         # the HTTP endpoint open to Transformation/ChemicalSystem SKs)
@@ -1127,6 +1229,11 @@ class Neo4jStore(AlchemiscaleStateStore):
             raise ValueError(
                 f"The following ScopedKey(s) do not refer to AlchemicalNetworks: {joined}"
             )
+
+        # only ``active`` source networks are eligible for merging;
+        # ``inactive`` / ``invalid`` / ``deleted`` networks are excluded
+        # entirely so they cannot be silently reactivated in the target
+        self._require_active_networks(network_scoped_keys)
 
         # Collect keyed chain representation for all alchemical networks,
         # gathering every missing ScopedKey up front so callers passing
@@ -1235,6 +1342,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         via ``PERFORMS`` and to one another via ``EXTENDS`` where
         applicable.
 
+        Only source networks in ``active`` state are eligible; a
+        non-``active`` source (``inactive``, ``invalid``, ``deleted``, or
+        missing) raises :class:`ValueError`.
+
         Any ``Strategy`` (``PROGRESSES``) and ``TaskRestartPattern``\\ s
         (``ENFORCES`` / ``APPLIES``) on the source network are not
         carried over; set them on the copy via
@@ -1244,7 +1355,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         Parameters
         ----------
         network_scoped_key
-            The ``ScopedKey`` of the source ``AlchemicalNetwork``.
+            The ``ScopedKey`` of the source ``AlchemicalNetwork``. Must
+            refer to an ``active`` network.
         scope
             The destination ``Scope`` for the copy.
         name
@@ -1268,6 +1380,9 @@ class Neo4jStore(AlchemiscaleStateStore):
             raise ValueError(
                 f"ScopedKey ({network_scoped_key}) does not refer to an AlchemicalNetwork"
             )
+
+        # only ``active`` source networks are eligible for copying
+        self._require_active_networks([network_scoped_key])
 
         # decode the source network's keyed chain
         try:

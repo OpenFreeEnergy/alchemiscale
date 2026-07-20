@@ -762,7 +762,7 @@ class TestClient:
         ).records[0]["n"]
         assert fresh_count == 1
 
-    def test_merge_scopes_preserves_source_state(
+    def test_merge_scopes_only_copies_active_networks(
         self,
         scope_test,
         multiple_scopes,
@@ -770,38 +770,35 @@ class TestClient:
         user_client: client.AlchemiscaleClient,
         network_tyk2,
     ):
-        """merge_scopes must copy each source network into the target scope
-        with the source network's *state*, not silently default every
-        copy to ``active``. Regressing this would resurrect
-        inactive/invalid/deleted networks as active on the target.
+        """merge_scopes must only copy source networks in ``active`` state.
+
+        Networks in ``inactive``, ``invalid``, or ``deleted`` state on
+        the source scope must not appear in the target scope; that
+        would silently reactivate soft-deleted or invalidated
+        networks. Only ``active`` sources land in the target, and
+        each lands in ``active`` state.
         """
         source_scope = scope_test
         target_scope = multiple_scopes[2]
 
-        # add three fresh networks to source, one per exercised state, so
-        # we can observe the state flowing through cleanly without
+        # one fresh network per NetworkStateEnum value on the source
+        # scope, so the filter can be observed cleanly without
         # interference from n4js_preloaded's baseline
         fresh_networks = {
-            "active": AlchemicalNetwork(
-                edges=list(network_tyk2.edges)[:2], name="state_test_active"
-            ),
-            "inactive": AlchemicalNetwork(
-                edges=list(network_tyk2.edges)[:2], name="state_test_inactive"
-            ),
-            "deleted": AlchemicalNetwork(
-                edges=list(network_tyk2.edges)[:2], name="state_test_deleted"
-            ),
+            state.value: AlchemicalNetwork(
+                edges=list(network_tyk2.edges)[:2], name=f"state_test_{state.value}"
+            )
+            for state in NetworkStateEnum
         }
-        expected_target_sks: dict[str, ScopedKey] = {}
+        target_sks_by_state: dict[str, ScopedKey] = {}
         for state, an in fresh_networks.items():
             sk = user_client.create_network(an, source_scope, state=state)
-            expected_target_sks[state] = ScopedKey(
+            target_sks_by_state[state] = ScopedKey(
                 gufe_key=sk.gufe_key,
                 org=target_scope.org,
                 campaign=target_scope.campaign,
                 project=target_scope.project,
             )
-            # sanity: source got the right state
             assert user_client.get_network_state(sk) == state
 
         user_client.merge_scopes(
@@ -810,10 +807,21 @@ class TestClient:
             visualize=False,
         )
 
-        # each copy must land in target_scope with the source's state
-        for state, target_sk in expected_target_sks.items():
-            assert user_client.check_exists(target_sk)
-            assert user_client.get_network_state(target_sk) == state
+        # only the ``active`` source lands in target, and it lands active
+        active_target_sk = target_sks_by_state[NetworkStateEnum.active.value]
+        assert user_client.check_exists(active_target_sk)
+        assert (
+            user_client.get_network_state(active_target_sk)
+            == NetworkStateEnum.active.value
+        )
+
+        # non-active sources are skipped -- they must not appear in target
+        for state, target_sk in target_sks_by_state.items():
+            if state == NetworkStateEnum.active.value:
+                continue
+            assert not user_client.check_exists(
+                target_sk
+            ), f"source network in state {state!r} unexpectedly landed in target"
 
     def test_merge_scopes_rejects_empty(
         self,
