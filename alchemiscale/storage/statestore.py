@@ -7,6 +7,7 @@
 import abc
 import bisect
 import datetime
+from dataclasses import dataclass, field
 from contextlib import contextmanager
 import json
 import re
@@ -24,7 +25,12 @@ from gufe import (
     Protocol,
 )
 from gufe.settings import SettingsBaseModel
-from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER, KeyedChain
+from gufe.tokenization import (
+    GufeTokenizable,
+    GufeKey,
+    JSON_HANDLER,
+    KeyedChain,
+)
 from gufe.protocols import ProtocolUnitFailure
 
 from neo4j import Transaction, GraphDatabase, Driver, NotificationDisabledClassification
@@ -76,6 +82,266 @@ def get_n4js(settings: Neo4jStoreSettings):
 
 
 class Neo4JStoreError(Exception): ...
+
+
+def _is_transformation_keyed_dict(keyed_dict: dict) -> bool:
+    """Return ``True`` if ``keyed_dict`` represents a ``Transformation`` or ``NonTransformation``.
+
+    Used as the predicate for ``KeyedChain.decode_subchains`` when walking
+    an ``AlchemicalNetwork``'s keyed chain in :meth:`Neo4jStore.merge_networks`
+    and :meth:`Neo4jStore.copy_network`.
+    """
+    return keyed_dict.get("__qualname__") in ("Transformation", "NonTransformation")
+
+
+@dataclass
+class _TransformationData:
+    """Bookkeeping for one Transformation as it is reconstructed during
+    :meth:`Neo4jStore.merge_networks` or :meth:`Neo4jStore.copy_network`.
+
+    Attributes
+    ----------
+    transformation
+        The decoded ``Transformation`` (or ``NonTransformation``)
+        ``GufeTokenizable``.
+    task_tree
+        Flat list of Neo4j records, one per ``Task`` associated with this
+        ``Transformation`` in the source network(s). Each record carries:
+
+        - ``tf_key``: this ``Transformation``'s decoded gufe key (string)
+        - ``task``: the full ``Task`` node
+        - ``extended_task``: optional ``Task`` node that this ``Task`` extends
+        - ``pdrrs``: list of ``ProtocolDAGResultRef`` nodes for this ``Task``
+    known_scoped_keys
+        All ``ScopedKey``\\ s representing this ``Transformation`` across the
+        source network(s). Multiple ``ScopedKey``\\ s can map to a single
+        decoded ``Transformation`` if the same content was serialized under
+        different gufe versions.
+    """
+
+    transformation: Transformation
+    task_tree: list = field(default_factory=list)
+    known_scoped_keys: list = field(default_factory=list)
+
+    def add_known_scoped_key(self, key, scope):
+        self.known_scoped_keys.append(
+            ScopedKey(gufe_key=GufeKey(key), **scope.to_dict())
+        )
+
+    @staticmethod
+    def update_task_trees(
+        transformation_data: list,
+        statestore,
+        task_statuses: list[str] | None = None,
+    ):
+        """Given a list of ``_TransformationData``, extract all necessary
+        info from Neo4j and load the task trees.
+
+        Parameters
+        ----------
+        transformation_data
+            List of ``_TransformationData`` to populate.
+        statestore
+            The ``Neo4jStore`` to query.
+        task_statuses
+            If provided, only ``Task``\\ s whose ``status`` is in this list
+            are loaded, and any ``EXTENDS`` parent whose status is not in
+            this list is null-ed (the child row is preserved without its
+            parent). If ``None`` (the default), ``Task``\\ s of any status
+            are loaded and every ``EXTENDS`` parent is returned. Both
+            ``merge_networks`` and ``copy_network`` pass ``["complete"]``
+            so only ``Task``\\ s carrying successful results are preserved
+            and no non-carried ancestor Task can leak into the target
+            scope regardless of source-graph shape.
+        """
+        key_to_data_map = {str(td.transformation.key): td for td in transformation_data}
+        # prepare for unwind clause, include transformation key
+        # for updating each entry of transformation_data for
+        # each scoped key
+        transformation_sk_pairs = [
+            [str(td.transformation.key), str(sk)]
+            for td in transformation_data
+            for sk in td.known_scoped_keys
+        ]
+        # When task_statuses is provided, filter both the primary Task match
+        # AND any ``EXTENDS`` parent on the same status list. Neo4j's normal
+        # store transitions guarantee that a ``complete`` child's parent is
+        # ``complete`` too *via the compute-service claim path* (see
+        # `claim_taskhub_tasks`'s `other_task.status = 'complete'` gate),
+        # but ``set_task_running`` itself does not check the parent, so a
+        # caller poking the store API directly can produce a ``complete``
+        # child of a non-``complete`` parent. Gating the OPTIONAL MATCH
+        # here makes ``update_task_trees`` itself enforce the invariant --
+        # for non-carried parents, ``extended_task`` is null-ed without
+        # dropping the primary Task's row, so ``to_subgraph`` skips the
+        # parent clone and the ``EXTENDS`` edge, and no non-carried Task
+        # ever leaks into the target scope regardless of source-graph
+        # shape.
+        if task_statuses is None:
+            status_clause = ""
+            extended_status_clause = ""
+            params = {"tf_sk_pairs": transformation_sk_pairs}
+        else:
+            status_clause = "WHERE task.status IN $task_statuses"
+            extended_status_clause = "WHERE extended_task.status IN $task_statuses"
+            params = {
+                "tf_sk_pairs": transformation_sk_pairs,
+                "task_statuses": list(task_statuses),
+            }
+        query = f"""
+        UNWIND $tf_sk_pairs as pairs
+        WITH pairs[0] AS tf_key, pairs[1] AS tf_scoped_key
+        MATCH (task:Task)-[:PERFORMS]->(:Transformation|NonTransformation {{`_scoped_key`: tf_scoped_key}})
+        {status_clause}
+        OPTIONAL MATCH (task)-[:EXTENDS]->(extended_task:Task)
+        {extended_status_clause}
+        OPTIONAL MATCH (task)-[:RESULTS_IN]->(pdrr:ProtocolDAGResultRef)
+        RETURN tf_key, task, extended_task as extended_task, collect(pdrr) as pdrrs
+        """
+        results = statestore.execute_query(query, **params).records
+
+        for record in results:
+            key_to_data_map[record["tf_key"]].task_tree.append(record)
+
+    def to_subgraph(self, target_scope, tf_node):
+        """Create a subgraph of cloned Tasks + EXTENDS + PERFORMS + RESULTS_IN
+        relationships, anchored at ``tf_node``.
+
+        Each cloned Task is wired back to the Transformation via a
+        ``PERFORMS`` edge so the standard
+        ``(:AlchemicalNetwork)-[:DEPENDS_ON]->(:Transformation)<-[:PERFORMS]-(:Task)``
+        traversal keeps working on the merged network.
+
+        Parameters
+        ----------
+        target_scope
+            The destination ``Scope`` to stamp on every cloned Task / PDRR.
+        tf_node
+            The existing Transformation ``Node`` from the surrounding
+            merged-network subgraph. Reusing the **same Python Node object**
+            (rather than constructing a fresh one with a matching
+            ``_scoped_key``) is required: :func:`merge_subgraph` assigns a
+            Neo4j ``elementId`` to only the first Python Node it sees per
+            primary key, so any Relationship pointing at a duplicate Node
+            object would be silently dropped on commit.
+        """
+        # if there are no tasks, return an empty subgraph
+        if not self.task_tree:
+            return Subgraph()
+
+        subgraph = Subgraph()
+
+        scope_props = {
+            "_org": target_scope.org,
+            "_campaign": target_scope.campaign,
+            "_project": target_scope.project,
+        }
+
+        # Every ``Task`` that will be cloned into the target scope, keyed
+        # by gufe key. Used to rewrite each cloned ``Task``'s serialized
+        # ``extends`` property so it references the target-scope parent's
+        # ``ScopedKey`` (if the parent was carried) rather than the
+        # source-scope ``ScopedKey`` (which would only be a valid pointer
+        # in the source scope). Only primary ``task`` records are guaranteed
+        # to be in the carry set; ``extended_task`` records that survived
+        # the ``update_task_trees`` status gate are equivalently complete
+        # and, since a Task's ``EXTENDS`` parent must PERFORM on the same
+        # Transformation, are also present as a primary row in some other
+        # record.
+        carried_task_gufe_keys = {
+            record["task"]["_gufe_key"] for record in self.task_tree
+        }
+
+        def rewrite_task_extends(props: dict) -> dict:
+            """Return ``props`` with the serialized ``extends`` string
+            rewritten so it points at the target-scope parent ``Task``,
+            or ``None`` if that parent was not carried into the target.
+            """
+            source_extends = props.get("extends")
+            if not source_extends:
+                return props
+            source_extends_sk = ScopedKey.from_str(source_extends)
+            if str(source_extends_sk.gufe_key) in carried_task_gufe_keys:
+                target_extends_sk = ScopedKey(
+                    gufe_key=source_extends_sk.gufe_key, **target_scope.to_dict()
+                )
+                return props | {"extends": str(target_extends_sk)}
+            return props | {"extends": None}
+
+        def record_to_node(record):
+            # create node from a neo4j record with updated scoped key
+            scoped_key = ScopedKey(
+                gufe_key=record["_gufe_key"], **target_scope.to_dict()
+            )
+            return Node(
+                *record.labels,
+                **record._properties | scope_props | {"_scoped_key": str(scoped_key)},
+            )
+
+        def task_record_to_node(record):
+            # ``Task`` nodes additionally need their serialized ``extends``
+            # property rewritten so it references the target-scope
+            # parent's ``ScopedKey`` rather than the source-scope one --
+            # this property is what ``get_transformation_tasks(...,
+            # return_as='graph')`` returns to callers, and if left
+            # unchanged the graph view would point out-of-scope.
+            scoped_key = ScopedKey(
+                gufe_key=record["_gufe_key"], **target_scope.to_dict()
+            )
+            props = record._properties | scope_props | {"_scoped_key": str(scoped_key)}
+            props = rewrite_task_extends(props)
+            return Node(*record.labels, **props)
+
+        # Memoize Task Nodes by gufe key across iterations of ``task_tree``.
+        # If ``record[i]["task"]`` is the same Task as
+        # ``record[j]["extended_task"]``, we must reuse the same Python
+        # Node object -- otherwise ``merge_subgraph`` assigns a Neo4j
+        # ``elementId`` only to the first Python Node it sees per primary
+        # key and the EXTENDS Relationship's endpoint (pointing at the
+        # duplicate) is silently dropped on commit. Same bug pattern as
+        # the AN's Transformation Node vs. the to_subgraph anchor.
+        task_node_cache: dict[str, Node] = {}
+
+        def get_or_create_task_node(record):
+            gufe_key = record["_gufe_key"]
+            node = task_node_cache.get(gufe_key)
+            if node is None:
+                node = task_record_to_node(record)
+                task_node_cache[gufe_key] = node
+            return node
+
+        # process each task found. Each record represents a single task.
+        for record in self.task_tree:
+            # update task node to have new scoped key
+            task_node = get_or_create_task_node(record["task"])
+            # wire the cloned Task back to its Transformation; without
+            # this edge the Task is unreachable from get_network_tasks
+            # and every other PERFORMS-based traversal
+            subgraph |= Relationship.type("PERFORMS")(task_node, tf_node, **scope_props)
+            # create the task node this task extends if it exists. The
+            # source query returns ``record["extended_task"]`` as the Task
+            # that ``record["task"]`` extends -- i.e. in the source graph,
+            # ``(task)-[:EXTENDS]->(extended_task)``. The relationship's
+            # direction must be preserved on the clone so downstream
+            # traversals that read ``(task)-[:EXTENDS]->(other_task)``
+            # keep working.
+            etask_node = (
+                None
+                if not record["extended_task"]
+                else get_or_create_task_node(record["extended_task"])
+            )
+            if etask_node:
+                subgraph |= Relationship.type("EXTENDS")(
+                    task_node, etask_node, **scope_props
+                )
+            # clone all result refs for the task
+            for pdrr_record in record["pdrrs"]:
+                pdrr_node = record_to_node(pdrr_record)
+                subgraph |= Relationship.type("RESULTS_IN")(
+                    task_node, pdrr_node, **scope_props
+                )
+
+        return subgraph
 
 
 class AlchemiscaleStateStore(abc.ABC): ...
@@ -875,6 +1141,317 @@ class Neo4jStore(AlchemiscaleStateStore):
         DETACH DELETE an
         """
         raise NotImplementedError
+
+    def _require_active_networks(self, network_scoped_keys: list[ScopedKey]) -> None:
+        """Raise ``ValueError`` if any given network is not in ``active`` state.
+
+        Used by :meth:`merge_networks` and :meth:`copy_network` to keep
+        the merge/copy machinery working over ``active`` networks only.
+        ``inactive`` / ``invalid`` / ``deleted`` networks (or networks
+        missing from the database entirely) are rejected up front so the
+        target scope cannot silently receive a copy that reactivates a
+        soft-deleted or invalidated source.
+        """
+        states = self.get_network_state(network_scoped_keys)
+        active = NetworkStateEnum.active.value
+        offenders = [
+            (sk, s) for sk, s in zip(network_scoped_keys, states) if s != active
+        ]
+        if offenders:
+            joined = ", ".join(
+                f"{sk} (state={s!r})" if s is not None else f"{sk} (not found)"
+                for sk, s in offenders
+            )
+            raise ValueError(
+                "Only `active` AlchemicalNetworks are eligible for merging or "
+                f"copying; the following are not: {joined}"
+            )
+
+    def merge_networks(
+        self,
+        network_scoped_keys: list[ScopedKey],
+        name: str,
+        scope: Scope,
+        state: NetworkStateEnum | str = NetworkStateEnum.active,
+    ) -> ScopedKey:
+        """Merge multiple ``AlchemicalNetwork`` nodes into a new ``AlchemicalNetwork``.
+
+        Each ``Transformation`` / ``NonTransformation`` in the input
+        networks is included exactly once in the new network. Only
+        ``Task``\\ s on the source networks in ``complete`` state are
+        cloned into the new network's ``Scope``, along with their
+        ``ProtocolDAGResultRef``\\ s and ``EXTENDS`` relationships,
+        wired to their ``Transformation`` via ``PERFORMS``.
+
+        Only source networks in ``active`` state are eligible; if any of
+        the given ``ScopedKey``\\ s refers to a network in a non-``active``
+        state (``inactive``, ``invalid``, ``deleted``, or missing), a
+        :class:`ValueError` is raised without side effects.
+
+        Any ``Strategy`` (``PROGRESSES``) and ``TaskRestartPattern``\\ s
+        (``ENFORCES`` / ``APPLIES``) on the source networks are not
+        carried over; set them on the merged network via
+        :meth:`set_network_strategy` and :meth:`add_task_restart_patterns`
+        if needed.
+
+        Parameters
+        ----------
+        network_scoped_keys
+          List of ``AlchemicalNetwork`` ``ScopedKey`` objects to merge.
+          Must be non-empty; every referenced network must be ``active``.
+        name
+          The name of the new ``AlchemicalNetwork``.
+        scope
+          The ``Scope`` of the new ``AlchemicalNetwork``.
+        state
+          The starting state for the new ``AlchemicalNetwork``'s
+          ``NetworkMark``. Defaults to ``NetworkStateEnum.active``.
+
+        Returns
+        -------
+        The ``ScopedKey`` of the new ``AlchemicalNetwork`` in the database.
+        """
+        # reject empty input; no meaningful merge is possible and the
+        # result would be an empty AlchemicalNetwork
+        if not network_scoped_keys:
+            raise ValueError(
+                "`network_scoped_keys` must contain at least one ScopedKey"
+            )
+
+        # reject non-AlchemicalNetwork ScopedKeys up front (both HTTP and
+        # Python callers land here; the client-side check alone would leave
+        # the HTTP endpoint open to Transformation/ChemicalSystem SKs)
+        non_networks = [
+            sk for sk in network_scoped_keys if sk.qualname != "AlchemicalNetwork"
+        ]
+        if non_networks:
+            joined = ", ".join(str(sk) for sk in non_networks)
+            raise ValueError(
+                f"The following ScopedKey(s) do not refer to AlchemicalNetworks: {joined}"
+            )
+
+        # only ``active`` source networks are eligible for merging;
+        # ``inactive`` / ``invalid`` / ``deleted`` networks are excluded
+        # entirely so they cannot be silently reactivated in the target
+        self._require_active_networks(network_scoped_keys)
+
+        # Collect keyed chain representation for all alchemical networks,
+        # gathering every missing ScopedKey up front so callers passing
+        # many SKs get a single, complete error.
+        network_keyed_chains: list[tuple[Scope, KeyedChain]] = []
+        missing: list[ScopedKey] = []
+        for network_scoped_key in network_scoped_keys:
+            try:
+                keyed_chain = self.get_keyed_chain(network_scoped_key)
+            except KeyError:
+                missing.append(network_scoped_key)
+                continue
+            network_keyed_chains.append((network_scoped_key.scope, keyed_chain))
+        if missing:
+            joined = ", ".join(str(sk) for sk in missing)
+            raise ValueError(
+                f"The following ScopedKey(s) were not found in the database: {joined}"
+            )
+
+        # Map decoded Transformation / NonTransformation objects to all of
+        # their original database GufeKeys (potentially across multiple
+        # source networks, and including duplicates introduced by minor
+        # serialization-version drift). These original keys are needed to
+        # locate Tasks associated with each Transformation in the source
+        # networks. We key the dedup map on ``transformation.key`` (the
+        # decoded GufeKey) to avoid O(N^2) GufeTokenizable equality checks
+        # for large networks.
+        transformation_data: dict[GufeKey, _TransformationData] = {}
+        for network_scope, network_keyed_chain in network_keyed_chains:
+            # database keys for Transformations / NonTransformations in this
+            # source network's chain, in chain order
+            database_keys = [
+                gufe_key
+                for gufe_key, keyed_dict in network_keyed_chain
+                if _is_transformation_keyed_dict(keyed_dict)
+            ]
+            # decoded Transformation / NonTransformation objects, yielded
+            # by decode_subchains in the same chain order as the predicate
+            # selects above (gufe contract); decode_subchains also shares
+            # a tokenizable_map across yields so common dependencies are
+            # decoded only once per source network.
+            transformations = network_keyed_chain.decode_subchains(
+                _is_transformation_keyed_dict
+            )
+            for database_key, transformation in zip(database_keys, transformations):
+                data = transformation_data.get(transformation.key)
+                if data is None:
+                    data = _TransformationData(transformation)
+                    transformation_data[transformation.key] = data
+                data.add_known_scoped_key(database_key, network_scope)
+
+        # Collect all transformation gufe objects and collect into a new set of edges.
+        # Only ``complete`` Tasks carry over -- the new network reflects the
+        # results the user has already computed; in-flight, errored, or
+        # tombstoned Tasks are not preserved.
+        _TransformationData.update_task_trees(
+            list(transformation_data.values()),
+            self,
+            task_statuses=["complete"],
+        )
+        new_edges = [td.transformation for td in transformation_data.values()]
+        # Make new alchemiscale network with these edges
+        combined_alchemical_network = AlchemicalNetwork(edges=new_edges, name=name)
+        an_subgraph, an_node, an_sk = self._keyed_chain_to_subgraph(
+            KeyedChain.from_gufe(combined_alchemical_network), scope
+        )
+        # create and fold in taskhub and network mark supporting nodes
+        an_subgraph |= (
+            self.create_network_mark_subgraph(an_node, state=state)[0]
+            | self.create_taskhub_subgraph(an_node)[0]
+        )
+
+        # Build a lookup from gufe key to the existing Transformation Node
+        # already present in ``an_subgraph``. ``to_subgraph`` must reuse
+        # these Python Node objects rather than building fresh ones with
+        # the same ``_scoped_key`` -- ``merge_subgraph`` assigns a Neo4j
+        # ``elementId`` only to the first Python Node it sees per primary
+        # key, so Relationships pointing at a duplicate Node would be
+        # silently dropped on commit.
+        tf_node_lookup = {
+            node["_gufe_key"]: node
+            for node in an_subgraph.nodes
+            if "Transformation" in node.labels or "NonTransformation" in node.labels
+        }
+
+        # create and fold in all task and results data
+        for td in transformation_data.values():
+            tf_node = tf_node_lookup[str(td.transformation.key)]
+            an_subgraph |= td.to_subgraph(scope, tf_node)
+
+        # merge the new network into neo4j
+        with self.transaction() as tx:
+            merge_subgraph(tx, an_subgraph, "GufeTokenizable", "_scoped_key")
+        return an_sk
+
+    def copy_network(
+        self,
+        network_scoped_key: ScopedKey,
+        scope: Scope,
+        name: str | None = None,
+        state: NetworkStateEnum | str = NetworkStateEnum.active,
+    ) -> ScopedKey:
+        """Copy an ``AlchemicalNetwork`` to a new ``Scope``, carrying over
+        every ``complete`` ``Task`` and its associated
+        ``ProtocolDAGResultRef``\\ s, wired to their ``Transformation``
+        via ``PERFORMS`` and to one another via ``EXTENDS`` where
+        applicable.
+
+        Only source networks in ``active`` state are eligible; a
+        non-``active`` source (``inactive``, ``invalid``, ``deleted``, or
+        missing) raises :class:`ValueError`.
+
+        Any ``Strategy`` (``PROGRESSES``) and ``TaskRestartPattern``\\ s
+        (``ENFORCES`` / ``APPLIES``) on the source network are not
+        carried over; set them on the copy via
+        :meth:`set_network_strategy` and :meth:`add_task_restart_patterns`
+        if needed.
+
+        Parameters
+        ----------
+        network_scoped_key
+            The ``ScopedKey`` of the source ``AlchemicalNetwork``. Must
+            refer to an ``active`` network.
+        scope
+            The destination ``Scope`` for the copy.
+        name
+            Optional new name for the copy. If ``None``, the source
+            ``AlchemicalNetwork``'s name is preserved; the resulting copy
+            has the same gufe key as the source. If a different name is
+            given, the resulting copy has a fresh gufe key derived from
+            the renamed content.
+        state
+            Starting ``NetworkStateEnum`` for the copy's ``NetworkMark``.
+            Defaults to ``NetworkStateEnum.active``.
+
+        Returns
+        -------
+        The ``ScopedKey`` of the new ``AlchemicalNetwork`` in the database.
+        """
+        # reject non-AlchemicalNetwork ScopedKeys up front (both HTTP and
+        # Python callers land here; the client-side check alone would leave
+        # the HTTP endpoint open to Transformation/ChemicalSystem SKs)
+        if network_scoped_key.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                f"ScopedKey ({network_scoped_key}) does not refer to an AlchemicalNetwork"
+            )
+
+        # only ``active`` source networks are eligible for copying
+        self._require_active_networks([network_scoped_key])
+
+        # decode the source network's keyed chain
+        try:
+            source_kc = self.get_keyed_chain(network_scoped_key)
+        except KeyError:
+            raise ValueError(
+                f"ScopedKey ({network_scoped_key}) not found in the database."
+            )
+        source_an: AlchemicalNetwork = source_kc.to_gufe()
+
+        # optionally rename; preserving the name preserves the gufe key
+        if name is not None and name != source_an.name:
+            target_an = source_an.copy_with_replacements(name=name)
+        else:
+            target_an = source_an
+
+        # gather Transformations and their source-scope database keys,
+        # then load every Task that PERFORMs on each (no status filter)
+        source_scope = network_scoped_key.scope
+        transformation_data: dict[GufeKey, _TransformationData] = {}
+        database_keys = [
+            gufe_key
+            for gufe_key, keyed_dict in source_kc
+            if _is_transformation_keyed_dict(keyed_dict)
+        ]
+        transformations = source_kc.decode_subchains(_is_transformation_keyed_dict)
+        for database_key, transformation in zip(database_keys, transformations):
+            data = transformation_data.get(transformation.key)
+            if data is None:
+                data = _TransformationData(transformation)
+                transformation_data[transformation.key] = data
+            data.add_known_scoped_key(database_key, source_scope)
+
+        # Only ``complete`` Tasks carry over -- the copy reflects the
+        # results the user has already computed; in-flight, errored, or
+        # tombstoned Tasks are not preserved.
+        _TransformationData.update_task_trees(
+            list(transformation_data.values()),
+            self,
+            task_statuses=["complete"],
+        )
+
+        # build the new AlchemicalNetwork's subgraph + NetworkMark + TaskHub
+        an_subgraph, an_node, an_sk = self._keyed_chain_to_subgraph(
+            KeyedChain.from_gufe(target_an), scope
+        )
+        an_subgraph |= (
+            self.create_network_mark_subgraph(an_node, state=state)[0]
+            | self.create_taskhub_subgraph(an_node)[0]
+        )
+
+        # Look up the existing Transformation Nodes in ``an_subgraph`` so
+        # ``to_subgraph`` can reuse the same Python Node objects rather
+        # than building fresh duplicates; see :meth:`merge_networks` for
+        # why this matters.
+        tf_node_lookup = {
+            node["_gufe_key"]: node
+            for node in an_subgraph.nodes
+            if "Transformation" in node.labels or "NonTransformation" in node.labels
+        }
+
+        # fold in cloned Tasks, EXTENDS, PERFORMS, and RESULTS_IN
+        for td in transformation_data.values():
+            tf_node = tf_node_lookup[str(td.transformation.key)]
+            an_subgraph |= td.to_subgraph(scope, tf_node)
+
+        with self.transaction() as tx:
+            merge_subgraph(tx, an_subgraph, "GufeTokenizable", "_scoped_key")
+        return an_sk
 
     def get_network_state(self, networks: list[ScopedKey]) -> list[str | None]:
         """Get the states of a group of networks.
@@ -2853,7 +3430,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## tasks
 
-    def _validate_extends_tasks(self, task_list) -> dict[str, tuple[Node, str]]:
+    def _validate_extends_tasks(
+        self,
+        task_list,
+    ) -> dict[str, tuple[Node, str]]:
 
         if not task_list:
             return {}
@@ -2943,7 +3523,7 @@ class Neo4jStore(AlchemiscaleStateStore):
             transformation_map[transformation.qualname][1].append(extends[i])
 
         extends_nodes = self._validate_extends_tasks(
-            [_extends for _extends in extends if _extends is not None]
+            [_extends for _extends in extends if _extends is not None],
         )
 
         subgraph = Subgraph()

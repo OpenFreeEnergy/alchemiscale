@@ -5,6 +5,7 @@ from gufe import AlchemicalNetwork
 from gufe.tokenization import JSON_HANDLER, KeyedChain
 
 from alchemiscale.models import ScopedKey
+from alchemiscale.storage.models import NetworkStateEnum
 
 
 def pre_load_payload(network, scope, name="incomplete 2"):
@@ -102,6 +103,278 @@ class TestAPI:
         # Check our error details are expected
         assert str(bad_scope) in details
         assert str(scope_test) in details
+
+    def test_merge_networks(
+        self, n4js_preloaded, test_client, network_tyk2, scope_test
+    ):
+        n4js = n4js_preloaded
+
+        # source networks in scope_test. n4js_preloaded creates 1 active
+        # (network_tyk2) + 1 inactive ("incomplete") per scope; merge_networks
+        # only accepts active sources, so seed a second active network here
+        # so the merge has multiple active inputs to combine.
+        second_active_an = AlchemicalNetwork(
+            edges=list(network_tyk2.edges)[:-2], name="api_second_active"
+        )
+        n4js.assemble_network(second_active_an, scope_test)
+
+        source_sks = n4js.query_networks(
+            scope=scope_test, state=NetworkStateEnum.active.value
+        )
+        assert len(source_sks) >= 2
+
+        # destination scope: a new project under the same org/campaign so the
+        # test_client's scope_test token has access
+        merge_scope_dict = {
+            "org": scope_test.org,
+            "campaign": scope_test.campaign,
+            "project": scope_test.project,
+        }
+
+        headers = {"Content-type": "application/json"}
+        data = dict(
+            networks=[str(sk) for sk in source_sks],
+            name="api_merged",
+            scope=merge_scope_dict,
+        )
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post("/networks/merge", data=jsondata, headers=headers)
+        assert response.status_code == 200
+
+        merged_sk = ScopedKey(**response.json())
+        assert merged_sk.scope == scope_test
+        assert merged_sk.gufe_key.startswith("AlchemicalNetwork-")
+
+        # network should now be present in the database
+        assert n4js.check_existence(merged_sk)
+
+        # merged network's union-of-edges equals network_tyk2's edge set,
+        # since one active source is network_tyk2 and the other active
+        # source is a strict subset of it
+        merged_network = n4js.get_gufe(merged_sk)
+        assert merged_network.name == "api_merged"
+        assert {t.key for t in merged_network.edges} == {
+            t.key for t in network_tyk2.edges
+        }
+
+    def test_merge_networks_bad_scope(
+        self, n4js_preloaded, test_client, scope_test, multiple_scopes
+    ):
+        # destination scope the test_client's token does not have access to
+        bad_scope = multiple_scopes[1]
+        assert bad_scope != scope_test
+
+        source_sks = n4js_preloaded.query_networks(scope=scope_test)
+        assert source_sks
+
+        headers = {"Content-type": "application/json"}
+        data = dict(
+            networks=[str(sk) for sk in source_sks],
+            name="should_fail",
+            scope=bad_scope.to_dict(),
+        )
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post("/networks/merge", data=jsondata, headers=headers)
+        assert response.status_code == 401
+        details = response.json()
+        assert "detail" in details
+        assert str(bad_scope) in details["detail"]
+
+    def test_merge_networks_bad_source_scope(
+        self, n4js_preloaded, test_client, scope_test, multiple_scopes
+    ):
+        # source network in a scope the test_client's token does not authorize
+        unauth_scope = multiple_scopes[1]
+        assert unauth_scope != scope_test
+
+        unauth_source_sks = n4js_preloaded.query_networks(scope=unauth_scope)
+        assert unauth_source_sks
+
+        headers = {"Content-type": "application/json"}
+        data = dict(
+            networks=[str(sk) for sk in unauth_source_sks],
+            name="should_fail",
+            scope=scope_test.to_dict(),
+        )
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post("/networks/merge", data=jsondata, headers=headers)
+        assert response.status_code == 401
+        details = response.json()
+        assert "detail" in details
+        assert str(unauth_scope) in details["detail"]
+
+    def test_merge_networks_bad_qualname(self, n4js_preloaded, test_client, scope_test):
+        """POST /networks/merge with a non-AlchemicalNetwork ScopedKey in
+        ``networks`` must be rejected at the store layer (422)."""
+        # a Transformation ScopedKey masquerading as a network SK
+        tf_sks = n4js_preloaded.query_transformations(scope=scope_test)
+        assert tf_sks
+
+        headers = {"Content-type": "application/json"}
+        data = dict(
+            networks=[str(tf_sks[0])],
+            name="should_fail",
+            scope=scope_test.to_dict(),
+        )
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post("/networks/merge", data=jsondata, headers=headers)
+        assert response.status_code == 422
+        assert "AlchemicalNetwork" in response.json()["detail"]
+
+    def test_merge_networks_empty_list(self, n4js_preloaded, test_client, scope_test):
+        """POST /networks/merge with an empty ``networks`` list must be
+        rejected at the store layer (422); a REST caller must not be
+        able to produce an empty AlchemicalNetwork.
+        """
+        headers = {"Content-type": "application/json"}
+        data = dict(networks=[], name="should_fail", scope=scope_test.to_dict())
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post("/networks/merge", data=jsondata, headers=headers)
+        assert response.status_code == 422
+        assert "at least one" in response.json()["detail"]
+
+    def test_merge_networks_non_active_source(
+        self, n4js_preloaded, test_client, network_tyk2, scope_test
+    ):
+        """POST /networks/merge must reject a source network that is
+        not in ``active`` state (422). This keeps consolidation from
+        silently reactivating a soft-deleted or invalidated network.
+        """
+        source_sks = n4js_preloaded.query_networks(scope=scope_test)
+        assert source_sks
+        n4js_preloaded.set_network_state(
+            [source_sks[0]], [NetworkStateEnum.inactive.value]
+        )
+
+        headers = {"Content-type": "application/json"}
+        data = dict(
+            networks=[str(source_sks[0])],
+            name="should_fail",
+            scope=scope_test.to_dict(),
+        )
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post("/networks/merge", data=jsondata, headers=headers)
+        assert response.status_code == 422
+        assert "Only `active`" in response.json()["detail"]
+
+    def test_copy_network_non_active_source(
+        self, n4js_preloaded, test_client, scope_test
+    ):
+        """POST /networks/{sk}/copy must reject a non-``active`` source."""
+        source_sks = n4js_preloaded.query_networks(scope=scope_test)
+        assert source_sks
+        source_sk = source_sks[0]
+        n4js_preloaded.set_network_state([source_sk], [NetworkStateEnum.inactive.value])
+
+        headers = {"Content-type": "application/json"}
+        data = dict(scope=scope_test.to_dict())
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post(
+            f"/networks/{source_sk}/copy", data=jsondata, headers=headers
+        )
+        assert response.status_code == 422
+        assert "Only `active`" in response.json()["detail"]
+
+    def test_copy_network(self, n4js_preloaded, test_client, network_tyk2, scope_test):
+        n4js = n4js_preloaded
+
+        # pick an ``active`` source network in scope_test (copy_network
+        # only accepts active sources; n4js_preloaded also seeds an
+        # inactive "incomplete" network per scope which we skip here)
+        source_sks = n4js.query_networks(
+            scope=scope_test, state=NetworkStateEnum.active.value
+        )
+        assert source_sks
+        source_sk = source_sks[0]
+
+        # destination scope: reuse scope_test since the test_client's token
+        # only authorizes it; the copy dedups onto the preexisting node
+        # (name preserved, so gufe_key preserved, so ScopedKey preserved)
+        headers = {"Content-type": "application/json"}
+        data = dict(scope=scope_test.to_dict())
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post(
+            f"/networks/{source_sk}/copy", data=jsondata, headers=headers
+        )
+        assert response.status_code == 200
+
+        copied_sk = ScopedKey(**response.json())
+        assert copied_sk.scope == scope_test
+        assert copied_sk.gufe_key == source_sk.gufe_key
+        assert n4js.check_existence(copied_sk)
+
+    def test_copy_network_bad_target_scope(
+        self, n4js_preloaded, test_client, scope_test, multiple_scopes
+    ):
+        """POST /networks/{sk}/copy with a destination scope the token
+        does not authorize must be denied (401)."""
+        # source in the authorized scope, destination in an unauthorized one
+        source_sks = n4js_preloaded.query_networks(scope=scope_test)
+        assert source_sks
+        source_sk = source_sks[0]
+
+        bad_scope = multiple_scopes[1]
+        assert bad_scope != scope_test
+
+        headers = {"Content-type": "application/json"}
+        data = dict(scope=bad_scope.to_dict())
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post(
+            f"/networks/{source_sk}/copy", data=jsondata, headers=headers
+        )
+        assert response.status_code == 401
+        details = response.json()
+        assert "detail" in details
+        assert str(bad_scope) in details["detail"]
+
+    def test_copy_network_bad_source_scope(
+        self, n4js_preloaded, test_client, scope_test, multiple_scopes
+    ):
+        """POST /networks/{sk}/copy with a source network in a scope the
+        token does not authorize must be denied (401)."""
+        unauth_scope = multiple_scopes[1]
+        assert unauth_scope != scope_test
+
+        unauth_source_sks = n4js_preloaded.query_networks(scope=unauth_scope)
+        assert unauth_source_sks
+        unauth_source_sk = unauth_source_sks[0]
+
+        headers = {"Content-type": "application/json"}
+        data = dict(scope=scope_test.to_dict())
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post(
+            f"/networks/{unauth_source_sk}/copy", data=jsondata, headers=headers
+        )
+        assert response.status_code == 401
+        details = response.json()
+        assert "detail" in details
+        assert str(unauth_scope) in details["detail"]
+
+    def test_copy_network_bad_qualname(self, n4js_preloaded, test_client, scope_test):
+        """POST /networks/{sk}/copy with a non-AlchemicalNetwork ScopedKey
+        must be rejected at the store layer (422)."""
+        tf_sks = n4js_preloaded.query_transformations(scope=scope_test)
+        assert tf_sks
+
+        headers = {"Content-type": "application/json"}
+        data = dict(scope=scope_test.to_dict())
+        jsondata = json.dumps(data, cls=JSON_HANDLER.encoder)
+
+        response = test_client.post(
+            f"/networks/{tf_sks[0]}/copy", data=jsondata, headers=headers
+        )
+        assert response.status_code == 422
+        assert "AlchemicalNetwork" in response.json()["detail"]
 
     def test_get_network(self, prepared_network, test_client):
         network, scoped_key = prepared_network
