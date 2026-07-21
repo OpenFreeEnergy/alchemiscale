@@ -34,6 +34,11 @@ from ..storage.models import (
     TaskStatusEnum,
     NetworkStateEnum,
     StrategyState,
+    TaskAttempt,
+    TaskDetails,
+    TaskTracebacks,
+    ProtocolDAGResultRec,
+    ProtocolUnitResultRec,
 )
 from stratocaster.base import Strategy
 from ..utils import pdr_from_bytes
@@ -1364,10 +1369,15 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return self._run_async(async_request(self))
 
     async def _set_task_status(
-        self, tasks: list[ScopedKey], status: TaskStatusEnum
+        self,
+        tasks: list[ScopedKey],
+        status: TaskStatusEnum,
+        reason: str | None = None,
     ) -> list[ScopedKey | None]:
         """Set the statuses for many Tasks"""
-        data = dict(tasks=[t.to_dict() for t in tasks], status=status.value)
+        data = dict(
+            tasks=[t.to_dict() for t in tasks], status=status.value, reason=reason
+        )
         tasks_updated = await self._post_resource_async(
             "/bulk/tasks/status/set", data=data
         )
@@ -1381,6 +1391,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         tasks: list[ScopedKey],
         status: TaskStatusEnum | str,
         batch_size: int = 1000,
+        reason: str | None = None,
     ) -> list[ScopedKey | None]:
         """Set the status of one or multiple Tasks.
 
@@ -1394,6 +1405,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         status
             The status to set the Tasks to. Can be one of
             'waiting', 'invalid', or 'deleted'.
+        reason
+            An optional human-readable reason for the status change. This is
+            only recorded when setting the status to 'invalid' or 'deleted'.
 
         Returns
         -------
@@ -1406,7 +1420,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         status = TaskStatusEnum(status)
 
         return self._batched_attribute_setter(
-            tasks, self._set_task_status, (status,), batch_size
+            tasks, self._set_task_status, (status, reason), batch_size
         )
 
     async def _get_task_status(self, tasks: list[ScopedKey]) -> list[TaskStatusEnum]:
@@ -2149,6 +2163,285 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         )
 
         return pdrs
+
+    def get_task_history(
+        self, task: ScopedKey, limit: int | None = None
+    ) -> list[TaskAttempt]:
+        """Get the execution history of a `Task`.
+
+        Parameters
+        ----------
+        task
+            The `ScopedKey` of the `Task` to retrieve the history for.
+        limit
+            If given, return at most this many of the most recent attempts.
+
+        Returns
+        -------
+        list[TaskAttempt]
+            A list of `TaskAttempt` records, one per execution attempt of the `Task`,
+            most recent first.
+        """
+        params = dict(limit=limit)
+        attempts = self._get_resource(f"/tasks/{task}/history", params=params)
+        return [TaskAttempt.from_dict(attempt) for attempt in attempts]
+
+    def get_tasks_details(self, tasks: list[ScopedKey]) -> list[TaskDetails | None]:
+        """Get summary details for multiple Tasks.
+
+        Parameters
+        ----------
+        tasks
+            The `ScopedKey` of each `Task` to retrieve details for.
+
+        Returns
+        -------
+        list[TaskDetails | None]
+            A list of `TaskDetails`, in the same order as given in `tasks`. If
+            a given `Task` doesn't exist, ``None`` will be returned in its
+            place.
+        """
+        data = dict(tasks=[str(task) for task in tasks])
+        details = self._post_resource("/bulk/tasks/details", data=data)
+        return [
+            TaskDetails.from_dict(detail) if detail is not None else None
+            for detail in details
+        ]
+
+    def get_task_tracebacks(
+        self, task: ScopedKey, limit: int | None = None
+    ) -> list[TaskTracebacks]:
+        """Get the tracebacks from failed `ProtocolDAGResult` objects of a `Task`.
+
+        Parameters
+        ----------
+        task
+            The `ScopedKey` of the `Task` to retrieve tracebacks for.
+        limit
+            If given, return tracebacks for at most this many of the most
+            recent failed `ProtocolDAGResult` objects.
+
+        Returns
+        -------
+        list[TaskTracebacks]
+            A list of `TaskTracebacks`, one per failed `ProtocolDAGResult` of
+            the `Task`, most recent first.
+        """
+        params = dict(limit=limit)
+        tracebacks = self._get_resource(f"/tasks/{task}/tracebacks", params=params)
+        return [TaskTracebacks.from_dict(tb) for tb in tracebacks]
+
+    def get_scope_compute_share(self, scope: Scope) -> float:
+        """Get this identity's fractional compute share within the given `Scope`.
+
+        The share is computed server-side as the aggregate fraction for this `Scope`
+        relative to its sibling Scopes; only the aggregate fraction is
+        returned. The identity must hold the given `Scope`.
+
+        Parameters
+        ----------
+        scope
+            The `Scope` to retrieve the compute share for.
+
+        Returns
+        -------
+        float
+            The fractional compute share for the given `Scope`.
+        """
+        return self._get_resource(f"/scopes/{scope}/compute-share")
+
+    @staticmethod
+    def _as_scoped_key(obj: ScopedKey | Any) -> ScopedKey:
+        """Coerce a `ScopedKey` or a `*Rec` carrying one to a `ScopedKey`."""
+        return getattr(obj, "scoped_key", obj)
+
+    def get_task_result_recs(
+        self, task: ScopedKey, ok: bool | None = None
+    ) -> list[ProtocolDAGResultRec]:
+        """Get records describing the `ProtocolDAGResult` objects of a `Task`.
+
+        Parameters
+        ----------
+        task
+            The `ScopedKey` of the `Task` to retrieve result records for.
+        ok
+            If ``True``, return only records for successful results; if
+            ``False``, only failures; if ``None`` (default), all of them.
+
+        Returns
+        -------
+        list[ProtocolDAGResultRec]
+            A list of `ProtocolDAGResultRec` records, one per `ProtocolDAGResult` of
+            the `Task`, most recent first.
+        """
+        params = dict(ok=ok)
+        recs = self._get_resource(f"/tasks/{task}/resultrecs", params=params)
+        return [ProtocolDAGResultRec.from_dict(rec) for rec in recs]
+
+    def get_result_unit_recs(
+        self, pdrr: ScopedKey | ProtocolDAGResultRec
+    ) -> list[ProtocolUnitResultRec]:
+        """Get records describing the `ProtocolUnitResult` objects of a `ProtocolDAGResult`.
+
+        Parameters
+        ----------
+        pdrr
+            The `ScopedKey` of the `ProtocolDAGResultRef` (or the
+            `ProtocolDAGResultRec` describing it) to retrieve unit records for.
+
+        Returns
+        -------
+        list[ProtocolUnitResultRec]
+            A list of `ProtocolUnitResultRec` records, one per `ProtocolUnitResult`,
+            in dependency order.
+        """
+        pdrr_sk = self._as_scoped_key(pdrr)
+        recs = self._get_resource(f"/protocoldagresultrefs/{pdrr_sk}/unitresultrecs")
+        return [ProtocolUnitResultRec.from_dict(rec) for rec in recs]
+
+    def get_result_unit_logs(
+        self, purr: ScopedKey | ProtocolUnitResultRec
+    ) -> str | None:
+        """Get the captured logs for a single `ProtocolUnitResult`.
+
+        Parameters
+        ----------
+        purr
+            The `ScopedKey` of the `ProtocolUnitResultRef` (or the
+            `ProtocolUnitResultRec` describing it) to retrieve logs for.
+
+        Returns
+        -------
+        str | None
+            The captured log text, or ``None`` if no logs were captured.
+        """
+        purr_sk = self._as_scoped_key(purr)
+        return self._get_resource(f"/protocolunitresultrefs/{purr_sk}/logs")
+
+    def get_result_unit_stdout(
+        self, purr: ScopedKey | ProtocolUnitResultRec
+    ) -> dict[str, str] | None:
+        """Get the captured stdout for a single `ProtocolUnitResult`.
+
+        Parameters
+        ----------
+        purr
+            The `ScopedKey` of the `ProtocolUnitResultRef` (or the
+            `ProtocolUnitResultRec` describing it) to retrieve stdout for.
+
+        Returns
+        -------
+        dict[str, str] | None
+            A mapping of filename to captured stdout text, or ``None`` if no
+            stdout was captured.
+        """
+        purr_sk = self._as_scoped_key(purr)
+        return self._get_resource(f"/protocolunitresultrefs/{purr_sk}/stdout")
+
+    def get_result_unit_stderr(
+        self, purr: ScopedKey | ProtocolUnitResultRec
+    ) -> dict[str, str] | None:
+        """Get the captured stderr for a single `ProtocolUnitResult`.
+
+        Parameters
+        ----------
+        purr
+            The `ScopedKey` of the `ProtocolUnitResultRef` (or the
+            `ProtocolUnitResultRec` describing it) to retrieve stderr for.
+
+        Returns
+        -------
+        dict[str, str] | None
+            A mapping of filename to captured stderr text, or ``None`` if no
+            stderr was captured.
+        """
+        purr_sk = self._as_scoped_key(purr)
+        return self._get_resource(f"/protocolunitresultrefs/{purr_sk}/stderr")
+
+    def get_result_logs(
+        self, pdrr: ScopedKey | ProtocolDAGResultRec, order: str = "unit"
+    ) -> str:
+        """Get a human-readable rendering of all unit logs of a `ProtocolDAGResult`.
+
+        Parameters
+        ----------
+        pdrr
+            The `ScopedKey` of the `ProtocolDAGResultRef` (or the
+            `ProtocolDAGResultRec` describing it) to retrieve logs for.
+        order
+            How to order the rendered logs. ``'unit'`` (default) groups each
+            unit's logs under a header; ``'time'`` interleaves all units' log
+            lines by their leading ``[timestamp]`` prefix.
+
+        Returns
+        -------
+        str
+            The rendered logs, or ``""`` if none were captured.
+        """
+        pdrr_sk = self._as_scoped_key(pdrr)
+        params = dict(order=order)
+        return self._get_resource(
+            f"/protocoldagresultrefs/{pdrr_sk}/logs", params=params
+        )
+
+    def get_task_stdout(self, task: ScopedKey) -> str:
+        """Get a human-readable rendering of all captured stdout for a `Task`.
+
+        Concatenates stdout across all `ProtocolDAGResult` objects of the
+        `Task` (most recent first), with section headers identifying each result,
+        unit, and filename.
+
+        Parameters
+        ----------
+        task
+            The `ScopedKey` of the `Task` to retrieve stdout for.
+
+        Returns
+        -------
+        str
+            The rendered stdout, or ``""`` if none was captured.
+        """
+        return self._get_resource(f"/tasks/{task}/stdout")
+
+    def get_task_stderr(self, task: ScopedKey) -> str:
+        """Get a human-readable rendering of all captured stderr for a `Task`.
+
+        Concatenates stderr across all `ProtocolDAGResult` objects of the
+        `Task` (most recent first), with section headers identifying each result,
+        unit, and filename.
+
+        Parameters
+        ----------
+        task
+            The `ScopedKey` of the `Task` to retrieve stderr for.
+
+        Returns
+        -------
+        str
+            The rendered stderr, or ``""`` if none was captured.
+        """
+        return self._get_resource(f"/tasks/{task}/stderr")
+
+    def get_tasks_progress(
+        self, tasks: list[ScopedKey]
+    ) -> list[tuple[int, int] | None]:
+        """Get execution progress for multiple Tasks.
+
+        Parameters
+        ----------
+        tasks
+            The `ScopedKey` of each `Task` to retrieve progress for.
+
+        Returns
+        -------
+        list[tuple[int, int] | None]
+            A list in the same order as `tasks`. Each element is a
+            ``(units_completed, units_total)`` tuple for a `running` `Task`
+            reporting progress, or ``None`` otherwise.
+        """
+        data = dict(tasks=[str(task) for task in tasks])
+        progress = self._post_resource("/bulk/tasks/progress", data=data)
+        return [tuple(p) if p is not None else None for p in progress]
 
     def add_task_restart_patterns(
         self,

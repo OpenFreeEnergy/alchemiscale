@@ -12,7 +12,7 @@ import random
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Request
 from fastapi import status as http_status
 from fastapi.middleware.gzip import GZipMiddleware
-from gufe.tokenization import JSON_HANDLER
+from gufe.tokenization import JSON_HANDLER, GufeKey
 from gufe.protocols import ProtocolDAGResult
 
 from ..base.api import (
@@ -37,7 +37,7 @@ from ..settings import (
     ComputeAPISettings,
 )
 from ..storage.statestore import Neo4jStore
-from ..storage.objectstore import S3ObjectStore
+from ..storage.objectstore import S3ObjectStore, protocol_unit_result_location
 from ..storage.models import (
     ProtocolDAGResultRef,
     ComputeServiceID,
@@ -107,6 +107,7 @@ def register_computeservice(
     compute_service_id,
     *,
     compute_manager_id: str | None = Body(None, embed=True),
+    hostname: str | None = Body(None, embed=True),
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     now = datetime.datetime.now(tz=datetime.UTC)
@@ -121,6 +122,7 @@ def register_computeservice(
         heartbeat=now,
         failure_times=[],
         manager_name=manager_name,
+        hostname=hostname,
     )
 
     try:
@@ -381,6 +383,15 @@ async def set_task_result(
     protocoldagresult_ = body_["protocoldagresult"]
     compute_service_id = body_["compute_service_id"]
 
+    # the compute client serializes a missing id as the string "None"; treat
+    # that (and a genuine null) as "no compute service", so provenance
+    # finalization is simply skipped rather than erroring on an invalid id
+    compute_service_id_ = (
+        ComputeServiceID(compute_service_id)
+        if compute_service_id and compute_service_id != "None"
+        else None
+    )
+
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
 
@@ -400,10 +411,38 @@ async def set_task_result(
         creator=compute_service_id,
     )
 
-    # push the reference to the state store
+    # push the reference to the state store; this also finalizes the open
+    # TaskProvenance attempt for this (task, compute_service_id) pair with the
+    # appropriate outcome and links it to the new ProtocolDAGResultRef
     result_sk: ScopedKey = n4js.set_task_result(
-        task=task_sk, protocoldagresultref=protocoldagresultref
+        task=task_sk,
+        protocoldagresultref=protocoldagresultref,
+        compute_service_id=compute_service_id_,
     )
+
+    # derive one ProtocolUnitResultRef per unit result, and extract any embedded
+    # stdout/stderr from the (already-deserialized) ProtocolDAGResult into
+    # per-unit, retrieval-optimized artifacts --- flipping has_stdout/has_stderr.
+    # Streams need no new compute-facing routes: they ride inside the PDR blob.
+    refs_map = n4js.add_protocol_unit_result_refs(protocoldagresultref, result_sk, pdr)
+    if protocoldagresultref.location:
+        for unit_result in pdr.protocol_unit_results:
+            purr_sk = refs_map.get(unit_result.key)
+            if purr_sk is None:
+                continue
+            unit_location = protocol_unit_result_location(
+                protocoldagresultref.location, unit_result.key
+            )
+            if unit_result.stdout:
+                s3os.push_protocol_unit_result_streams(
+                    unit_location, "stdout", unit_result.stdout
+                )
+                n4js.set_protocol_unit_result_ref_artifacts(purr_sk, has_stdout=True)
+            if unit_result.stderr:
+                s3os.push_protocol_unit_result_streams(
+                    unit_location, "stderr", unit_result.stderr
+                )
+                n4js.set_protocol_unit_result_ref_artifacts(purr_sk, has_stderr=True)
 
     # if success, set task complete, remove from all hubs
     # otherwise, set as errored, leave in hubs
@@ -413,6 +452,8 @@ async def set_task_result(
         n4js.add_protocol_dag_result_ref_tracebacks(
             pdr.protocol_unit_failures, result_sk
         )
+        # provenance already finalized by set_task_result above, so no
+        # compute_service_id passed here (avoids a redundant finalization)
         n4js.set_task_error(tasks=[task_sk])
 
         # report that the compute service experienced a failure
@@ -421,6 +462,119 @@ async def set_task_result(
         n4js.resolve_task_restarts(task_scoped_keys=[task_sk])
 
     return result_sk
+
+
+@router.post("/tasks/{task_scoped_key}/error", response_model=str)
+async def set_task_error(
+    task_scoped_key,
+    *,
+    reason: str = Body(..., embed=True),
+    compute_service_id: str = Body(..., embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    """Set a Task to `error` with a `reason`, for `ProtocolDAG` creation failures.
+
+    No `ProtocolDAGResult` exists in this case (creation failed before any unit
+    ran), which is exactly why `reason` lives on the `Task`. The open
+    `TaskProvenance` attempt for this ``(task, compute_service_id)`` pair is
+    finalized with `outcome = error`.
+
+    `ProtocolDAG` creation failures deliberately do not participate in restart
+    policies: `resolve_task_restarts` matches against `Tracebacks` nodes only,
+    and none exist here, so the Task's restarts are cancelled rather than
+    retried --- these tend to be systematic problems with the `Transformation`
+    itself, which auto-retrying would only mask.
+    """
+    task_sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(task_sk.scope, token)
+
+    n4js.set_task_error(
+        tasks=[task_sk],
+        reason=reason,
+        compute_service_id=ComputeServiceID(compute_service_id),
+    )
+
+    # no Tracebacks node exists, so this cancels (does not renew) the Task's
+    # restart patterns
+    n4js.resolve_task_restarts(task_scoped_keys=[task_sk])
+
+    return str(task_sk)
+
+
+@router.post("/computeservice/{compute_service_id}/progress")
+def update_task_progress(
+    compute_service_id,
+    *,
+    progress: dict[str, dict[str, int]] = Body(...),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+):
+    """Record live progress counts for a service's claimed Tasks.
+
+    The request body is the bare map from `Task` ScopedKey string to
+    ``{"units_completed": int, "units_total": int}`` (per the design's transport
+    spec) --- one batched request per push event, regardless of claim count.
+    NOTE: this is deliberately NOT ``embed``ed; the compute client sends the map
+    as the whole body. Like a heartbeat, this route never rejects: updates for
+    Tasks the service no longer claims are silently dropped server-side (the
+    claim expired mid-flight), and malformed entries are skipped rather than
+    500'd.
+    """
+    progress_ = {
+        task_sk: (counts["units_completed"], counts["units_total"])
+        for task_sk, counts in progress.items()
+        if "units_completed" in counts and "units_total" in counts
+    }
+    n4js.update_task_progress(ComputeServiceID(compute_service_id), progress_)
+    return None
+
+
+@router.post(
+    "/tasks/{task_scoped_key}/results/{protocoldagresultref_scoped_key}/units/{unit_result_key}/artifacts/logs"
+)
+def set_unit_result_logs(
+    task_scoped_key,
+    protocoldagresultref_scoped_key,
+    unit_result_key,
+    *,
+    logs: str = Body(..., embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    """Upload captured log text for a single unit result, flipping `has_logs`.
+
+    Ordered after streams and unit-ref creation (which happen in
+    `set_task_result`), so a service dying mid-upload leaves consistent state:
+    refs and streams exist, missing logs are simply flagged absent.
+    """
+    task_sk = ScopedKey.from_str(task_scoped_key)
+    pdrr_sk = ScopedKey.from_str(protocoldagresultref_scoped_key)
+    # authorize BOTH the Task and the ProtocolDAGResultRef scopes, and require
+    # the ref to actually be a result of the Task --- otherwise a caller
+    # credentialed for one scope could flip flags / overwrite artifacts on a
+    # ref in another scope by pairing it with an in-scope Task path parameter
+    validate_scopes(task_sk.scope, token)
+    validate_scopes(pdrr_sk.scope, token)
+
+    purr_sk = n4js.get_protocol_unit_result_ref_scoped_key(
+        pdrr_sk, GufeKey(unit_result_key), task=task_sk
+    )
+    if purr_sk is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No ProtocolUnitResultRef for unit result '{unit_result_key}' "
+                f"under '{protocoldagresultref_scoped_key}' for task "
+                f"'{task_scoped_key}'"
+            ),
+        )
+
+    protocolunitresultref = n4js.get_gufe(purr_sk)
+    s3os.push_protocol_unit_result_logs(protocolunitresultref.location, logs)
+    n4js.set_protocol_unit_result_ref_artifacts(purr_sk, has_logs=True)
+
+    return str(purr_sk)
 
 
 def process_compute_manager_id_string(

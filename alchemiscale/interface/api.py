@@ -4,9 +4,10 @@
 
 """
 
+import re
 from collections import Counter
 
-from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Request
+from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi import status as http_status
 from fastapi.middleware.gzip import GZipMiddleware
 
@@ -565,6 +566,19 @@ def get_scope_status(
     return dict(status_counts)
 
 
+@router.get("/scopes/{scope}/compute-share")
+def get_scope_compute_share(
+    scope,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> float:
+    scope_obj = Scope.from_str(scope)
+    validate_scopes(scope_obj, token)
+
+    return n4js.get_scope_compute_share(scope_obj)
+
+
 @router.get("/networks/{network_scoped_key}/status")
 def get_network_status(
     network_scoped_key,
@@ -885,6 +899,7 @@ def tasks_status_set(
     *,
     tasks: list[ScopedKey] = Body(),
     status: str = Body(),
+    reason: str | None = Body(None),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> list[str | None]:
@@ -907,7 +922,7 @@ def tasks_status_set(
         except HTTPException:
             valid_tasks.append(None)
 
-    tasks_updated = n4js.set_task_status(valid_tasks, status)
+    tasks_updated = n4js.set_task_status(valid_tasks, status, reason=reason)
 
     return [str(t) if t is not None else None for t in tasks_updated]
 
@@ -916,6 +931,7 @@ def tasks_status_set(
 def set_task_status(
     task_scoped_key,
     status: str = Body(),
+    reason: str | None = Body(None),
     n4js: Neo4jStore = Depends(get_n4js_depends),
     token: TokenData = Depends(get_token_data_depends),
 ):
@@ -931,7 +947,7 @@ def set_task_status(
         )
     task_sk = ScopedKey.from_str(task_scoped_key)
     validate_scopes(task_sk.scope, token)
-    tasks_statused = n4js.set_task_status([task_sk], status)
+    tasks_statused = n4js.set_task_status([task_sk], status, reason=reason)
     return [str(t) if t is not None else None for t in tasks_statused][0]
 
 
@@ -1174,6 +1190,260 @@ def get_task_failures(
     validate_scopes(sk.scope, token)
 
     return [str(sk) for sk in n4js.get_task_failures(sk)]
+
+
+### task introspection
+
+
+@router.get("/tasks/{task_scoped_key}/history")
+def get_task_history(
+    task_scoped_key,
+    *,
+    limit: int | None = Query(None, ge=1),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return [attempt.to_dict() for attempt in n4js.get_task_history(sk, limit)]
+
+
+@router.post("/bulk/tasks/details")
+def get_tasks_details(
+    *,
+    tasks: list[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    task_sks = [ScopedKey.from_str(task) for task in tasks]
+
+    for task_sk in task_sks:
+        validate_scopes(task_sk.scope, token)
+
+    details = n4js.get_tasks_details(task_sks)
+
+    return [detail.to_dict() if detail is not None else None for detail in details]
+
+
+@router.get("/tasks/{task_scoped_key}/tracebacks")
+def get_task_tracebacks(
+    task_scoped_key,
+    *,
+    limit: int | None = Query(None, ge=1),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return [tb.to_dict() for tb in n4js.get_task_tracebacks(sk, limit)]
+
+
+### result and artifact retrieval (section 3.4)
+
+
+_TIMESTAMP_RE = re.compile(r"^\s*\[([^\]]+)\]")
+
+
+def _unit_label(rec) -> str:
+    """Human-readable label for a `ProtocolUnitResultRec`."""
+    return f"{rec.name or str(rec.source_key)} ({rec.scoped_key})"
+
+
+@router.get("/tasks/{task_scoped_key}/resultrecs")
+def get_task_result_recs(
+    task_scoped_key,
+    *,
+    ok: bool | None = None,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    return [rec.to_dict() for rec in n4js.get_task_result_recs(sk, ok)]
+
+
+@router.get("/protocoldagresultrefs/{protocoldagresultref_scoped_key}/unitresultrecs")
+def get_result_unit_recs(
+    protocoldagresultref_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    pdrr_sk = ScopedKey.from_str(protocoldagresultref_scoped_key)
+    validate_scopes(pdrr_sk.scope, token)
+
+    return [rec.to_dict() for rec in n4js.get_result_unit_recs(pdrr_sk)]
+
+
+@router.get("/protocolunitresultrefs/{protocolunitresultref_scoped_key}/logs")
+def get_result_unit_logs(
+    protocolunitresultref_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    purr_sk = ScopedKey.from_str(protocolunitresultref_scoped_key)
+    validate_scopes(purr_sk.scope, token)
+
+    purr = n4js.get_gufe(purr_sk)
+    if not purr.has_logs:
+        return None
+
+    return s3os.pull_protocol_unit_result_logs(purr.location)
+
+
+@router.get("/protocolunitresultrefs/{protocolunitresultref_scoped_key}/stdout")
+def get_result_unit_stdout(
+    protocolunitresultref_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    purr_sk = ScopedKey.from_str(protocolunitresultref_scoped_key)
+    validate_scopes(purr_sk.scope, token)
+
+    purr = n4js.get_gufe(purr_sk)
+    if not purr.has_stdout:
+        return None
+
+    return s3os.pull_protocol_unit_result_streams(purr.location, "stdout")
+
+
+@router.get("/protocolunitresultrefs/{protocolunitresultref_scoped_key}/stderr")
+def get_result_unit_stderr(
+    protocolunitresultref_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    purr_sk = ScopedKey.from_str(protocolunitresultref_scoped_key)
+    validate_scopes(purr_sk.scope, token)
+
+    purr = n4js.get_gufe(purr_sk)
+    if not purr.has_stderr:
+        return None
+
+    return s3os.pull_protocol_unit_result_streams(purr.location, "stderr")
+
+
+@router.get("/protocoldagresultrefs/{protocoldagresultref_scoped_key}/logs")
+def get_result_logs(
+    protocoldagresultref_scoped_key,
+    *,
+    order: str = "unit",
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> str:
+    if order not in ("unit", "time"):
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"`order` takes 'unit' or 'time', not '{order}'",
+        )
+
+    pdrr_sk = ScopedKey.from_str(protocoldagresultref_scoped_key)
+    validate_scopes(pdrr_sk.scope, token)
+
+    unit_recs = n4js.get_result_unit_recs(pdrr_sk)
+
+    if order == "unit":
+        sections = []
+        for rec in unit_recs:
+            if not rec.has_logs:
+                continue
+            purr = n4js.get_gufe(rec.scoped_key)
+            logs = s3os.pull_protocol_unit_result_logs(purr.location)
+            sections.append(f"=== unit {_unit_label(rec)} ===\n{logs}")
+        return "\n".join(sections)
+
+    # order == "time": interleave all units' log lines by their leading
+    # [timestamp] prefix, each labeled with its unit
+    entries = []  # (sort_key, order_index, line)
+    idx = 0
+    for rec in unit_recs:
+        if not rec.has_logs:
+            continue
+        purr = n4js.get_gufe(rec.scoped_key)
+        logs = s3os.pull_protocol_unit_result_logs(purr.location)
+        label = _unit_label(rec)
+        for line in logs.splitlines():
+            m = _TIMESTAMP_RE.match(line)
+            sort_key = (0, m.group(1)) if m is not None else (1, "")
+            entries.append((sort_key, idx, f"[{label}] {line}"))
+            idx += 1
+
+    if not entries:
+        return ""
+
+    # stable sort by parsed timestamp; lines without a timestamp sort last
+    # while preserving their original relative order
+    entries.sort(key=lambda e: (e[0], e[1]))
+    return "\n".join(line for _, _, line in entries)
+
+
+def _render_task_stream(task_scoped_key, stream, n4js, s3os, token) -> str:
+    has_attr = "has_stdout" if stream == "stdout" else "has_stderr"
+
+    sk = ScopedKey.from_str(task_scoped_key)
+    validate_scopes(sk.scope, token)
+
+    sections = []
+    for pdrr_rec in n4js.get_task_result_recs(sk):
+        for unit_rec in n4js.get_result_unit_recs(pdrr_rec.scoped_key):
+            if not getattr(unit_rec, has_attr):
+                continue
+            purr = n4js.get_gufe(unit_rec.scoped_key)
+            files = s3os.pull_protocol_unit_result_streams(purr.location, stream)
+            for filename, text in files.items():
+                sections.append(
+                    f"=== result {pdrr_rec.scoped_key} :: "
+                    f"unit {_unit_label(unit_rec)} :: {filename} ===\n{text}"
+                )
+
+    return "\n".join(sections)
+
+
+@router.get("/tasks/{task_scoped_key}/stdout")
+def get_task_stdout(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> str:
+    return _render_task_stream(task_scoped_key, "stdout", n4js, s3os, token)
+
+
+@router.get("/tasks/{task_scoped_key}/stderr")
+def get_task_stderr(
+    task_scoped_key,
+    *,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    s3os: S3ObjectStore = Depends(get_s3os_depends),
+    token: TokenData = Depends(get_token_data_depends),
+) -> str:
+    return _render_task_stream(task_scoped_key, "stderr", n4js, s3os, token)
+
+
+@router.post("/bulk/tasks/progress")
+def get_tasks_progress(
+    *,
+    tasks: list[str] = Body(embed=True),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    token: TokenData = Depends(get_token_data_depends),
+):
+    task_sks = [ScopedKey.from_str(task) for task in tasks]
+
+    for task_sk in task_sks:
+        validate_scopes(task_sk.scope, token)
+
+    return n4js.get_tasks_progress(task_sks)
 
 
 ### strategies
