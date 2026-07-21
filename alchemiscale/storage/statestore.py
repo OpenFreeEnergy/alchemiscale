@@ -9,7 +9,6 @@ import bisect
 import datetime
 from contextlib import contextmanager
 import json
-import os
 import re
 from functools import lru_cache, update_wrapper
 from collections import defaultdict
@@ -67,6 +66,7 @@ from gufe.protocols import ProtocolDAGResult, ProtocolUnitResult
 
 from ..models import Scope, ScopedKey
 from .cypher import cypher_or
+from .objectstore import protocol_unit_result_location
 
 from ..security.models import CredentialedEntity
 from ..settings import Neo4jStoreSettings
@@ -4034,11 +4034,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         pdrr_node = self._get_node(protocoldagresultref_scoped_key)
 
-        base_location = (
-            os.path.dirname(protocoldagresultref.location)
-            if protocoldagresultref.location
-            else None
-        )
+        pdrr_location = protocoldagresultref.location
 
         subgraph = Subgraph()
         result_key_to_node = {}
@@ -4046,8 +4042,8 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         for result in protocoldagresult.protocol_unit_results:
             unit_location = (
-                os.path.join(base_location, "units", str(result.key))
-                if base_location is not None
+                protocol_unit_result_location(pdrr_location, result.key)
+                if pdrr_location
                 else None
             )
             purr = ProtocolUnitResultRef(

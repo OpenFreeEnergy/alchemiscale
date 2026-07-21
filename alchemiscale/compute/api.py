@@ -5,7 +5,6 @@
 """
 
 import json
-import os
 import datetime
 from datetime import timedelta
 import random
@@ -38,7 +37,7 @@ from ..settings import (
     ComputeAPISettings,
 )
 from ..storage.statestore import Neo4jStore
-from ..storage.objectstore import S3ObjectStore
+from ..storage.objectstore import S3ObjectStore, protocol_unit_result_location
 from ..storage.models import (
     ProtocolDAGResultRef,
     ComputeServiceID,
@@ -427,12 +426,13 @@ async def set_task_result(
     # Streams need no new compute-facing routes: they ride inside the PDR blob.
     refs_map = n4js.add_protocol_unit_result_refs(protocoldagresultref, result_sk, pdr)
     if protocoldagresultref.location:
-        base_location = os.path.dirname(protocoldagresultref.location)
         for unit_result in pdr.protocol_unit_results:
             purr_sk = refs_map.get(unit_result.key)
             if purr_sk is None:
                 continue
-            unit_location = os.path.join(base_location, "units", str(unit_result.key))
+            unit_location = protocol_unit_result_location(
+                protocoldagresultref.location, unit_result.key
+            )
             if unit_result.stdout:
                 s3os.push_protocol_unit_result_streams(
                     unit_location, "stdout", unit_result.stdout

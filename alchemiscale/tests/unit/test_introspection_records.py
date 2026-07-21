@@ -306,3 +306,31 @@ class TestProtocolUnitResultRefNode:
         assert purr2.has_logs is True
         assert purr2.start_time == NOW
         assert str(purr2.key) == str(key1)
+
+
+class TestProtocolUnitResultLocation:
+    """The shared constructor for per-unit-result artifact locations, used by
+    both storage and (reconstruction-based) retrieval."""
+
+    def test_layout_matches_pdr_dir(self):
+        from alchemiscale.storage.objectstore import (
+            protocol_unit_result_location,
+            OBJECT_FILENAME,
+        )
+
+        pdr_location = f"protocoldagresult/o/c/p/T/results/PDR/{OBJECT_FILENAME}"
+
+        # units hang off the parent ProtocolDAGResult's directory (the PDR's
+        # `location` filename is stripped), keyed by the unit result gufe key
+        assert (
+            protocol_unit_result_location(pdr_location, GufeKey("PUR"))
+            == "protocoldagresult/o/c/p/T/results/PDR/units/PUR"
+        )
+
+    def test_accepts_gufekey_or_str(self):
+        from alchemiscale.storage.objectstore import protocol_unit_result_location
+
+        pdr_location = "protocoldagresult/o/c/p/T/results/PDR/obj.json.zst"
+        assert protocol_unit_result_location(
+            pdr_location, GufeKey("PUR")
+        ) == protocol_unit_result_location(pdr_location, "PUR")

@@ -27,6 +27,25 @@ STDOUT_DIRNAME = "stdout"
 STDERR_DIRNAME = "stderr"
 
 
+def protocol_unit_result_location(
+    protocoldagresult_location: str, unit_result_key
+) -> str:
+    """Construct the object-store prefix for a unit result's artifacts.
+
+    Derived from the parent `ProtocolDAGResult`'s ``location`` --- the unit
+    result artifacts hang off the PDR's directory as
+    ``.../{pdr_key}/units/{unit_result_key}``. This is the single source of
+    truth for that layout: it is used both when storing artifacts (and recording
+    the result on `ProtocolUnitResultRef.location`) and when retrieving them, so
+    a retrieval can reconstruct the location the same way it was constructed and
+    fall back to the stored `ProtocolUnitResultRef.location` if that misses ---
+    mirroring `ProtocolDAGResult` storage/retrieval.
+    """
+    return os.path.join(
+        os.path.dirname(protocoldagresult_location), "units", str(unit_result_key)
+    )
+
+
 def get_s3os(settings: S3ObjectStoreSettings) -> "S3ObjectStore":
     """Convenience function for getting an S3ObjectStore directly from settings."""
     return S3ObjectStore(settings)
