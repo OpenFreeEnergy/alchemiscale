@@ -315,8 +315,23 @@ class Task(GufeTokenizable):
     priority
         Priority of the task; 1 is highest, larger values indicate lower priority.
     claim
-        Identifier of the compute service that has a claim on this task.
+        Identifier of the compute service that has a claim on this task, if any.
     datetime_created
+        When the `Task` was created.
+    datetime_status_changed
+        When the `Task`'s `status` was last changed; refreshed at every
+        status-mutation site (claim, `set_task_*`, expiry, deregistration,
+        restart-renew), but not on an idempotent no-op re-set of the same status.
+    reason
+        Human-readable reason for the current `status`, if any --- e.g. a
+        `ProtocolDAG` creation-failure traceback, or a user-supplied reason for
+        an `invalid`/`deleted` transition. Cleared when the status changes to
+        one that carries no reason.
+    creator
+        Identifier of the identity that created the `Task`, if recorded.
+    extends
+        `ScopedKey` (as a string) of the `Task` this one extends (continues
+        from), if any.
 
     """
 
@@ -718,6 +733,8 @@ class ProtocolUnitResultRef(ObjectStoreRef):
         When execution of the unit attempt began and ended.
     location
         The object store prefix under which this unit result's artifacts live.
+    scope
+        The `Scope` (org/campaign/project) this reference lives in.
     has_logs, has_stdout, has_stderr
         Whether captured log/stdout/stderr artifacts exist for this unit result.
 
