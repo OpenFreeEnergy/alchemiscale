@@ -209,10 +209,20 @@ class TestClient:
         user_client: client.AlchemiscaleClient,
         network_tyk2,
     ):
-        # gather source AlchemicalNetwork ScopedKeys across all scopes
-        # n4js_preloaded creates `network_tyk2` and a trimmed copy named
-        # "incomplete" in each of `multiple_scopes`
-        source_sks = user_client.query_networks(state=None)
+        # gather ``active`` source AlchemicalNetwork ScopedKeys across all
+        # scopes. n4js_preloaded creates one active `network_tyk2` per
+        # scope and one inactive trimmed copy named "incomplete";
+        # merge_networks only accepts active sources, so the trimmed
+        # copy would be rejected. Add a second active source in
+        # scope_test with a disjoint name so the merge has multiple
+        # active inputs to combine.
+        extra_active_an = AlchemicalNetwork(
+            edges=list(network_tyk2.edges)[:-2], name="extra_active_source"
+        )
+        user_client.create_network(extra_active_an, scope_test)
+
+        source_sks = user_client.query_networks(state="active")
+        assert len(source_sks) >= 2
 
         # destination scope: reuse `scope_test`, which is authorized for
         # the test identity. The merged network's name differs from the
@@ -237,9 +247,10 @@ class TestClient:
         all_active_sks = user_client.query_networks()
         assert merged_sk in all_active_sks
 
-        # the merged network should contain the union of all source edges;
-        # since `network_tyk2` is a superset of `incomplete`, the union equals
-        # `network_tyk2.edges`
+        # the merged network should contain the union of all source edges.
+        # Both ``network_tyk2`` (full) and ``extra_active_an`` (a subset)
+        # are active in scope_test, and every other source scope contributes
+        # ``network_tyk2`` again; the union is network_tyk2.edges.
         merged_network = user_client.get_network(merged_sk)
         assert merged_network.name == "merged_tyk2"
         assert len(merged_network.edges) == len(network_tyk2.edges)
@@ -257,7 +268,7 @@ class TestClient:
     ):
         """The state parameter must control the NetworkMark on the merged
         AlchemicalNetwork the same way it does on create_network."""
-        source_sks = user_client.query_networks(scope=scope_test, state=None)
+        source_sks = user_client.query_networks(scope=scope_test, state="active")
         assert source_sks
 
         # destination scope: reuse `scope_test`, which is authorized for
@@ -334,8 +345,9 @@ class TestClient:
         Tasks in any other status (``waiting``, ``running``, ``error``,
         ``invalid``, ``deleted``) must not be cloned.
         """
-        # pick a source network in scope_test
-        source_sks = user_client.query_networks(scope=scope_test, state=None)
+        # pick an ``active`` source network in scope_test (merge_networks
+        # only accepts active sources)
+        source_sks = user_client.query_networks(scope=scope_test, state="active")
         assert source_sks
         source_sk = source_sks[0]
 
@@ -444,7 +456,7 @@ class TestClient:
         relationships and PERFORMS wiring must be intact for the Tasks
         that do carry over.
         """
-        source_sks = user_client.query_networks(scope=scope_test, state=None)
+        source_sks = user_client.query_networks(scope=scope_test, state="active")
         assert source_sks
         source_sk = source_sks[0]
         source_an = user_client.get_network(source_sk)
@@ -536,7 +548,7 @@ class TestClient:
     ):
         """copy_network with a non-default `name` must produce a distinct
         gufe key while still copying into the target scope."""
-        source_sks = user_client.query_networks(scope=scope_test, state=None)
+        source_sks = user_client.query_networks(scope=scope_test, state="active")
         source_sk = source_sks[0]
         source_an = user_client.get_network(source_sk)
 
@@ -567,7 +579,7 @@ class TestClient:
         would silently invert every EXTENDS chain on copied networks and
         break the downstream traversals that read it forward (e.g.
         ``get_task_extends``, ``get_task_results``)."""
-        source_sks = user_client.query_networks(scope=scope_test, state=None)
+        source_sks = user_client.query_networks(scope=scope_test, state="active")
         source_sk = source_sks[0]
 
         transformation_sks = n4js_preloaded.get_network_transformations(source_sk)
@@ -650,22 +662,25 @@ class TestClient:
         n4js_preloaded,
         user_client: client.AlchemiscaleClient,
     ):
-        """merge_scopes must copy every AlchemicalNetwork in the listed
-        source scopes into the target scope, preserving names (and
-        therefore gufe keys)."""
+        """merge_scopes must copy every ``active`` AlchemicalNetwork in the
+        listed source scopes into the target scope, preserving names (and
+        therefore gufe keys). Non-active networks are skipped."""
         source_scopes = [scope_test, multiple_scopes[1]]
         target_scope = multiple_scopes[2]
 
-        # baseline: 2 networks pre-loaded in target_scope
+        # baseline: 2 networks pre-loaded in target_scope (1 active + 1 inactive)
         baseline_target_sks = user_client.query_networks(scope=target_scope, state=None)
         assert len(baseline_target_sks) == 2
 
+        # merge_scopes only carries ``active`` networks. n4js_preloaded seeds
+        # 1 active + 1 inactive per scope; only the active one per source
+        # scope makes it into the returned list.
         expected_source_count = sum(
-            len(user_client.query_networks(scope=sc, state=None))
+            len(user_client.query_networks(scope=sc, state="active"))
             for sc in source_scopes
         )
-        # 2 source networks per scope, 2 source scopes
-        assert expected_source_count == 4
+        # 1 active per scope × 2 source scopes
+        assert expected_source_count == 2
 
         new_sks = user_client.merge_scopes(
             scopes=source_scopes,
@@ -673,20 +688,18 @@ class TestClient:
             visualize=False,
         )
 
-        # one returned ScopedKey per source network
+        # one returned ScopedKey per carried (active) source network
         assert len(new_sks) == expected_source_count
         assert all(sk.scope == target_scope for sk in new_sks)
 
-        # every copy preserves the source network's gufe key, so each copy's
-        # ScopedKey is just (source_gufe_key, target_scope). Since the source
-        # scopes contain the same set of networks (preloaded with the same
-        # names), the returned ScopedKeys collapse to the same 2 unique keys.
-        assert len(set(new_sks)) == 2
+        # both source scopes hold the *same* active network (network_tyk2),
+        # so the two per-scope copies collapse onto a single target-scope
+        # ScopedKey via gufe-key dedup
+        assert len(set(new_sks)) == 1
 
         # target scope ends up with the union of its baseline networks and
-        # the copied networks; baseline and copies share the same gufe keys
-        # (assemble_network preloaded the same names everywhere), so the
-        # final count is unchanged from baseline
+        # the copied networks; the active copy dedups onto the preexisting
+        # active entry, so the final set is unchanged from baseline
         final_target_sks = user_client.query_networks(scope=target_scope, state=None)
         assert set(baseline_target_sks) == set(final_target_sks)
 
@@ -742,9 +755,11 @@ class TestClient:
             visualize=False,
         )
 
-        # source scope holds 3 networks now (2 preloaded + 1 fresh) → 3
-        # returned ScopedKeys, all anchored to target_scope
-        assert len(new_sks) == 3
+        # source scope holds 3 networks now, but only 2 are ``active``
+        # (network_tyk2 + fresh_an; an2 is inactive from n4js_preloaded).
+        # merge_scopes filters to active-only → 2 returned ScopedKeys,
+        # all anchored to target_scope.
+        assert len(new_sks) == 2
         assert all(sk.scope == target_scope for sk in new_sks)
         assert fresh_expected_target_sk in new_sks
 

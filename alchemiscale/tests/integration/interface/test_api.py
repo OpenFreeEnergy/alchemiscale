@@ -109,8 +109,18 @@ class TestAPI:
     ):
         n4js = n4js_preloaded
 
-        # source networks in scope_test (pre-loaded by n4js_preloaded)
-        source_sks = n4js.query_networks(scope=scope_test)
+        # source networks in scope_test. n4js_preloaded creates 1 active
+        # (network_tyk2) + 1 inactive ("incomplete") per scope; merge_networks
+        # only accepts active sources, so seed a second active network here
+        # so the merge has multiple active inputs to combine.
+        second_active_an = AlchemicalNetwork(
+            edges=list(network_tyk2.edges)[:-2], name="api_second_active"
+        )
+        n4js.assemble_network(second_active_an, scope_test)
+
+        source_sks = n4js.query_networks(
+            scope=scope_test, state=NetworkStateEnum.active.value
+        )
         assert len(source_sks) >= 2
 
         # destination scope: a new project under the same org/campaign so the
@@ -140,7 +150,8 @@ class TestAPI:
         assert n4js.check_existence(merged_sk)
 
         # merged network's union-of-edges equals network_tyk2's edge set,
-        # since one of the sources is network_tyk2 and the other is a strict subset
+        # since one active source is network_tyk2 and the other active
+        # source is a strict subset of it
         merged_network = n4js.get_gufe(merged_sk)
         assert merged_network.name == "api_merged"
         assert {t.key for t in merged_network.edges} == {
@@ -274,8 +285,12 @@ class TestAPI:
     def test_copy_network(self, n4js_preloaded, test_client, network_tyk2, scope_test):
         n4js = n4js_preloaded
 
-        # pick a source network in scope_test (pre-loaded)
-        source_sks = n4js.query_networks(scope=scope_test)
+        # pick an ``active`` source network in scope_test (copy_network
+        # only accepts active sources; n4js_preloaded also seeds an
+        # inactive "incomplete" network per scope which we skip here)
+        source_sks = n4js.query_networks(
+            scope=scope_test, state=NetworkStateEnum.active.value
+        )
         assert source_sks
         source_sk = source_sks[0]
 
