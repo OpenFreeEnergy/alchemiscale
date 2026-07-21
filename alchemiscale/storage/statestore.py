@@ -181,23 +181,11 @@ CLAIM_QUERY = f"""
     MATCH (csreg:ComputeServiceRegistration {{identifier: $compute_service_id}})
     CREATE (t)<-[cl:CLAIMS {{claimed: datetime($datetimestr)}}]-(csreg)
 
-    // create an immutable TaskProvenance record for this execution attempt,
-    // copying identifying info off the registration (which may later be
-    // deleted on expiry/deregistration)
-    CREATE (tp:TaskProvenance {{
-        compute_service_id: $compute_service_id,
-        hostname: csreg.hostname,
-        manager_name: csreg.manager_name,
-        datetime_claimed: datetime($datetimestr),
-        _org: t._org,
-        _campaign: t._campaign,
-        _project: t._project
-    }})
-    CREATE (tp)-[:PROVENANCE_OF]->(t)
-
     {_status_write('t', TaskStatusEnum.running.value, time_param='datetimestr')}
 
-    RETURN t
+    // return the identifying info the caller copies onto a `TaskProvenance`
+    // record for each genuinely-claimed Task (built in the same transaction)
+    RETURN t, csreg.hostname AS hostname, csreg.manager_name AS manager_name
 """
 
 
@@ -2925,12 +2913,51 @@ class Neo4jStore(AlchemiscaleStateStore):
 
             # if tasks is not empty, proceed with claiming
             if tasks:
-                tx.run(
+                now = datetime.datetime.now(tz=datetime.UTC)
+                claim_result = tx.run(
                     CLAIM_QUERY,
                     tasks_list=[str(task) for task in tasks if task is not None],
-                    datetimestr=str(datetime.datetime.now(tz=datetime.UTC).isoformat()),
+                    datetimestr=now.isoformat(),
                     compute_service_id=str(compute_service_id),
                 )
+
+                # Build a `TaskProvenance` record for each Task *actually*
+                # claimed (only those come back from CLAIM_QUERY --- a racing
+                # service may have taken some), in this same transaction so
+                # claim and provenance are atomic. `TaskProvenance` is a
+                # `GufeTokenizable`, so each is created through the normal
+                # keyed-node path and carries a `ScopedKey`; the `PROVENANCE_OF`
+                # edge to its Task is created after the nodes are merged.
+                provenance_subgraph = Subgraph()
+                links = []
+                for record in claim_result:
+                    task_node = record["t"]
+                    task_sk = ScopedKey.from_str(task_node["_scoped_key"])
+                    tp = TaskProvenance(
+                        compute_service_id=compute_service_id,
+                        hostname=record["hostname"],
+                        manager_name=record["manager_name"],
+                        datetime_claimed=now,
+                    )
+                    tp_subgraph, _, tp_sk = self._keyed_chain_to_subgraph(
+                        KeyedChain.from_gufe(tp), scope=task_sk.scope
+                    )
+                    provenance_subgraph = provenance_subgraph | tp_subgraph
+                    links.append({"tp": str(tp_sk), "task": str(task_sk)})
+
+                if links:
+                    merge_subgraph(
+                        tx, provenance_subgraph, "GufeTokenizable", "_scoped_key"
+                    )
+                    tx.run(
+                        """
+                        UNWIND $links AS link
+                        MATCH (tp:TaskProvenance {_scoped_key: link.tp})
+                        MATCH (t:Task {_scoped_key: link.task})
+                        CREATE (tp)-[:PROVENANCE_OF]->(t)
+                        """,
+                        links=links,
+                    )
 
             tx.run(
                 """

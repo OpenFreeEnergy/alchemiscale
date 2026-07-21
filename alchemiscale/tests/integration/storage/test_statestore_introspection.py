@@ -22,6 +22,7 @@ from alchemiscale.storage.models import (
     TaskAttempt,
     TaskDetails,
     TaskOutcomeEnum,
+    TaskProvenance,
     TaskStatusEnum,
     TaskTracebacks,
 )
@@ -123,6 +124,38 @@ class TestStateStoreIntrospection:
         ).records[0]["t"]
         assert task_node["status"] == TaskStatusEnum.running.value
         assert task_node.get("datetime_status_changed") is not None
+
+    def test_provenance_is_scoped_gufe_tokenizable(
+        self, n4js, network_tyk2, transformation, scope_test
+    ):
+        """The provenance node is a `GufeTokenizable` carrying a `ScopedKey` in
+        its Task's scope, and round-trips via `get_gufe` --- so it authorizes
+        through the standard `validate_scopes(sk.scope, token)` path, with no
+        anchoring Task required."""
+        csid = ComputeServiceID.new_from_name("prov.scoped")
+        task_sk, _ = self._claimed_task(
+            n4js,
+            network_tyk2,
+            transformation,
+            scope_test,
+            csid,
+            hostname="cluster-node-7",
+            manager_name="mgr-a",
+        )
+
+        tp = _provenance_nodes(n4js, task_sk)[0]
+        # a real keyed node: GufeTokenizable label + a ScopedKey in Task's scope
+        tp_sk = ScopedKey.from_str(tp["_scoped_key"])
+        assert tp_sk.qualname == "TaskProvenance"
+        assert tp_sk.scope == task_sk.scope
+
+        # round-trips as a TaskProvenance with the same identity and fields
+        obj = n4js.get_gufe(tp_sk)
+        assert isinstance(obj, TaskProvenance)
+        assert str(obj.key) == tp["_gufe_key"]
+        assert str(obj.compute_service_id) == str(csid)
+        assert obj.hostname == "cluster-node-7"
+        assert obj.manager_name == "mgr-a"
 
     # --- finalization: complete / error via set_task_result ---------------
 

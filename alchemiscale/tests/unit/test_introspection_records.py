@@ -89,6 +89,29 @@ class TestTaskProvenance:
         assert tp2.datetime_end is None
         assert tp2.hostname is None
 
+    def test_gufe_tokenizable_uuid_identity(self):
+        # TaskProvenance is a GufeTokenizable so it carries a ScopedKey for
+        # scope-based authorization; it tokenizes on a uuid, so the key is
+        # unique per attempt and stable against content / later mutation.
+        from gufe.tokenization import GufeTokenizable
+
+        tp = TaskProvenance(compute_service_id=CSID, datetime_claimed=NOW)
+        assert isinstance(tp, GufeTokenizable)
+        assert str(tp.key).startswith("TaskProvenance-")
+
+        # identical content but a distinct attempt -> distinct key
+        assert (
+            tp.key != TaskProvenance(compute_service_id=CSID, datetime_claimed=NOW).key
+        )
+
+        # key survives a serialization round-trip and an in-place mutation
+        # (finalization sets outcome/datetime_end after creation)
+        key = tp.key
+        assert TaskProvenance.from_dict(tp.to_dict()).key == key
+        tp.outcome = TaskOutcomeEnum.complete
+        tp.datetime_end = LATER
+        assert TaskProvenance.from_dict(tp.to_dict()).key == key
+
 
 class TestTaskAttempt:
     @pytest.mark.parametrize(

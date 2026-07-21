@@ -19,6 +19,21 @@ from gufe.tokenization import GufeTokenizable, GufeKey
 from ..models import ScopedKey, Scope
 
 
+def _coerce_datetime(v) -> datetime.datetime | None:
+    """Coerce a neo4j ``DateTime``, ISO string, or ``datetime`` to ``datetime``."""
+    if v is None:
+        return None
+    if hasattr(v, "to_native"):
+        return v.to_native()
+    if isinstance(v, str):
+        return datetime.datetime.fromisoformat(v)
+    return v
+
+
+def _iso(v: datetime.datetime | None) -> str | None:
+    return v.isoformat() if v is not None else None
+
+
 class ComputeIDBase(str):
 
     _allowed_name_pattern = r"^[a-zA-Z][a-zA-Z0-9_\.\:]*$"
@@ -175,8 +190,8 @@ class TaskOutcomeEnum(Enum):
     released = "released"
 
 
-class TaskProvenance(BaseModel):
-    """An immutable record of a single execution attempt of a `Task`.
+class TaskProvenance(GufeTokenizable):
+    """A record of a single execution attempt of a `Task`.
 
     A `TaskProvenance` node is created at claim time and finalized when the
     attempt ends. It survives claim teardown and registration expiry, so that
@@ -184,6 +199,17 @@ class TaskProvenance(BaseModel):
     information (compute service id, hostname, manager name) is copied onto the
     record rather than held as a relationship to the (potentially deleted)
     `ComputeServiceRegistration`.
+
+    It is a `GufeTokenizable` so it carries a `ScopedKey`: provenance is a
+    scoped entity, authorized through the same ``validate_scopes(sk.scope,
+    token)`` path as every other scoped object, rather than relying on an
+    anchoring `Task`. Like `Task`, it tokenizes on a uuid (see
+    `_gufe_tokenize`), *not* its contents, so its `GufeKey`/`ScopedKey` is fixed
+    at creation and unaffected by the in-place mutations (`outcome`,
+    `datetime_end`, and the progress counts) applied over the attempt's life.
+    Because of that, a `TaskProvenance` must never be re-tokenized after
+    creation (never round-tripped object -> node a second time); mutations go
+    straight to the node via Cypher.
 
     Attributes
     ----------
@@ -208,27 +234,65 @@ class TaskProvenance(BaseModel):
     """
 
     compute_service_id: ComputeServiceID
-    hostname: str | None = None
-    manager_name: str | None = None
-    datetime_claimed: datetime.datetime
-    datetime_end: datetime.datetime | None = None
-    outcome: TaskOutcomeEnum | None = None
-    units_completed: int | None = None
-    units_total: int | None = None
+    hostname: str | None
+    manager_name: str | None
+    datetime_claimed: datetime.datetime | None
+    datetime_end: datetime.datetime | None
+    outcome: TaskOutcomeEnum | None
+    units_completed: int | None
+    units_total: int | None
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    def __init__(
+        self,
+        *,
+        compute_service_id: ComputeServiceID | str,
+        datetime_claimed: datetime.datetime | None = None,
+        hostname: str | None = None,
+        manager_name: str | None = None,
+        datetime_end: datetime.datetime | None = None,
+        outcome: str | TaskOutcomeEnum | None = None,
+        units_completed: int | None = None,
+        units_total: int | None = None,
+        _key: str = None,
+    ):
+        if _key is not None:
+            self._key = GufeKey(_key)
 
-    def to_dict(self):
-        dct = self.model_dump()
-        dct["compute_service_id"] = str(self.compute_service_id)
-        dct["outcome"] = self.outcome.value if self.outcome is not None else None
-        return dct
+        self.compute_service_id = ComputeServiceID(compute_service_id)
+        self.hostname = hostname
+        self.manager_name = manager_name
+        self.datetime_claimed = _coerce_datetime(datetime_claimed)
+        self.datetime_end = _coerce_datetime(datetime_end)
+        self.outcome = TaskOutcomeEnum(outcome) if outcome is not None else None
+        self.units_completed = units_completed
+        self.units_total = units_total
+
+    def _gufe_tokenize(self):
+        # tokenize with a uuid, not content: identity is per-attempt, and the
+        # record is mutated in place (outcome/datetime_end/progress) after
+        # creation, so a content hash would neither be stable nor unique.
+        return uuid4().hex
+
+    def _to_dict(self):
+        return {
+            "compute_service_id": str(self.compute_service_id),
+            "hostname": self.hostname,
+            "manager_name": self.manager_name,
+            "datetime_claimed": self.datetime_claimed,
+            "datetime_end": self.datetime_end,
+            "outcome": self.outcome.value if self.outcome is not None else None,
+            "units_completed": self.units_completed,
+            "units_total": self.units_total,
+            "_key": str(self.key),
+        }
 
     @classmethod
-    def from_dict(cls, dct):
-        dct_ = copy(dct)
-        dct_["compute_service_id"] = ComputeServiceID(dct_["compute_service_id"])
-        return cls(**dct_)
+    def _from_dict(cls, d):
+        return cls(**d)
+
+    @classmethod
+    def _defaults(cls):
+        return super()._defaults()
 
 
 class TaskStatusEnum(Enum):
@@ -800,21 +864,6 @@ class StrategyState(BaseModel):
     @classmethod
     def from_dict(cls, d):
         return cls(**d)
-
-
-def _coerce_datetime(v) -> datetime.datetime | None:
-    """Coerce a neo4j ``DateTime``, ISO string, or ``datetime`` to ``datetime``."""
-    if v is None:
-        return None
-    if hasattr(v, "to_native"):
-        return v.to_native()
-    if isinstance(v, str):
-        return datetime.datetime.fromisoformat(v)
-    return v
-
-
-def _iso(v: datetime.datetime | None) -> str | None:
-    return v.isoformat() if v is not None else None
 
 
 # --- client-facing API record models --------------------------------------
