@@ -741,13 +741,14 @@ class ProtocolUnitResultRef(ObjectStoreRef):
     Note
     ----
     The ``has_logs``, ``has_stdout``, and ``has_stderr`` flags (and nothing
-    else) are mutated in place via Cypher after
-    the node is created, as artifacts arrive. The node's `_scoped_key` and
-    `_gufe_key`
-    are computed once at creation and never recomputed, so lookups stay stable
-    even though these tokenizable-contributing fields change. This is safe only
-    because `ProtocolUnitResultRef` nodes are an internal state-store detail,
-    never re-tokenized after creation; keep it that way.
+    else) are mutated in place via Cypher after the node is created, as
+    artifacts arrive. Like `Task`/`TaskProvenance`, this object tokenizes on a
+    uuid (see `_gufe_tokenize`), *not* its contents, so its `GufeKey`/
+    `ScopedKey` is fixed at creation and is unaffected by those mutations ---
+    lookups by `_scoped_key` stay stable. Because the key is a uuid, a
+    `ProtocolUnitResultRef` must never be re-tokenized after creation (never
+    round-tripped object -> node a second time); mutations go straight to the
+    node via Cypher.
     """
 
     ok: bool
@@ -773,7 +774,11 @@ class ProtocolUnitResultRef(ObjectStoreRef):
         has_logs: bool = False,
         has_stdout: bool = False,
         has_stderr: bool = False,
+        _key: str = None,
     ):
+        if _key is not None:
+            self._key = GufeKey(_key)
+
         self.location = location
         self.obj_key = GufeKey(obj_key)
         self.source_key = GufeKey(source_key)
@@ -785,6 +790,12 @@ class ProtocolUnitResultRef(ObjectStoreRef):
         self.has_logs = has_logs
         self.has_stdout = has_stdout
         self.has_stderr = has_stderr
+
+    def _gufe_tokenize(self):
+        # tokenize with a uuid, not content: the has_logs/has_stdout/has_stderr
+        # flags are mutated in place after creation, so a content hash would not
+        # be stable. Like `Task`/`TaskProvenance`, the key is fixed at creation.
+        return uuid4().hex
 
     def _to_dict(self):
         return {
@@ -803,6 +814,7 @@ class ProtocolUnitResultRef(ObjectStoreRef):
             "has_logs": self.has_logs,
             "has_stdout": self.has_stdout,
             "has_stderr": self.has_stderr,
+            "_key": str(self.key),
         }
 
     @classmethod

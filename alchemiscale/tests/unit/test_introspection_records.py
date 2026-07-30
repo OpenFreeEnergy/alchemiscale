@@ -317,11 +317,29 @@ class TestProtocolUnitResultRefNode:
             end_time=LATER,
             has_logs=True,
         )
-        # deterministic key computed once at creation
-        key1 = purr.key
-        # round-trip through the keyed chain (as the state store does)
-        from gufe.tokenization import KeyedChain
+        # uuid key, fixed at creation (the has_* flags are mutated in place, so
+        # a content hash would not be stable)
+        from gufe.tokenization import GufeTokenizable, KeyedChain
 
+        assert isinstance(purr, GufeTokenizable)
+        key1 = purr.key
+
+        # a distinct ref with identical content gets a distinct key
+        purr_other = ProtocolUnitResultRef(
+            location="protocoldagresult/o/c/p/T/results/K/units/R",
+            obj_key=GufeKey("ProtocolUnitResult-r1"),
+            source_key=GufeKey("ProtocolUnit-u1"),
+            scope=Scope("o", "c", "p"),
+            ok=True,
+            name="u",
+            start_time=NOW,
+            end_time=LATER,
+            has_logs=True,
+        )
+        assert purr_other.key != key1
+
+        # round-trip through the keyed chain (as the state store does) preserves
+        # the key and the fields
         purr2 = KeyedChain.from_gufe(purr).to_gufe()
         assert purr2.obj_key == purr.obj_key
         assert purr2.source_key == purr.source_key
