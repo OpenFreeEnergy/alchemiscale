@@ -1010,23 +1010,33 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         transformation = self._get_resource(f"/tasks/{task}/transformation")
         return ScopedKey.from_str(transformation)
 
+    # rich styles for Task status / attempt-outcome cells, shared across the
+    # ``visualize=True`` renderings for a consistent color scheme
+    _STATUS_STYLES = {
+        "complete": "green",
+        "running": "orange3",
+        "waiting": "#1793d0",
+        "error": "#ff073a",
+        "invalid": "magenta1",
+        "deleted": "purple",
+    }
+    _OUTCOME_STYLES = {
+        "complete": "green",
+        "error": "#ff073a",
+        "expired": "orange3",
+        "released": "grey62",
+    }
+
     def _visualize_status(self, status_counts, status_object):
         from rich import print as rprint
         from rich.table import Table
 
-        title = f"{status_object}"
-        table = Table(title=title, title_justify="left", expand=True)
-        # table = Table()
-
+        table = Table(title=f"{status_object}", title_justify="left", expand=True)
         table.add_column("status", justify="left", no_wrap=True)
         table.add_column("count", justify="right")
 
-        table.add_row("complete", f"{status_counts.get('complete', 0)}", style="green")
-        table.add_row("running", f"{status_counts.get('running', 0)}", style="orange3")
-        table.add_row("waiting", f"{status_counts.get('waiting', 0)}", style="#1793d0")
-        table.add_row("error", f"{status_counts.get('error', 0)}", style="#ff073a")
-        table.add_row("invalid", f"{status_counts.get('invalid', 0)}", style="magenta1")
-        table.add_row("deleted", f"{status_counts.get('deleted', 0)}", style="purple")
+        for status, style in self._STATUS_STYLES.items():
+            table.add_row(status, f"{status_counts.get(status, 0)}", style=style)
 
         rprint(table)
 
@@ -2164,8 +2174,173 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return pdrs
 
+    @staticmethod
+    def _fmt_dt(dt) -> str:
+        # minute precision keeps the glance tables narrow; the returned records
+        # carry full-precision datetimes
+        return dt.strftime("%Y-%m-%d %H:%M") if dt is not None else "—"
+
+    @staticmethod
+    def _fmt_duration(start, end) -> str:
+        """Compact ``start``..``end`` duration (e.g. ``1h30m``), or ``—``."""
+        if start is None or end is None:
+            return "—"
+        seconds = int((end - start).total_seconds())
+        if seconds < 0:
+            return "—"
+        hours, rem = divmod(seconds, 3600)
+        minutes, secs = divmod(rem, 60)
+        if hours:
+            return f"{hours}h{minutes}m"
+        if minutes:
+            return f"{minutes}m{secs}s"
+        return f"{secs}s"
+
+    def _visualize_task_history(self, task, attempts):
+        from rich import print as rprint
+        from rich.table import Table
+        from rich.text import Text
+
+        table = Table(title=f"Task history: {task}", title_justify="left")
+        table.add_column("#", justify="right", no_wrap=True)
+        table.add_column("outcome", no_wrap=True)
+        table.add_column("hostname", overflow="fold")
+        table.add_column("claimed", no_wrap=True)
+        table.add_column("duration", justify="right", no_wrap=True)
+        table.add_column("progress", justify="right", no_wrap=True)
+        table.add_column("result", justify="center", no_wrap=True)
+
+        # `compute_service_id` is intentionally omitted (long, and present on the
+        # returned records); `hostname` is the human-friendly "where". `duration`
+        # (rather than an end timestamp) directly answers "how long did it run".
+        n = len(attempts)
+        for i, a in enumerate(attempts):
+            outcome = a.outcome.value if a.outcome is not None else "running"
+            progress = (
+                f"{a.units_completed}/{a.units_total}"
+                if a.units_total is not None
+                else "—"
+            )
+            table.add_row(
+                str(n - i),  # 1-based, oldest = 1 (attempts are most-recent-first)
+                Text(outcome, style=self._OUTCOME_STYLES.get(outcome, "grey62")),
+                Text(a.hostname or "—"),
+                self._fmt_dt(a.datetime_claimed),
+                self._fmt_duration(a.datetime_claimed, a.datetime_end),
+                progress,
+                "✓" if a.protocoldagresultref is not None else "—",
+            )
+
+        rprint(table)
+
+    def _visualize_tasks_details(self, tasks, details):
+        from rich import print as rprint
+        from rich.table import Table
+        from rich.text import Text
+
+        table = Table(title="Task details", title_justify="left")
+        table.add_column("task", overflow="fold")
+        table.add_column("status", no_wrap=True)
+        table.add_column("changed", no_wrap=True)
+        table.add_column("reason", overflow="fold")
+        table.add_column("claims", justify="right", no_wrap=True)
+        table.add_column("current claim", overflow="fold")
+        table.add_column("last outcome", no_wrap=True)
+
+        for task, d in zip(tasks, details):
+            if d is None:
+                table.add_row(
+                    str(task), Text("(not found)", style="grey62"), *(["—"] * 5)
+                )
+                continue
+
+            status = d.status.value
+            claim = "—"
+            if d.current_claim is not None:
+                claim = d.current_claim.hostname or d.current_claim.compute_service_id
+
+            last_outcome = "—"
+            attempt = d.most_recent_attempt
+            if attempt is not None and attempt.outcome is not None:
+                oc = attempt.outcome.value
+                last_outcome = Text(oc, style=self._OUTCOME_STYLES.get(oc, "grey62"))
+
+            reason = d.reason or ""
+            if len(reason) > 30:
+                reason = reason[:29] + "…"
+
+            table.add_row(
+                str(d.task),
+                Text(status, style=self._STATUS_STYLES.get(status, "")),
+                self._fmt_dt(d.datetime_status_changed),
+                Text(reason),
+                str(d.num_claims),
+                Text(claim),
+                last_outcome,
+            )
+
+        rprint(table)
+
+    def _visualize_tasks_progress(self, tasks, progress):
+        from rich import print as rprint
+        from rich.progress_bar import ProgressBar
+        from rich.table import Table
+        from rich.text import Text
+
+        table = Table(title="Task progress", title_justify="left")
+        table.add_column("task", overflow="fold")
+        table.add_column("progress", ratio=1)
+        table.add_column("units", justify="right", no_wrap=True)
+        table.add_column("%", justify="right", no_wrap=True)
+
+        for task, p in zip(tasks, progress):
+            if p is None:
+                table.add_row(
+                    str(task), Text("— not reporting —", style="grey62"), "—", "—"
+                )
+                continue
+
+            completed, total = p
+            pct = (100 * completed / total) if total else 0.0
+            table.add_row(
+                str(task),
+                ProgressBar(total=total or 1, completed=completed, width=40),
+                f"{completed}/{total}",
+                f"{pct:.0f}%",
+            )
+
+        rprint(table)
+
+    def _visualize_task_tracebacks(self, task, tracebacks):
+        from rich import print as rprint
+        from rich.panel import Panel
+        from rich.text import Text
+
+        if not tracebacks:
+            rprint(f"[grey62]No tracebacks for task {task}.[/grey62]")
+            return
+
+        for tb in tracebacks:
+            header = f"[bold]{tb.protocoldagresultref}[/bold]"
+            if tb.datetime_created is not None:
+                header += f"  ·  {self._fmt_dt(tb.datetime_created)}"
+            rprint(header)
+            for ut in tb.tracebacks:
+                # wrap traceback text in `Text` so its bracketed content (e.g.
+                # ``[Errno 2]``) is never interpreted as rich markup
+                rprint(
+                    Panel(
+                        Text(ut.traceback),
+                        title=str(ut.source_key),
+                        subtitle=str(ut.failure_key),
+                        title_align="left",
+                        subtitle_align="right",
+                        border_style="#ff073a",
+                    )
+                )
+
     def get_task_history(
-        self, task: ScopedKey, limit: int | None = None
+        self, task: ScopedKey, limit: int | None = None, visualize: bool = True
     ) -> list[TaskAttempt]:
         """Get the execution history of a `Task`.
 
@@ -2175,6 +2350,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             The `ScopedKey` of the `Task` to retrieve the history for.
         limit
             If given, return at most this many of the most recent attempts.
+        visualize
+            If ``True`` (default), also print a rich-formatted table of the
+            attempts.
 
         Returns
         -------
@@ -2184,15 +2362,25 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         params = dict(limit=limit)
         attempts = self._get_resource(f"/tasks/{task}/history", params=params)
-        return [TaskAttempt.from_dict(attempt) for attempt in attempts]
+        attempts = [TaskAttempt.from_dict(attempt) for attempt in attempts]
 
-    def get_tasks_details(self, tasks: list[ScopedKey]) -> list[TaskDetails | None]:
+        if visualize:
+            self._visualize_task_history(task, attempts)
+
+        return attempts
+
+    def get_tasks_details(
+        self, tasks: list[ScopedKey], visualize: bool = True
+    ) -> list[TaskDetails | None]:
         """Get summary details for multiple Tasks.
 
         Parameters
         ----------
         tasks
             The `ScopedKey` of each `Task` to retrieve details for.
+        visualize
+            If ``True`` (default), also print a rich-formatted table of the
+            details.
 
         Returns
         -------
@@ -2203,13 +2391,18 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         data = dict(tasks=[str(task) for task in tasks])
         details = self._post_resource("/bulk/tasks/details", data=data)
-        return [
+        details = [
             TaskDetails.from_dict(detail) if detail is not None else None
             for detail in details
         ]
 
+        if visualize:
+            self._visualize_tasks_details(tasks, details)
+
+        return details
+
     def get_task_tracebacks(
-        self, task: ScopedKey, limit: int | None = None
+        self, task: ScopedKey, limit: int | None = None, visualize: bool = True
     ) -> list[TaskTracebacks]:
         """Get the tracebacks from failed `ProtocolDAGResult` objects of a `Task`.
 
@@ -2220,6 +2413,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         limit
             If given, return tracebacks for at most this many of the most
             recent failed `ProtocolDAGResult` objects.
+        visualize
+            If ``True`` (default), also print each traceback in a rich-formatted
+            panel.
 
         Returns
         -------
@@ -2229,7 +2425,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         params = dict(limit=limit)
         tracebacks = self._get_resource(f"/tasks/{task}/tracebacks", params=params)
-        return [TaskTracebacks.from_dict(tb) for tb in tracebacks]
+        tracebacks = [TaskTracebacks.from_dict(tb) for tb in tracebacks]
+
+        if visualize:
+            self._visualize_task_tracebacks(task, tracebacks)
+
+        return tracebacks
 
     def get_scope_compute_share(self, scope: Scope) -> float:
         """Get this identity's fractional compute share within the given `Scope`.
@@ -2425,7 +2626,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         return self._get_resource(f"/protocoldagresultrefs/{pdrr_sk}/stderr")
 
     def get_tasks_progress(
-        self, tasks: list[ScopedKey]
+        self, tasks: list[ScopedKey], visualize: bool = True
     ) -> list[tuple[int, int] | None]:
         """Get execution progress for multiple Tasks.
 
@@ -2433,6 +2634,9 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         ----------
         tasks
             The `ScopedKey` of each `Task` to retrieve progress for.
+        visualize
+            If ``True`` (default), also print a rich-formatted table of progress
+            bars.
 
         Returns
         -------
@@ -2443,7 +2647,12 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
         """
         data = dict(tasks=[str(task) for task in tasks])
         progress = self._post_resource("/bulk/tasks/progress", data=data)
-        return [tuple(p) if p is not None else None for p in progress]
+        progress = [tuple(p) if p is not None else None for p in progress]
+
+        if visualize:
+            self._visualize_tasks_progress(tasks, progress)
+
+        return progress
 
     def add_task_restart_patterns(
         self,
