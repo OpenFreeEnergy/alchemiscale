@@ -8,12 +8,20 @@ from abc import abstractmethod
 from copy import copy
 import datetime
 from enum import Enum, StrEnum
+from typing import Annotated
 from uuid import uuid4, UUID
 import re
 import hashlib
 
 
-from pydantic import BaseModel, ConfigDict, PositiveInt, field_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    PlainSerializer,
+    PositiveInt,
+    field_validator,
+)
 from gufe.tokenization import GufeTokenizable, GufeKey
 
 from ..models import ScopedKey, Scope
@@ -30,8 +38,39 @@ def _coerce_datetime(v) -> datetime.datetime | None:
     return v
 
 
-def _iso(v: datetime.datetime | None) -> str | None:
-    return v.isoformat() if v is not None else None
+def _to_scoped_key(v):
+    return ScopedKey.from_str(v) if isinstance(v, str) else v
+
+
+def _to_gufe_key(v):
+    return GufeKey(v) if v is not None else v
+
+
+# Reusable field types for the client-facing record models below. They coerce
+# the wire/neo4j representations on the way in --- on *any* construction, not
+# just via `from_dict` --- and pin the wire representation on the way out, so
+# those models need no per-field coercion plumbing:
+#
+# - `Datetime` accepts a neo4j ``DateTime``, an ISO string, or a ``datetime``,
+#   and serializes with ``isoformat()`` (stable ``+00:00`` offset --- pydantic's
+#   default would render UTC as ``Z``, changing the wire shape).
+# - `SK`/`GK` accept a `ScopedKey`/`GufeKey` or its string form and serialize
+#   back to that string.
+Datetime = Annotated[
+    datetime.datetime,
+    BeforeValidator(_coerce_datetime),
+    PlainSerializer(lambda v: v.isoformat(), return_type=str),
+]
+SK = Annotated[
+    ScopedKey,
+    BeforeValidator(_to_scoped_key),
+    PlainSerializer(lambda v: str(v), return_type=str),
+]
+GK = Annotated[
+    GufeKey,
+    BeforeValidator(_to_gufe_key),
+    PlainSerializer(lambda v: str(v), return_type=str),
+]
 
 
 class ComputeIDBase(str):
@@ -915,51 +954,21 @@ class TaskAttempt(BaseModel):
     compute_service_id: str
     hostname: str | None = None
     manager_name: str | None = None
-    datetime_claimed: datetime.datetime
-    datetime_end: datetime.datetime | None = None
+    datetime_claimed: Datetime
+    datetime_end: Datetime | None = None
     outcome: TaskOutcomeEnum | None = None
     units_completed: int | None = None
     units_total: int | None = None
-    protocoldagresultref: ScopedKey | None = None
+    protocoldagresultref: SK | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def to_dict(self):
-        return {
-            "compute_service_id": self.compute_service_id,
-            "hostname": self.hostname,
-            "manager_name": self.manager_name,
-            "datetime_claimed": _iso(self.datetime_claimed),
-            "datetime_end": _iso(self.datetime_end),
-            "outcome": self.outcome.value if self.outcome is not None else None,
-            "units_completed": self.units_completed,
-            "units_total": self.units_total,
-            "protocoldagresultref": (
-                str(self.protocoldagresultref)
-                if self.protocoldagresultref is not None
-                else None
-            ),
-        }
+        return self.model_dump(mode="json")
 
     @classmethod
     def from_dict(cls, d):
-        return cls(
-            compute_service_id=d["compute_service_id"],
-            hostname=d.get("hostname"),
-            manager_name=d.get("manager_name"),
-            datetime_claimed=_coerce_datetime(d["datetime_claimed"]),
-            datetime_end=_coerce_datetime(d.get("datetime_end")),
-            outcome=(
-                TaskOutcomeEnum(d["outcome"]) if d.get("outcome") is not None else None
-            ),
-            units_completed=d.get("units_completed"),
-            units_total=d.get("units_total"),
-            protocoldagresultref=(
-                ScopedKey.from_str(d["protocoldagresultref"])
-                if d.get("protocoldagresultref") is not None
-                else None
-            ),
-        )
+        return cls.model_validate(d)
 
 
 class TaskClaim(BaseModel):
@@ -967,38 +976,26 @@ class TaskClaim(BaseModel):
 
     compute_service_id: str
     hostname: str | None = None
-    datetime_claimed: datetime.datetime | None = None
+    datetime_claimed: Datetime | None = None
     units_completed: int | None = None
     units_total: int | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def to_dict(self):
-        return {
-            "compute_service_id": self.compute_service_id,
-            "hostname": self.hostname,
-            "datetime_claimed": _iso(self.datetime_claimed),
-            "units_completed": self.units_completed,
-            "units_total": self.units_total,
-        }
+        return self.model_dump(mode="json")
 
     @classmethod
     def from_dict(cls, d):
-        return cls(
-            compute_service_id=d["compute_service_id"],
-            hostname=d.get("hostname"),
-            datetime_claimed=_coerce_datetime(d.get("datetime_claimed")),
-            units_completed=d.get("units_completed"),
-            units_total=d.get("units_total"),
-        )
+        return cls.model_validate(d)
 
 
 class TaskDetails(BaseModel):
     """Bulk indicator summary for a `Task`, as returned by `get_tasks_details`."""
 
-    task: ScopedKey
+    task: SK
     status: TaskStatusEnum
-    datetime_status_changed: datetime.datetime | None = None
+    datetime_status_changed: Datetime | None = None
     reason: str | None = None
     num_claims: int = 0
     current_claim: TaskClaim | None = None
@@ -1007,77 +1004,29 @@ class TaskDetails(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def to_dict(self):
-        return {
-            "task": str(self.task),
-            "status": self.status.value,
-            "datetime_status_changed": _iso(self.datetime_status_changed),
-            "reason": self.reason,
-            "num_claims": self.num_claims,
-            "current_claim": (
-                self.current_claim.to_dict() if self.current_claim is not None else None
-            ),
-            "most_recent_attempt": (
-                self.most_recent_attempt.to_dict()
-                if self.most_recent_attempt is not None
-                else None
-            ),
-        }
+        return self.model_dump(mode="json")
 
     @classmethod
     def from_dict(cls, d):
-        return cls(
-            task=ScopedKey.from_str(d["task"]),
-            status=TaskStatusEnum(d["status"]),
-            datetime_status_changed=_coerce_datetime(d.get("datetime_status_changed")),
-            reason=d.get("reason"),
-            num_claims=d.get("num_claims", 0),
-            current_claim=(
-                TaskClaim.from_dict(d["current_claim"])
-                if d.get("current_claim") is not None
-                else None
-            ),
-            most_recent_attempt=(
-                TaskAttempt.from_dict(d["most_recent_attempt"])
-                if d.get("most_recent_attempt") is not None
-                else None
-            ),
-        )
+        return cls.model_validate(d)
 
 
 class TaskUnitTraceback(BaseModel):
     """A single `ProtocolUnitFailure` traceback within a `TaskTracebacks`."""
 
-    failure_key: GufeKey
-    source_key: GufeKey
+    failure_key: GK
+    source_key: GK
     traceback: str
-    protocolunitresultref: ScopedKey | None = None
+    protocolunitresultref: SK | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def to_dict(self):
-        return {
-            "failure_key": str(self.failure_key),
-            "source_key": str(self.source_key),
-            "traceback": self.traceback,
-            "protocolunitresultref": (
-                str(self.protocolunitresultref)
-                if self.protocolunitresultref is not None
-                else None
-            ),
-        }
+        return self.model_dump(mode="json")
 
     @classmethod
     def from_dict(cls, d):
-        return cls(
-            failure_key=GufeKey(d["failure_key"]),
-            source_key=GufeKey(d["source_key"]),
-            traceback=d["traceback"],
-            protocolunitresultref=(
-                ScopedKey.from_str(d["protocolunitresultref"])
-                if d.get("protocolunitresultref") is not None
-                else None
-            ),
-        )
+        return cls.model_validate(d)
 
 
 class TaskTracebacks(BaseModel):
@@ -1087,29 +1036,19 @@ class TaskTracebacks(BaseModel):
     `ProtocolDAGResultRef`, most recent first.
     """
 
-    protocoldagresultref: ScopedKey
-    datetime_created: datetime.datetime | None = None
+    protocoldagresultref: SK
+    datetime_created: Datetime | None = None
     creator: str | None = None
     tracebacks: list[TaskUnitTraceback] = []
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def to_dict(self):
-        return {
-            "protocoldagresultref": str(self.protocoldagresultref),
-            "datetime_created": _iso(self.datetime_created),
-            "creator": self.creator,
-            "tracebacks": [tb.to_dict() for tb in self.tracebacks],
-        }
+        return self.model_dump(mode="json")
 
     @classmethod
     def from_dict(cls, d):
-        return cls(
-            protocoldagresultref=ScopedKey.from_str(d["protocoldagresultref"]),
-            datetime_created=_coerce_datetime(d.get("datetime_created")),
-            creator=d.get("creator"),
-            tracebacks=[TaskUnitTraceback.from_dict(tb) for tb in d["tracebacks"]],
-        )
+        return cls.model_validate(d)
 
 
 class ProtocolDAGResultRec(BaseModel):
@@ -1120,29 +1059,19 @@ class ProtocolDAGResultRec(BaseModel):
     method accepts directly.
     """
 
-    scoped_key: ScopedKey
+    scoped_key: SK
     ok: bool
-    datetime_created: datetime.datetime | None = None
+    datetime_created: Datetime | None = None
     creator: str | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def to_dict(self):
-        return {
-            "scoped_key": str(self.scoped_key),
-            "ok": self.ok,
-            "datetime_created": _iso(self.datetime_created),
-            "creator": self.creator,
-        }
+        return self.model_dump(mode="json")
 
     @classmethod
     def from_dict(cls, d):
-        return cls(
-            scoped_key=ScopedKey.from_str(d["scoped_key"]),
-            ok=d["ok"],
-            datetime_created=_coerce_datetime(d.get("datetime_created")),
-            creator=d.get("creator"),
-        )
+        return cls.model_validate(d)
 
 
 class ProtocolUnitResultRec(BaseModel):
@@ -1154,13 +1083,13 @@ class ProtocolUnitResultRec(BaseModel):
     `ProtocolDAGResult`.
     """
 
-    scoped_key: ScopedKey
-    obj_key: GufeKey
-    source_key: GufeKey
+    scoped_key: SK
+    obj_key: GK
+    source_key: GK
     name: str | None = None
     ok: bool
-    start_time: datetime.datetime | None = None
-    end_time: datetime.datetime | None = None
+    start_time: Datetime | None = None
+    end_time: Datetime | None = None
     has_logs: bool = False
     has_stdout: bool = False
     has_stderr: bool = False
@@ -1168,30 +1097,8 @@ class ProtocolUnitResultRec(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def to_dict(self):
-        return {
-            "scoped_key": str(self.scoped_key),
-            "obj_key": str(self.obj_key),
-            "source_key": str(self.source_key),
-            "name": self.name,
-            "ok": self.ok,
-            "start_time": _iso(self.start_time),
-            "end_time": _iso(self.end_time),
-            "has_logs": self.has_logs,
-            "has_stdout": self.has_stdout,
-            "has_stderr": self.has_stderr,
-        }
+        return self.model_dump(mode="json")
 
     @classmethod
     def from_dict(cls, d):
-        return cls(
-            scoped_key=ScopedKey.from_str(d["scoped_key"]),
-            obj_key=GufeKey(d["obj_key"]),
-            source_key=GufeKey(d["source_key"]),
-            name=d.get("name"),
-            ok=d["ok"],
-            start_time=_coerce_datetime(d.get("start_time")),
-            end_time=_coerce_datetime(d.get("end_time")),
-            has_logs=d.get("has_logs", False),
-            has_stdout=d.get("has_stdout", False),
-            has_stderr=d.get("has_stderr", False),
-        )
+        return cls.model_validate(d)

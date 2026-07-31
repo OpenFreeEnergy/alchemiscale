@@ -24,7 +24,6 @@ from alchemiscale.storage.models import (
     TaskTracebacks,
     TaskUnitTraceback,
     _coerce_datetime,
-    _iso,
 )
 
 NOW = datetime.datetime(2026, 7, 10, 12, 0, 0, tzinfo=datetime.UTC)
@@ -51,10 +50,6 @@ class TestHelpers:
                 return NOW
 
         assert _coerce_datetime(FakeNeo4jDT()) == NOW
-
-    def test_iso(self):
-        assert _iso(None) is None
-        assert _iso(NOW) == NOW.isoformat()
 
 
 class TestTaskProvenance:
@@ -375,3 +370,114 @@ class TestProtocolUnitResultLocation:
         assert protocol_unit_result_location(
             pdr_location, GufeKey("PUR")
         ) == protocol_unit_result_location(pdr_location, "PUR")
+
+
+class TestWireShapeStability:
+    """Pin the exact JSON wire shape of the client-facing record models. These
+    cross the HTTP boundary, so the switch to pydantic validators/serializers
+    must not change what a client sees --- most importantly the datetime format
+    (isoformat ``+00:00``, not pydantic's default ``Z``)."""
+
+    def test_task_attempt_shape(self):
+        ta = TaskAttempt(
+            compute_service_id=str(CSID),
+            hostname="h",
+            datetime_claimed=NOW,
+            datetime_end=LATER,
+            outcome=TaskOutcomeEnum.complete,
+            units_completed=3,
+            units_total=5,
+            protocoldagresultref=PDRR_SK,
+        )
+        assert ta.to_dict() == {
+            "compute_service_id": str(CSID),
+            "hostname": "h",
+            "manager_name": None,
+            "datetime_claimed": "2026-07-10T12:00:00+00:00",
+            "datetime_end": "2026-07-10T13:30:00+00:00",
+            "outcome": "complete",
+            "units_completed": 3,
+            "units_total": 5,
+            "protocoldagresultref": str(PDRR_SK),
+        }
+
+    def test_unit_result_rec_shape(self):
+        pur = ProtocolUnitResultRec(
+            scoped_key=PURR_SK,
+            obj_key=GufeKey("ProtocolUnitResult-r1"),
+            source_key=GufeKey("ProtocolUnit-u1"),
+            name="u",
+            ok=True,
+            start_time=NOW,
+            end_time=LATER,
+            has_logs=True,
+        )
+        assert pur.to_dict() == {
+            "scoped_key": str(PURR_SK),
+            "obj_key": "ProtocolUnitResult-r1",
+            "source_key": "ProtocolUnit-u1",
+            "name": "u",
+            "ok": True,
+            "start_time": "2026-07-10T12:00:00+00:00",
+            "end_time": "2026-07-10T13:30:00+00:00",
+            "has_logs": True,
+            "has_stdout": False,
+            "has_stderr": False,
+        }
+
+    def test_task_details_nested_shape(self):
+        tc = TaskClaim(compute_service_id=str(CSID), hostname="h", datetime_claimed=NOW)
+        ta = TaskAttempt(
+            compute_service_id=str(CSID), datetime_claimed=NOW, outcome=None
+        )
+        td = TaskDetails(
+            task=TASK_SK,
+            status=TaskStatusEnum.running,
+            datetime_status_changed=NOW,
+            num_claims=2,
+            current_claim=tc,
+            most_recent_attempt=ta,
+        )
+        d = td.to_dict()
+        assert d["task"] == str(TASK_SK)
+        assert d["status"] == "running"
+        assert d["datetime_status_changed"] == "2026-07-10T12:00:00+00:00"
+        # nested models serialize identically to their own to_dict()
+        assert d["current_claim"] == tc.to_dict()
+        assert d["most_recent_attempt"] == ta.to_dict()
+
+    def test_datetime_is_isoformat_offset_not_z(self):
+        # the one real regression risk of pydantic serialization
+        d = ProtocolDAGResultRec(
+            scoped_key=PDRR_SK, ok=True, datetime_created=NOW
+        ).to_dict()
+        assert d["datetime_created"] == "2026-07-10T12:00:00+00:00"
+        assert not d["datetime_created"].endswith("Z")
+
+    def test_validators_coerce_wire_values_on_any_construction(self):
+        # coercion applies on model_validate (and any construction), not only
+        # via from_dict: raw wire strings become the proper Python types
+        pur = ProtocolUnitResultRec.model_validate(
+            {
+                "scoped_key": str(PURR_SK),
+                "obj_key": "ProtocolUnitResult-r1",
+                "source_key": "ProtocolUnit-u1",
+                "ok": True,
+                "start_time": "2026-07-10T12:00:00+00:00",
+            }
+        )
+        assert isinstance(pur.scoped_key, ScopedKey) and pur.scoped_key == PURR_SK
+        assert isinstance(pur.obj_key, GufeKey)
+        assert pur.start_time == NOW
+
+    def test_neo4j_datetime_coerced(self):
+        # a neo4j DateTime-like object (has .to_native()) is coerced inbound
+        class FakeNeo4jDT:
+            def to_native(self):
+                return NOW
+
+        rec = ProtocolDAGResultRec(
+            scoped_key=PDRR_SK, ok=True, datetime_created=FakeNeo4jDT()
+        )
+        assert rec.datetime_created == NOW
+        assert rec.to_dict()["datetime_created"] == "2026-07-10T12:00:00+00:00"
