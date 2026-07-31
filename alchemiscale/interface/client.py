@@ -2236,7 +2236,7 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         The share is computed server-side as the aggregate fraction for this `Scope`
         relative to its sibling Scopes; only the aggregate fraction is
-        returned. The identity must hold the given `Scope`.
+        returned. The identity must be able to access the given `Scope`.
 
         Parameters
         ----------

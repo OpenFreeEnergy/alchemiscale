@@ -3775,7 +3775,7 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         `None` is returned in place of any `Task` that does not exist. The
         The `current_claim` live progress fields stay `None` until a compute
-        service reports progress (section 2 of the design).
+        service reports progress.
         """
         q = """
         UNWIND $tasks AS task_sk
@@ -4284,8 +4284,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         raise_error
             If `True`, raise a `ValueError` if the status of a given Task cannot be changed.
         reason
-            Optional human-readable reason for the status change; only recorded
-            for `invalid`/`deleted` transitions (ignored otherwise).
+            Optional human-readable reason for the status change.
 
         Returns
         -------

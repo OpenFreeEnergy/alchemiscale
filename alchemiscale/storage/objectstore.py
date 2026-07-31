@@ -379,15 +379,14 @@ class S3ObjectStore:
         """Return a unit result's captured stream files, filename -> decoded text.
 
         Bytes are decoded as UTF-8 with ``errors="replace"``; protocols
-        overwhelmingly archive text (binary outputs are #180 `ResultFile`
-        territory).
+        overwhelmingly archive text.
         """
         if stream not in (STDOUT_DIRNAME, STDERR_DIRNAME):
             raise ValueError("`stream` must be 'stdout' or 'stderr'")
         prefix = os.path.join(unit_location, stream) + "/"
         decompressor = zstd.ZstdDecompressor()
         out = {}
-        for obj in self._get_filename_prefix_contents(prefix):
+        for obj in self.iter_contents(prefix):
             # key includes self.prefix and the full location; recover the
             # filename relative to the stream directory, dropping the .zst suffix
             key = obj.key
@@ -399,8 +398,3 @@ class S3ObjectStore:
                 "utf-8", errors="replace"
             )
         return out
-
-    def _get_filename_prefix_contents(self, prefix: str):
-        """Iterate S3 objects under a location prefix (excluding ``self.prefix``)."""
-        filter_prefix = os.path.join(self.prefix, prefix)
-        return self.resource.Bucket(self.bucket).objects.filter(Prefix=filter_prefix)
