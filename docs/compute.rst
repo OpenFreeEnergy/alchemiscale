@@ -207,7 +207,7 @@ All of them have sensible defaults, so you only need to set them to change the d
 ``capture_streams``
     If ``true`` (the default), each :external+gufe:py:class:`~gufe.protocols.protocolunit.ProtocolUnit`\'s :external+gufe:py:class:`~gufe.protocols.protocolunit.Context` is constructed with per-attempt stdout/stderr directories, so ``gufe``'s native per-unit stream-capture mechanism archives whatever the :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` directs into them.
     This is *protocol opt-in*: the compute service only provides the capture directories, and each :external+gufe:py:class:`~gufe.protocols.protocol.Protocol` chooses what, if anything, to write there.
-    Captured streams are what :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_stdout`, :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_stderr`, :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_stdout`, and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_stderr` return.
+    Captured streams are what :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_stdout`, :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_unit_stderr`, :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_stdout`, and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_stderr` return.
 
 ``capture_logs``
     If ``true`` (the default), log records emitted through ``gufe``'s ``gufekey`` logger namespace (that is, protocol logs written via ``ProtocolUnit.logger``) are captured per unit result and uploaded alongside results.

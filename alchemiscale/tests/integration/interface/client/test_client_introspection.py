@@ -205,8 +205,8 @@ class TestClientIntrospection:
         assert "first line" in rendered_unit
         rendered_time = user_client.get_result_logs(pdrr_sk, order="time")
         assert "first line" in rendered_time
-        assert "captured stdout" in user_client.get_task_stdout(task_sk)
-        assert "captured stderr" in user_client.get_task_stderr(task_sk)
+        assert "captured stdout" in user_client.get_result_stdout(pdrr_sk)
+        assert "captured stderr" in user_client.get_result_stderr(pdrr_sk)
 
     def test_tracebacks(
         self,

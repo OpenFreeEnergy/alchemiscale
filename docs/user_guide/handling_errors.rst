@@ -110,10 +110,10 @@ When you don't need per-unit granularity, three convenience methods render every
     >>> # or interleave across units by timestamp
     >>> print(asc.get_result_logs(pdrr, order='time'))
 
-:py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_stdout` and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_task_stderr` go one level higher, concatenating the captured stdout/stderr across *all* of a :py:class:`~alchemiscale.storage.models.Task`\'s :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`\s (most recent first), with section headers identifying each result, unit, and filename::
+:py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_stdout` and :py:meth:`~alchemiscale.interface.client.AlchemiscaleClient.get_result_stderr` do the same for the captured stdout/stderr of one :external+gufe:py:class:`~gufe.protocols.protocoldag.ProtocolDAGResult`, concatenating across its unit results with section headers identifying each unit and filename::
 
-    >>> print(asc.get_task_stdout(task))
-    >>> print(asc.get_task_stderr(task))
+    >>> print(asc.get_result_stdout(pdrr))
+    >>> print(asc.get_result_stderr(pdrr))
 
 Each returns ``""`` when nothing was captured.
 

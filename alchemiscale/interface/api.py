@@ -1387,48 +1387,52 @@ def get_result_logs(
     return "\n".join(line for _, _, line in entries)
 
 
-def _render_task_stream(task_scoped_key, stream, n4js, s3os, token) -> str:
+def _render_result_stream(
+    protocoldagresultref_scoped_key, stream, n4js, s3os, token
+) -> str:
     has_attr = "has_stdout" if stream == "stdout" else "has_stderr"
 
-    sk = ScopedKey.from_str(task_scoped_key)
-    validate_scopes(sk.scope, token)
+    pdrr_sk = ScopedKey.from_str(protocoldagresultref_scoped_key)
+    validate_scopes(pdrr_sk.scope, token)
 
     sections = []
-    for pdrr_rec in n4js.get_task_result_recs(sk):
-        for unit_rec in n4js.get_result_unit_recs(pdrr_rec.scoped_key):
-            if not getattr(unit_rec, has_attr):
-                continue
-            purr = n4js.get_gufe(unit_rec.scoped_key)
-            files = s3os.pull_protocol_unit_result_streams(purr.location, stream)
-            for filename, text in files.items():
-                sections.append(
-                    f"=== result {pdrr_rec.scoped_key} :: "
-                    f"unit {_unit_label(unit_rec)} :: {filename} ===\n{text}"
-                )
+    for unit_rec in n4js.get_result_unit_recs(pdrr_sk):
+        if not getattr(unit_rec, has_attr):
+            continue
+        purr = n4js.get_gufe(unit_rec.scoped_key)
+        files = s3os.pull_protocol_unit_result_streams(purr.location, stream)
+        for filename, text in files.items():
+            sections.append(
+                f"=== unit {_unit_label(unit_rec)} :: {filename} ===\n{text}"
+            )
 
     return "\n".join(sections)
 
 
-@router.get("/tasks/{task_scoped_key}/stdout")
-def get_task_stdout(
-    task_scoped_key,
+@router.get("/protocoldagresultrefs/{protocoldagresultref_scoped_key}/stdout")
+def get_result_stdout(
+    protocoldagresultref_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> str:
-    return _render_task_stream(task_scoped_key, "stdout", n4js, s3os, token)
+    return _render_result_stream(
+        protocoldagresultref_scoped_key, "stdout", n4js, s3os, token
+    )
 
 
-@router.get("/tasks/{task_scoped_key}/stderr")
-def get_task_stderr(
-    task_scoped_key,
+@router.get("/protocoldagresultrefs/{protocoldagresultref_scoped_key}/stderr")
+def get_result_stderr(
+    protocoldagresultref_scoped_key,
     *,
     n4js: Neo4jStore = Depends(get_n4js_depends),
     s3os: S3ObjectStore = Depends(get_s3os_depends),
     token: TokenData = Depends(get_token_data_depends),
 ) -> str:
-    return _render_task_stream(task_scoped_key, "stderr", n4js, s3os, token)
+    return _render_result_stream(
+        protocoldagresultref_scoped_key, "stderr", n4js, s3os, token
+    )
 
 
 @router.post("/bulk/tasks/progress")

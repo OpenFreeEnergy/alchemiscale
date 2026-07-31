@@ -2384,43 +2384,45 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             f"/protocoldagresultrefs/{pdrr_sk}/logs", params=params
         )
 
-    def get_task_stdout(self, task: ScopedKey) -> str:
-        """Get a human-readable rendering of all captured stdout for a `Task`.
+    def get_result_stdout(self, pdrr: ScopedKey | ProtocolDAGResultRec) -> str:
+        """Get a human-readable rendering of all captured stdout of a `ProtocolDAGResult`.
 
-        Concatenates stdout across all `ProtocolDAGResult` objects of the
-        `Task` (most recent first), with section headers identifying each result,
-        unit, and filename.
+        Concatenates stdout across the unit results of the `ProtocolDAGResult`,
+        with section headers identifying each unit and filename.
 
         Parameters
         ----------
-        task
-            The `ScopedKey` of the `Task` to retrieve stdout for.
+        pdrr
+            The `ScopedKey` of the `ProtocolDAGResultRef` (or the
+            `ProtocolDAGResultRec` describing it) to retrieve stdout for.
 
         Returns
         -------
         str
             The rendered stdout, or ``""`` if none was captured.
         """
-        return self._get_resource(f"/tasks/{task}/stdout")
+        pdrr_sk = self._as_scoped_key(pdrr)
+        return self._get_resource(f"/protocoldagresultrefs/{pdrr_sk}/stdout")
 
-    def get_task_stderr(self, task: ScopedKey) -> str:
-        """Get a human-readable rendering of all captured stderr for a `Task`.
+    def get_result_stderr(self, pdrr: ScopedKey | ProtocolDAGResultRec) -> str:
+        """Get a human-readable rendering of all captured stderr of a `ProtocolDAGResult`.
 
-        Concatenates stderr across all `ProtocolDAGResult` objects of the
-        `Task` (most recent first), with section headers identifying each result,
-        unit, and filename.
+        Concatenates stderr across the unit results of the `ProtocolDAGResult`,
+        with section headers identifying each unit and filename.
 
         Parameters
         ----------
-        task
-            The `ScopedKey` of the `Task` to retrieve stderr for.
+        pdrr
+            The `ScopedKey` of the `ProtocolDAGResultRef` (or the
+            `ProtocolDAGResultRec` describing it) to retrieve stderr for.
 
         Returns
         -------
         str
             The rendered stderr, or ``""`` if none was captured.
         """
-        return self._get_resource(f"/tasks/{task}/stderr")
+        pdrr_sk = self._as_scoped_key(pdrr)
+        return self._get_resource(f"/protocoldagresultrefs/{pdrr_sk}/stderr")
 
     def get_tasks_progress(
         self, tasks: list[ScopedKey]
