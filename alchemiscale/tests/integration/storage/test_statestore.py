@@ -221,6 +221,25 @@ class TestNeo4jStore(TestStateStore):
 
         assert an3 == an2 == an
 
+    def test_get_network_membrane(self, n4js, network_membrane, scope_test):
+        """A network with attributes neo4j can't store natively (here, the
+        `pint.Quantity` `box_vectors` of a `ProteinMembraneComponent`) should
+        round-trip through the state store.
+
+        """
+        an = network_membrane
+        sk: ScopedKey = n4js.assemble_network(an, scope_test)[0]
+
+        TOKENIZABLE_REGISTRY.clear()
+
+        an2 = n4js.get_gufe(sk)
+
+        assert an2 == an
+
+        component = list(an2.nodes)[0].components["protein"]
+        expected = list(an.nodes)[0].components["protein"]
+        assert (component.box_vectors == expected.box_vectors).all()
+
     def test_query_networks(self, n4js, network_tyk2, scope_test, multiple_scopes):
         an = network_tyk2
         an2 = AlchemicalNetwork(edges=list(an.edges)[:-2], name=None)
