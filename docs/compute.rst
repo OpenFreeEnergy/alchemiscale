@@ -16,6 +16,12 @@ A template for this file can be found here; replace ``$ALCHEMISCALE_VERSION`` wi
 
     https://raw.githubusercontent.com/OpenFreeEnergy/alchemiscale/$ALCHEMISCALE_VERSION/devtools/configs/synchronous-compute-settings.yaml
 
+.. note::
+   Compute services must run the same ``alchemiscale`` version as the compute API they claim
+   :py:class:`~alchemiscale.storage.models.Task`\s from.
+   The two exchange ``gufe`` objects in a form that is not guaranteed to be stable across versions,
+   so upgrade the compute API and its compute services together rather than one at a time.
+
 
 ***********
 Single-host

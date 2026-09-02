@@ -9,6 +9,7 @@ import zstandard as zstd
 
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
+from gufe.tokenization import GufeTokenizable
 
 from ..base.client import (
     AlchemiscaleBaseClient,
@@ -130,8 +131,8 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
     def retrieve_task_transformation(
         self, task: ScopedKey
     ) -> tuple[Transformation, ProtocolDAGResult | None]:
-        transformation_json, protocoldagresult_latin1 = self._get_resource(
-            f"/tasks/{task}/transformation/gufe"
+        transformation_keyed_chain, protocoldagresult_latin1 = self._get_resource(
+            f"/tasks/{task}/transformation/gufe", compress=True
         )
 
         if (protocoldagresult := protocoldagresult_latin1) is not None:
@@ -147,7 +148,9 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
                     protocoldagresult_bytes.decode("utf-8")
                 )
 
-        return json_to_gufe(transformation_json), protocoldagresult
+        transformation = GufeTokenizable.from_keyed_chain(transformation_keyed_chain)
+
+        return transformation, protocoldagresult
 
     def set_task_result(
         self,
@@ -161,7 +164,7 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
             compute_service_id=str(compute_service_id),
         )
 
-        pdr_sk = self._post_resource(f"/tasks/{task}/results", data)
+        pdr_sk = self._post_resource(f"/tasks/{task}/results", data, compress=True)
 
         return ScopedKey.from_dict(pdr_sk)
 
