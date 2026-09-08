@@ -6,10 +6,13 @@ from time import sleep
 
 from gufe.tokenization import JSON_HANDLER
 
+from gufe.tokenization import GufeKey
+
 from alchemiscale.compute import client
 from alchemiscale.models import ScopedKey
 from alchemiscale.storage.models import (
     TaskStatusEnum,
+    TaskOutcomeEnum,
     ProtocolDAGResultRef,
 )
 from alchemiscale.tests.integration.compute.utils import get_compute_settings_override
@@ -503,3 +506,114 @@ class TestComputeClient:
         _ = compute_client.set_task_result(task_sks[0], protocoldagresults_failure[0])
 
         assert n4js_preloaded.get_task_status(task_sks)[0] == TaskStatusEnum.error
+
+    def test_update_task_progress(
+        self,
+        scope_test,
+        n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        compute_service_id,
+        network_tyk2,
+        uvicorn_server,
+    ):
+        # exercises the live-progress push over the wire (client -> /progress
+        # route -> state store); a body-shape mismatch here would silently 422
+        compute_client.register(compute_service_id)
+        an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.to_dict())
+        taskhub_sk = n4js_preloaded.get_taskhub(an_sk)
+
+        task_sk = compute_client.claim_taskhub_tasks(
+            taskhub_sk, compute_service_id=compute_service_id
+        )[0]
+        assert task_sk is not None
+
+        # no progress reported yet for the running Task
+        assert n4js_preloaded.get_tasks_progress([task_sk]) == [None]
+
+        compute_client.update_task_progress(
+            compute_service_id,
+            {str(task_sk): {"units_completed": 2, "units_total": 5}},
+        )
+
+        assert n4js_preloaded.get_tasks_progress([task_sk]) == [(2, 5)]
+
+    def test_set_task_error(
+        self,
+        scope_test,
+        n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        compute_service_id,
+        network_tyk2,
+        uvicorn_server,
+    ):
+        # the ProtocolDAG creation-failure path (client -> /error route)
+        compute_client.register(compute_service_id)
+        an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.to_dict())
+        taskhub_sk = n4js_preloaded.get_taskhub(an_sk)
+
+        task_sk = compute_client.claim_taskhub_tasks(
+            taskhub_sk, compute_service_id=compute_service_id
+        )[0]
+        assert task_sk is not None
+
+        returned = compute_client.set_task_error(
+            task_sk, reason="boom during create", compute_service_id=compute_service_id
+        )
+        assert returned == task_sk
+
+        assert n4js_preloaded.get_task_status([task_sk])[0] == TaskStatusEnum.error
+
+        # reason recorded on the Task; open provenance finalized as error
+        details = n4js_preloaded.get_tasks_details([task_sk])[0]
+        assert details.reason == "boom during create"
+
+        tp = n4js_preloaded.execute_query(
+            """
+            MATCH (tp:TaskProvenance {compute_service_id: $csid})-[:PROVENANCE_OF]->(t:Task {_scoped_key: $task})
+            RETURN tp
+            """,
+            csid=str(compute_service_id),
+            task=str(task_sk),
+        ).records[0]["tp"]
+        assert tp["outcome"] == TaskOutcomeEnum.error.value
+
+    def test_set_task_result_unit_logs(
+        self,
+        scope_test,
+        n4js_preloaded,
+        s3os_server_fresh,
+        compute_client: client.AlchemiscaleComputeClient,
+        compute_service_id,
+        network_tyk2,
+        protocoldagresults,
+        uvicorn_server,
+    ):
+        # push a result (server derives unit refs), then upload logs for one
+        # unit result over the wire (client -> /artifacts/logs route)
+        compute_client.register(compute_service_id)
+        an_sk = ScopedKey(gufe_key=network_tyk2.key, **scope_test.to_dict())
+        taskhub_sk = n4js_preloaded.get_taskhub(an_sk)
+
+        task_sk = compute_client.claim_taskhub_tasks(
+            taskhub_sk, compute_service_id=compute_service_id
+        )[0]
+        assert task_sk is not None
+
+        pdr = protocoldagresults[0]
+        pdrr_sk = compute_client.set_task_result(task_sk, pdr, compute_service_id)
+
+        unit_key = str(pdr.protocol_unit_results[0].key)
+        compute_client.set_task_result_unit_logs(
+            task_sk, pdrr_sk, unit_key, "captured log line\n"
+        )
+
+        purr_sk = n4js_preloaded.get_protocol_unit_result_ref_scoped_key(
+            pdrr_sk, GufeKey(unit_key)
+        )
+        assert purr_sk is not None
+        purr = n4js_preloaded.get_gufe(purr_sk)
+        assert purr.has_logs is True
+        assert (
+            s3os_server_fresh.pull_protocol_unit_result_logs(purr.location)
+            == "captured log line\n"
+        )

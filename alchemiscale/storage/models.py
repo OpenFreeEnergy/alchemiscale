@@ -8,15 +8,69 @@ from abc import abstractmethod
 from copy import copy
 import datetime
 from enum import Enum, StrEnum
+from typing import Annotated
 from uuid import uuid4, UUID
 import re
 import hashlib
 
 
-from pydantic import BaseModel, ConfigDict, PositiveInt, field_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    PlainSerializer,
+    PositiveInt,
+    field_validator,
+)
 from gufe.tokenization import GufeTokenizable, GufeKey
 
 from ..models import ScopedKey, Scope
+
+
+def _coerce_datetime(v) -> datetime.datetime | None:
+    """Coerce a neo4j ``DateTime``, ISO string, or ``datetime`` to ``datetime``."""
+    if v is None:
+        return None
+    if hasattr(v, "to_native"):
+        return v.to_native()
+    if isinstance(v, str):
+        return datetime.datetime.fromisoformat(v)
+    return v
+
+
+def _to_scoped_key(v):
+    return ScopedKey.from_str(v) if isinstance(v, str) else v
+
+
+def _to_gufe_key(v):
+    return GufeKey(v) if v is not None else v
+
+
+# Reusable field types for the client-facing record models below. They coerce
+# the wire/neo4j representations on the way in --- on *any* construction, not
+# just via `from_dict` --- and pin the wire representation on the way out, so
+# those models need no per-field coercion plumbing:
+#
+# - `Datetime` accepts a neo4j ``DateTime``, an ISO string, or a ``datetime``,
+#   and serializes with ``isoformat()`` (stable ``+00:00`` offset --- pydantic's
+#   default would render UTC as ``Z``, changing the wire shape).
+# - `SK`/`GK` accept a `ScopedKey`/`GufeKey` or its string form and serialize
+#   back to that string.
+Datetime = Annotated[
+    datetime.datetime,
+    BeforeValidator(_coerce_datetime),
+    PlainSerializer(lambda v: v.isoformat(), return_type=str),
+]
+SK = Annotated[
+    ScopedKey,
+    BeforeValidator(_to_scoped_key),
+    PlainSerializer(lambda v: str(v), return_type=str),
+]
+GK = Annotated[
+    GufeKey,
+    BeforeValidator(_to_gufe_key),
+    PlainSerializer(lambda v: str(v), return_type=str),
+]
 
 
 class ComputeIDBase(str):
@@ -82,6 +136,7 @@ class ComputeServiceRegistration(BaseModel):
     heartbeat: datetime.datetime
     failure_times: list[datetime.datetime] = []
     manager_name: str | None = None
+    hostname: str | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -150,14 +205,133 @@ class ComputeManagerRegistration(BaseModel):
         return ComputeManagerID("-".join([self.name, self.uuid]))
 
 
-class TaskProvenance(BaseModel):
-    computeserviceid: ComputeServiceID
-    datetime_start: datetime.datetime
-    datetime_end: datetime.datetime
+class TaskOutcomeEnum(Enum):
+    """Terminal outcome of a single execution attempt of a `Task`.
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    Attributes
+    ----------
+    complete
+        The attempt produced a successful `ProtocolDAGResult`.
+    error
+        The attempt produced a failed `ProtocolDAGResult`, or errored during
+        `ProtocolDAG` creation.
+    expired
+        The attempt's compute service lost its registration (expiry or
+        deregistration) before the attempt produced a result.
+    released
+        A user forced the claimed `Task` to another status (e.g. `waiting`,
+        `invalid`, `deleted`) before the attempt produced a result.
+    """
 
-    # this should include versions of various libraries
+    complete = "complete"
+    error = "error"
+    expired = "expired"
+    released = "released"
+
+
+class TaskProvenance(GufeTokenizable):
+    """A record of a single execution attempt of a `Task`.
+
+    A `TaskProvenance` node is created at claim time and finalized when the
+    attempt ends. It survives claim teardown and registration expiry, so that
+    the history of *who ran what, when* is preserved. The identifying
+    information (compute service id, hostname, manager name) is copied onto the
+    record rather than held as a relationship to the (potentially deleted)
+    `ComputeServiceRegistration`.
+
+    It is a `GufeTokenizable` so it carries a `ScopedKey`: provenance is a
+    scoped entity, authorized through the same ``validate_scopes(sk.scope,
+    token)`` path as every other scoped object, rather than relying on an
+    anchoring `Task`. Like `Task`, it tokenizes on a uuid (see
+    `_gufe_tokenize`), *not* its contents, so its `GufeKey`/`ScopedKey` is fixed
+    at creation and unaffected by the in-place mutations (`outcome`,
+    `datetime_end`, and the progress counts) applied over the attempt's life.
+    Because of that, a `TaskProvenance` must never be re-tokenized after
+    creation (never round-tripped object -> node a second time); mutations go
+    straight to the node via Cypher.
+
+    Attributes
+    ----------
+    compute_service_id
+        The identifier of the compute service that claimed the `Task`.
+    hostname
+        The hostname of the compute service, copied from its registration.
+    manager_name
+        The name of the compute manager responsible for the compute service,
+        if any.
+    datetime_claimed
+        When the `Task` was claimed for this attempt.
+    datetime_end
+        When the attempt was finalized; `None` while the attempt is open.
+    outcome
+        The terminal outcome of the attempt; `None` while the attempt is open.
+    units_completed
+        The number of distinct `ProtocolUnit` objects successfully completed in this
+        attempt, as of the last progress update.
+    units_total
+        The total number of `ProtocolUnit` objects in the attempt's `ProtocolDAG`.
+    """
+
+    compute_service_id: ComputeServiceID
+    hostname: str | None
+    manager_name: str | None
+    datetime_claimed: datetime.datetime | None
+    datetime_end: datetime.datetime | None
+    outcome: TaskOutcomeEnum | None
+    units_completed: int | None
+    units_total: int | None
+
+    def __init__(
+        self,
+        *,
+        compute_service_id: ComputeServiceID | str,
+        datetime_claimed: datetime.datetime | None = None,
+        hostname: str | None = None,
+        manager_name: str | None = None,
+        datetime_end: datetime.datetime | None = None,
+        outcome: str | TaskOutcomeEnum | None = None,
+        units_completed: int | None = None,
+        units_total: int | None = None,
+        _key: str = None,
+    ):
+        if _key is not None:
+            self._key = GufeKey(_key)
+
+        self.compute_service_id = ComputeServiceID(compute_service_id)
+        self.hostname = hostname
+        self.manager_name = manager_name
+        self.datetime_claimed = _coerce_datetime(datetime_claimed)
+        self.datetime_end = _coerce_datetime(datetime_end)
+        self.outcome = TaskOutcomeEnum(outcome) if outcome is not None else None
+        self.units_completed = units_completed
+        self.units_total = units_total
+
+    def _gufe_tokenize(self):
+        # tokenize with a uuid, not content: identity is per-attempt, and the
+        # record is mutated in place (outcome/datetime_end/progress) after
+        # creation, so a content hash would neither be stable nor unique.
+        return uuid4().hex
+
+    def _to_dict(self):
+        return {
+            "compute_service_id": str(self.compute_service_id),
+            "hostname": self.hostname,
+            "manager_name": self.manager_name,
+            "datetime_claimed": self.datetime_claimed,
+            "datetime_end": self.datetime_end,
+            "outcome": self.outcome.value if self.outcome is not None else None,
+            "units_completed": self.units_completed,
+            "units_total": self.units_total,
+            "_key": str(self.key),
+        }
+
+    @classmethod
+    def _from_dict(cls, d):
+        return cls(**d)
+
+    @classmethod
+    def _defaults(cls):
+        return super()._defaults()
 
 
 class TaskStatusEnum(Enum):
@@ -180,8 +354,23 @@ class Task(GufeTokenizable):
     priority
         Priority of the task; 1 is highest, larger values indicate lower priority.
     claim
-        Identifier of the compute service that has a claim on this task.
+        Identifier of the compute service that has a claim on this task, if any.
     datetime_created
+        When the `Task` was created.
+    datetime_status_changed
+        When the `Task`'s `status` was last changed; refreshed at every
+        status-mutation site (claim, `set_task_*`, expiry, deregistration,
+        restart-renew), but not on an idempotent no-op re-set of the same status.
+    reason
+        Human-readable reason for the current `status`, if any --- e.g. a
+        `ProtocolDAG` creation-failure traceback, or a user-supplied reason for
+        an `invalid`/`deleted` transition. Cleared when the status changes to
+        one that carries no reason.
+    creator
+        Identifier of the identity that created the `Task`, if recorded.
+    extends
+        `ScopedKey` (as a string) of the `Task` this one extends (continues
+        from), if any.
 
     """
 
@@ -189,6 +378,8 @@ class Task(GufeTokenizable):
     priority: int
     claim: str | None
     datetime_created: datetime.datetime | None
+    datetime_status_changed: datetime.datetime | None
+    reason: str | None
     creator: str | None
     extends: str | None
 
@@ -198,6 +389,8 @@ class Task(GufeTokenizable):
         status: str | TaskStatusEnum = TaskStatusEnum.waiting,
         priority: int = 10,
         datetime_created: datetime.datetime | None = None,
+        datetime_status_changed: datetime.datetime | None = None,
+        reason: str | None = None,
         creator: str | None = None,
         extends: str | None = None,
         claim: str | None = None,
@@ -215,6 +408,8 @@ class Task(GufeTokenizable):
             else datetime.datetime.now(tz=datetime.UTC)
         )
 
+        self.datetime_status_changed = datetime_status_changed
+        self.reason = reason
         self.creator = creator
         self.extends = extends
         self.claim = claim
@@ -228,6 +423,8 @@ class Task(GufeTokenizable):
             "status": self.status.value,
             "priority": self.priority,
             "datetime_created": self.datetime_created,
+            "datetime_status_changed": self.datetime_status_changed,
+            "reason": self.reason,
             "creator": self.creator,
             "extends": self.extends,
             "claim": self.claim,
@@ -552,6 +749,135 @@ class ProtocolDAGResultRef(ObjectStoreRef):
         return super()._from_dict(d_)
 
 
+class ProtocolUnitResultRef(ObjectStoreRef):
+    """A reference to the artifacts of a single `ProtocolUnitResult` or
+    `ProtocolUnitFailure` within a `ProtocolDAGResult`.
+
+    One `ProtocolUnitResultRef` node is derived per unit result when a
+    `ProtocolDAGResultRef` is stored, keyed by the unit result's gufe key. The
+    `has_*` flags record which per-unit artifacts (logs, stdout, stderr) are
+    present in the object store under `location`.
+
+    Attributes
+    ----------
+    obj_key
+        The gufe key of the `ProtocolUnitResult`/`ProtocolUnitFailure`.
+    source_key
+        The gufe key of the originating `ProtocolUnit`.
+    name
+        The name of the unit result, if any.
+    ok
+        Whether the unit result is a success (`True`) or failure (`False`).
+    start_time, end_time
+        When execution of the unit attempt began and ended.
+    location
+        The object store prefix under which this unit result's artifacts live.
+    scope
+        The `Scope` (org/campaign/project) this reference lives in.
+    has_logs, has_stdout, has_stderr
+        Whether captured log/stdout/stderr artifacts exist for this unit result.
+
+    Note
+    ----
+    The ``has_logs``, ``has_stdout``, and ``has_stderr`` flags (and nothing
+    else) are mutated in place via Cypher after the node is created, as
+    artifacts arrive. Like `Task`/`TaskProvenance`, this object tokenizes on a
+    uuid (see `_gufe_tokenize`), *not* its contents, so its `GufeKey`/
+    `ScopedKey` is fixed at creation and is unaffected by those mutations ---
+    lookups by `_scoped_key` stay stable. Because the key is a uuid, a
+    `ProtocolUnitResultRef` must never be re-tokenized after creation (never
+    round-tripped object -> node a second time); mutations go straight to the
+    node via Cypher.
+    """
+
+    ok: bool
+    source_key: GufeKey
+    name: str | None
+    start_time: datetime.datetime | None
+    end_time: datetime.datetime | None
+    has_logs: bool
+    has_stdout: bool
+    has_stderr: bool
+
+    def __init__(
+        self,
+        *,
+        location: str | None = None,
+        obj_key: GufeKey,
+        source_key: GufeKey,
+        scope: Scope,
+        ok: bool,
+        name: str | None = None,
+        start_time: datetime.datetime | None = None,
+        end_time: datetime.datetime | None = None,
+        has_logs: bool = False,
+        has_stdout: bool = False,
+        has_stderr: bool = False,
+        _key: str = None,
+    ):
+        if _key is not None:
+            self._key = GufeKey(_key)
+
+        self.location = location
+        self.obj_key = GufeKey(obj_key)
+        self.source_key = GufeKey(source_key)
+        self.scope = scope
+        self.ok = ok
+        self.name = name
+        self.start_time = start_time
+        self.end_time = end_time
+        self.has_logs = has_logs
+        self.has_stdout = has_stdout
+        self.has_stderr = has_stderr
+
+    def _gufe_tokenize(self):
+        # tokenize with a uuid, not content: the has_logs/has_stdout/has_stderr
+        # flags are mutated in place after creation, so a content hash would not
+        # be stable. Like `Task`/`TaskProvenance`, the key is fixed at creation.
+        return uuid4().hex
+
+    def _to_dict(self):
+        return {
+            "location": self.location,
+            "obj_key": str(self.obj_key),
+            "source_key": str(self.source_key),
+            "scope": str(self.scope),
+            "ok": self.ok,
+            "name": self.name,
+            "start_time": (
+                self.start_time.isoformat() if self.start_time is not None else None
+            ),
+            "end_time": (
+                self.end_time.isoformat() if self.end_time is not None else None
+            ),
+            "has_logs": self.has_logs,
+            "has_stdout": self.has_stdout,
+            "has_stderr": self.has_stderr,
+            "_key": str(self.key),
+        }
+
+    @classmethod
+    def _from_dict(cls, d):
+        d_ = copy(d)
+        d_["scope"] = Scope.from_str(d["scope"])
+        d_["source_key"] = GufeKey(d["source_key"])
+        d_["start_time"] = (
+            datetime.datetime.fromisoformat(d["start_time"])
+            if d.get("start_time") is not None
+            else None
+        )
+        d_["end_time"] = (
+            datetime.datetime.fromisoformat(d["end_time"])
+            if d.get("end_time") is not None
+            else None
+        )
+        return cls(**d_)
+
+    @classmethod
+    def _defaults(cls):
+        return super()._defaults()
+
+
 class StrategyModeEnum(StrEnum):
     full = "full"
     partial = "partial"
@@ -606,3 +932,173 @@ class StrategyState(BaseModel):
     @classmethod
     def from_dict(cls, d):
         return cls(**d)
+
+
+# --- client-facing API record models --------------------------------------
+#
+# These models are the user-facing surface for Task introspection. They are
+# deliberately decoupled from the state-store node types (`TaskProvenance`,
+# `ProtocolDAGResultRef`, `ProtocolUnitResultRef`): the two families evolve
+# independently, joined only by `ScopedKey`s. User-level names are used
+# throughout; no storage jargon (`Ref` suffixes, `pdrr`/`purr`) leaks in.
+
+
+class TaskAttempt(BaseModel):
+    """A single execution attempt of a `Task`, as reported by `get_task_history`.
+
+    Bundles a `TaskProvenance` record's properties with the `ScopedKey` of the
+    `ProtocolDAGResultRef` the attempt produced (via `PROVENANCE_OF`), where one
+    exists; `expired`/`released` attempts have none.
+    """
+
+    compute_service_id: str
+    hostname: str | None = None
+    manager_name: str | None = None
+    datetime_claimed: Datetime
+    datetime_end: Datetime | None = None
+    outcome: TaskOutcomeEnum | None = None
+    units_completed: int | None = None
+    units_total: int | None = None
+    protocoldagresultref: SK | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls.model_validate(d)
+
+
+class TaskClaim(BaseModel):
+    """The live claim currently held on a `running` `Task`."""
+
+    compute_service_id: str
+    hostname: str | None = None
+    datetime_claimed: Datetime | None = None
+    units_completed: int | None = None
+    units_total: int | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls.model_validate(d)
+
+
+class TaskDetails(BaseModel):
+    """Bulk indicator summary for a `Task`, as returned by `get_tasks_details`."""
+
+    task: SK
+    status: TaskStatusEnum
+    datetime_status_changed: Datetime | None = None
+    reason: str | None = None
+    num_claims: int = 0
+    current_claim: TaskClaim | None = None
+    most_recent_attempt: TaskAttempt | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls.model_validate(d)
+
+
+class TaskUnitTraceback(BaseModel):
+    """A single `ProtocolUnitFailure` traceback within a `TaskTracebacks`."""
+
+    failure_key: GK
+    source_key: GK
+    traceback: str
+    protocolunitresultref: SK | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls.model_validate(d)
+
+
+class TaskTracebacks(BaseModel):
+    """Tracebacks for one failed `ProtocolDAGResult` of a `Task`.
+
+    Returned by `get_task_tracebacks`, one record per failed
+    `ProtocolDAGResultRef`, most recent first.
+    """
+
+    protocoldagresultref: SK
+    datetime_created: Datetime | None = None
+    creator: str | None = None
+    tracebacks: list[TaskUnitTraceback] = []
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls.model_validate(d)
+
+
+class ProtocolDAGResultRec(BaseModel):
+    """A record describing one `ProtocolDAGResult` of a `Task`.
+
+    Returned by `get_task_result_recs`. Carries the `ScopedKey` of the
+    underlying `ProtocolDAGResultRef` as `scoped_key`, which every drill-down
+    method accepts directly.
+    """
+
+    scoped_key: SK
+    ok: bool
+    datetime_created: Datetime | None = None
+    creator: str | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls.model_validate(d)
+
+
+class ProtocolUnitResultRec(BaseModel):
+    """A record describing one `ProtocolUnitResult` of a `ProtocolDAGResult`.
+
+    Returned by `get_result_unit_recs`. Carries the `ScopedKey` of the
+    underlying `ProtocolUnitResultRef` as `scoped_key`, plus the `obj_key`/
+    `source_key` that let a user correlate it against a deserialized
+    `ProtocolDAGResult`.
+    """
+
+    scoped_key: SK
+    obj_key: GK
+    source_key: GK
+    name: str | None = None
+    ok: bool
+    start_time: Datetime | None = None
+    end_time: Datetime | None = None
+    has_logs: bool = False
+    has_stdout: bool = False
+    has_stderr: bool = False
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def to_dict(self):
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls.model_validate(d)

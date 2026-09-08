@@ -5,10 +5,15 @@
 
 """
 
+import json
+from urllib.parse import urljoin
+
+import requests
 import zstandard as zstd
 
 from gufe import Transformation
 from gufe.protocols import ProtocolDAGResult
+from gufe.tokenization import JSON_HANDLER
 
 from ..base.client import (
     AlchemiscaleBaseClient,
@@ -39,10 +44,11 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         self,
         compute_service_id: ComputeServiceID,
         compute_manager_id: ComputeManagerID | None = None,
+        hostname: str | None = None,
     ):
         res = self._post_resource(
             f"/computeservice/{compute_service_id}/register",
-            {"compute_manager_id": compute_manager_id},
+            {"compute_manager_id": compute_manager_id, "hostname": hostname},
         )
         return ComputeServiceID(res)
 
@@ -164,6 +170,86 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
         pdr_sk = self._post_resource(f"/tasks/{task}/results", data)
 
         return ScopedKey.from_dict(pdr_sk)
+
+    def set_task_error(
+        self,
+        task: ScopedKey,
+        reason: str,
+        compute_service_id: ComputeServiceID | None = None,
+    ) -> ScopedKey:
+        """Set a `Task` to `error` with a human-readable `reason`.
+
+        Used by the compute service when `ProtocolDAG` creation fails, where
+        there is no `ProtocolDAGResult` to submit. The `reason` (a traceback)
+        is stored on `Task.reason` and the open `TaskProvenance` attempt is
+        finalized with `outcome = error`.
+        """
+        data = dict(reason=reason, compute_service_id=str(compute_service_id))
+        task_sk = self._post_resource(f"/tasks/{task}/error", data)
+        return ScopedKey.from_str(task_sk)
+
+    def update_task_progress(
+        self,
+        compute_service_id: ComputeServiceID,
+        progress: dict[str, dict[str, int]],
+        timeout: float = 5.0,
+    ) -> None:
+        """Push live progress counts for this service's claimed Tasks.
+
+        `progress` maps `Task` ScopedKey strings to
+        ``{"units_completed": int, "units_total": int}``. One batched request
+        per push event.
+
+        This is **fire-and-forget**: a single attempt with a short timeout and
+        NO retry/backoff (the usual retry machinery would stall the DAG between
+        units on a flaky API). Progress is best-effort telemetry, refreshed at
+        the next unit boundary. Errors propagate to the caller, which is
+        expected to log-and-continue.
+
+        This deliberately does **not** fetch or refresh a JWT: `_get_token`
+        issues its request with ``timeout=None`` and would block the execution
+        thread indefinitely if the token endpoint hangs. A token is virtually
+        always already present by the time a DAG executes (registration/claim
+        obtained one); if it is missing or stale, the push is simply skipped and
+        the retrying transport (result push, next claim) refreshes it before the
+        next boundary.
+        """
+        if self._jwtoken is None:
+            # no token yet and we won't block to get one; skip this push
+            return
+
+        url = urljoin(self.api_url, f"/computeservice/{compute_service_id}/progress")
+        jsondata = json.dumps(progress, cls=JSON_HANDLER.encoder)
+
+        resp = requests.post(
+            url,
+            data=jsondata,
+            headers=self._headers,
+            timeout=timeout,
+            verify=self.verify,
+        )
+        if not 200 <= resp.status_code < 300:
+            raise self._exception(
+                f"Status Code {resp.status_code} : {resp.reason}",
+                status_code=resp.status_code,
+            )
+
+    def set_task_result_unit_logs(
+        self,
+        task: ScopedKey,
+        protocoldagresultref: ScopedKey,
+        unit_result_key: str,
+        logs: str,
+    ) -> None:
+        """Upload captured log text for a single unit result.
+
+        Uses the normal (retrying) transport --- this happens after DAG
+        execution, not between units, so a retry cannot stall execution.
+        """
+        self._post_resource(
+            f"/tasks/{task}/results/{protocoldagresultref}/units/{unit_result_key}/artifacts/logs",
+            {"logs": logs},
+        )
 
 
 class AlchemiscaleComputeManagerClientError(AlchemiscaleBaseClientError): ...

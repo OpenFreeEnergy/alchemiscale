@@ -6,17 +6,21 @@
 
 from contextlib import contextmanager
 import gc
+import socket
 import time
 import logging
+import traceback
 from uuid import uuid4
 import threading
 from pathlib import Path
 import shutil
 
 from gufe import Transformation
-from gufe.protocols.protocoldag import execute_DAG, ProtocolDAG, ProtocolDAGResult
+from gufe.protocols.protocoldag import ProtocolDAG, ProtocolDAGResult
 
 from .client import AlchemiscaleComputeClient
+from .execute import execute_DAG
+from .capture import SynchronousExecutionHooks
 from .settings import ComputeServiceSettings
 from ..storage.models import ComputeServiceID
 from ..models import Scope, ScopedKey
@@ -77,6 +81,10 @@ class SynchronousComputeService:
 
         self.compute_service_id = ComputeServiceID.new_from_name(self.name)
 
+        # hostname is copied onto the registration and every TaskProvenance this
+        # service creates; falls back to the OS hostname when not set
+        self.hostname = self.settings.hostname or socket.gethostname()
+
         # shared between the main loop and the heartbeat thread; both wake
         # on a single ``stop()`` (which calls ``int_sleep.interrupt()``).
         # If you split these into separate functors, be sure to interrupt
@@ -110,7 +118,11 @@ class SynchronousComputeService:
 
     def _register(self):
         """Register this compute service with the compute API."""
-        self.client.register(self.compute_service_id, self.settings.compute_manager_id)
+        self.client.register(
+            self.compute_service_id,
+            self.settings.compute_manager_id,
+            hostname=self.hostname,
+        )
 
     def _deregister(self):
         """Deregister this compute service with the compute API."""
@@ -202,15 +214,52 @@ class SynchronousComputeService:
 
         return sk
 
-    def execute(self, task: ScopedKey) -> ScopedKey:
+    def execute(self, task: ScopedKey) -> ScopedKey | None:
         """Executes given Task.
 
-        Returns ScopedKey of ProtocolDAGResultRef following push to database.
+        Returns ScopedKey of ProtocolDAGResultRef following push to database,
+        or ``None`` if `ProtocolDAG` creation failed and the Task was errored.
 
         """
         # obtain a ProtocolDAG from the task
         self.logger.info("Creating ProtocolDAG from '%s'...", task)
-        protocoldag, transformation, extends = self.task_to_protocoldag(task)
+        try:
+            protocoldag, transformation, extends = self.task_to_protocoldag(task)
+        except Exception:
+            # `ProtocolDAG` creation failed --- typically a systematic problem
+            # with the `Transformation` itself, not a random execution-environment
+            # failure. Record it as a Task `error` with the traceback as its
+            # `reason` and continue the cycle with the next Task, rather than
+            # letting the exception propagate out of the service loop (which
+            # would deregister the service and silently bounce its Tasks back to
+            # `waiting`). We catch `Exception` only: `KeyboardInterrupt` and
+            # `gufe` `ExecutionInterrupt` derive from `BaseException` and are
+            # deliberately allowed to propagate.
+            tb = traceback.format_exc()
+            self.logger.error(
+                "Failed to create ProtocolDAG from '%s'; setting Task to error:\n%s",
+                task,
+                tb,
+            )
+            # best-effort: an unreachable/old server (the /error route 404s) must
+            # not propagate out of the loop and tear the service down --- that is
+            # the exact pre-#195 failure this handler exists to prevent. Swallow
+            # and continue to the next Task, as heartbeats already do. The Task
+            # stays `running` until its registration expires, which the server
+            # then handles.
+            try:
+                self.client.set_task_error(
+                    task, reason=tb, compute_service_id=self.compute_service_id
+                )
+            except Exception:
+                self.logger.warning(
+                    "Failed to report ProtocolDAG creation error for '%s'; "
+                    "continuing",
+                    task,
+                    exc_info=True,
+                )
+            return None
+
         self.logger.info(
             "Created '%s' from '%s' performing '%s'",
             protocoldag,
@@ -226,15 +275,38 @@ class SynchronousComputeService:
         scratch = self.scratch_basedir / str(protocoldag.key)
         scratch.mkdir()
 
+        # per-attempt stdout/stderr archiving (gufe's native mechanism); the
+        # executor creates per-attempt subdirs under these base dirs
+        if self.settings.capture_streams:
+            stdout_basedir = scratch / "_stdout"
+            stdout_basedir.mkdir()
+            stderr_basedir = scratch / "_stderr"
+            stderr_basedir.mkdir()
+        else:
+            stdout_basedir = stderr_basedir = None
+
+        # hooks: per-unit log capture + event-driven, fire-and-forget progress
+        hooks = SynchronousExecutionHooks(
+            task=task,
+            compute_service_id=self.compute_service_id,
+            progress_callback=self._push_progress,
+            capture_logs=self.settings.capture_logs,
+            gufekey_loglevel=self.settings.gufekey_loglevel,
+            log_cap_bytes=self.settings.log_cap_bytes,
+        )
+
         self.logger.info("Executing '%s'...", protocoldag)
         try:
             protocoldagresult = execute_DAG(
                 protocoldag,
                 shared_basedir=shared,
                 scratch_basedir=scratch,
+                stdout_basedir=stdout_basedir,
+                stderr_basedir=stderr_basedir,
                 keep_scratch=self.keep_scratch,
                 raise_error=False,
                 n_retries=self.settings.n_retries,
+                hooks=hooks,
             )
         finally:
             if not self.keep_shared:
@@ -259,7 +331,62 @@ class SynchronousComputeService:
         result_sk = self.push_result(task, protocoldagresult)
         self.logger.info("Pushed result `%s'", protocoldagresult)
 
+        # upload any captured per-unit logs; best-effort, so an old server
+        # (which 404s the artifact route) or a transient failure never fails the
+        # Task --- the unit refs simply keep `has_logs` false
+        if self.settings.capture_logs and hooks.unit_logs:
+            for unit_result_key, logtext in hooks.unit_logs.items():
+                try:
+                    self.client.set_task_result_unit_logs(
+                        task, result_sk, unit_result_key, logtext
+                    )
+                except Exception:
+                    # a failure here is almost always systemic for this push
+                    # (e.g. an old server 404s the artifact route, or the API is
+                    # down) --- retrying every remaining unit would burn the
+                    # client's whole retry budget per unit. Log once and stop
+                    # uploading logs for this Task; the unit refs simply keep
+                    # `has_logs` false.
+                    self.logger.warning(
+                        "Failed to upload logs for unit result '%s' of task '%s'; "
+                        "skipping remaining log uploads for this Task",
+                        unit_result_key,
+                        task,
+                        exc_info=True,
+                    )
+                    break
+
         return result_sk
+
+    def _push_progress(
+        self, task: ScopedKey, units_completed: int, units_total: int
+    ) -> None:
+        """Fire-and-forget progress push for a running Task.
+
+        Runs in the execution thread at unit boundaries, so failures are
+        swallowed and logged rather than retried --- best-effort telemetry must
+        never stall the DAG. Progress plays no liveness role; that remains the
+        heartbeat's job.
+        """
+        try:
+            self.client.update_task_progress(
+                self.compute_service_id,
+                {
+                    str(task): {
+                        "units_completed": units_completed,
+                        "units_total": units_total,
+                    }
+                },
+                timeout=self.settings.progress_push_timeout,
+            )
+        except Exception:
+            self.logger.debug(
+                "Progress push failed for task '%s' (%d/%d); continuing",
+                task,
+                units_completed,
+                units_total,
+                exc_info=True,
+            )
 
     def _check_max_tasks(self, max_tasks):
         if max_tasks is not None:

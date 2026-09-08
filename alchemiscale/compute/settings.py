@@ -27,6 +27,14 @@ class ComputeServiceSettings(BaseModel):
             "resources, e.g. different hosts or HPC clusters."
         ),
     )
+    hostname: str | None = Field(
+        None,
+        description=(
+            "Hostname to record on this compute service's registration and copy "
+            "onto every `TaskProvenance` it creates. If `None`, the service uses "
+            "`socket.gethostname()`."
+        ),
+    )
     compute_manager_id: str | None = Field(
         None,
         description=(
@@ -51,6 +59,46 @@ class ComputeServiceSettings(BaseModel):
     n_retries: int = Field(
         3,
         description="Number of times to attempt a given Task on failure.",
+    )
+    capture_streams: bool = Field(
+        True,
+        description=(
+            "If True, construct each `ProtocolUnit`'s `Context` with per-attempt "
+            "stdout/stderr directories so `gufe`'s native stream-capture "
+            "mechanism archives whatever the protocol directs into them."
+        ),
+    )
+    capture_logs: bool = Field(
+        True,
+        description=(
+            "If True, capture log records emitted through `gufe`'s `gufekey` "
+            "logger namespace (`ProtocolUnit.logger`) per unit result and upload "
+            "them alongside results."
+        ),
+    )
+    gufekey_loglevel: str = Field(
+        "INFO",
+        description=(
+            "Level to set the `gufekey` logger to for per-unit log capture; the "
+            "logger otherwise inherits the root logger's level (typically "
+            "WARNING), which would drop protocol INFO logs."
+        ),
+    )
+    log_cap_bytes: int = Field(
+        1048576,
+        description=(
+            "Per-unit-result cap in bytes on captured log text; the tail (where "
+            "errors live) is kept. Default 1 MiB."
+        ),
+    )
+    progress_push_timeout: float = Field(
+        5.0,
+        description=(
+            "Timeout in seconds for a single fire-and-forget progress push. "
+            "Progress is best-effort telemetry: pushes are not retried, and "
+            "failures are logged and swallowed so a flaky API never stalls the "
+            "DAG between units."
+        ),
     )
     sleep_interval: int = Field(
         30, description="Time in seconds to sleep if no Tasks claimed from compute API."
