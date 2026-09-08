@@ -356,6 +356,33 @@ class Neo4jStore(AlchemiscaleStateStore):
             node[key] = json.dumps(value, cls=JSON_HANDLER.encoder, sort_keys=True)
             node["_json_props"].append(key)
 
+        def handle_scalar(node, key, value):
+            # neo4j only accepts a narrow set of property types; anything else
+            # (e.g. a `pint.Quantity`, as used for `box_vectors` on
+            # `SolvatedPDBComponent`) has to be JSON-serialized.
+            #
+            # this set is closed, fixed by the Cypher type system rather than by
+            # anything in `gufe`; see `NEO4J_NATIVE_PROPERTY_TYPES`, which pins
+            # it from the unit tests
+            match value:
+                case (
+                    None
+                    | bool()
+                    | int()
+                    | float()
+                    | str()
+                    | bytes()
+                    | bytearray()
+                    # temporal types, handled by the driver's dehydration hooks
+                    | datetime.date()
+                    | datetime.time()
+                    | datetime.timedelta()
+                ):
+                    node[key] = value
+                case _:
+                    node[key] = json.dumps(value, cls=JSON_HANDLER.encoder)
+                    node["_json_props"].append(key)
+
         def process_keyed_dict(gufe_key, kd):
             node = Node("GufeTokenizable", kd["__qualname__"])
             node["_json_props"] = []
@@ -374,7 +401,7 @@ class Neo4jStore(AlchemiscaleStateStore):
                     case SettingsBaseModel():
                         handle_settings(node, key, value)
                     case _:
-                        node[key] = value
+                        handle_scalar(node, key, value)
 
             node["_gufe_key"] = str(gufe_key)
             node["_scoped_key"] = str(
