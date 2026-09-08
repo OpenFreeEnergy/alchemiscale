@@ -1,6 +1,9 @@
+import json
+
 import pytest
 
 from gufe import Transformation
+from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
 from alchemiscale.base.client import json_to_gufe
 from alchemiscale.models import Scope, ScopedKey
@@ -70,12 +73,30 @@ class TestComputeAPI:
             f"/tasks/{scoped_keys['tasks'][0]}/transformation/gufe"
         )
         assert response.status_code == 200
-        data = response.json()
+
+        # decoded as the client does: the keyed chain holds values only gufe's
+        # codecs understand, such as a Protocol's `Settings`
+        data = json.loads(response.text, cls=JSON_HANDLER.decoder)
         assert len(data) == 2
 
-        transformation = json_to_gufe(data[0])
+        keyed_chain, protocoldagresult = data
+
+        assert protocoldagresult is None
+
+        # the transformation is given in keyed chain form, so each object it
+        # depends on appears exactly once no matter how many times it is
+        # referenced
+        keys = [key for key, _ in keyed_chain]
+        assert len(keys) == len(set(keys))
+
+        transformation = GufeTokenizable.from_keyed_chain(keyed_chain)
 
         assert isinstance(transformation, Transformation)
+
+        # both ChemicalSystems are recoverable, and shared components are the
+        # same object rather than duplicates
+        assert transformation.stateA is not None
+        assert transformation.stateB is not None
 
     def test_get_task_transformation_bad_scope(
         self,
