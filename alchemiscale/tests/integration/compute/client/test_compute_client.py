@@ -4,7 +4,7 @@ import os
 import datetime
 from time import sleep
 
-from gufe.tokenization import JSON_HANDLER
+from gufe.tokenization import JSON_HANDLER, TOKENIZABLE_REGISTRY
 
 from alchemiscale.compute import client
 from alchemiscale.models import ScopedKey
@@ -304,6 +304,42 @@ class TestComputeClient:
 
         assert transformation_ == transformation
         assert extends_protocoldagresult is None
+
+    def test_retrieve_task_transformation_membrane(
+        self,
+        scope_test,
+        n4js_preloaded,
+        compute_client: client.AlchemiscaleComputeClient,
+        network_membrane,
+        uvicorn_server,
+    ):
+        """A `ProteinMembraneComponent` carries its `box_vectors` as a bare
+        `pint.Quantity`, which the state store keeps JSON-encoded rather than as
+        a native neo4j property. It has to survive the round trip back out
+        through the keyed chain the compute API now serves.
+
+        """
+        n4js = n4js_preloaded
+        n4js.assemble_network(network_membrane, scope_test)
+
+        edge = list(network_membrane.edges)[0]
+        edge_sk = n4js.get_scoped_key(edge, scope_test)
+        task_sk = n4js.create_tasks([edge_sk])[0]
+
+        # otherwise the client hands back the very objects the fixture is
+        # holding, and nothing about the wire format gets exercised
+        TOKENIZABLE_REGISTRY.clear()
+
+        edge_, extends_protocoldagresult = compute_client.retrieve_task_transformation(
+            task_sk
+        )
+
+        assert extends_protocoldagresult is None
+        assert edge_ == edge
+        assert edge_ is not edge
+
+        box_vectors = edge_.system.components["protein"].box_vectors
+        assert (box_vectors == edge.system.components["protein"].box_vectors).all()
 
     ### results
 

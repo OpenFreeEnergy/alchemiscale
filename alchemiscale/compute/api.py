@@ -14,6 +14,7 @@ from fastapi import status as http_status
 from fastapi.middleware.gzip import GZipMiddleware
 from gufe.tokenization import JSON_HANDLER
 from gufe.protocols import ProtocolDAGResult
+from starlette.concurrency import run_in_threadpool
 
 from ..base.api import (
     QueryGUFEHandler,
@@ -27,8 +28,8 @@ from ..base.api import (
     validate_scopes_query,
     minimize_scope_space,
     _check_store_connectivity,
-    gufe_to_json,
     GzipRoute,
+    JSONHandlerResponse,
 )
 from ..compression import decompress_gufe_zstd
 from ..settings import (
@@ -340,7 +341,13 @@ def retrieve_task_transformation(
         task=task_scoped_key, return_gufe=False
     )
 
-    transformation = n4js.get_gufe(transformation_sk)
+    # the keyed chain is served as-is: it is the deduplicated form the compute
+    # service wants anyway, so there is no reason to pay for building the
+    # `Transformation` here only to take it apart again. Doing so with
+    # `get_gufe` + `to_dict` costs ~380 MB per request for a `ChemicalSystem`
+    # with a large `ProteinComponent`, and emits both of its `ChemicalSystem`s
+    # in full, protein and all.
+    transformation = list(n4js.get_keyed_chain(transformation_sk))
 
     if protocoldagresultref_sk:
         protocoldagresultref = n4js.get_gufe(protocoldagresultref_sk)
@@ -362,10 +369,9 @@ def retrieve_task_transformation(
     else:
         pdr = None
 
-    return (gufe_to_json(transformation), pdr)
+    return JSONHandlerResponse((transformation, pdr))
 
 
-# TODO: support compression performed client-side
 @router.post("/tasks/{task_scoped_key}/results", response_model=ScopedKey)
 async def set_task_result(
     task_scoped_key,
@@ -376,6 +382,23 @@ async def set_task_result(
     token: TokenData = Depends(get_token_data_depends),
 ):
     body = await request.body()
+
+    # everything past reading the body is blocking and can take a while for a
+    # large result --- parsing a multi-megabyte body, talking to S3, several
+    # round trips to neo4j. Run it in the threadpool so a result submission
+    # doesn't stall every other request this worker is serving.
+    return await run_in_threadpool(
+        _set_task_result, body, task_scoped_key, n4js, s3os, token
+    )
+
+
+def _set_task_result(
+    body: bytes,
+    task_scoped_key: str,
+    n4js: Neo4jStore,
+    s3os: S3ObjectStore,
+    token: TokenData,
+) -> ScopedKey:
     body_ = json.loads(body.decode("utf-8"), cls=JSON_HANDLER.decoder)
 
     protocoldagresult_ = body_["protocoldagresult"]

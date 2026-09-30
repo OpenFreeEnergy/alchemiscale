@@ -3,6 +3,7 @@
 ## storage
 ### below from `py2neo.test.integration.conftest.py`
 
+import importlib.resources
 import os
 from pathlib import Path
 import logging
@@ -15,7 +16,13 @@ from moto.server import ThreadedMotoServer
 
 from neo4j import GraphDatabase
 
-from gufe import ChemicalSystem, NonTransformation, Transformation, AlchemicalNetwork
+from gufe import (
+    ChemicalSystem,
+    NonTransformation,
+    ProteinMembraneComponent,
+    Transformation,
+    AlchemicalNetwork,
+)
 from gufe.protocols import ProtocolResult
 from gufe.protocols.protocoldag import execute_DAG
 from gufe.tests.test_protocol import DummyProtocol, BrokenProtocol
@@ -433,6 +440,36 @@ def network_tyk2():
     return AlchemicalNetwork(
         edges=(solvent_network + complex_network + nontransformations),
         name="tyk2_relative_benchmark",
+    )
+
+
+@fixture(scope="module")
+def network_membrane():
+    """An `AlchemicalNetwork` featuring a `ProteinMembraneComponent`.
+
+    `SolvatedPDBComponent` and its `ProteinMembraneComponent` subclass carry a
+    `box_vectors` attribute serialized as a bare `pint.Quantity`, which neo4j
+    cannot store as a node property.
+
+    """
+    pdb_path = importlib.resources.files("gufe.tests.data") / "181l.pdb"
+    protein = ProteinMembraneComponent.from_pdb_file(
+        str(pdb_path), infer_box_vectors=True
+    )
+
+    chemicalsystem = ChemicalSystem(
+        components={"protein": protein}, name="membrane_system"
+    )
+
+    return AlchemicalNetwork(
+        edges=[
+            NonTransformation(
+                system=chemicalsystem,
+                protocol=DummyProtocolA(DummyProtocolA.default_settings()),
+                name="membrane_nt",
+            )
+        ],
+        name="membrane_network",
     )
 
 

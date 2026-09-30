@@ -147,6 +147,24 @@ class GufeJSONResponse(JSONResponse):
         return json.dumps(keyed_chain, cls=JSON_HANDLER.encoder).encode("utf-8")
 
 
+class JSONHandlerResponse(JSONResponse):
+    """Response rendered with ``gufe``'s ``JSON_HANDLER`` encoder.
+
+    Unlike :class:`GufeJSONResponse`, the content is rendered as given rather
+    than being converted from a ``GufeTokenizable`` first. Use this for content
+    that is already in a JSON-ready form but holds values only ``gufe``'s
+    codecs know how to encode --- ``pint`` quantities, ``numpy`` arrays,
+    ``bytes`` --- such as a ``KeyedChain`` read straight out of the state
+    store, or a container holding one.
+
+    """
+
+    media_type = "application/json"
+
+    def render(self, content: Any) -> bytes:
+        return json.dumps(content, cls=JSON_HANDLER.encoder).encode("utf-8")
+
+
 class GzipRequest(Request):
     async def body(self) -> bytes:
         if not hasattr(self, "_body"):
