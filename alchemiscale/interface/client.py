@@ -190,6 +190,267 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
 
         return ScopedKey.from_dict(scoped_key)
 
+    def merge_networks(
+        self,
+        networks: list[ScopedKey],
+        name: str,
+        scope: Scope,
+        state: NetworkStateEnum | str = NetworkStateEnum.active,
+        visualize: bool = True,
+    ) -> ScopedKey:
+        """Merge multiple existing AlchemicalNetworks into a new AlchemicalNetwork.
+
+        The resulting AlchemicalNetwork contains the union of all
+        Transformations and NonTransformations from the source networks.
+        Only Tasks in ``complete`` state on those Transformations are
+        cloned into the new network's scope along with their
+        ProtocolDAGResultRefs, so previously-computed results do not need
+        to be re-run.
+
+        Any ``Strategy`` (:meth:`set_network_strategy`) and
+        ``TaskRestartPattern`` s (:meth:`add_task_restart_patterns`) on
+        the source networks are not carried over; set them on the merged
+        network afterward if needed.
+
+        Parameters
+        ----------
+        networks
+            The ScopedKeys of the AlchemicalNetworks to merge. The source
+            networks may live in different Scopes; the caller must have access
+            to each.
+        name
+            The name of the new AlchemicalNetwork.
+        scope
+            The Scope in which to create the new AlchemicalNetwork.
+            This must be a *specific* Scope; it must not contain wildcards.
+        state
+            The starting state of the new AlchemicalNetwork. See
+            :meth:`AlchemiscaleClient.set_network_state` for valid states.
+            Defaults to ``"active"``.
+        visualize
+            If ``True``, show progress indicator.
+
+        Returns
+        -------
+        ScopedKey
+            The ScopedKey of the new, merged AlchemicalNetwork.
+        """
+        if not scope.specific():
+            raise ValueError(
+                f"`scope` '{scope}' contains wildcards ('*'); `scope` must be *specific*"
+            )
+
+        if not networks:
+            raise ValueError("`networks` must contain at least one ScopedKey")
+
+        network_sks = [
+            sk if isinstance(sk, ScopedKey) else ScopedKey.from_str(sk)
+            for sk in networks
+        ]
+
+        for network_sk in network_sks:
+            if network_sk.qualname not in ("AlchemicalNetwork",):
+                raise ValueError(
+                    f"ScopedKey '{network_sk}' does not refer to an AlchemicalNetwork"
+                )
+
+        state = NetworkStateEnum(state)
+
+        data = dict(
+            networks=[str(sk) for sk in network_sks],
+            name=name,
+            scope=scope.to_dict(),
+            state=state.value,
+        )
+
+        def post():
+            return self._post_resource("/networks/merge", data)
+
+        if visualize:
+            from rich.progress import Progress
+
+            with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+                task = progress.add_task(
+                    f"Merging [bold]{len(network_sks)}[/bold] networks into "
+                    f"[bold]'{name}'[/bold] in scope [bold]'{scope}'[/bold]...",
+                    total=None,
+                )
+
+                scoped_key = post()
+                progress.start_task(task)
+                progress.update(task, total=1, completed=1)
+        else:
+            scoped_key = post()
+
+        return ScopedKey.from_dict(scoped_key)
+
+    def copy_network(
+        self,
+        network: ScopedKey,
+        scope: Scope,
+        name: str | None = None,
+        state: NetworkStateEnum | str = NetworkStateEnum.active,
+        visualize: bool = True,
+    ) -> ScopedKey:
+        """Copy an AlchemicalNetwork to a new Scope, carrying over every
+        existing ``complete`` Task and its associated
+        ProtocolDAGResultRefs.
+
+        Any ``Strategy`` (:meth:`set_network_strategy`) and
+        ``TaskRestartPattern`` s (:meth:`add_task_restart_patterns`) on
+        the source network are not carried over; set them on the copy
+        afterward if needed.
+
+        Parameters
+        ----------
+        network
+            The ScopedKey of the AlchemicalNetwork to copy.
+        scope
+            The destination Scope for the copy. This must be a *specific*
+            Scope; it must not contain wildcards.
+        name
+            Optional new name for the copy. If ``None``, the source
+            AlchemicalNetwork's name is preserved and the resulting copy
+            has the same gufe key as the source. If a different name is
+            given, the resulting copy gets a fresh gufe key derived from
+            the renamed content.
+        state
+            The starting state of the new AlchemicalNetwork. See
+            :meth:`AlchemiscaleClient.set_network_state` for valid states.
+            Defaults to ``"active"``.
+        visualize
+            If ``True``, show progress indicator.
+
+        Returns
+        -------
+        ScopedKey
+            The ScopedKey of the new, copied AlchemicalNetwork.
+        """
+        if not scope.specific():
+            raise ValueError(
+                f"`scope` '{scope}' contains wildcards ('*'); `scope` must be *specific*"
+            )
+
+        if not isinstance(network, ScopedKey):
+            network = ScopedKey.from_str(network)
+        if network.qualname != "AlchemicalNetwork":
+            raise ValueError(
+                f"ScopedKey '{network}' does not refer to an AlchemicalNetwork"
+            )
+
+        state = NetworkStateEnum(state)
+
+        data = dict(
+            scope=scope.to_dict(),
+            name=name,
+            state=state.value,
+        )
+
+        def post():
+            return self._post_resource(f"/networks/{network}/copy", data)
+
+        if visualize:
+            from rich.progress import Progress
+
+            with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+                task = progress.add_task(
+                    f"Copying [bold]'{network}'[/bold] into scope "
+                    f"[bold]'{scope}'[/bold]...",
+                    total=None,
+                )
+                scoped_key = post()
+                progress.start_task(task)
+                progress.update(task, total=1, completed=1)
+        else:
+            scoped_key = post()
+
+        return ScopedKey.from_dict(scoped_key)
+
+    def merge_scopes(
+        self,
+        scopes: list[Scope],
+        target_scope: Scope,
+        visualize: bool = True,
+    ) -> list[ScopedKey]:
+        """Copy every ``active`` AlchemicalNetwork in each of the given
+        source Scopes into ``target_scope``.
+
+        Only source networks in ``active`` state are eligible. Networks
+        in ``inactive``, ``invalid``, or ``deleted`` state are skipped
+        entirely; consolidating a scope should not silently reactivate
+        soft-deleted or invalidated networks. Each carried network is
+        copied via :meth:`copy_network`, preserving its name, its
+        ``complete`` Tasks, and its associated ProtocolDAGResultRefs,
+        and lands in ``target_scope`` in ``active`` state.
+
+        This method is not transactional: if a per-network
+        :meth:`copy_network` call fails partway through, earlier copies
+        are already committed and the failure propagates. Because
+        :meth:`copy_network` is idempotent -- re-copying an already-copied
+        network dedups onto the existing target node -- rerunning after a
+        failure is safe.
+
+        Parameters
+        ----------
+        scopes
+            The source Scopes to copy from. Each must be a *specific*
+            Scope (no wildcards). The caller must have access to each.
+        target_scope
+            The destination Scope. Must be a *specific* Scope.
+        visualize
+            If ``True``, show a progress bar tracking the number of
+            networks copied.
+
+        Returns
+        -------
+        list[ScopedKey]
+            The ScopedKeys of all newly-copied AlchemicalNetworks in
+            ``target_scope``, in the order they were copied.
+        """
+        if not target_scope.specific():
+            raise ValueError(
+                f"`target_scope` '{target_scope}' contains wildcards ('*'); "
+                "`target_scope` must be *specific*"
+            )
+        if not scopes:
+            raise ValueError("`scopes` must contain at least one Scope")
+        for sc in scopes:
+            if not sc.specific():
+                raise ValueError(
+                    f"source scope '{sc}' contains wildcards ('*'); each source "
+                    "scope must be *specific*"
+                )
+
+        # only ``active`` networks in each source scope are eligible;
+        # non-active networks are skipped entirely so a soft-deleted or
+        # invalidated network never reactivates in the target scope.
+        network_sks: list[ScopedKey] = []
+        for sc in scopes:
+            network_sks.extend(
+                self.query_networks(scope=sc, state=NetworkStateEnum.active.value)
+            )
+
+        def _do_copy(sk: ScopedKey) -> ScopedKey:
+            return self.copy_network(sk, target_scope, visualize=False)
+
+        if visualize:
+            from rich.progress import Progress
+
+            with Progress(*self._rich_waiting_columns(), transient=False) as progress:
+                task = progress.add_task(
+                    f"Copying [bold]{len(network_sks)}[/bold] networks into "
+                    f"[bold]'{target_scope}'[/bold]...",
+                    total=len(network_sks),
+                )
+                new_sks: list[ScopedKey] = []
+                for sk in network_sks:
+                    new_sks.append(_do_copy(sk))
+                    progress.update(task, advance=1)
+        else:
+            new_sks = [_do_copy(sk) for sk in network_sks]
+
+        return new_sks
+
     def set_network_state(
         self, network: ScopedKey, state: NetworkStateEnum | str
     ) -> ScopedKey | None:

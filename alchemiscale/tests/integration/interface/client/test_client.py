@@ -2,6 +2,7 @@ import pytest
 import datetime
 from time import sleep
 import os
+import uuid
 from pathlib import Path
 from itertools import chain
 import json
@@ -199,6 +200,669 @@ class TestClient:
         # TODO: make a network in a scope that doesn't have any components in
         # common with an existing network
         # user_client.create_network(
+
+    def test_merge_networks(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        # gather ``active`` source AlchemicalNetwork ScopedKeys across all
+        # scopes. n4js_preloaded creates one active `network_tyk2` per
+        # scope and one inactive trimmed copy named "incomplete";
+        # merge_networks only accepts active sources, so the trimmed
+        # copy would be rejected. Add a second active source in
+        # scope_test with a disjoint name so the merge has multiple
+        # active inputs to combine.
+        extra_active_an = AlchemicalNetwork(
+            edges=list(network_tyk2.edges)[:-2], name="extra_active_source"
+        )
+        user_client.create_network(extra_active_an, scope_test)
+
+        source_sks = user_client.query_networks(state="active")
+        assert len(source_sks) >= 2
+
+        # destination scope: reuse `scope_test`, which is authorized for
+        # the test identity. The merged network's name differs from the
+        # pre-loaded networks, so there is no _scoped_key collision.
+        merge_scope = scope_test
+
+        merged_sk = user_client.merge_networks(
+            networks=source_sks,
+            name="merged_tyk2",
+            scope=merge_scope,
+            visualize=False,
+        )
+
+        assert isinstance(merged_sk, ScopedKey)
+        assert merged_sk.scope == merge_scope
+        assert merged_sk.qualname == "AlchemicalNetwork"
+
+        # the merged network should exist
+        assert user_client.check_exists(merged_sk)
+
+        # the merged network should appear in queries (defaults to active state)
+        all_active_sks = user_client.query_networks()
+        assert merged_sk in all_active_sks
+
+        # the merged network should contain the union of all source edges.
+        # Both ``network_tyk2`` (full) and ``extra_active_an`` (a subset)
+        # are active in scope_test, and every other source scope contributes
+        # ``network_tyk2`` again; the union is network_tyk2.edges.
+        merged_network = user_client.get_network(merged_sk)
+        assert merged_network.name == "merged_tyk2"
+        assert len(merged_network.edges) == len(network_tyk2.edges)
+        assert {t.key for t in merged_network.edges} == {
+            t.key for t in network_tyk2.edges
+        }
+
+    @pytest.mark.parametrize("state", ["active", "inactive"])
+    def test_merge_networks_respects_state(
+        self,
+        state,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        """The state parameter must control the NetworkMark on the merged
+        AlchemicalNetwork the same way it does on create_network."""
+        source_sks = user_client.query_networks(scope=scope_test, state="active")
+        assert source_sks
+
+        # destination scope: reuse `scope_test`, which is authorized for
+        # the test identity; the unique network name keeps each parametrize
+        # case from colliding on _scoped_key.
+        merge_scope = scope_test
+        merged_sk = user_client.merge_networks(
+            networks=source_sks,
+            name=f"merged_state_{state}",
+            scope=merge_scope,
+            state=state,
+            visualize=False,
+        )
+
+        assert user_client.get_network_state(merged_sk) == state
+
+    def test_merge_networks_rejects_wildcard_scope(
+        self,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        source_sks = user_client.query_networks(state=None)
+        with pytest.raises(ValueError, match="wildcards"):
+            user_client.merge_networks(
+                networks=source_sks,
+                name="should_fail",
+                scope=Scope(org="test_org"),
+                visualize=False,
+            )
+
+    def test_merge_networks_rejects_empty_list(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        with pytest.raises(ValueError, match="at least one"):
+            user_client.merge_networks(
+                networks=[],
+                name="should_fail",
+                scope=scope_test,
+                visualize=False,
+            )
+
+    def test_merge_networks_rejects_non_network_scoped_key(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        # pass a Transformation ScopedKey rather than an AlchemicalNetwork one
+        tf_sks = user_client.query_transformations(scope=scope_test)
+        assert tf_sks
+        with pytest.raises(ValueError, match="does not refer to an AlchemicalNetwork"):
+            user_client.merge_networks(
+                networks=[tf_sks[0]],
+                name="should_fail",
+                scope=scope_test,
+                visualize=False,
+            )
+
+    def test_merge_networks_preserves_tasks_and_results(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        """The merged network must carry over ``complete`` Tasks -- and only
+        ``complete`` Tasks -- along with their ProtocolDAGResultRefs, cloned
+        into the new scope.
+
+        Tasks in any other status (``waiting``, ``running``, ``error``,
+        ``invalid``, ``deleted``) must not be cloned.
+        """
+        # pick an ``active`` source network in scope_test (merge_networks
+        # only accepts active sources)
+        source_sks = user_client.query_networks(scope=scope_test, state="active")
+        assert source_sks
+        source_sk = source_sks[0]
+
+        # create Tasks on four of its Transformations directly through n4js
+        # so we can drive them to distinct statuses without actually
+        # executing protocols. The four statuses cover the "carry"/"drop"
+        # boundary: complete is preserved, error/waiting/running are dropped.
+        transformation_sks = n4js_preloaded.get_network_transformations(source_sk)
+        assert len(transformation_sks) >= 4
+
+        task_sks = n4js_preloaded.create_tasks(transformation_sks[:4])
+
+        # task 0: complete + ok PDRR -- carried over
+        n4js_preloaded.set_task_running(task_sks[:1])
+        n4js_preloaded.set_task_complete(task_sks[:1])
+        ok_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=task_sks[0].scope,
+            ok=True,
+        )
+        n4js_preloaded.set_task_result(task_sks[0], ok_pdrr)
+
+        # task 1: error + failure PDRR -- dropped
+        n4js_preloaded.set_task_running(task_sks[1:2])
+        n4js_preloaded.set_task_error(task_sks[1:2])
+        err_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=task_sks[1].scope,
+            ok=False,
+        )
+        n4js_preloaded.set_task_result(task_sks[1], err_pdrr)
+
+        # task 2: waiting -- dropped
+        # (default status after create_tasks)
+
+        # task 3: running -- dropped
+        n4js_preloaded.set_task_running(task_sks[3:4])
+
+        # merge into a different authorized scope from where we set up the
+        # source Tasks, so the per-scope counts below remain clean (the
+        # destination scope has pre-loaded networks but no Tasks/PDRRs).
+        merge_scope = multiple_scopes[1]
+        assert merge_scope != scope_test
+        merged_sk = user_client.merge_networks(
+            networks=[source_sk],
+            name="merged_with_results",
+            scope=merge_scope,
+            visualize=False,
+        )
+        assert user_client.check_exists(merged_sk)
+
+        # only the complete Task should appear in the new scope
+        task_records = n4js_preloaded.execute_query(
+            """
+            MATCH (t:Task {`_project`: $project})
+            RETURN t.status AS status
+            """,
+            project=merge_scope.project,
+        ).records
+        assert [r["status"] for r in task_records] == ["complete"]
+
+        # only the ok PDRR should appear in the new scope; the error PDRR
+        # is dropped along with its Task
+        pdrr_records = n4js_preloaded.execute_query(
+            """
+            MATCH (pdrr:ProtocolDAGResultRef {`_project`: $project})
+            RETURN pdrr.ok AS ok, pdrr.obj_key AS obj_key
+            """,
+            project=merge_scope.project,
+        ).records
+        assert len(pdrr_records) == 1
+        assert pdrr_records[0]["ok"] is True
+        assert pdrr_records[0]["obj_key"] == ok_pdrr.obj_key
+
+        # cloned PDRR must be wired to the cloned Task in the new scope
+        linked = n4js_preloaded.execute_query(
+            """
+            MATCH (t:Task {`_project`: $project})-[:RESULTS_IN]->
+                  (pdrr:ProtocolDAGResultRef {`_project`: $project})
+            RETURN t.status AS status, pdrr.ok AS ok
+            """,
+            project=merge_scope.project,
+        ).records
+        assert [(r["status"], r["ok"]) for r in linked] == [("complete", True)]
+
+        # the cloned Task must be reachable from the merged AlchemicalNetwork
+        # via the standard PERFORMS traversal that the user-facing API uses;
+        # this catches any case where Tasks are written to the new scope but
+        # not wired back to their Transformations in the merged network
+        merged_task_sks = user_client.get_network_tasks(merged_sk)
+        assert len(merged_task_sks) == 1
+        assert merged_task_sks[0].scope == merge_scope
+        assert user_client.get_tasks_status(merged_task_sks) == ["complete"]
+
+    def test_copy_network(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        """copy_network must duplicate the source AlchemicalNetwork into the
+        target scope and carry over only ``complete`` Tasks (with their
+        PDRRs), while dropping Tasks in any other status. EXTENDS
+        relationships and PERFORMS wiring must be intact for the Tasks
+        that do carry over.
+        """
+        source_sks = user_client.query_networks(scope=scope_test, state="active")
+        assert source_sks
+        source_sk = source_sks[0]
+        source_an = user_client.get_network(source_sk)
+
+        transformation_sks = n4js_preloaded.get_network_transformations(source_sk)
+        assert len(transformation_sks) >= 4
+
+        # Stage four tasks across four statuses so we can prove copy_network
+        # carries over only ``complete`` Tasks and drops the rest:
+        #   task 0: complete + ok PDRR    -- carried
+        #   task 1: error    + not-ok PDRR -- dropped
+        #   task 2: waiting  (no result)  -- dropped
+        #   task 3: running  (no result)  -- dropped
+        task_sks = n4js_preloaded.create_tasks(transformation_sks[:4])
+
+        n4js_preloaded.set_task_running(task_sks[:1])
+        n4js_preloaded.set_task_complete(task_sks[:1])
+        ok_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=task_sks[0].scope,
+            ok=True,
+        )
+        n4js_preloaded.set_task_result(task_sks[0], ok_pdrr)
+
+        n4js_preloaded.set_task_running(task_sks[1:2])
+        n4js_preloaded.set_task_error(task_sks[1:2])
+        err_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=task_sks[1].scope,
+            ok=False,
+        )
+        n4js_preloaded.set_task_result(task_sks[1], err_pdrr)
+
+        # task_sks[2] stays waiting (default after create_tasks)
+        n4js_preloaded.set_task_running(task_sks[3:4])
+
+        # copy into a scope distinct from the source, so per-_project counts
+        # are clean
+        target_scope = multiple_scopes[2]
+        assert target_scope != scope_test
+        copied_sk = user_client.copy_network(
+            network=source_sk,
+            scope=target_scope,
+            visualize=False,
+        )
+
+        # name is preserved → gufe key is preserved → only the scope changes
+        assert copied_sk.gufe_key == source_sk.gufe_key
+        assert copied_sk.scope == target_scope
+        assert user_client.check_exists(copied_sk)
+        assert user_client.get_network(copied_sk).name == source_an.name
+
+        # the target scope is preloaded with this same AlchemicalNetwork, so
+        # the copy must dedup onto the existing node rather than create a
+        # duplicate; the copy is additive to the preexisting network
+        an_count = n4js_preloaded.execute_query(
+            "MATCH (an:AlchemicalNetwork {_scoped_key: $sk}) RETURN count(an) AS n",
+            sk=str(copied_sk),
+        ).records[0]["n"]
+        assert an_count == 1
+
+        # only the ``complete`` Task must be reachable from the new network
+        # via the standard PERFORMS traversal; the error / waiting / running
+        # Tasks are dropped
+        copied_task_sks = user_client.get_network_tasks(copied_sk)
+        assert len(copied_task_sks) == 1
+        assert copied_task_sks[0].scope == target_scope
+        assert user_client.get_tasks_status(copied_task_sks) == ["complete"]
+
+        # only the ok PDRR lands in the target scope; the error PDRR is
+        # dropped along with its Task
+        pdrr_records = n4js_preloaded.execute_query(
+            """
+            MATCH (pdrr:ProtocolDAGResultRef {`_project`: $project})
+            RETURN pdrr.ok AS ok, pdrr.obj_key AS obj_key
+            """,
+            project=target_scope.project,
+        ).records
+        assert len(pdrr_records) == 1
+        assert pdrr_records[0]["ok"] is True
+        assert pdrr_records[0]["obj_key"] == ok_pdrr.obj_key
+
+    def test_copy_network_with_rename(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        """copy_network with a non-default `name` must produce a distinct
+        gufe key while still copying into the target scope."""
+        source_sks = user_client.query_networks(scope=scope_test, state="active")
+        source_sk = source_sks[0]
+        source_an = user_client.get_network(source_sk)
+
+        target_scope = multiple_scopes[2]
+        new_name = source_an.name + "_renamed_copy"
+
+        copied_sk = user_client.copy_network(
+            network=source_sk,
+            scope=target_scope,
+            name=new_name,
+            visualize=False,
+        )
+
+        assert copied_sk.gufe_key != source_sk.gufe_key
+        assert copied_sk.scope == target_scope
+        copied_an = user_client.get_network(copied_sk)
+        assert copied_an.name == new_name
+
+    def test_copy_network_preserves_extends_direction(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        """The cloned EXTENDS edge must match the source direction:
+        ``(task)-[:EXTENDS]->(extended_task)``. Regressing this direction
+        would silently invert every EXTENDS chain on copied networks and
+        break the downstream traversals that read it forward (e.g.
+        ``get_task_extends``, ``get_task_results``)."""
+        source_sks = user_client.query_networks(scope=scope_test, state="active")
+        source_sk = source_sks[0]
+
+        transformation_sks = n4js_preloaded.get_network_transformations(source_sk)
+        assert transformation_sks
+
+        # base Task: complete with ok PDRR
+        base_task_sks = n4js_preloaded.create_tasks(transformation_sks[:1])
+        n4js_preloaded.set_task_running(base_task_sks)
+        n4js_preloaded.set_task_complete(base_task_sks)
+        base_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=base_task_sks[0].scope,
+            ok=True,
+        )
+        n4js_preloaded.set_task_result(base_task_sks[0], base_pdrr)
+
+        # extending Task: extends the base, also complete; the EXTENDS edge
+        # in the source graph is ``(extending)-[:EXTENDS]->(base)``
+        extending_task_sks = n4js_preloaded.create_tasks(
+            transformation_sks[:1], extends=base_task_sks
+        )
+        n4js_preloaded.set_task_running(extending_task_sks)
+        n4js_preloaded.set_task_complete(extending_task_sks)
+        ext_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=extending_task_sks[0].scope,
+            ok=True,
+        )
+        n4js_preloaded.set_task_result(extending_task_sks[0], ext_pdrr)
+
+        target_scope = multiple_scopes[2]
+        user_client.copy_network(network=source_sk, scope=target_scope, visualize=False)
+
+        # exactly one EXTENDS edge between the two cloned Tasks must exist
+        # in the target scope, with the same direction as the source:
+        # extending -> EXTENDS -> base
+        edges = n4js_preloaded.execute_query(
+            """
+            MATCH (a:Task {`_project`: $project})-[:EXTENDS]->(b:Task {`_project`: $project})
+            RETURN a._gufe_key AS extender, b._gufe_key AS extended
+            """,
+            project=target_scope.project,
+        ).records
+        assert len(edges) == 1
+        assert edges[0]["extender"] == str(extending_task_sks[0].gufe_key)
+        assert edges[0]["extended"] == str(base_task_sks[0].gufe_key)
+
+    def test_copy_network_rejects_wildcard_scope(
+        self,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        source_sks = user_client.query_networks(state=None)
+        with pytest.raises(ValueError, match="wildcards"):
+            user_client.copy_network(
+                network=source_sks[0],
+                scope=Scope(org="test_org"),
+                visualize=False,
+            )
+
+    def test_copy_network_rejects_non_network_scoped_key(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        tf_sks = user_client.query_transformations(scope=scope_test)
+        assert tf_sks
+        with pytest.raises(ValueError, match="does not refer to an AlchemicalNetwork"):
+            user_client.copy_network(
+                network=tf_sks[0],
+                scope=scope_test,
+                visualize=False,
+            )
+
+    def test_merge_scopes(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        """merge_scopes must copy every ``active`` AlchemicalNetwork in the
+        listed source scopes into the target scope, preserving names (and
+        therefore gufe keys). Non-active networks are skipped."""
+        source_scopes = [scope_test, multiple_scopes[1]]
+        target_scope = multiple_scopes[2]
+
+        # baseline: 2 networks pre-loaded in target_scope (1 active + 1 inactive)
+        baseline_target_sks = user_client.query_networks(scope=target_scope, state=None)
+        assert len(baseline_target_sks) == 2
+
+        # merge_scopes only carries ``active`` networks. n4js_preloaded seeds
+        # 1 active + 1 inactive per scope; only the active one per source
+        # scope makes it into the returned list.
+        expected_source_count = sum(
+            len(user_client.query_networks(scope=sc, state="active"))
+            for sc in source_scopes
+        )
+        # 1 active per scope × 2 source scopes
+        assert expected_source_count == 2
+
+        new_sks = user_client.merge_scopes(
+            scopes=source_scopes,
+            target_scope=target_scope,
+            visualize=False,
+        )
+
+        # one returned ScopedKey per carried (active) source network
+        assert len(new_sks) == expected_source_count
+        assert all(sk.scope == target_scope for sk in new_sks)
+
+        # both source scopes hold the *same* active network (network_tyk2),
+        # so the two per-scope copies collapse onto a single target-scope
+        # ScopedKey via gufe-key dedup
+        assert len(set(new_sks)) == 1
+
+        # target scope ends up with the union of its baseline networks and
+        # the copied networks; the active copy dedups onto the preexisting
+        # active entry, so the final set is unchanged from baseline
+        final_target_sks = user_client.query_networks(scope=target_scope, state=None)
+        assert set(baseline_target_sks) == set(final_target_sks)
+
+    def test_merge_scopes_creates_new_networks_in_target(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        """merge_scopes must create fresh AlchemicalNetwork nodes in the
+        target scope for source networks that don't already exist there --
+        not just dedup onto preexisting ones.
+
+        n4js_preloaded seeds the same 2 networks (network_tyk2 + an2) into
+        every scope in multiple_scopes, so we first add a *third*
+        AlchemicalNetwork to the source scope only. After merge_scopes,
+        the target scope must contain that third network as a new node,
+        alongside the 2 that dedup onto its preexisting entries.
+        """
+        source_scope = scope_test
+        target_scope = multiple_scopes[2]
+
+        # add a fresh AN to the source scope that does not exist in the
+        # target; a unique name → unique gufe key
+        fresh_an = AlchemicalNetwork(
+            edges=list(network_tyk2.edges)[:2],
+            name="fresh_source_only",
+        )
+        fresh_source_sk = user_client.create_network(fresh_an, source_scope)
+        fresh_expected_target_sk = ScopedKey(
+            gufe_key=fresh_source_sk.gufe_key,
+            org=target_scope.org,
+            campaign=target_scope.campaign,
+            project=target_scope.project,
+        )
+
+        # sanity: fresh AN exists in source, does not exist in target
+        assert user_client.check_exists(fresh_source_sk)
+        assert not user_client.check_exists(fresh_expected_target_sk)
+
+        baseline_target_sks = set(
+            user_client.query_networks(scope=target_scope, state=None)
+        )
+        # baseline: network_tyk2 + an2 preloaded in target
+        assert len(baseline_target_sks) == 2
+        assert fresh_expected_target_sk not in baseline_target_sks
+
+        new_sks = user_client.merge_scopes(
+            scopes=[source_scope],
+            target_scope=target_scope,
+            visualize=False,
+        )
+
+        # source scope holds 3 networks now, but only 2 are ``active``
+        # (network_tyk2 + fresh_an; an2 is inactive from n4js_preloaded).
+        # merge_scopes filters to active-only → 2 returned ScopedKeys,
+        # all anchored to target_scope.
+        assert len(new_sks) == 2
+        assert all(sk.scope == target_scope for sk in new_sks)
+        assert fresh_expected_target_sk in new_sks
+
+        # target scope now holds the baseline union the fresh AN as a
+        # genuinely new node
+        final_target_sks = set(
+            user_client.query_networks(scope=target_scope, state=None)
+        )
+        assert final_target_sks == baseline_target_sks | {fresh_expected_target_sk}
+
+        # exactly one AN node backs the fresh copy in the target scope
+        fresh_count = n4js_preloaded.execute_query(
+            "MATCH (an:AlchemicalNetwork {_scoped_key: $sk}) RETURN count(an) AS n",
+            sk=str(fresh_expected_target_sk),
+        ).records[0]["n"]
+        assert fresh_count == 1
+
+    def test_merge_scopes_only_copies_active_networks(
+        self,
+        scope_test,
+        multiple_scopes,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+        network_tyk2,
+    ):
+        """merge_scopes must only copy source networks in ``active`` state.
+
+        Networks in ``inactive``, ``invalid``, or ``deleted`` state on
+        the source scope must not appear in the target scope; that
+        would silently reactivate soft-deleted or invalidated
+        networks. Only ``active`` sources land in the target, and
+        each lands in ``active`` state.
+        """
+        source_scope = scope_test
+        target_scope = multiple_scopes[2]
+
+        # one fresh network per NetworkStateEnum value on the source
+        # scope, so the filter can be observed cleanly without
+        # interference from n4js_preloaded's baseline
+        fresh_networks = {
+            state.value: AlchemicalNetwork(
+                edges=list(network_tyk2.edges)[:2], name=f"state_test_{state.value}"
+            )
+            for state in NetworkStateEnum
+        }
+        target_sks_by_state: dict[str, ScopedKey] = {}
+        for state, an in fresh_networks.items():
+            sk = user_client.create_network(an, source_scope, state=state)
+            target_sks_by_state[state] = ScopedKey(
+                gufe_key=sk.gufe_key,
+                org=target_scope.org,
+                campaign=target_scope.campaign,
+                project=target_scope.project,
+            )
+            assert user_client.get_network_state(sk) == state
+
+        user_client.merge_scopes(
+            scopes=[source_scope],
+            target_scope=target_scope,
+            visualize=False,
+        )
+
+        # only the ``active`` source lands in target, and it lands active
+        active_target_sk = target_sks_by_state[NetworkStateEnum.active.value]
+        assert user_client.check_exists(active_target_sk)
+        assert (
+            user_client.get_network_state(active_target_sk)
+            == NetworkStateEnum.active.value
+        )
+
+        # non-active sources are skipped -- they must not appear in target
+        for state, target_sk in target_sks_by_state.items():
+            if state == NetworkStateEnum.active.value:
+                continue
+            assert not user_client.check_exists(
+                target_sk
+            ), f"source network in state {state!r} unexpectedly landed in target"
+
+    def test_merge_scopes_rejects_empty(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        with pytest.raises(ValueError, match="at least one"):
+            user_client.merge_scopes(
+                scopes=[],
+                target_scope=scope_test,
+                visualize=False,
+            )
+
+    def test_merge_scopes_rejects_wildcard_target(
+        self,
+        scope_test,
+        n4js_preloaded,
+        user_client: client.AlchemiscaleClient,
+    ):
+        with pytest.raises(ValueError, match="wildcards"):
+            user_client.merge_scopes(
+                scopes=[scope_test],
+                target_scope=Scope(org="test_org"),
+                visualize=False,
+            )
 
     def test_check_exists(
         self,
