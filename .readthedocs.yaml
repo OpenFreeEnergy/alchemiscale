@@ -5,16 +5,18 @@ build:
   tools:
     python: "3.13"
   jobs:
-    # Environment comes from `pixi.lock`; conda's solver needs more memory
-    # than the build allows.
+    # micromamba rather than RTD's conda support: conda's solver needs more
+    # memory than the build allows.
     create_environment:
-      - mkdir -p $HOME/.pixi/bin
-      - curl -fsSL https://github.com/prefix-dev/pixi/releases/download/v0.82.0/pixi-x86_64-unknown-linux-musl.tar.gz | tar -xz -C $HOME/.pixi/bin
+      - mkdir -p $HOME/bin
+      - curl -fsSL https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-linux-64 -o $HOME/bin/micromamba
+      - chmod +x $HOME/bin/micromamba
+      - $HOME/bin/micromamba create -y -q -r $HOME/micromamba -p $HOME/docs-env -f devtools/conda-envs/docs.yml
     install:
-      - $HOME/.pixi/bin/pixi install --locked -e docs
+      - $HOME/bin/micromamba run -r $HOME/micromamba -p $HOME/docs-env python -m pip install --no-deps .
     build:
       html:
-        - $HOME/.pixi/bin/pixi run --locked -e docs sphinx-build -T -W --keep-going -b html docs $READTHEDOCS_OUTPUT/html
+        - $HOME/bin/micromamba run -r $HOME/micromamba -p $HOME/docs-env python -m sphinx -T -W --keep-going -b html docs $READTHEDOCS_OUTPUT/html
 
 sphinx:
    configuration: docs/conf.py
