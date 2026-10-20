@@ -57,6 +57,10 @@ and modify ``.env`` with your favorite text editor.
 
 See ``.env.testing`` for an example. 
 
+.. note::
+   ``JWT_SECRET_KEY`` must be set, and must be the same for every ``alchemiscale api`` and ``alchemiscale compute api`` process that should accept each other's tokens (e.g. multiple replicas behind a load balancer).
+   If no key is supplied, each process generates its own random key at startup; tokens it issues are then rejected by every other process and invalidated on restart.
+
 The ``neo4j`` database requires the directory for the data store to exist before it starts.
 This location should be on a storage medium that can handle the IOPS demand of a ``neo4j`` database.
 For example, using the location set in ``.env.testing``::
