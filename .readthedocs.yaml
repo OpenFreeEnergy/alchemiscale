@@ -3,17 +3,18 @@ version: 2
 build:
   os: "ubuntu-24.04"
   tools:
-    python: "miniconda-latest"
+    python: "3.13"
+  jobs:
+    # Environment comes from `pixi.lock`; conda's solver needs more memory
+    # than the build allows.
+    create_environment:
+      - mkdir -p $HOME/.pixi/bin
+      - curl -fsSL https://github.com/prefix-dev/pixi/releases/download/v0.82.0/pixi-x86_64-unknown-linux-musl.tar.gz | tar -xz -C $HOME/.pixi/bin
+    install:
+      - $HOME/.pixi/bin/pixi install --locked -e docs
+    build:
+      html:
+        - $HOME/.pixi/bin/pixi run --locked -e docs sphinx-build -T -W --keep-going -b html docs $READTHEDOCS_OUTPUT/html
 
 sphinx:
    configuration: docs/conf.py
-   fail_on_warning: true
-
-conda:
-  environment: devtools/conda-envs/docs.yml
-
-python:
-  # Install our python package before building the docs
-  install:
-    - method: pip
-      path: .
