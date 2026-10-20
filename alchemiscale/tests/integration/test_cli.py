@@ -1,4 +1,5 @@
 import pytest
+import click
 from click.testing import CliRunner
 
 import time
@@ -15,7 +16,7 @@ import requests
 from fastapi import FastAPI
 from alchemiscale.tests.integration.utils import running_service
 
-from alchemiscale.cli import get_settings_from_options, cli
+from alchemiscale.cli import get_settings_from_options, cli, jwt_params
 from alchemiscale.cli_utils import ApiApplication
 from alchemiscale.models import Scope
 from alchemiscale.security.auth import hash_key, authenticate
@@ -265,6 +266,42 @@ def test_get_settings_from_options(cli_vars):
 
     for key in expected:
         assert expected[key] == settings_dict[key]
+
+
+@click.command()
+@jwt_params
+def jwt_cmd(jwt_secret, jwt_expire_seconds, jwt_algorithm):
+    click.echo(f"secret={jwt_secret['JWT_SECRET_KEY']}")
+
+
+@pytest.mark.parametrize("source", ["option", "envvar"])
+def test_jwt_secret_supplied(source):
+    secret = "a-supplied-secret"
+    runner = CliRunner()
+    if source == "option":
+        result = runner.invoke(jwt_cmd, ["--jwt-secret", secret])
+    else:
+        result = runner.invoke(jwt_cmd, [], env={"JWT_SECRET_KEY": secret})
+
+    assert click_success(result)
+    assert f"secret={secret}" in result.output
+    assert "WARNING" not in result.output
+
+
+def test_jwt_secret_generated():
+    runner = CliRunner()
+    first = runner.invoke(jwt_cmd, [], env={"JWT_SECRET_KEY": None})
+    second = runner.invoke(jwt_cmd, [], env={"JWT_SECRET_KEY": None})
+
+    assert click_success(first) and click_success(second)
+    assert "WARNING: no JWT_SECRET_KEY supplied" in first.output
+
+    def get_secret(result):
+        line = next(ln for ln in result.output.splitlines() if ln.startswith("secret="))
+        return line.removeprefix("secret=")
+
+    assert get_secret(first)
+    assert get_secret(first) != get_secret(second)
 
 
 def test_database_init(n4js_fresh):
