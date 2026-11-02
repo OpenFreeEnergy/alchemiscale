@@ -122,8 +122,22 @@ def db_params(func):
 
 
 def generate_secret_key(ctx, param, value):
+    """Callback to return a dict of param's envvar to value, generating a
+    random secret key if no value was given.
+
+    A generated key is held only by this process, so tokens it signs will
+    not validate against any other API process or survive a restart.
+    """
     from alchemiscale.security.auth import generate_secret_key
 
+    if value:
+        return {param.envvar: value}
+
+    click.echo(
+        f"WARNING: no {param.envvar} supplied; generating a random JWT secret key. "
+        "Tokens will not be valid across API processes or restarts.",
+        err=True,
+    )
     return {param.envvar: generate_secret_key()}
 
 
@@ -131,7 +145,7 @@ def jwt_params(func):
     secret = click.option(
         "--jwt-secret",
         type=str,
-        help="JSON web token secret",
+        help="JSON web token secret; a random key is generated if not given",
         envvar="JWT_SECRET_KEY",
         callback=generate_secret_key,
         show_envvar=True,
@@ -239,13 +253,6 @@ def api(
     from alchemiscale.interface.api import app
     from .settings import APISettings, get_base_api_settings
 
-    # CONSIDER GENERATING A JWT_SECRET_KEY if none provided with
-    # key = generate_secret_key()
-    # CONVENIENT FOR THE SINGLE-SERVER CASE HERE
-    # HOW-TO: modify the callback in jwt_secret (defined in jwt_params) to
-    # do this. See comment there. Use that instead of the callback in
-    # SETTINGS_OPTION_KWARGS
-
     options = {}
     if config_file is not None:
         options.update(yaml.safe_load(config_file))
@@ -313,10 +320,6 @@ def api(
 ):
     from alchemiscale.compute.api import app
     from .settings import ComputeAPISettings, get_base_api_settings
-
-    # CONSIDER GENERATING A JWT_SECRET_KEY if none provided with
-    # key = generate_secret_key()
-    # CONVENIENT FOR THE SINGLE-SERVER CASE HERE
 
     options = {}
     if config_file is not None:

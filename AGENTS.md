@@ -1,6 +1,7 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to agents when working with code in this repository.
+Review `AI_POLICY.md` for what agents are allowed to do when developing in this repository.
 
 ## Project Overview
 

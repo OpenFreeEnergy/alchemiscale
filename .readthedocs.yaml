@@ -3,17 +3,20 @@ version: 2
 build:
   os: "ubuntu-24.04"
   tools:
-    python: "miniconda-latest"
+    python: "3.13"
+  jobs:
+    # micromamba rather than RTD's conda support: conda's solver needs more
+    # memory than the build allows.
+    create_environment:
+      - mkdir -p $HOME/bin
+      - curl -fsSL https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-linux-64 -o $HOME/bin/micromamba
+      - chmod +x $HOME/bin/micromamba
+      - $HOME/bin/micromamba create -y -q -r $HOME/micromamba -p $HOME/docs-env -f devtools/conda-envs/docs.yml
+    install:
+      - $HOME/bin/micromamba run -r $HOME/micromamba -p $HOME/docs-env python -m pip install --no-deps .
+    build:
+      html:
+        - $HOME/bin/micromamba run -r $HOME/micromamba -p $HOME/docs-env python -m sphinx -T -W --keep-going -b html docs $READTHEDOCS_OUTPUT/html
 
 sphinx:
    configuration: docs/conf.py
-   fail_on_warning: true
-
-conda:
-  environment: devtools/conda-envs/docs.yml
-
-python:
-  # Install our python package before building the docs
-  install:
-    - method: pip
-      path: .
