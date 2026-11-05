@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import threading
 import time
 import random
 from itertools import islice
@@ -116,7 +117,15 @@ class AlchemiscaleBaseClient:
 
     _exception = AlchemiscaleBaseClientError
     _retry_status_codes = [404, 502, 503, 504]
+
+    # A single event loop, running in a dedicated daemon thread, is shared
+    # across all client instances. Coroutines are submitted to it from the
+    # calling thread (see ``_run_async``). Sharing one loop process-wide keeps
+    # ``alru_cache`` --- which binds to the loop it is first used with --- bound
+    # to a stable loop regardless of which client invoked it.
     _shared_event_loop = None
+    _shared_event_loop_thread = None
+    _event_loop_lock = threading.Lock()
 
     _PARAMS = {
         "api_url": AlchemiscaleBaseClientParam(
@@ -263,27 +272,53 @@ class AlchemiscaleBaseClient:
     def __repr__(self):
         return f"{self.__class__.__name__}('{self.api_url}')"
 
-    def _run_async(self, coro):
-        """Run an async coroutine, reusing event loop for alru_cache compatibility.
+    @classmethod
+    def _get_event_loop(cls) -> asyncio.AbstractEventLoop:
+        """Return the shared event loop, starting its daemon thread if needed.
 
-        ``alru_cache`` binds to the event loop it is first used with and rejects
-        calls from different loops. ``asyncio.run()`` creates a new loop each time,
-        which is incompatible. This method maintains a single shared event loop
-        per class to match ``alru_cache``'s class-level loop tracking.
-
-        We apply ``nest_asyncio`` proactively so the loop also works in
-        environments where an event loop is already running (e.g. Jupyter).
+        The loop runs in a dedicated background thread via ``run_forever`` and
+        persists for the lifetime of the process. A single loop is shared across
+        all client instances so that ``alru_cache`` (which binds to the loop it
+        is first used with) always sees the same loop. Lazy initialization is
+        guarded by a lock so concurrent callers cannot start competing loops.
 
         """
-        import nest_asyncio
+        loop = AlchemiscaleBaseClient._shared_event_loop
+        if loop is not None and not loop.is_closed():
+            return loop
 
-        cls = type(self)
-        if cls._shared_event_loop is None or cls._shared_event_loop.is_closed():
-            cls._shared_event_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(cls._shared_event_loop)
-            nest_asyncio.apply(cls._shared_event_loop)
+        with AlchemiscaleBaseClient._event_loop_lock:
+            # re-check inside the lock; another thread may have started it
+            loop = AlchemiscaleBaseClient._shared_event_loop
+            if loop is not None and not loop.is_closed():
+                return loop
 
-        return cls._shared_event_loop.run_until_complete(coro)
+            loop = asyncio.new_event_loop()
+            thread = threading.Thread(
+                target=loop.run_forever,
+                name="alchemiscale-client-asyncio",
+                daemon=True,
+            )
+            thread.start()
+
+            AlchemiscaleBaseClient._shared_event_loop = loop
+            AlchemiscaleBaseClient._shared_event_loop_thread = thread
+            return loop
+
+    def _run_async(self, coro):
+        """Run an async coroutine on the shared background event loop.
+
+        The coroutine is scheduled on a persistent event loop running in a
+        dedicated daemon thread, and the calling thread blocks until it
+        completes. Because the loop lives in its own thread, this works even
+        when the caller is itself inside a running event loop (e.g. Jupyter):
+        the calling thread simply waits on the result while the loop thread does
+        the work. This avoids ``nest_asyncio``'s monkeypatching of asyncio
+        internals, and keeps ``alru_cache`` bound to a single stable loop.
+
+        """
+        loop = self._get_event_loop()
+        return asyncio.run_coroutine_threadsafe(coro, loop).result()
 
     def _retry(f):
         """Automatically retry with exponential backoff if API service is
