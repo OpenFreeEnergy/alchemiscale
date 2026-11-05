@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import threading
 import time
 import random
 from itertools import islice
@@ -117,6 +118,7 @@ class AlchemiscaleBaseClient:
     _exception = AlchemiscaleBaseClientError
     _retry_status_codes = [404, 502, 503, 504]
     _shared_event_loop = None
+    _shared_event_loop_lock = threading.Lock()
 
     _PARAMS = {
         "api_url": AlchemiscaleBaseClientParam(
@@ -271,19 +273,28 @@ class AlchemiscaleBaseClient:
         which is incompatible. This method maintains a single shared event loop
         per class to match ``alru_cache``'s class-level loop tracking.
 
-        We apply ``nest_asyncio`` proactively so the loop also works in
-        environments where an event loop is already running (e.g. Jupyter).
+        The shared loop runs forever in a daemon thread, and coroutines are
+        submitted to it from the calling thread. This also works in
+        environments where an event loop is already running in the calling
+        thread (e.g. Jupyter), without patching ``asyncio``.
 
         """
-        import nest_asyncio
-
         cls = type(self)
-        if cls._shared_event_loop is None or cls._shared_event_loop.is_closed():
-            cls._shared_event_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(cls._shared_event_loop)
-            nest_asyncio.apply(cls._shared_event_loop)
+        with cls._shared_event_loop_lock:
+            if cls._shared_event_loop is None or cls._shared_event_loop.is_closed():
+                cls._shared_event_loop = asyncio.new_event_loop()
+                threading.Thread(
+                    target=cls._shared_event_loop.run_forever,
+                    name=f"{cls.__name__}-event-loop",
+                    daemon=True,
+                ).start()
 
-        return cls._shared_event_loop.run_until_complete(coro)
+        future = asyncio.run_coroutine_threadsafe(coro, cls._shared_event_loop)
+        try:
+            return future.result()
+        except BaseException:
+            future.cancel()
+            raise
 
     def _retry(f):
         """Automatically retry with exponential backoff if API service is
