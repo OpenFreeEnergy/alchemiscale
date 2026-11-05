@@ -17,7 +17,7 @@
 
 **Fixed:**
 
-* <news item>
+* ``AlchemiscaleClient`` no longer uses ``nest_asyncio``, which is incompatible with Python 3.14; async requests now run on a shared event loop in a background thread, which also works where an event loop is already running (e.g. Jupyter).
 
 **Security:**
 
