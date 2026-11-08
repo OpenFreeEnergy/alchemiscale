@@ -5,7 +5,7 @@ Review `AI_POLICY.md` for what agents are allowed to do when developing in this 
 
 ## Project Overview
 
-**alchemiscale** is a high-throughput alchemical free energy execution system for HPC, cloud, bare metal, and Folding@Home. It's a Python 3.11+ service-oriented system using Neo4j as a graph database state store and AWS S3 for object storage.
+**alchemiscale** is a high-throughput alchemical free energy execution system for HPC, cloud, bare metal, and Folding@Home. It's a Python 3.12+ service-oriented system using Neo4j as a graph database state store and AWS S3 for object storage.
 
 ## Build & Development Commands
 

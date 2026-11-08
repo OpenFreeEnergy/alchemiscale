@@ -5,6 +5,8 @@
 """
 
 import asyncio
+import contextvars
+import threading
 import time
 import random
 from itertools import islice
@@ -36,16 +38,21 @@ class AlchemiscaleBaseClientError(Exception):
 class AlchemiscaleConnectionError(Exception): ...
 
 
+# the async session and token lock in use by the current task, as
+# (client, session, lock); kept in a context variable rather than on the
+# client so that concurrent or abandoned calls cannot clobber each other
+_async_session = contextvars.ContextVar("_async_session", default=None)
+
+
 def use_session(f):
     async def _wrapper(self, *args, **kwargs):
-        self._lock = asyncio.Lock()
-        self._session = httpx.AsyncClient(verify=self.verify)
+        session = httpx.AsyncClient(verify=self.verify)
+        token = _async_session.set((self, session, asyncio.Lock()))
         try:
             return await f(self, *args, **kwargs)
         finally:
-            await self._session.aclose()
-            self._session = None
-            self._lock = None
+            _async_session.reset(token)
+            await session.aclose()
 
     return _wrapper
 
@@ -116,7 +123,10 @@ class AlchemiscaleBaseClient:
 
     _exception = AlchemiscaleBaseClientError
     _retry_status_codes = [404, 502, 503, 504]
+    # a single event loop, running in a daemon thread, shared by all clients
     _shared_event_loop = None
+    _shared_event_loop_thread = None
+    _shared_event_loop_lock = threading.Lock()
 
     _PARAMS = {
         "api_url": AlchemiscaleBaseClientParam(
@@ -208,9 +218,6 @@ class AlchemiscaleBaseClient:
         self._jwtoken = None
         self._headers = {}
 
-        self._session = None
-        self._lock = None
-
         self._cache_enabled = use_local_cache
         self._cache_size_limit = cache_size_limit
         self._cache_directory = (
@@ -263,27 +270,62 @@ class AlchemiscaleBaseClient:
     def __repr__(self):
         return f"{self.__class__.__name__}('{self.api_url}')"
 
+    @property
+    def _session(self):
+        current = _async_session.get()
+        return current[1] if current is not None and current[0] is self else None
+
+    @property
+    def _lock(self):
+        current = _async_session.get()
+        return current[2] if current is not None and current[0] is self else None
+
+    @staticmethod
+    def _reset_shared_event_loop():
+        """Discard the shared event loop; its thread does not survive a fork."""
+        AlchemiscaleBaseClient._shared_event_loop = None
+        AlchemiscaleBaseClient._shared_event_loop_thread = None
+        AlchemiscaleBaseClient._shared_event_loop_lock = threading.Lock()
+
     def _run_async(self, coro):
         """Run an async coroutine, reusing event loop for alru_cache compatibility.
 
         ``alru_cache`` binds to the event loop it is first used with and rejects
         calls from different loops. ``asyncio.run()`` creates a new loop each time,
-        which is incompatible. This method maintains a single shared event loop
-        per class to match ``alru_cache``'s class-level loop tracking.
+        which is incompatible. This method maintains a single event loop shared
+        by all clients, since an ``alru_cache`` is shared by all instances and
+        subclasses of the class defining it.
 
-        We apply ``nest_asyncio`` proactively so the loop also works in
-        environments where an event loop is already running (e.g. Jupyter).
+        The shared loop runs forever in a daemon thread, and coroutines are
+        submitted to it from the calling thread. This also works in
+        environments where an event loop is already running in the calling
+        thread (e.g. Jupyter), without patching ``asyncio``.
 
         """
-        import nest_asyncio
+        base = AlchemiscaleBaseClient
+        with base._shared_event_loop_lock:
+            if base._shared_event_loop is None:
+                base._shared_event_loop = asyncio.new_event_loop()
+                base._shared_event_loop_thread = threading.Thread(
+                    target=base._shared_event_loop.run_forever,
+                    name="alchemiscale-client-event-loop",
+                    daemon=True,
+                )
+                base._shared_event_loop_thread.start()
 
-        cls = type(self)
-        if cls._shared_event_loop is None or cls._shared_event_loop.is_closed():
-            cls._shared_event_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(cls._shared_event_loop)
-            nest_asyncio.apply(cls._shared_event_loop)
+        if threading.current_thread() is base._shared_event_loop_thread:
+            coro.close()
+            raise RuntimeError(
+                "Cannot call a synchronous client method from within a coroutine "
+                "running on the client's event loop; await the async method instead."
+            )
 
-        return cls._shared_event_loop.run_until_complete(coro)
+        future = asyncio.run_coroutine_threadsafe(coro, base._shared_event_loop)
+        try:
+            return future.result()
+        except BaseException:
+            future.cancel()
+            raise
 
     def _retry(f):
         """Automatically retry with exponential backoff if API service is
@@ -358,7 +400,7 @@ class AlchemiscaleBaseClient:
                         self.retry_base_seconds**retries
                         + self.retry_base_seconds * random.random(),
                     )
-                    time.sleep(sleep_time)
+                    await asyncio.sleep(sleep_time)
 
         return _wrapper
 
@@ -683,3 +725,8 @@ class AlchemiscaleBaseClient:
     def _api_check(self):
         # Check if the API is up and running and can reach services
         self._get_resource("/check")
+
+
+# the thread running the shared event loop does not exist in a forked child,
+# so the child must start its own
+os.register_at_fork(after_in_child=AlchemiscaleBaseClient._reset_shared_event_loop)
