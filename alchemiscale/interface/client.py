@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import json
 from enum import StrEnum
 from typing import Any, Literal
@@ -2258,3 +2259,14 @@ class AlchemiscaleClient(AlchemiscaleBaseClient):
             patterns.
         """
         self._query_resource(f"/networks/{network_scoped_key}/restartpatterns/clear")
+
+
+def _reset_protocoldagresult_cache():
+    # an alru_cache is bound to the event loop it was first used with; a forked
+    # child replaces the parent's loop with its own, so it needs a fresh cache
+    AlchemiscaleClient._async_get_protocoldagresult = alru_cache(maxsize=10000)(
+        AlchemiscaleClient.__dict__["_async_get_protocoldagresult"].__wrapped__
+    )
+
+
+os.register_at_fork(after_in_child=_reset_protocoldagresult_cache)
