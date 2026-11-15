@@ -8,8 +8,8 @@ dependencies:
   - cuda-version >=12
 
   # alchemiscale dependencies
-  - gufe=1.10.0
-  - openfe=1.11.1
+  - gufe=1.13.1
+  - openfe=1.13.0
   - requests
   - click
   - pydantic >2
@@ -17,7 +17,6 @@ dependencies:
   - async-lru
   - zstandard
   - diskcache
-  - libsqlite<3.49  # newer versions cause diskcache to fail
   - stratocaster
 
   ## state store
@@ -42,7 +41,7 @@ dependencies:
   - feflow=0.2.1
 
   # additional pins
-  - openmm=8.2.0
+  - openmm=8.4.0
   - openmmforcefields>=0.14.2
 
   # deployment
