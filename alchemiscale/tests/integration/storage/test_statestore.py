@@ -3731,6 +3731,14 @@ class TestNeo4jStore(TestStateStore):
             n4js.register_computemanager(cmr_1, steal=True)
             assert self.confirm_registration_contents(n4js, cmr_1)
 
+        def test_register_steal_unregistered(self, n4js: Neo4jStore):
+            # stealing a name with no existing registration simply registers
+            cmr: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_name("testmanager")
+            )
+            n4js.register_computemanager(cmr, steal=True)
+            assert self.confirm_registration_contents(n4js, cmr)
+
         def test_deregister(self, n4js: Neo4jStore):
             cmr: ComputeManagerRegistration = (
                 self.compute_manager_registration_from_name("testmanager")
