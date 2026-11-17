@@ -138,6 +138,514 @@ class TestNeo4jStore(TestStateStore):
     def test_delete_network(self):
         raise NotImplementedError
 
+    def test_merge_networks(self, n4js, network_tyk2, scope_test):
+        network_sks = []
+
+        scope_args = scope_test.to_dict()
+        all_transformations = list(network_tyk2.edges)
+        all_transformations.sort(key=lambda x: x.key)
+
+        def project_scope(iteration):
+            return Scope(**(scope_args | {"project": f"project{iteration}"}))
+
+        transformations_common = all_transformations[:3]
+
+        # note the nonlocal task_sks and transformation_sks to reduce
+        # clutter down below
+        def set_result(_slice, *, ok: bool):
+            nonlocal task_sks, transformation_sks
+            for task_sk in task_sks[_slice]:
+                pdrr = ProtocolDAGResultRef(
+                    obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+                    scope=task_sk.scope,
+                    ok=ok,
+                )
+                n4js.set_task_result(task_sk, pdrr)
+
+        # NETWORK 1---JUST TYK2
+        # 5 tasks: [completed, completed, running, error, waiting]
+        # no extends
+        an = network_tyk2.copy_with_replacements(
+            name=network_tyk2.name + f"_test_network_clone_1"
+        )
+        scope = project_scope(1)
+        sk, th_sk, _ = n4js.assemble_network(an, scope)
+        network_sks.append(sk)
+        # add two more of the transformations
+        transformation_sks = [
+            n4js.get_scoped_key(transformation, scope)
+            for transformation in transformations_common + all_transformations[3:5]
+        ]
+        task_sks = n4js.create_tasks(transformation_sks)
+        n4js.set_task_running(task_sks[2:3])
+        n4js.action_tasks(task_sks[2:3], th_sk)
+
+        n4js.set_task_waiting(task_sks[5:])
+        n4js.action_tasks(task_sks[5:], th_sk)
+
+        n4js.set_task_running(task_sks[4:5])
+        n4js.set_task_error(task_sks[4:5])
+        n4js.action_tasks(task_sks[4:5], th_sk)
+
+        n4js.set_task_running(task_sks[:2])
+        n4js.set_task_complete(task_sks[:2])
+
+        set_result(slice(None, 2), ok=True)
+        set_result(slice(4, 5), ok=False)
+
+        # NETWORK 2---TYK2 WITH TRIMMED EDGES
+        # 6 tasks: [complete, complete, complete]
+        #               ^         ^         ^
+        #               |         |         |
+        # extends: [waiting,  running,  complete]
+        an = network_tyk2.copy_with_replacements(
+            name=network_tyk2.name + f"_test_network_clone_2_fewer_transformations",
+            edges=all_transformations[:-2],
+        )
+        scope = project_scope(2)
+        sk, _, _ = n4js.assemble_network(an, scope)
+        network_sks.append(sk)
+        transformation_sks = [
+            n4js.get_scoped_key(transformation, scope)
+            for transformation in transformations_common
+        ]
+        task_sks = n4js.create_tasks(transformation_sks)
+        n4js.set_task_running(task_sks)
+        n4js.set_task_complete(task_sks)
+        set_result(slice(None), ok=True)
+
+        # create extending tasks
+        task_sks = n4js.create_tasks(transformation_sks, extends=task_sks)
+
+        n4js.set_task_waiting(task_sks[0:1])
+        n4js.set_task_running(task_sks[1:2])
+        n4js.set_task_running(task_sks[2:3])
+        n4js.set_task_complete(task_sks[2:3])
+
+        set_result(slice(2, 3), ok=True)
+
+        # network 3---tyk2
+        # 6 tasks: [waiting, waiting, waiting, waiting, waiting, complete]
+        # no extends
+        # last task is for a transformation missing from NETWORK 2
+        an = network_tyk2.copy_with_replacements(
+            name=network_tyk2.name + f"_test_network_clone_2_name_only"
+        )
+        scope = project_scope(3)
+        sk, _, _ = n4js.assemble_network(an, scope)
+        network_sks.append(sk)
+
+        transformation_sks = [
+            n4js.get_scoped_key(transformation, scope)
+            for transformation in transformations_common + all_transformations[-2:]
+        ]
+
+        task_sks = n4js.create_tasks(transformation_sks)
+        n4js.set_task_waiting(task_sks[:-1])
+        n4js.set_task_running(task_sks[-1:])
+        n4js.set_task_complete(task_sks[-1:])
+        set_result(slice(-1, None), ok=True)
+
+        scope_dict = scope_test.to_dict()
+        scope_dict["project"] = "mergedproject"
+        new_scope = Scope(**scope_dict)
+        sk_merged = n4js.merge_networks(
+            network_sks, f"{network_tyk2.name}_combined", new_scope
+        )
+        assert len(n4js.get_gufe(sk_merged).edges) == len(
+            n4js.get_gufe(network_sks[0]).edges
+        )
+        assert len(n4js.get_gufe(sk_merged).edges) != len(
+            n4js.get_gufe(network_sks[1]).edges
+        )
+
+        # we expect 7 pdrrs from the completed tasks
+        results = n4js.execute_query(
+            """
+        MATCH (pdrr: ProtocolDAGResultRef {`_project`: $project})
+        WHERE pdrr.ok = True
+        RETURN pdrr
+        """,
+            project=new_scope.project,
+        )
+        assert len(results.records) == 7
+
+        # errored Task is not cloned (complete-only policy), so its not-ok
+        # PDRR must not appear in the merged scope
+        results = n4js.execute_query(
+            """
+        MATCH (pdrr: ProtocolDAGResultRef {`_project`: $project})
+        WHERE pdrr.ok = False
+        RETURN pdrr
+        """,
+            project=new_scope.project,
+        )
+        assert len(results.records) == 0
+
+    def test_copy_network_partial_preload_target(self, n4js, network_tyk2, scope_test):
+        """copy_network must correctly place cloned Tasks in a target
+        scope that has only a *partial* overlap with the source's
+        Transformations.
+
+        Transformations already present in the target scope must
+        dedup onto the preexisting nodes; Transformations missing from
+        the target must be created fresh. Either way, cloned Tasks
+        must land wired to the correct target-scope Transformation via
+        PERFORMS, EXTENDS chains must be preserved, and
+        ProtocolDAGResultRefs must land in the target scope.
+
+        This case is not reachable through the interface tests, which
+        always start from ``n4js_preloaded`` -- a fixture that seeds
+        the same networks (and therefore the same Transformations)
+        into every scope, so every copy is either pure dedup or pure
+        fresh-write, never a mix.
+        """
+        all_edges = sorted(network_tyk2.edges, key=lambda e: e.key)
+        overlap_edges = all_edges[:2]
+
+        # source: full network
+        source_scope = Scope(**(scope_test.to_dict() | {"project": "source"}))
+        source_sk, _, _ = n4js.assemble_network(network_tyk2, source_scope)
+
+        # target: preload an AN carrying only the overlap subset of
+        # Transformations. This produces the partial-preload shape.
+        target_scope = Scope(**(scope_test.to_dict() | {"project": "target"}))
+        partial_an = AlchemicalNetwork(edges=overlap_edges, name="target_preexisting")
+        n4js.assemble_network(partial_an, target_scope)
+
+        def target_tf_count():
+            return n4js.execute_query(
+                """
+                MATCH (tf)
+                WHERE (tf:Transformation OR tf:NonTransformation)
+                  AND tf._project = $project
+                RETURN count(tf) AS n
+                """,
+                project=target_scope.project,
+            ).records[0]["n"]
+
+        # baseline: target scope holds exactly the overlap Transformations
+        assert target_tf_count() == len(overlap_edges)
+
+        # hang Tasks off one overlap Transformation and one non-overlap
+        # Transformation so both sides of the boundary get exercised.
+        # Under the complete-only policy, only complete Tasks carry over;
+        # a waiting Task on the overlap side lets us also verify that
+        # non-complete Tasks are dropped, not leaked into the target.
+        overlap_tf_sk = n4js.get_scoped_key(overlap_edges[0], source_scope)
+        fresh_tf_sk = n4js.get_scoped_key(all_edges[-1], source_scope)
+
+        # overlap side: 2 tasks
+        #   [0]: complete + ok PDRR -- carried
+        #   [1]: waiting            -- dropped
+        overlap_tasks = n4js.create_tasks([overlap_tf_sk, overlap_tf_sk])
+        n4js.set_task_running(overlap_tasks[:1])
+        n4js.set_task_complete(overlap_tasks[:1])
+        overlap_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=overlap_tasks[0].scope,
+            ok=True,
+        )
+        n4js.set_task_result(overlap_tasks[0], overlap_pdrr)
+
+        # fresh side: 1 complete base + 1 complete EXTENDS on top; both
+        # carried, so we can verify EXTENDS is preserved across the copy
+        fresh_base = n4js.create_tasks([fresh_tf_sk])
+        n4js.set_task_running(fresh_base)
+        n4js.set_task_complete(fresh_base)
+        fresh_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=fresh_base[0].scope,
+            ok=True,
+        )
+        n4js.set_task_result(fresh_base[0], fresh_pdrr)
+
+        fresh_ext = n4js.create_tasks([fresh_tf_sk], extends=fresh_base)
+        n4js.set_task_running(fresh_ext)
+        n4js.set_task_complete(fresh_ext)
+        fresh_ext_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=fresh_ext[0].scope,
+            ok=True,
+        )
+        n4js.set_task_result(fresh_ext[0], fresh_ext_pdrr)
+
+        # --- copy ---
+        copied_sk = n4js.copy_network(source_sk, target_scope)
+
+        def target_key(source_task_sk):
+            return ScopedKey(
+                gufe_key=source_task_sk.gufe_key,
+                org=target_scope.org,
+                campaign=target_scope.campaign,
+                project=target_scope.project,
+            )
+
+        # 1) exactly one AN node in target with the copied ScopedKey
+        an_count = n4js.execute_query(
+            "MATCH (an:AlchemicalNetwork {_scoped_key: $sk}) RETURN count(an) AS n",
+            sk=str(copied_sk),
+        ).records[0]["n"]
+        assert an_count == 1
+
+        # 2) Transformation node count in target rises to the full
+        # source count -- overlap subset stays deduplicated, non-overlap
+        # subset is freshly created
+        assert target_tf_count() == len(all_edges)
+
+        # 3) every source Transformation appears exactly once in target
+        # (proves no duplication of overlap nodes, no missed fresh nodes)
+        for edge in all_edges:
+            cnt = n4js.execute_query(
+                """
+                MATCH (tf)
+                WHERE (tf:Transformation OR tf:NonTransformation)
+                  AND tf._project = $project
+                  AND tf._gufe_key = $gufe_key
+                RETURN count(tf) AS n
+                """,
+                project=target_scope.project,
+                gufe_key=str(edge.key),
+            ).records[0]["n"]
+            assert cnt == 1
+
+        # 4) every carried (complete) source Task lands in target wired via
+        # PERFORMS to a target-scope Transformation
+        carried_tasks = [overlap_tasks[0], fresh_base[0], fresh_ext[0]]
+        for source_task_sk in carried_tasks:
+            target_sk_ = target_key(source_task_sk)
+            perf = n4js.execute_query(
+                """
+                MATCH (t:Task {_scoped_key: $sk})-[:PERFORMS]->(tf)
+                WHERE (tf:Transformation OR tf:NonTransformation)
+                  AND tf._project = $project
+                RETURN count(tf) AS n
+                """,
+                sk=str(target_sk_),
+                project=target_scope.project,
+            ).records[0]["n"]
+            assert perf == 1
+
+        # 5) the waiting overlap Task must NOT appear in the target scope
+        # under the complete-only policy
+        dropped_target_sk = target_key(overlap_tasks[1])
+        dropped_count = n4js.execute_query(
+            "MATCH (t:Task {_scoped_key: $sk}) RETURN count(t) AS n",
+            sk=str(dropped_target_sk),
+        ).records[0]["n"]
+        assert dropped_count == 0
+
+        # 6) EXTENDS preserved for the fresh_ext -> fresh_base pair
+        ext_edge = n4js.execute_query(
+            """
+            MATCH (a:Task {_scoped_key: $a})-[:EXTENDS]->(b:Task {_scoped_key: $b})
+            RETURN count(*) AS n
+            """,
+            a=str(target_key(fresh_ext[0])),
+            b=str(target_key(fresh_base[0])),
+        ).records[0]["n"]
+        assert ext_edge == 1
+
+        # 7) exactly the three ok PDRRs land in target scope with obj_keys
+        # intact -- one per carried Task
+        pdrr_records = n4js.execute_query(
+            """
+            MATCH (pdrr:ProtocolDAGResultRef {_project: $project})
+            RETURN pdrr.ok AS ok, pdrr.obj_key AS obj_key
+            """,
+            project=target_scope.project,
+        ).records
+        assert len(pdrr_records) == 3
+        assert {r["obj_key"] for r in pdrr_records} == {
+            overlap_pdrr.obj_key,
+            fresh_pdrr.obj_key,
+            fresh_ext_pdrr.obj_key,
+        }
+
+        # verify get_transformation_tasks(..., return_as="graph") on a
+        # copied Transformation returns a mapping wholly in the target
+        # scope. This exercises the copied Task nodes' serialized
+        # ``extends`` property, which is what that method reads to build
+        # the graph. If left unrewritten, the target-scope child would
+        # still point at the source-scope parent ScopedKey.
+        target_fresh_tf_sk = ScopedKey(
+            gufe_key=fresh_tf_sk.gufe_key,
+            org=target_scope.org,
+            campaign=target_scope.campaign,
+            project=target_scope.project,
+        )
+        task_graph = n4js.get_transformation_tasks(
+            target_fresh_tf_sk, return_as="graph"
+        )
+        target_base_sk = target_key(fresh_base[0])
+        target_ext_sk = target_key(fresh_ext[0])
+        assert task_graph == {target_base_sk: None, target_ext_sk: target_base_sk}
+        # every key and every non-None value lives in target_scope
+        for child_sk, parent_sk in task_graph.items():
+            assert child_sk.scope == target_scope
+            if parent_sk is not None:
+                assert parent_sk.scope == target_scope
+
+    def test_merge_networks_rejects_empty_list(self, n4js, scope_test):
+        """merge_networks must reject an empty ScopedKey list up front,
+        so direct-store and REST callers cannot produce an empty
+        AlchemicalNetwork.
+        """
+        with pytest.raises(ValueError, match="at least one"):
+            n4js.merge_networks([], "should_fail", scope_test)
+
+    def test_merge_networks_rejects_non_active_source(
+        self, n4js, network_tyk2, scope_test
+    ):
+        """Only ``active`` source networks are eligible for merging.
+
+        A mix of ``active`` + ``inactive`` sources must raise before any
+        target-side writes so consolidation never silently reactivates a
+        soft-deleted or invalidated network.
+        """
+        active_an = network_tyk2.copy_with_replacements(name="merge_active_source")
+        inactive_an = network_tyk2.copy_with_replacements(name="merge_inactive_source")
+        active_sk, _, _ = n4js.assemble_network(active_an, scope_test)
+        inactive_sk, _, _ = n4js.assemble_network(
+            inactive_an, scope_test, state=NetworkStateEnum.inactive
+        )
+
+        target_scope = Scope(**(scope_test.to_dict() | {"project": "mergetarget"}))
+        with pytest.raises(ValueError, match="Only `active`"):
+            n4js.merge_networks([active_sk, inactive_sk], "should_fail", target_scope)
+
+        # no partial write: the target AN was never created
+        target_an_count = n4js.execute_query(
+            """
+            MATCH (an:AlchemicalNetwork {_project: $project, name: "should_fail"})
+            RETURN count(an) AS n
+            """,
+            project=target_scope.project,
+        ).records[0]["n"]
+        assert target_an_count == 0
+
+    def test_copy_network_rejects_non_active_source(
+        self, n4js, network_tyk2, scope_test
+    ):
+        """copy_network must reject a non-``active`` source network."""
+        an = network_tyk2.copy_with_replacements(name="copy_inactive_source")
+        sk, _, _ = n4js.assemble_network(
+            an, scope_test, state=NetworkStateEnum.inactive
+        )
+        target_scope = Scope(**(scope_test.to_dict() | {"project": "copytarget"}))
+        with pytest.raises(ValueError, match="Only `active`"):
+            n4js.copy_network(sk, target_scope)
+
+    def test_update_task_trees_invariant_drops_non_complete_extends_parent(
+        self, n4js, network_tyk2, scope_test
+    ):
+        """``update_task_trees(task_statuses=["complete"])`` must never
+        return an ``extended_task`` whose status is not ``complete``,
+        even under adversarial source-graph states.
+
+        The normal store transitions plus ``claim_taskhub_tasks``'s
+        parent-complete gate ordinarily prevent a ``complete`` child of a
+        non-``complete`` parent from arising. But ``set_task_running``
+        itself does not check the parent's status, so a caller poking
+        the store API directly can force the shape: create an errored
+        parent, create a child extending it, then call
+        ``set_task_running``/``set_task_complete`` on the child to
+        bypass the claim gate. Under this synthetic state, the
+        ``extended_status_clause`` in ``update_task_trees`` still
+        excludes the errored parent from the carry, so ``copy_network``
+        clones only the complete child, no orphan parent lands in the
+        target scope, and no dangling ``EXTENDS`` edge remains.
+        """
+        source_scope = Scope(**(scope_test.to_dict() | {"project": "invsource"}))
+        target_scope = Scope(**(scope_test.to_dict() | {"project": "invtarget"}))
+
+        source_sk, _, _ = n4js.assemble_network(network_tyk2, source_scope)
+
+        tf_sk = n4js.get_scoped_key(
+            sorted(network_tyk2.edges, key=lambda e: e.key)[0], source_scope
+        )
+
+        # errored parent
+        parent = n4js.create_task(tf_sk)
+        n4js.set_task_running([parent])
+        n4js.set_task_error([parent])
+        parent_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=parent.scope,
+            ok=False,
+        )
+        n4js.set_task_result(parent, parent_pdrr)
+
+        # child extending the errored parent; bypass the claim path by
+        # calling set_task_running directly (this is the store-API abuse
+        # that the invariant defends against)
+        retry = n4js.create_task(tf_sk, extends=parent)
+        n4js.set_task_running([retry])
+        n4js.set_task_complete([retry])
+        retry_pdrr = ProtocolDAGResultRef(
+            obj_key=f"ProtocolDAGResult-{uuid.uuid4()}",
+            scope=retry.scope,
+            ok=True,
+        )
+        n4js.set_task_result(retry, retry_pdrr)
+
+        n4js.copy_network(source_sk, target_scope)
+
+        def target_key(source_task_sk):
+            return ScopedKey(
+                gufe_key=source_task_sk.gufe_key,
+                org=target_scope.org,
+                campaign=target_scope.campaign,
+                project=target_scope.project,
+            )
+
+        # errored parent must not appear in target
+        parent_count = n4js.execute_query(
+            "MATCH (t:Task {_scoped_key: $sk}) RETURN count(t) AS n",
+            sk=str(target_key(parent)),
+        ).records[0]["n"]
+        assert parent_count == 0
+
+        # complete retry appears wired to its Transformation via PERFORMS
+        perf_count = n4js.execute_query(
+            """
+            MATCH (t:Task {_scoped_key: $sk})-[:PERFORMS]->(tf)
+            WHERE (tf:Transformation OR tf:NonTransformation)
+              AND tf._project = $project
+            RETURN count(tf) AS n
+            """,
+            sk=str(target_key(retry)),
+            project=target_scope.project,
+        ).records[0]["n"]
+        assert perf_count == 1
+
+        # no dangling EXTENDS Neo4j edge, and the retry's serialized
+        # ``extends`` property is rewritten to None since the parent
+        # was not carried
+        ext_count = n4js.execute_query(
+            """
+            MATCH (t:Task {_scoped_key: $sk})-[:EXTENDS]->(other:Task)
+            RETURN count(other) AS n
+            """,
+            sk=str(target_key(retry)),
+        ).records[0]["n"]
+        assert ext_count == 0
+        retry_props = n4js.execute_query(
+            "MATCH (t:Task {_scoped_key: $sk}) RETURN t.extends AS extends",
+            sk=str(target_key(retry)),
+        ).records[0]
+        assert retry_props["extends"] is None
+
+        # only the ok PDRR appears in target
+        pdrrs = n4js.execute_query(
+            """
+            MATCH (pdrr:ProtocolDAGResultRef {_project: $project})
+            RETURN pdrr.ok AS ok, pdrr.obj_key AS obj_key
+            """,
+            project=target_scope.project,
+        ).records
+        assert [(r["ok"], r["obj_key"]) for r in pdrrs] == [(True, retry_pdrr.obj_key)]
+
     def test_set_network_state(self, n4js, network_tyk2, scope_test):
         valid_states = [state.value for state in NetworkStateEnum]
         network_sks = []
