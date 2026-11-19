@@ -577,7 +577,17 @@ def clear_error_computemanager(
         compute_manager_id = n4js.get_compute_manager_id(
             name=compute_manager_name, tx=tx
         )
-        n4js.clear_errored_computemanager(compute_manager_id, tx=tx)
+        try:
+            if compute_manager_id is None:
+                raise ValueError(
+                    "Could not find an ERROR compute manager with the provided name"
+                )
+            n4js.clear_errored_computemanager(compute_manager_id, tx=tx)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=str(e),
+            )
 
 
 ### add router

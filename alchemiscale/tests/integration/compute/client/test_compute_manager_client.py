@@ -90,6 +90,28 @@ class TestComputeManagerClient:
         ):
             compute_manager_client.register(compute_manager_id_1)
 
+    def test_clear_error_not_errored(
+        self,
+        n4js_preloaded,
+        compute_manager_client: client.AlchemiscaleComputeManagerClient,
+    ):
+        # no registration under this name
+        with pytest.raises(
+            client.AlchemiscaleComputeManagerClientError,
+            match="Could not find an ERROR compute manager",
+        ) as e:
+            compute_manager_client.clear_error("testmanager")
+        assert e.value.status_code == 404
+
+        # a registration without the ERROR status
+        compute_manager_client.register(ComputeManagerID.new_from_name("testmanager"))
+        with pytest.raises(
+            client.AlchemiscaleComputeManagerClientError,
+            match="Could not find an ERROR compute manager",
+        ) as e:
+            compute_manager_client.clear_error("testmanager")
+        assert e.value.status_code == 404
+
     def test_deregistration(
         self,
         n4js_preloaded,

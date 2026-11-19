@@ -201,6 +201,13 @@ class TestComputeManager:
         manager.clear_error()
         assert not n4js_preloaded.execute_query(query).records
 
+    def test_clear_error_not_errored(
+        self, n4js_preloaded, manager: LocalTestingComputeManager, caplog
+    ):
+        caplog.set_level(logging.INFO, logger=manager.logger.name)
+        manager.clear_error()
+        assert "no such compute manager with the ERROR status" in caplog.text
+
     def test_manager_keyboard_interrupt(
         self,
         n4js_preloaded,
