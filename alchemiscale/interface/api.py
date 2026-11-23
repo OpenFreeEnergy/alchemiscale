@@ -5,6 +5,7 @@
 """
 
 from collections import Counter
+from importlib.metadata import version
 
 from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Request
 from fastapi import status as http_status
@@ -60,7 +61,7 @@ def ping():
 
 @router.get("/info")
 def info():
-    return {"message": "nothing yet"}
+    return {"version": version("alchemiscale")}
 
 
 @router.get("/check")

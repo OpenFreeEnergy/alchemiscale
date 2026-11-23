@@ -4,6 +4,7 @@
 
 """
 
+from importlib.metadata import version
 import json
 import datetime
 from datetime import timedelta
@@ -83,7 +84,7 @@ def ping():
 
 @router.get("/info")
 def info():
-    return {"message": "nothing yet"}
+    return {"version": version("alchemiscale")}
 
 
 @router.get("/check")

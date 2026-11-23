@@ -220,6 +220,10 @@ The status can either be:
 
 Currently, these supporting data are only used by administrators for introspection, though this might change in the future.
 
+Before registering, a compute manager checks the alchemiscale version the server reports from its ``/info`` endpoint.
+If the server is older than the oldest version the manager supports, the manager exits with a message naming both versions.
+Upgrade the server before upgrading compute managers.
+
 Creating a compute manager
 ==========================
 

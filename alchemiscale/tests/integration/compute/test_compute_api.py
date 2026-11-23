@@ -1,3 +1,4 @@
+from importlib.metadata import version
 import json
 
 import pytest
@@ -13,6 +14,7 @@ class TestComputeAPI:
     def test_info(self, test_client):
         response = test_client.get("/info")
         assert response.status_code == 200
+        assert response.json() == {"version": version("alchemiscale")}
 
     def test_check(self, test_client):
         response = test_client.get("/check")

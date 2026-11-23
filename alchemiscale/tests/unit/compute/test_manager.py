@@ -8,7 +8,11 @@ API. Integration coverage of the cycle loop lives in
 
 from unittest.mock import MagicMock
 
-from alchemiscale.compute.manager import ComputeManager
+import pytest
+
+from alchemiscale.base.client import AlchemiscaleBaseClient
+from alchemiscale.compute import manager as manager_module
+from alchemiscale.compute.manager import ComputeManager, IncompatibleServerError
 from alchemiscale.compute.settings import (
     ComputeManagerSettings,
     ComputeServiceSettings,
@@ -125,3 +129,68 @@ def test_sizing_floor_does_not_override_capacity():
     mgr = _make_manager(max_compute_services=2)
     # Already at capacity -> 0, floor does NOT kick in
     assert mgr._compute_jobs_to_create(num_tasks=10, num_active_services=2) == 0
+
+
+class TestServerVersionCheck:
+    """``ComputeManager.start`` refuses a server older than it supports."""
+
+    @staticmethod
+    def _manager_with_server(info: dict, client_version: str = "0.9.0"):
+        mgr = _make_manager()
+        mgr.client = MagicMock()
+        mgr.client.api_url = "http://server/"
+        mgr.client.get_server_version.side_effect = lambda: (
+            AlchemiscaleBaseClient.get_server_version(_FakeInfoClient(info))
+        )
+        mgr.logger = MagicMock()
+        return mgr
+
+    @pytest.fixture
+    def client_version(self, monkeypatch):
+        def set_version(v):
+            monkeypatch.setattr(manager_module, "version", lambda _: v)
+
+        set_version("0.9.0")
+        return set_version
+
+    def test_current_server(self, client_version):
+        mgr = self._manager_with_server({"version": "0.9.0"})
+        mgr._check_server_version()
+
+        mgr = self._manager_with_server({"version": "0.10.1"})
+        mgr._check_server_version()
+
+    def test_older_server(self, client_version):
+        mgr = self._manager_with_server({"version": "0.8.1"})
+        with pytest.raises(IncompatibleServerError, match="0.8.1.*0.9.0"):
+            mgr._check_server_version()
+
+    def test_server_without_version(self, client_version):
+        mgr = self._manager_with_server({"message": "nothing yet"})
+        with pytest.raises(IncompatibleServerError, match="older than 0.9.0"):
+            mgr._check_server_version()
+
+    def test_development_builds(self, client_version):
+        # a development client accepts a server at least as new as itself
+        client_version("0.8.2.dev3+gabc1234")
+        mgr = self._manager_with_server({"version": "0.8.2.dev3+gabc1234"})
+        mgr._check_server_version()
+
+        mgr = self._manager_with_server({"version": "0.8.2.dev1"})
+        with pytest.raises(IncompatibleServerError):
+            mgr._check_server_version()
+
+    def test_start_exits_before_registering(self, client_version):
+        mgr = self._manager_with_server({"version": "0.8.1"})
+        mgr.settings = mgr.settings.model_copy(update={"name": "testmgr"})
+        with pytest.raises(IncompatibleServerError):
+            mgr.start()
+        mgr.client.register.assert_not_called()
+
+
+class _FakeInfoClient:
+    def __init__(self, info):
+        self._info = info
+
+    def get_info(self):
+        return self._info
