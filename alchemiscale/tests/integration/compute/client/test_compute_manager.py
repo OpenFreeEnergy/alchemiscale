@@ -240,7 +240,7 @@ class TestComputeManager:
         assert "Received skip instruction" in caplog.text
         manager._deregister()
 
-    def test_shutdown_instruction(
+    def test_not_registered(
         self, n4js_preloaded, manager: LocalTestingComputeManager, caplog
     ):
         caplog.set_level(logging.INFO, logger=manager.logger.name)
@@ -253,9 +253,9 @@ class TestComputeManager:
         """
 
         n4js_preloaded.execute_query(query, new_uuid=new_uuid)
-        manager.cycle()
+        assert manager.cycle() is False
 
-        assert "Received shutdown message" in caplog.text
+        assert "is no longer registered with the server" in caplog.text
 
     def test_manager_interruptible_sleep(
         self,

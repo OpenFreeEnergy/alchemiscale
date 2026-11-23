@@ -17,6 +17,7 @@ from ..storage.models import (
 from .client import (
     AlchemiscaleComputeManagerClient,
     AlchemiscaleComputeManagerClientError,
+    ComputeManagerNotRegisteredError,
 )
 from .settings import ComputeManagerSettings, ComputeServiceSettings
 from ..sleep import InterruptableSleep, SleepInterrupted
@@ -76,7 +77,12 @@ class ComputeManager:
             raise e
 
     def _deregister(self):
-        self.client.deregister(self.compute_manager_id)
+        try:
+            self.client.deregister(self.compute_manager_id)
+        except ComputeManagerNotRegisteredError:
+            self.logger.warning(
+                f"'{self.compute_manager_id}' was no longer registered with the server"
+            )
 
     @contextmanager
     def _running(self, steal=False):
@@ -138,11 +144,17 @@ class ComputeManager:
                 self.logger.error(f"Unknown exception raised: '{str(e)}'")
                 self.logger.info("Updating manager status to 'ERROR'")
 
-                self.client.update_status(
-                    self.compute_manager_id,
-                    ComputeManagerStatus.ERROR,
-                    detail=repr(e),
-                )
+                try:
+                    self.client.update_status(
+                        self.compute_manager_id,
+                        ComputeManagerStatus.ERROR,
+                        detail=repr(e),
+                    )
+                except ComputeManagerNotRegisteredError:
+                    self.logger.warning(
+                        f"Could not report the error: '{self.compute_manager_id}' "
+                        "is no longer registered with the server"
+                    )
 
                 raise
 
@@ -240,11 +252,18 @@ class ComputeManager:
             return False
 
         self.logger.info(f"Requesting instruction from '{self.client.api_url}'")
-        instruction, data = self.client.get_instruction(
-            self.service_settings.scopes or [],
-            self.service_settings.protocols,
-            self.compute_manager_id,
-        )
+        try:
+            instruction, data = self.client.get_instruction(
+                self.service_settings.scopes or [],
+                self.service_settings.protocols,
+                self.compute_manager_id,
+            )
+        except ComputeManagerNotRegisteredError:
+            self.logger.info(
+                f"'{self.compute_manager_id}' is no longer registered with the server; "
+                "shutting down"
+            )
+            return False
         match instruction:
             case ComputeManagerInstruction.OK:
                 total_services = len(data["compute_service_ids"])
@@ -300,7 +319,9 @@ class ComputeManager:
         try:
             self.logger.info(f"Clearing '{self.settings.name}' with the ERROR status")
             self.client.clear_error(self.settings.name)
-        except ValueError:
+        except AlchemiscaleComputeManagerClientError as e:
+            if e.status_code not in (404, 422):
+                raise
             self.logger.info(
                 f"Could not clear '{self.settings.name}', no such compute manager with the ERROR status"
             )

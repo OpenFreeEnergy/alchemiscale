@@ -188,14 +188,8 @@ class TestComputeManagerClient:
         }
         n4js_preloaded.execute_query(usurp_query, params)
 
-        instruction, payload = compute_manager_client.get_instruction(
-            [], [], compute_manager_id
-        )
-
-        assert instruction == ComputeManagerInstruction.SHUTDOWN, (instruction, payload)
-        assert payload == {
-            "message": "no compute manager was found with the given manager name and UUID"
-        }, (instruction, payload)
+        with pytest.raises(client.ComputeManagerNotRegisteredError):
+            compute_manager_client.get_instruction([], [], compute_manager_id)
 
     def test_update_status(
         self,
@@ -239,3 +233,98 @@ class TestComputeManagerClient:
         results = n4js_preloaded.execute_query(query, params)
         record = results.records[0]
         assert record["status"] == "ERROR" and record["detail"] == repr(exception)
+
+
+class TestComputeManagerRegistrationStates:
+    """Every manager endpoint, called with no registration, an OK
+    registration and an ERROR registration under the manager's name."""
+
+    @pytest.fixture
+    def manager_id(self, n4js_preloaded, compute_manager_client, request):
+        compute_manager_id = ComputeManagerID.new_from_name("testmanager")
+        state = request.param
+        if state in ("OK", "ERROR"):
+            compute_manager_client.register(compute_manager_id)
+        if state == "ERROR":
+            compute_manager_client.update_status(
+                compute_manager_id, ComputeManagerStatus.ERROR, detail="broken"
+            )
+        return state, compute_manager_id
+
+    STATES = ["none", "OK", "ERROR"]
+
+    @pytest.mark.parametrize("manager_id", STATES, indirect=True)
+    def test_deregister(self, compute_manager_client, manager_id):
+        state, compute_manager_id = manager_id
+        if state == "none":
+            with pytest.raises(client.ComputeManagerNotRegisteredError):
+                compute_manager_client.deregister(compute_manager_id)
+        else:
+            assert (
+                compute_manager_client.deregister(compute_manager_id)
+                == compute_manager_id
+            )
+
+    @pytest.mark.parametrize("manager_id", STATES, indirect=True)
+    def test_get_instruction(self, compute_manager_client, manager_id):
+        state, compute_manager_id = manager_id
+        if state == "none":
+            with pytest.raises(client.ComputeManagerNotRegisteredError):
+                compute_manager_client.get_instruction([], [], compute_manager_id)
+        else:
+            instruction, _ = compute_manager_client.get_instruction(
+                [], [], compute_manager_id
+            )
+            assert instruction == ComputeManagerInstruction.OK
+
+    @pytest.mark.parametrize("manager_id", STATES, indirect=True)
+    def test_update_status(self, compute_manager_client, manager_id):
+        state, compute_manager_id = manager_id
+        if state == "none":
+            with pytest.raises(client.ComputeManagerNotRegisteredError):
+                compute_manager_client.update_status(
+                    compute_manager_id, ComputeManagerStatus.OK, saturation=0
+                )
+        else:
+            compute_manager_client.update_status(
+                compute_manager_id, ComputeManagerStatus.OK, saturation=0
+            )
+
+        # an invalid update is a 400 whatever the registration state
+        with pytest.raises(client.AlchemiscaleComputeManagerClientError) as excinfo:
+            compute_manager_client.update_status(
+                compute_manager_id, ComputeManagerStatus.OK
+            )
+        assert excinfo.value.status_code == 400
+
+    @pytest.mark.parametrize("manager_id", STATES, indirect=True)
+    def test_clear_error(self, compute_manager_client, manager_id):
+        state, compute_manager_id = manager_id
+        match state:
+            case "none":
+                with pytest.raises(client.ComputeManagerNotRegisteredError):
+                    compute_manager_client.clear_error(compute_manager_id.name)
+            case "OK":
+                with pytest.raises(
+                    client.AlchemiscaleComputeManagerClientError, match="has status OK"
+                ) as excinfo:
+                    compute_manager_client.clear_error(compute_manager_id.name)
+                assert excinfo.value.status_code == 422
+            case "ERROR":
+                compute_manager_client.clear_error(compute_manager_id.name)
+                with pytest.raises(client.ComputeManagerNotRegisteredError):
+                    compute_manager_client.get_instruction([], [], compute_manager_id)
+
+    @pytest.mark.parametrize("manager_id", STATES, indirect=True)
+    def test_register_steal(self, compute_manager_client, manager_id):
+        state, compute_manager_id = manager_id
+        new_id = ComputeManagerID.new_from_name(compute_manager_id.name)
+        if state == "ERROR":
+            with pytest.raises(
+                client.AlchemiscaleComputeManagerClientError,
+                match="already registered with status ERROR",
+            ) as excinfo:
+                compute_manager_client.register(new_id, steal=True)
+            assert excinfo.value.status_code == 422
+        else:
+            assert compute_manager_client.register(new_id, steal=True) == new_id
