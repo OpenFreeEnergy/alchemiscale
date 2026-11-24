@@ -20,45 +20,74 @@ from alchemiscale.storage.models import (
     ComputeManagerStatus,
     ComputeManagerInstruction,
 )
+from alchemiscale.compute.backend import ComputeBackend, Job, JobState
 from alchemiscale.compute.manager import ComputeManager, ComputeManagerSettings
 from alchemiscale.compute.settings import ComputeManagerSettings, ComputeServiceSettings
 from alchemiscale.compute.client import AlchemiscaleComputeManagerClient
 
 
-class LocalTestingComputeManager(ComputeManager):
+class LocalProcessBackend(ComputeBackend):
+    """Runs each job as a local process running a compute service."""
 
-    service_processes = []
+    service_processes = {}
     exception = None
     service_max_time = None
     service_max_tasks = None
 
-    def create_compute_services(self, data, target):
-        if exception := LocalTestingComputeManager.exception:
+    def __init__(self, service_settings: ComputeServiceSettings):
+        self.service_settings = service_settings
+        self.submitted_at = {}
+
+    def validate(self):
+        pass
+
+    def list_jobs(self):
+        jobs = []
+        for name, proc in LocalProcessBackend.service_processes.items():
+            submitted_at = self.submitted_at[name]
+            if proc.is_alive():
+                state, ended_at = JobState.RUNNING, None
+            else:
+                state = JobState.SUCCEEDED if proc.exitcode == 0 else JobState.FAILED
+                ended_at = datetime.datetime.now(tz=datetime.UTC)
+            jobs.append(
+                Job(
+                    name=name,
+                    state=state,
+                    submitted_at=submitted_at,
+                    started_at=submitted_at,
+                    ended_at=ended_at,
+                )
+            )
+        return jobs
+
+    def submit(self, name):
+        if exception := LocalProcessBackend.exception:
             raise exception
 
-        # service lifetime limits now live on the ComputeServiceSettings the
-        # manager hands to each service, rather than being passed to start()
-        self.service_settings.max_time = self.service_max_time or 10
-        self.service_settings.max_tasks = self.service_max_tasks or 2
-
-        # Honor ``target`` rather than always creating a single service.
-        # ``_compute_jobs_to_create`` computes
-        #     min(num_tasks, max_submit_per_cycle, remaining_capacity) // claim_limit
-        # with a floor of 1 when scale-up is warranted. With the default
-        # ``max_submit_per_cycle=1`` (and max_compute_services=2,
-        # claim_limit=2), a 3-task fixture starting from zero services
-        # yields target=1 on cycle 1 (one service claims 2 of 3 tasks)
-        # and target=1 on cycle 2 (a second service claims the last
-        # task), matching the test's expected ramp-up.
-        for _ in range(target):
-            proc = Process(
-                target=LocalTestingComputeManager._create_compute_service,
-                args=(self.service_settings,),
-            )
-            proc.start()
-            LocalTestingComputeManager.service_processes.append(proc)
+        # service lifetime limits live on the ComputeServiceSettings each
+        # job's compute service runs with
+        settings = self.service_settings.model_copy(
+            update={
+                "name": name,
+                "compute_manager_id": self.compute_manager_id,
+                "max_time": self.service_max_time or 10,
+                "max_tasks": self.service_max_tasks or 2,
+            }
+        )
+        proc = Process(
+            target=LocalProcessBackend._create_compute_service, args=(settings,)
+        )
+        proc.start()
+        LocalProcessBackend.service_processes[name] = proc
+        self.submitted_at[name] = datetime.datetime.now(tz=datetime.UTC)
+        # give the service time to register and claim tasks
         time.sleep(2)
-        return target
+
+    def remove(self, job):
+        proc = LocalProcessBackend.service_processes.get(job.name)
+        if proc is not None and proc.is_alive():
+            proc.terminate()
 
     @staticmethod
     def _create_compute_service(service_settings):
@@ -125,25 +154,27 @@ def manager(
     tmpdir,
     uvicorn_server,
 ):
-    return LocalTestingComputeManager(manager_settings, service_settings)
+    return ComputeManager(
+        manager_settings, service_settings, LocalProcessBackend(service_settings)
+    )
 
 
 class TestComputeManager:
 
     def setup_method(self):
-        LocalTestingComputeManager.service_processes = []
-        LocalTestingComputeManager.exception = None
-        LocalTestingComputeManager.service_max_time = None
-        LocalTestingComputeManager.service_max_tasks = None
+        LocalProcessBackend.service_processes = {}
+        LocalProcessBackend.exception = None
+        LocalProcessBackend.service_max_time = None
+        LocalProcessBackend.service_max_tasks = None
 
     def teardown_method(self):
-        for proc in LocalTestingComputeManager.service_processes:
+        for proc in LocalProcessBackend.service_processes.values():
             proc.terminate()
 
     def test_manager_implementation(
         self,
         n4js_preloaded,
-        manager: LocalTestingComputeManager,
+        manager: ComputeManager,
         network_tyk2,
         scope_test,
     ):
@@ -159,28 +190,26 @@ class TestComputeManager:
         # first cycle should pick up 2 tasks with one compute service
         manager.start(max_cycles=1)
         assert get_num_unclaimed_tasks() == 1
-        assert len(LocalTestingComputeManager.service_processes) == 1
+        assert len(LocalProcessBackend.service_processes) == 1
 
         # second cycle should pick up last task with an additional compute service
         manager.start(max_cycles=1)
         assert get_num_unclaimed_tasks() == 0
-        assert len(LocalTestingComputeManager.service_processes) == 2
+        assert len(LocalProcessBackend.service_processes) == 2
 
         # an additional cycle should not create another service
         manager.start(max_cycles=1)
         assert get_num_unclaimed_tasks() == 0
-        assert len(LocalTestingComputeManager.service_processes) == 2
+        assert len(LocalProcessBackend.service_processes) == 2
 
     def test_runtime_failure(
         self,
         n4js_preloaded,
-        manager: LocalTestingComputeManager,
+        manager: ComputeManager,
         network_tyk2,
         scope_test,
     ):
-        LocalTestingComputeManager.exception = RuntimeError(
-            "Unexpected failure in manager"
-        )
+        LocalProcessBackend.exception = RuntimeError("Unexpected failure in manager")
 
         with pytest.raises(RuntimeError):
             manager.start(max_cycles=1)
@@ -193,13 +222,11 @@ class TestComputeManager:
     def test_clear_error(
         self,
         n4js_preloaded,
-        manager: LocalTestingComputeManager,
+        manager: ComputeManager,
         network_tyk2,
         scope_test,
     ):
-        LocalTestingComputeManager.exception = RuntimeError(
-            "Unexpected failure in manager"
-        )
+        LocalProcessBackend.exception = RuntimeError("Unexpected failure in manager")
 
         with pytest.raises(RuntimeError):
             manager.start(max_cycles=1)
@@ -216,13 +243,13 @@ class TestComputeManager:
     def test_manager_keyboard_interrupt(
         self,
         n4js_preloaded,
-        manager: LocalTestingComputeManager,
+        manager: ComputeManager,
         network_tyk2,
         scope_test,
         caplog,
     ):
         caplog.set_level(logging.INFO, logger=manager.logger.name)
-        LocalTestingComputeManager.exception = KeyboardInterrupt
+        LocalProcessBackend.exception = KeyboardInterrupt
         deregister = spy_deregister(manager)
 
         manager.start(max_cycles=1)
@@ -230,12 +257,10 @@ class TestComputeManager:
 
         assert "Caught SIGINT/Keyboard interrupt" in caplog.text
 
-    def test_skip_instruction(
-        self, n4js_preloaded, manager: LocalTestingComputeManager, caplog
-    ):
+    def test_skip_instruction(self, n4js_preloaded, manager: ComputeManager, caplog):
         caplog.set_level(logging.INFO, logger=manager.logger.name)
         # ensure long lived service
-        LocalTestingComputeManager.service_max_tasks = 10
+        LocalProcessBackend.service_max_tasks = 10
         manager._register()
         manager.cycle()
 
@@ -252,9 +277,7 @@ class TestComputeManager:
         assert "Received skip instruction" in caplog.text
         manager._deregister()
 
-    def test_not_registered(
-        self, n4js_preloaded, manager: LocalTestingComputeManager, caplog
-    ):
+    def test_not_registered(self, n4js_preloaded, manager: ComputeManager, caplog):
         caplog.set_level(logging.INFO, logger=manager.logger.name)
         manager._register()
 
@@ -274,13 +297,13 @@ class TestComputeManager:
     def test_manager_interruptible_sleep(
         self,
         n4js_preloaded,
-        manager: LocalTestingComputeManager,
+        manager: ComputeManager,
         caplog,
         monkeypatch,
     ):
         caplog.set_level(logging.INFO, logger=manager.logger.name)
 
-        # suppress the subprocess spawn. The default create_compute_services
+        # suppress the subprocess spawn. LocalProcessBackend.submit
         # forks a multiprocessing.Process; combined with the background
         # thread below, that makes this test fork from a multi-threaded
         # parent. POSIX fork only carries the calling thread, so locks held
@@ -289,9 +312,7 @@ class TestComputeManager:
         # the xdist worker on 3.11/3.13 (3.12 happens to miss it). The test
         # is about stop() interrupting the sleep, not about spawning, so
         # we cut the spawn path here. See PR #503 discussion.
-        # signature is (data, target) since #502 moved autoscaling sizing
-        # into ComputeManager; the no-op still returns 0 (no services created)
-        monkeypatch.setattr(manager, "create_compute_services", lambda data, target: 0)
+        monkeypatch.setattr(manager.backend, "submit", lambda name: None)
 
         # use a long sleep interval; if the sleep were *not* interruptible,
         # stop() would not take effect until this elapsed and this test would
@@ -328,7 +349,7 @@ class TestComputeManager:
     def test_manager_start_deregisters_if_interrupted_during_startup_setup(
         self,
         n4js_preloaded,
-        manager: LocalTestingComputeManager,
+        manager: ComputeManager,
         monkeypatch,
     ):
         """start() should deregister even if interrupted after registration.

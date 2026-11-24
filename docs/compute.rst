@@ -261,10 +261,66 @@ Before registering, a compute manager checks the alchemiscale version the server
 If the server is older than the oldest version the manager supports, the manager exits with a message naming both versions.
 Upgrade the server before upgrading compute managers.
 
+The cycle
+=========
+
+Every cycle, whatever the instruction, a ``ComputeManager``:
+
+1. lists its jobs on the batch system;
+2. handles each terminal job it hasn't handled before: records a failure, or a sign of health, and removes the job;
+3. checks that running jobs' compute services have registered with the server;
+4. if the instruction is ``OK``, no job is pending, and there are tasks and spare capacity, submits new jobs;
+5. posts its status.
+
+Maintenance therefore runs even when there are no tasks, no capacity, or the instruction is ``SKIP``.
+
+Jobs are linked to compute services by name.
+The manager names each job ``{manager name}.{uuid hex}``, and the job's compute service registers under that name.
+Capacity is the number of distinct names across pending and running jobs and registered compute services, so a running job whose service has registered counts once.
+
+A batch system such as SLURM keeps reporting finished jobs for a while.
+The names of handled jobs are kept on the shared registration, so each terminal job is handled once, by whichever instance sees it first.
+A job that disappears without being seen in a terminal state has an unknown outcome: it is logged, and counts as neither a failure nor a sign of health.
+
+A sign of health is a job that succeeded after its compute service was seen registered.
+A job that fails with a ``WORKLOAD`` failure (non-zero exit, out of memory) is recorded as a failure; an ``INFRASTRUCTURE`` failure (preemption, a lost node) is recorded, but never counts against the manager.
+A failure the backend can't classify is treated as ``WORKLOAD``.
+Each failure's reason says whether the job failed before or after its compute service registered, which tells a broken template from, say, a GPU lost mid-run.
+
+A running job whose compute service hasn't registered within ``registration_grace_period`` seconds of the job starting is checked again on the next cycle.
+Once two checks at least ``registration_grace_period`` apart find it unregistered, it is removed and recorded as a ``WORKLOAD`` failure.
+The grace period is counted from when the job started running, not from submission, since a job may wait in a queue for hours.
+
 Creating a compute manager
 ==========================
 
-``alchemiscale`` provides a base class for creating a custom compute manager and, in the simplest case, only require defining how a compute service is created on a target compute platform.
+A compute manager runs on a batch system through a :class:`~alchemiscale.compute.backend.ComputeBackend`, a small driver that reports facts about its jobs and makes no policy decisions.
+A backend implements:
+
+``validate()``
+    Check settings and templates at startup. Raising :class:`~alchemiscale.compute.backend.PermanentBackendError` exits the manager.
+
+``list_jobs()``
+    Return this manager's jobs, read from the batch system, as :class:`~alchemiscale.compute.backend.Job` s with their state, ``submitted_at``, ``started_at`` and ``ended_at``, and for failures a :class:`~alchemiscale.compute.backend.FailureKind`.
+    Pick out the manager's jobs with :func:`~alchemiscale.compute.backend.is_own_job_name`, rather than keeping them in memory.
+
+``submit(name)``
+    Submit a job named ``name`` that starts a compute service with that name, and with ``compute_manager_id`` set to the backend's ``compute_manager_id`` attribute.
+
+``remove(job)``
+    Remove a job from the batch system, cancelling it if it is still running.
+
+and sets ``finished_job_lookback``: how long a finished job keeps appearing in ``list_jobs()``, or ``None`` if ``remove()`` deletes it.
+
+Backend methods run synchronously in the manager's cycle, so each must return within a bounded time; bound any retries and timeouts well within ``ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS``.
+Backend methods raise :class:`~alchemiscale.compute.backend.TransientBackendError` for errors expected to clear on their own, such as a full submission queue or an API timeout, and :class:`~alchemiscale.compute.backend.PermanentBackendError` for errors that need a change, such as an invalid partition or missing permissions, chained from the original exception.
+
+To run a manager, pass the backend to :class:`~alchemiscale.compute.manager.ComputeManager`::
+
+    manager = ComputeManager(manager_settings, service_settings, MyBackend(...))
+    manager.start()
+
+:class:`~alchemiscale.compute.testing.FakeComputeBackend` is an in-memory backend for testing a manager without a cluster.
 
 .. _Deployment: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
 .. _alchemiscale-k8s: https://github.com/datryllic/alchemiscale-k8s/tree/main/compute

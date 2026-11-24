@@ -12,18 +12,13 @@ import pytest
 
 from alchemiscale.base.client import AlchemiscaleBaseClient
 from alchemiscale.compute import manager as manager_module
+from alchemiscale.compute.backend import is_own_job_name, make_job_name
 from alchemiscale.compute.manager import ComputeManager, IncompatibleServerError
+from alchemiscale.storage.models import ComputeServiceID
 from alchemiscale.compute.settings import (
     ComputeManagerSettings,
     ComputeServiceSettings,
 )
-
-
-class _Manager(ComputeManager):
-    """Concrete subclass for testing — implements the abstract method as a no-op."""
-
-    def create_compute_services(self, data, target):
-        return target
 
 
 def _make_manager(
@@ -31,7 +26,7 @@ def _make_manager(
     max_compute_services: int = 10,
     max_submit_per_cycle: int = 1,
     claim_limit: int = 1,
-) -> _Manager:
+) -> ComputeManager:
     """Construct a manager without going through ``__init__``.
 
     ``ComputeManager.__init__`` does network registration and logging setup
@@ -50,7 +45,7 @@ def _make_manager(
     service_settings = MagicMock(spec=ComputeServiceSettings)
     service_settings.claim_limit = claim_limit
 
-    mgr = _Manager.__new__(_Manager)
+    mgr = ComputeManager.__new__(ComputeManager)
     mgr.settings = settings
     mgr.service_settings = service_settings
     return mgr
@@ -194,3 +189,29 @@ class _FakeInfoClient:
 
     def get_info(self):
         return self._info
+
+
+class TestJobNames:
+    def test_make_job_name(self):
+        name = make_job_name("foo.bar")
+        assert is_own_job_name("foo.bar", name)
+        assert make_job_name("foo") != make_job_name("foo")
+
+    def test_is_own_job_name_exact(self):
+        hex32 = "0123456789abcdef" * 2
+        assert is_own_job_name("foo", f"foo.{hex32}")
+        # not a prefix match: other managers' jobs aren't claimed
+        assert not is_own_job_name("foo", f"foo.bar.{hex32}")
+        assert not is_own_job_name("foo", f"foobar.{hex32}")
+        assert not is_own_job_name("foo.bar", f"foo.{hex32}")
+        # the name is escaped, not a pattern
+        assert not is_own_job_name("f.o", f"fxo.{hex32}")
+        # exactly 32 lowercase hex characters
+        assert not is_own_job_name("foo", f"foo.{hex32[:-1]}")
+        assert not is_own_job_name("foo", f"foo.{hex32.upper()}")
+        assert not is_own_job_name("foo", f"foo.{hex32}x")
+
+    def test_job_name_is_a_compute_service_name(self):
+        # the compute service a job starts registers under the job's name
+        name = make_job_name("foo.bar")
+        assert ComputeServiceID.new_from_name(name).name == name

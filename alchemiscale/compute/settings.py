@@ -183,6 +183,15 @@ class ComputeManagerSettings(BaseModel):
         1800,
         description="Time in seconds to sleep before requesting another instruction.",
     )
+    registration_grace_period: int = Field(
+        120,
+        description=(
+            "Seconds a running job's compute service may take to register with "
+            "the server, counted from when the job started running. A job is "
+            "removed and counted as failed once two checks at least this far "
+            "apart find it unregistered."
+        ),
+    )
     loglevel: str = Field(
         "WARN",
         description="The loglevel at which to report; see the :mod:`logging` docs for available levels.",
