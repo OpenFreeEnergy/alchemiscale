@@ -428,3 +428,37 @@ class TestComputeManagerRegistrationStates:
         )
         assert not applied
         assert after.registration.status == ComputeManagerStatus.DEGRADED
+
+
+class TestComputeManagerStatus:
+    def test_get_status(self, n4js_preloaded, compute_manager_client):
+        # nothing known about the name
+        status = compute_manager_client.get_status("testmanager")
+        assert status == {
+            "name": "testmanager",
+            "state": None,
+            "expired": False,
+            "failure_count": None,
+            "errors": [],
+        }
+
+        compute_manager_id = compute_manager_client.register(
+            ComputeManagerID.new_from_name("testmanager")
+        )
+        compute_manager_client.update_status(
+            compute_manager_id, ComputeManagerStatus.ERROR, detail="broken"
+        )
+
+        status = compute_manager_client.get_status("testmanager")
+        assert status["state"].registration.status == ComputeManagerStatus.ERROR
+        assert status["state"].registration.detail == "broken"
+        assert [e.detail for e in status["errors"]] == ["broken"]
+        assert status["failure_count"] == 0
+        assert status["state"].registration.identities == [
+            compute_manager_client.identifier
+        ]
+
+        # an invalid name
+        with pytest.raises(client.AlchemiscaleComputeManagerClientError) as excinfo:
+            compute_manager_client.get_status("1nvalid-name")
+        assert excinfo.value.status_code == 422

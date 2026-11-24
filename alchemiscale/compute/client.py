@@ -28,6 +28,7 @@ from ..storage.models import (
     ComputeManagerID,
     ComputeManagerInstruction,
     ComputeManagerStatus,
+    ComputeManagerError,
     ComputeManagerState,
     ComputeManagerStateUpdate,
 )
@@ -326,6 +327,35 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
             f"/computemanager/{compute_manager_id}/state", payload
         )
         return res["applied"], ComputeManagerState.from_dict(res["state"])
+
+    def get_status(self, compute_manager_name: str) -> dict:
+        """Return what the server knows about the compute manager
+        ``compute_manager_name``.
+
+        Returns
+        -------
+        A dict with ``"name"``; ``"state"``, the manager's
+        :class:`~alchemiscale.storage.models.ComputeManagerState`, or
+        ``None`` if it isn't registered; ``"expired"``, whether that
+        registration is stale; ``"failure_count"``, the number of jobs that
+        failed with a WORKLOAD failure since the last sign of health, or
+        ``None`` if it isn't registered; and ``"errors"``, its recent
+        :class:`~alchemiscale.storage.models.ComputeManagerError` s, most
+        recent first.
+
+        """
+        res = self._get_resource(f"/computemanager/{compute_manager_name}")
+        return {
+            "name": res["name"],
+            "state": (
+                ComputeManagerState.from_dict(res["state"])
+                if res["state"] is not None
+                else None
+            ),
+            "expired": res["expired"],
+            "failure_count": res.get("failure_count"),
+            "errors": [ComputeManagerError.from_dict(e) for e in res["errors"]],
+        }
 
     @_not_registered_on_404
     def clear_error(self, compute_manager_name: str):

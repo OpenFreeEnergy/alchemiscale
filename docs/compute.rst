@@ -242,6 +242,21 @@ The ``ERROR`` status never prevents a manager from registering, so ``clear_error
 
 The compute manager endpoints return a 404 when the manager isn't registered, and a 422 when the request conflicts with the registration's state.
 
+Inspecting a compute manager
+============================
+
+Each time a compute manager's status changes to ``DEGRADED`` or ``ERROR``, or its detail changes, the error is recorded under the manager's name.
+The history also records events in the manager's pause and recovery, such as a probe passing or failing, and a registration expiring while paused, which resets its pause state.
+The most recent entries are kept, ``ALCHEMISCALE_COMPUTE_API_MANAGER_ERROR_HISTORY`` of them (20 by default), independently of the registration, so they remain readable after it expires or is replaced; older entries are deleted as new ones are recorded.
+
+To see a compute manager's registration, its shared pause state, the identities that registered it, the number of jobs that failed since the last sign of health, and its recent errors and events::
+
+    $ alchemiscale compute manager status <name> --api-url <compute API URL> \
+          --identifier <compute identity> --key <key>
+
+``--api-url``, ``--identifier`` and ``--key`` can also be set with the ``ALCHEMISCALE_URL``, ``ALCHEMISCALE_ID`` and ``ALCHEMISCALE_KEY`` environment variables, and ``--json`` prints the result as JSON.
+The same is available from ``AlchemiscaleComputeManagerClient.get_status``, and from ``GET /computemanager/{name}`` on the compute API.
+
 Before registering, a compute manager checks the alchemiscale version the server reports from its ``/info`` endpoint.
 If the server is older than the oldest version the manager supports, the manager exits with a message naming both versions.
 Upgrade the server before upgrading compute managers.

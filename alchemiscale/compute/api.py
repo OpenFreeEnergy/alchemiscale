@@ -534,6 +534,7 @@ def register_computemanager(
         steal=steal,
         expire_time=_manager_expire_time(settings),
         identity=token.entity,
+        error_history=settings.ALCHEMISCALE_COMPUTE_API_MANAGER_ERROR_HISTORY,
     )
 
 
@@ -605,13 +606,17 @@ def _update_compute_manager_status(
             saturation,
             expire_time=expire_time,
             state_update=state_update,
+            error_history=settings.ALCHEMISCALE_COMPUTE_API_MANAGER_ERROR_HISTORY,
         )
     except (ValueError, ComputeManagerNotFoundError) as e:
         raise _compute_manager_http_exception(e)
 
     # remove registrations no instance has renewed, including this one's
     # predecessors under other names
-    n4js.expire_computemanager_registrations(expire_time)
+    n4js.expire_computemanager_registrations(
+        expire_time,
+        error_history=settings.ALCHEMISCALE_COMPUTE_API_MANAGER_ERROR_HISTORY,
+    )
 
     return result
 
@@ -667,6 +672,32 @@ def update_state_computemanager(
         n4js, settings, compute_manager_id, status, detail, saturation, state_update_
     )
     return {"applied": applied, "state": state.to_dict()}
+
+
+@router.get("/computemanager/{compute_manager_name}")
+def get_computemanager(
+    compute_manager_name: str,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
+):
+    """Return a compute manager's registration and shared state, whether the
+    registration has expired, and its recent errors.
+
+    ``"state"`` is ``None`` if no registration exists under the name. Errors
+    are kept by name, so they are returned even then.
+
+    """
+    try:
+        ComputeManagerID.new_from_name(compute_manager_name)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    return n4js.get_compute_manager_overview(
+        compute_manager_name, expire_time=_manager_expire_time(settings)
+    )
 
 
 @router.post("/computemanager/{compute_manager_name}/clear_error")

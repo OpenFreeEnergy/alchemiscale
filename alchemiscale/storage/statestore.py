@@ -39,6 +39,7 @@ from .models import (
     ComputeManagerInstruction,
     ComputeManagerStatus,
     ComputeManagerID,
+    ComputeManagerError,
     ComputeManagerJobRecord,
     ComputeManagerState,
     ComputeManagerStateUpdate,
@@ -1783,6 +1784,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         steal: bool = False,
         expire_time: datetime.datetime | None = None,
         identity: str | None = None,
+        error_history: int = 20,
     ) -> ComputeManagerID:
         """Register a compute manager, or join its existing registration.
 
@@ -1810,6 +1812,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         identity
             The identity registering; recorded in the registration's
             ``identities``.
+        error_history
+            Number of entries to keep in the manager's error history, which
+            records the reset of a replaced registration's pause state.
 
         Returns
         -------
@@ -1861,6 +1866,8 @@ class Neo4jStore(AlchemiscaleStateStore):
                             )
                             return ComputeManagerID(f"{name}-{node['uuid']}")
 
+                        if not steal:
+                            self._note_pause_reset(node, keep=error_history, tx=tx)
                         self._delete_computemanager_registration(name, tx=tx)
 
                     if identity is not None:
@@ -1906,23 +1913,62 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         """
 
-    def expire_computemanager_registrations(self, expire_time: datetime.datetime):
+    def expire_computemanager_registrations(
+        self, expire_time: datetime.datetime, error_history: int = 20
+    ):
         """Remove compute manager registrations whose last status update is
         older than ``expire_time``, whatever their status.
+
+        The pause state of a paused manager goes with its registration; the
+        reset is recorded in its error history.
 
         Parameters
         ----------
         expire_time
             Registrations last updated before this time are removed.
+        error_history
+            Number of entries to keep in each manager's error history.
 
         """
-        query = """
-        MATCH (cmr:ComputeManagerRegistration)
-        WHERE cmr.last_status_update < datetime($expire_time)
-        OPTIONAL MATCH (cmr)-[:RECORDS]->(r:ComputeManagerJobRecord)
-        DETACH DELETE r, cmr
-        """
-        self.execute_query(query, expire_time=expire_time.isoformat())
+        with self.transaction() as tx:
+            records = (
+                tx.run(
+                    """
+                    MATCH (cmr:ComputeManagerRegistration)
+                    WHERE cmr.last_status_update < datetime($expire_time)
+                    RETURN cmr
+                    """,
+                    expire_time=expire_time.isoformat(),
+                )
+                .to_eager_result()
+                .records
+            )
+            for record in records:
+                node = record["cmr"]
+                self._note_pause_reset(node, keep=error_history, tx=tx)
+                self._delete_computemanager_registration(node["name"], tx=tx)
+
+    @chainable
+    def _note_pause_reset(self, node, keep: int = 20, tx=None):
+        """Record in the error history that an expiring registration's pause
+        state is being dropped, if it has any."""
+        if node.get("status") != ComputeManagerStatus.DEGRADED and not node.get(
+            "backoff_seconds"
+        ):
+            return
+        detail = "The registration expired, and its pause state was reset" + (
+            f"; it was paused: {node['detail']}" if node.get("detail") else ""
+        )
+        self._record_compute_manager_error(
+            ComputeManagerError(
+                name=node["name"],
+                time=datetime.datetime.now(tz=datetime.UTC),
+                status=node.get("status"),
+                detail=detail,
+            ),
+            keep=keep,
+            tx=tx,
+        )
 
     @chainable
     def _find_compute_manager_id(self, name: str, tx=None) -> ComputeManagerID | None:
@@ -2241,6 +2287,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         update_time: datetime.datetime | None = None,
         expire_time: datetime.datetime | None = None,
         state_update: ComputeManagerStateUpdate | None = None,
+        error_history: int = 20,
     ) -> tuple[bool, ComputeManagerState]:
         """Update the status of a compute manager, renewing its registration,
         and merge changes into its shared state.
@@ -2289,6 +2336,11 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         state_update
             Changes to merge into the manager's shared state.
+
+        error_history
+            When the status or detail changes to a DEGRADED or ERROR one,
+            the error is recorded under the manager's name, and only the
+            ``error_history`` most recent errors are kept.
 
         Returns
         -------
@@ -2366,6 +2418,32 @@ class Neo4jStore(AlchemiscaleStateStore):
                         **ident,
                     )
 
+                if status != ComputeManagerStatus.OK and (
+                    "status" in changes or "detail" in changes
+                ):
+                    self._record_compute_manager_error(
+                        ComputeManagerError(
+                            name=compute_manager_id.name,
+                            time=now,
+                            status=status.value,
+                            detail=detail,
+                        ),
+                        keep=error_history,
+                        tx=tx,
+                    )
+
+                for event in state_update.events:
+                    self._record_compute_manager_error(
+                        ComputeManagerError(
+                            name=compute_manager_id.name,
+                            time=now,
+                            status=status.value,
+                            detail=event,
+                        ),
+                        keep=error_history,
+                        tx=tx,
+                    )
+
             # mergeable state
             if state_update.last_healthy_at is not None:
                 tx.run(
@@ -2405,6 +2483,108 @@ class Neo4jStore(AlchemiscaleStateStore):
             state = self.get_compute_manager_state(compute_manager_id, tx=tx)
 
         return applied, state
+
+    @chainable
+    def _record_compute_manager_error(
+        self, error: ComputeManagerError, keep: int = 20, tx=None
+    ):
+        """Record an error under a compute manager's name, keeping only the
+        ``keep`` most recent."""
+        tx.run(
+            """
+            CREATE (:ComputeManagerError {
+                name: $name, time: datetime($time), status: $status,
+                detail: $detail
+            })
+            """,
+            name=error.name,
+            time=error.time.isoformat(),
+            status=error.status,
+            detail=error.detail,
+        )
+        tx.run(
+            """
+            MATCH (e:ComputeManagerError {name: $name})
+            WITH e ORDER BY e.time DESC
+            SKIP $keep
+            DELETE e
+            """,
+            name=error.name,
+            keep=keep,
+        )
+
+    @chainable
+    def get_compute_manager_errors(
+        self, name: str, tx=None
+    ) -> list[ComputeManagerError]:
+        """Return the errors recorded under a compute manager's name, most
+        recent first.
+
+        Errors are kept independently of the manager's registration, so they
+        outlive its expiry or replacement.
+
+        """
+        records = (
+            tx.run(
+                """
+                MATCH (e:ComputeManagerError {name: $name})
+                RETURN e ORDER BY e.time DESC
+                """,
+                name=name,
+            )
+            .to_eager_result()
+            .records
+        )
+        errors = []
+        for record in records:
+            props = dict(record["e"])
+            props["time"] = props["time"].to_native()
+            errors.append(ComputeManagerError.from_dict(props))
+        return errors
+
+    def get_compute_manager_overview(
+        self, name: str, expire_time: datetime.datetime | None = None
+    ) -> dict:
+        """Return what is known about the compute manager ``name``.
+
+        Returns
+        -------
+        A dict with ``"name"``; ``"state"``, the manager's
+        :class:`ComputeManagerState` in dict form, or ``None`` if it isn't
+        registered; ``"expired"``, whether that registration is stale;
+        ``"failure_count"``, the number of jobs that failed with a WORKLOAD
+        failure since the last sign of health, or ``None`` if it isn't
+        registered; and ``"errors"``, its recent errors in dict form, most
+        recent first.
+
+        """
+        with self.transaction() as tx:
+            compute_manager_id = self._find_compute_manager_id(name, tx=tx)
+            state = None
+            expired = False
+            failure_count = None
+            if compute_manager_id is not None:
+                state = self.get_compute_manager_state(compute_manager_id, tx=tx)
+                expired = self._is_stale(state.registration, expire_time)
+                healthy_at = state.registration.last_healthy_at
+                failure_count = sum(
+                    1
+                    for record in state.records_of(JobRecordKind.FAILURE).values()
+                    if record.failure_kind == "WORKLOAD"
+                    and (
+                        healthy_at is None
+                        or (record.ended_at or record.at) > healthy_at
+                    )
+                )
+            errors = self.get_compute_manager_errors(name, tx=tx)
+
+        return {
+            "name": name,
+            "state": state.to_dict() if state is not None else None,
+            "expired": expired,
+            "failure_count": failure_count,
+            "errors": [error.to_dict() for error in errors],
+        }
 
     @chainable
     def _merge_job_records(

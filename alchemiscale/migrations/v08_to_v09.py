@@ -17,10 +17,27 @@ def migrate(n4js: Neo4jStore):
       joined rather than replaced when a v0.9 compute manager registers
     - adds the uniqueness constraint on ComputeManagerRegistration names
 
+    - records the detail of each ERROR registration in the manager's error
+      history, so it remains readable after the registration expires
+
     Registrations with the ERROR status are kept: they no longer prevent a
     compute manager from registering, and expire like any other.
 
     """
+
+    # keep the errors of ERROR registrations, once each
+    q = """
+    MATCH (cmr:ComputeManagerRegistration {status: "ERROR"})
+    WHERE NOT EXISTS {
+        MATCH (e:ComputeManagerError {name: cmr.name})
+        WHERE e.time = cmr.last_status_update AND e.detail = cmr.detail
+    }
+    CREATE (:ComputeManagerError {
+        name: cmr.name, time: cmr.last_status_update, status: cmr.status,
+        detail: coalesce(cmr.detail, "")
+    })
+    """
+    n4js.execute_query(q)
 
     # remove all but the most recently updated registration under each name
     q = """
