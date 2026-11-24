@@ -1,5 +1,5 @@
 from pathlib import Path
-from pydantic import BaseModel, Field, PositiveInt, field_validator
+from pydantic import BaseModel, Field, NonNegativeInt, PositiveInt, field_validator
 
 from ..models import Scope
 
@@ -182,6 +182,38 @@ class ComputeManagerSettings(BaseModel):
     sleep_interval: int = Field(
         1800,
         description="Time in seconds to sleep before requesting another instruction.",
+    )
+    max_failed_jobs: NonNegativeInt | None = Field(
+        5,
+        description=(
+            "Number of jobs that may fail with a WORKLOAD failure since the last "
+            "sign of health, a job that succeeded after its compute service "
+            "registered, before the manager pauses. ``0`` pauses on the first "
+            "failure; ``None`` never pauses for job failures."
+        ),
+    )
+    max_backend_outage: NonNegativeInt = Field(
+        900,
+        description=(
+            "Seconds the backend may keep failing with transient errors before "
+            "the manager pauses."
+        ),
+    )
+    max_cycle_errors: PositiveInt = Field(
+        3,
+        description=(
+            "Number of cycles in a row that may fail with an unexpected error "
+            "before the manager pauses. Each such cycle is logged with its "
+            "traceback and skipped."
+        ),
+    )
+    max_backoff: PositiveInt = Field(
+        3600,
+        description=(
+            "Cap in seconds on the backoff between probes while paused. The "
+            "backoff starts at ``sleep_interval`` and doubles each time the "
+            "manager pauses or a probe fails."
+        ),
     )
     registration_grace_period: int = Field(
         120,

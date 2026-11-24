@@ -2484,6 +2484,45 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         return applied, state
 
+    def request_compute_manager_probe(
+        self, name: str, expire_time: datetime.datetime | None = None
+    ) -> ComputeManagerID:
+        """Have a paused compute manager probe on its next cycle.
+
+        Ends the backoff of the ``DEGRADED`` registration under ``name``, and
+        forgets any outstanding probe, so the next instance to cycle probes
+        straight away.
+
+        Raises
+        ------
+        ComputeManagerNotFoundError
+            Raised when no live registration exists under ``name``.
+        ComputeManagerStateError
+            Raised when the registration isn't ``DEGRADED``.
+
+        """
+        with self.transaction() as tx:
+            compute_manager_id = self.get_compute_manager_id(name, tx=tx)
+            registration = self._get_live_registration(
+                compute_manager_id, expire_time, tx=tx
+            )
+            if registration.status != ComputeManagerStatus.DEGRADED:
+                raise ComputeManagerStateError(
+                    f"Compute manager '{name}' has status {registration.status}, "
+                    f"not {ComputeManagerStatus.DEGRADED}"
+                )
+            tx.run(
+                """
+                MATCH (cmr:ComputeManagerRegistration {name: $name})
+                SET cmr.backoff_until = datetime($now),
+                    cmr.probe_job = null,
+                    cmr.version = coalesce(cmr.version, 0) + 1
+                """,
+                now=datetime.datetime.now(tz=datetime.UTC).isoformat(),
+                **compute_manager_id.to_dict(),
+            )
+        return compute_manager_id
+
     @chainable
     def _record_compute_manager_error(
         self, error: ComputeManagerError, keep: int = 20, tx=None

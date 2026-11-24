@@ -500,6 +500,24 @@ def status(name, api_url, identifier, key, as_json):
         click.echo(_format_compute_manager_status(result))
 
 
+@manager.command(
+    help=(
+        "Have a paused (DEGRADED) compute manager probe on its next cycle, "
+        "rather than waiting for its backoff to expire."
+    )
+)
+@click.argument("name")
+@compute_api_client_params
+def probe(name, api_url, identifier, key):
+    from .compute.client import AlchemiscaleComputeManagerClient
+
+    client = AlchemiscaleComputeManagerClient(
+        api_url, identifier, key, use_local_cache=False
+    )
+    client.request_probe(name)
+    click.echo(f"Compute manager '{name}' will probe on its next cycle")
+
+
 @cli.group(help="Subcommands for the database")
 def database(): ...
 

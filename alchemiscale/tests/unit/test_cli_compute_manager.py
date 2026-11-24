@@ -85,3 +85,18 @@ def test_status_json(monkeypatch):
     data = json.loads(result.output)
     assert data["state"]["registration"]["status"] == "DEGRADED"
     assert data["errors"][0]["detail"] == "6 failed jobs since the last healthy one"
+
+
+def test_probe(monkeypatch):
+    requested = []
+    monkeypatch.setattr(
+        AlchemiscaleComputeManagerClient,
+        "request_probe",
+        lambda self, name: requested.append(name),
+    )
+    result = CliRunner().invoke(
+        cli, ["compute", "manager", "probe", "testmanager", *ARGS]
+    )
+    assert result.exit_code == 0, result.output
+    assert requested == ["testmanager"]
+    assert "will probe on its next cycle" in result.output
