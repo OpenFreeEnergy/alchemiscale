@@ -5,6 +5,7 @@ import pytest
 
 from alchemiscale.compute import client
 from alchemiscale.storage.models import (
+    ComputeManagerStateUpdate,
     ComputeManagerID,
     ComputeManagerInstruction,
     ComputeManagerStatus,
@@ -64,31 +65,29 @@ class TestComputeManagerClient:
         compute_manager_id_2 = ComputeManagerID.new_from_name("testmanager")
 
         returned_id = compute_manager_client.register(compute_manager_id_1)
-
         assert compute_manager_id_1 == returned_id
 
-        with pytest.raises(
-            client.AlchemiscaleComputeManagerClientError,
-            match="ComputeManager with this name is already registered",
-        ):
-            compute_manager_client.register(compute_manager_id_2)
+        # a second instance joins the registration
+        assert compute_manager_client.register(compute_manager_id_2) == (
+            compute_manager_id_1
+        )
 
-        returned_id = compute_manager_client.register(compute_manager_id_2, steal=True)
-        assert compute_manager_id_2 == returned_id
-
-        # we don't expect steal to work with a compute manager with
-        # the error status, setting it manually
+        # an ERROR registration doesn't block registering
         compute_manager_client.update_status(
-            compute_manager_id_2,
+            compute_manager_id_1,
             ComputeManagerStatus.ERROR,
             detail="manual error state",
         )
+        assert compute_manager_client.register(compute_manager_id_2) == (
+            compute_manager_id_1
+        )
 
-        with pytest.raises(
-            client.AlchemiscaleComputeManagerClientError,
-            match="ComputeManager with this name is already registered with status ERROR",
-        ):
-            compute_manager_client.register(compute_manager_id_1)
+        # steal is deprecated, and replaces the registration
+        with pytest.warns(DeprecationWarning, match="steal"):
+            returned_id = compute_manager_client.register(
+                compute_manager_id_2, steal=True
+            )
+        assert compute_manager_id_2 == returned_id
 
     def test_deregistration(
         self,
@@ -114,6 +113,7 @@ class TestComputeManagerClient:
         instruction, payload = compute_manager_client.get_instruction(
             [], [], compute_manager_id
         )
+        assert payload.pop("state").registration.name == "testmanager"
 
         assert instruction == ComputeManagerInstruction.OK
         assert payload == {"compute_service_ids": [], "num_tasks": 3}
@@ -122,6 +122,7 @@ class TestComputeManagerClient:
         instruction, payload = compute_manager_client.get_instruction(
             [], ["FakeProtocol"], compute_manager_id
         )
+        payload.pop("state")
 
         assert instruction == ComputeManagerInstruction.OK
         assert payload == {"compute_service_ids": [], "num_tasks": 0}
@@ -132,6 +133,7 @@ class TestComputeManagerClient:
             ["FakeProtocol", "DummyProtocolA", "DummyProtocolB", "DummyProtocolC"],
             compute_manager_id,
         )
+        payload.pop("state")
 
         assert instruction == ComputeManagerInstruction.OK
         assert payload == {"compute_service_ids": [], "num_tasks": 3}
@@ -144,6 +146,7 @@ class TestComputeManagerClient:
         instruction, payload = compute_manager_client.get_instruction(
             [], [], compute_manager_id
         )
+        assert payload.pop("state").registration.name == "testmanager"
 
         assert instruction == ComputeManagerInstruction.OK, (instruction, payload)
         assert payload == {
@@ -169,6 +172,7 @@ class TestComputeManagerClient:
         instruction, payload = compute_manager_client.get_instruction(
             [], [], compute_manager_id
         )
+        assert payload.pop("state").registration.name == "testmanager"
 
         assert instruction == ComputeManagerInstruction.SKIP, (instruction, payload)
         assert payload == {"compute_service_ids": [_compute_service_id]}
@@ -188,6 +192,15 @@ class TestComputeManagerClient:
         }
         n4js_preloaded.execute_query(usurp_query, params)
 
+        # registrations are found by name, so the manager carries on with the
+        # registration that replaced its own
+        _, payload = compute_manager_client.get_instruction([], [], compute_manager_id)
+        assert payload["state"].registration.uuid == str(new_uuid)
+
+        # until there is none under its name
+        n4js_preloaded.execute_query(
+            "MATCH (cmr:ComputeManagerRegistration) DETACH DELETE cmr"
+        )
         with pytest.raises(client.ComputeManagerNotRegisteredError):
             compute_manager_client.get_instruction([], [], compute_manager_id)
 
@@ -236,39 +249,71 @@ class TestComputeManagerClient:
 
 
 class TestComputeManagerRegistrationStates:
-    """Every manager endpoint, called with no registration, an OK
-    registration and an ERROR registration under the manager's name."""
+    """Every manager endpoint, called with no registration, a live OK,
+    DEGRADED or ERROR registration, a stale registration, and an ERROR
+    registration left over from 0.8, under the manager's name."""
 
     @pytest.fixture
     def manager_id(self, n4js_preloaded, compute_manager_client, request):
         compute_manager_id = ComputeManagerID.new_from_name("testmanager")
         state = request.param
-        if state in ("OK", "ERROR"):
-            compute_manager_client.register(compute_manager_id)
-        if state == "ERROR":
-            compute_manager_client.update_status(
-                compute_manager_id, ComputeManagerStatus.ERROR, detail="broken"
+        if state == "v08 ERROR":
+            # as 0.8 wrote it, before migration: no version or pause state
+            now = datetime.datetime.now(tz=datetime.UTC)
+            n4js_preloaded.execute_query(
+                """
+                CREATE (:ComputeManagerRegistration {
+                    name: $name, uuid: $uuid, status: "ERROR", detail: "broken",
+                    registered: datetime($now), last_status_update: datetime($now)
+                })
+                """,
+                now=now.isoformat(),
+                **compute_manager_id.to_dict(),
             )
+        elif state != "none":
+            compute_manager_client.register(compute_manager_id)
+        match state:
+            case "ERROR":
+                compute_manager_client.update_status(
+                    compute_manager_id, ComputeManagerStatus.ERROR, detail="broken"
+                )
+            case "DEGRADED":
+                compute_manager_client.update_status(
+                    compute_manager_id,
+                    ComputeManagerStatus.DEGRADED,
+                    detail="paused",
+                    saturation=0,
+                )
+            case "stale":
+                n4js_preloaded.execute_query(
+                    """
+                    MATCH (cmr:ComputeManagerRegistration {name: $name})
+                    SET cmr.last_status_update = datetime($then)
+                    """,
+                    name=compute_manager_id.name,
+                    then=(
+                        datetime.datetime.now(tz=datetime.UTC)
+                        - datetime.timedelta(days=2)
+                    ).isoformat(),
+                )
         return state, compute_manager_id
 
-    STATES = ["none", "OK", "ERROR"]
+    STATES = ["none", "OK", "DEGRADED", "ERROR", "stale", "v08 ERROR"]
+    # states in which the endpoints find no registration
+    MISSING = ("none", "stale")
 
     @pytest.mark.parametrize("manager_id", STATES, indirect=True)
     def test_deregister(self, compute_manager_client, manager_id):
+        # a no-op whatever the state, as 0.8 managers expect it to succeed
         state, compute_manager_id = manager_id
-        if state == "none":
-            with pytest.raises(client.ComputeManagerNotRegisteredError):
-                compute_manager_client.deregister(compute_manager_id)
-        else:
-            assert (
-                compute_manager_client.deregister(compute_manager_id)
-                == compute_manager_id
-            )
+        assert compute_manager_client.deregister(compute_manager_id) == (
+            compute_manager_id
+        )
 
     @pytest.mark.parametrize("manager_id", STATES, indirect=True)
     def test_get_instruction(self, compute_manager_client, manager_id):
         state, compute_manager_id = manager_id
-        if state == "none":
+        if state in self.MISSING:
             with pytest.raises(client.ComputeManagerNotRegisteredError):
                 compute_manager_client.get_instruction([], [], compute_manager_id)
         else:
@@ -280,7 +325,7 @@ class TestComputeManagerRegistrationStates:
     @pytest.mark.parametrize("manager_id", STATES, indirect=True)
     def test_update_status(self, compute_manager_client, manager_id):
         state, compute_manager_id = manager_id
-        if state == "none":
+        if state in self.MISSING:
             with pytest.raises(client.ComputeManagerNotRegisteredError):
                 compute_manager_client.update_status(
                     compute_manager_id, ComputeManagerStatus.OK, saturation=0
@@ -304,14 +349,15 @@ class TestComputeManagerRegistrationStates:
             case "none":
                 with pytest.raises(client.ComputeManagerNotRegisteredError):
                     compute_manager_client.clear_error(compute_manager_id.name)
-            case "OK":
+            case "OK" | "DEGRADED" | "stale":
                 with pytest.raises(
-                    client.AlchemiscaleComputeManagerClientError, match="has status OK"
+                    client.AlchemiscaleComputeManagerClientError, match="has status"
                 ) as excinfo:
                     compute_manager_client.clear_error(compute_manager_id.name)
                 assert excinfo.value.status_code == 422
-            case "ERROR":
-                compute_manager_client.clear_error(compute_manager_id.name)
+            case "ERROR" | "v08 ERROR":
+                with pytest.warns(DeprecationWarning, match="clear_error"):
+                    compute_manager_client.clear_error(compute_manager_id.name)
                 with pytest.raises(client.ComputeManagerNotRegisteredError):
                     compute_manager_client.get_instruction([], [], compute_manager_id)
 
@@ -319,12 +365,66 @@ class TestComputeManagerRegistrationStates:
     def test_register_steal(self, compute_manager_client, manager_id):
         state, compute_manager_id = manager_id
         new_id = ComputeManagerID.new_from_name(compute_manager_id.name)
-        if state == "ERROR":
-            with pytest.raises(
-                client.AlchemiscaleComputeManagerClientError,
-                match="already registered with status ERROR",
-            ) as excinfo:
-                compute_manager_client.register(new_id, steal=True)
-            assert excinfo.value.status_code == 422
-        else:
+        with pytest.warns(DeprecationWarning):
             assert compute_manager_client.register(new_id, steal=True) == new_id
+
+    @pytest.mark.parametrize("manager_id", STATES, indirect=True)
+    def test_register(self, compute_manager_client, manager_id):
+        # registering always succeeds, joining a live registration
+        state, compute_manager_id = manager_id
+        new_id = ComputeManagerID.new_from_name(compute_manager_id.name)
+        # stale and pre-0.9 registrations are replaced rather than joined
+        replaced = state in ("none", "stale", "v08 ERROR")
+        expected = new_id if replaced else compute_manager_id
+        assert compute_manager_client.register(new_id) == expected
+
+    @pytest.mark.parametrize("manager_id", ["OK", "DEGRADED"], indirect=True)
+    def test_any_uuid(self, compute_manager_client, manager_id):
+        # registrations are found by name, so an instance can keep using its
+        # own ID after joining, as 0.8 managers do
+        state, compute_manager_id = manager_id
+        other_id = ComputeManagerID.new_from_name(compute_manager_id.name)
+        assert compute_manager_client.register(other_id) == compute_manager_id
+        instruction, data = compute_manager_client.get_instruction([], [], other_id)
+        assert data["state"].registration.uuid == compute_manager_id.uuid
+        compute_manager_client.update_status(
+            other_id, ComputeManagerStatus.OK, saturation=0
+        )
+        assert compute_manager_client.deregister(other_id) == other_id
+
+    @pytest.mark.parametrize("manager_id", STATES, indirect=True)
+    def test_update_state(self, compute_manager_client, manager_id):
+        state, compute_manager_id = manager_id
+        if state in self.MISSING:
+            with pytest.raises(client.ComputeManagerNotRegisteredError):
+                compute_manager_client.update_state(
+                    compute_manager_id, ComputeManagerStatus.OK, saturation=0
+                )
+            return
+
+        _, before = compute_manager_client.get_instruction([], [], compute_manager_id)
+        version = before["state"].registration.version
+
+        applied, after = compute_manager_client.update_state(
+            compute_manager_id,
+            ComputeManagerStatus.DEGRADED,
+            detail="paused",
+            saturation=0,
+            state_update=ComputeManagerStateUpdate(
+                transition={"pause_cause": "permanent"},
+                expected_version=version,
+            ),
+        )
+        assert applied
+        assert after.registration.status == ComputeManagerStatus.DEGRADED
+        assert after.registration.version == version + 1
+
+        # a transition decided from a stale version is rejected
+        applied, after = compute_manager_client.update_state(
+            compute_manager_id,
+            ComputeManagerStatus.OK,
+            saturation=0,
+            state_update=ComputeManagerStateUpdate(expected_version=version),
+        )
+        assert not applied
+        assert after.registration.status == ComputeManagerStatus.DEGRADED

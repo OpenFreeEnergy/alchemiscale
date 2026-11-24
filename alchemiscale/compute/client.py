@@ -6,6 +6,7 @@
 """
 
 from functools import wraps
+import warnings
 
 import zstandard as zstd
 
@@ -27,6 +28,8 @@ from ..storage.models import (
     ComputeManagerID,
     ComputeManagerInstruction,
     ComputeManagerStatus,
+    ComputeManagerState,
+    ComputeManagerStateUpdate,
 )
 
 
@@ -202,6 +205,22 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
     def register(
         self, compute_manager_id: ComputeManagerID, steal: bool = False
     ) -> ComputeManagerID:
+        """Register a compute manager instance.
+
+        Instances with the same name share one registration. If there is a
+        live one, it is joined, and its ID returned; use the returned ID for
+        all other requests.
+
+        ``steal`` is deprecated: registering always succeeds.
+
+        """
+        if steal:
+            warnings.warn(
+                "`steal` is deprecated and will be removed in a future release; "
+                "registering a compute manager always succeeds",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         res = self._post_resource(
             f"/computemanager/{compute_manager_id}/register", {"steal": steal}
         )
@@ -235,12 +254,19 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
                 "compute_service_ids": ids,
                 "num_tasks": num_tasks,
             }:
-                return ComputeManagerInstruction.OK, {
-                    "compute_service_ids": ids,
-                    "num_tasks": num_tasks,
-                }
+                data = {"compute_service_ids": ids, "num_tasks": num_tasks}
+                if "state" in instruction_data:
+                    data["state"] = ComputeManagerState.from_dict(
+                        instruction_data["state"]
+                    )
+                return ComputeManagerInstruction.OK, data
             case {"instruction": "SKIP", "compute_service_ids": ids}:
-                return ComputeManagerInstruction.SKIP, {"compute_service_ids": ids}
+                data = {"compute_service_ids": ids}
+                if "state" in instruction_data:
+                    data["state"] = ComputeManagerState.from_dict(
+                        instruction_data["state"]
+                    )
+                return ComputeManagerInstruction.SKIP, data
             case {"instruction": "SHUTDOWN", "message": message}:
                 return ComputeManagerInstruction.SHUTDOWN, {"message": message}
             case _:
@@ -266,7 +292,56 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         return ComputeManagerID(res)
 
     @_not_registered_on_404
+    def update_state(
+        self,
+        compute_manager_id: ComputeManagerID,
+        status: ComputeManagerStatus,
+        *,
+        detail: str | None = None,
+        saturation: float | None = None,
+        state_update: ComputeManagerStateUpdate | None = None,
+    ) -> tuple[bool, ComputeManagerState]:
+        """Update a compute manager's status and merge changes into its
+        shared state.
+
+        The status, detail and ``state_update.transition`` are applied only
+        if ``state_update.expected_version`` matches the registration's
+        version, or is ``None``.
+
+        Returns
+        -------
+        applied
+            Whether the status and transition were applied.
+        state
+            The manager's state after the update.
+
+        """
+        payload = {
+            "status": str(status),
+            "detail": detail,
+            "saturation": saturation,
+            "state_update": (state_update or ComputeManagerStateUpdate()).to_dict(),
+        }
+        res = self._post_resource(
+            f"/computemanager/{compute_manager_id}/state", payload
+        )
+        return res["applied"], ComputeManagerState.from_dict(res["state"])
+
+    @_not_registered_on_404
     def clear_error(self, compute_manager_name: str):
+        """Remove the ERROR registration under ``compute_manager_name``.
+
+        Deprecated: an ERROR registration no longer prevents a compute
+        manager from registering.
+
+        """
+        warnings.warn(
+            "`clear_error` is deprecated and will be removed in a future release; "
+            "an ERROR registration no longer prevents a compute manager from "
+            "registering",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         res = self._post_resource(
             f"/computemanager/{compute_manager_name}/clear_error",
             {},

@@ -1,3 +1,4 @@
+import datetime
 import logging
 import threading
 import time
@@ -8,7 +9,11 @@ import pytest
 from pathlib import Path
 
 from alchemiscale.models import ScopedKey, Scope
-from alchemiscale.storage.models import ComputeManagerID
+from alchemiscale.storage.models import (
+    ComputeManagerID,
+    ComputeManagerRegistration,
+    ComputeManagerStatus,
+)
 from alchemiscale.storage.statestore import Neo4jStore
 from alchemiscale.storage.objectstore import S3ObjectStore
 from alchemiscale.compute.client import AlchemiscaleComputeClientError
@@ -347,14 +352,30 @@ class TestSynchronousComputeService:
         _ = Scope("totally", "different", "scope")
 
     def test_missing_compute_manager(self, n4js_preloaded, service):
-        service.settings.compute_manager_id = ComputeManagerID.new_from_name(
-            "testmanager"
+        # a service may start while its manager's registration is being
+        # recreated after expiring; it registers, and is attached once the
+        # manager registers again
+        compute_manager_id = ComputeManagerID.new_from_name("testmanager")
+        service.settings.compute_manager_id = compute_manager_id
+        service._register()
+
+        now = datetime.datetime.now(tz=datetime.UTC)
+        n4js_preloaded.register_computemanager(
+            ComputeManagerRegistration(
+                name="testmanager",
+                uuid=compute_manager_id.uuid,
+                registered=now,
+                last_status_update=now,
+                status=ComputeManagerStatus.OK,
+                saturation=0,
+            )
         )
-        with pytest.raises(
-            AlchemiscaleComputeClientError,
-            match="Could not find ComputeManagerRegistration",
-        ):
-            service._register()
+        managed = n4js_preloaded.execute_query("""
+            MATCH (:ComputeManagerRegistration {name: "testmanager"})
+                  -[:MANAGES]->(csr:ComputeServiceRegistration)
+            RETURN csr.identifier AS identifier
+            """).records
+        assert [r["identifier"] for r in managed] == [str(service.compute_service_id)]
 
     def test_start_non_stop_exit_stops_heartbeat_thread(
         self, compute_client, tmpdir, monkeypatch

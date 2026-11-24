@@ -108,11 +108,22 @@ class ComputeManager:
         self.logger.info(f"Server version {server_version}")
 
     def _register(self, steal=False):
+        """Register with the server, joining the registration under this
+        manager's name if there is a live one, and adopt its ID."""
         try:
-            self.client.register(self.compute_manager_id, steal=steal)
+            compute_manager_id = self.client.register(
+                ComputeManagerID.new_from_name(self.settings.name), steal=steal
+            )
         except AlchemiscaleComputeManagerClientError as e:
             self.logger.error(f"Registration failed: '{e}'")
             raise e
+
+        if compute_manager_id != self.compute_manager_id:
+            self.logger.info(f"Using registration '{compute_manager_id}'")
+        self.compute_manager_id = compute_manager_id
+        self.service_settings.compute_manager_id = compute_manager_id
+        if isinstance(self.logger, logging.LoggerAdapter):
+            self.logger.extra["compute_manager_id"] = compute_manager_id
 
     def _deregister(self):
         try:
@@ -303,11 +314,14 @@ class ComputeManager:
                 self.compute_manager_id,
             )
         except ComputeManagerNotRegisteredError:
-            self.logger.info(
-                f"'{self.compute_manager_id}' is no longer registered with the server; "
-                "shutting down"
+            # the registration expired, for example after a network partition;
+            # join or recreate it, and carry on next cycle
+            self.logger.warning(
+                f"'{self.compute_manager_id}' is no longer registered with the "
+                "server; registering again"
             )
-            return False
+            self._register()
+            return True
         match instruction:
             case ComputeManagerInstruction.OK:
                 total_services = len(data["compute_service_ids"])
@@ -360,6 +374,8 @@ class ComputeManager:
         return True
 
     def clear_error(self):
+        """Deprecated: an ERROR registration no longer prevents a compute
+        manager from registering."""
         try:
             self.logger.info(f"Clearing '{self.settings.name}' with the ERROR status")
             self.client.clear_error(self.settings.name)

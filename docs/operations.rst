@@ -115,6 +115,35 @@ In other cases, a migration may need to be performed on the state and/or object 
 
 This section gives specific guidance for ``alchemiscale`` release upgrades, in particular migration steps.
 
+v0.8 to v0.9
+============
+``alchemiscale`` v0.9 shares one ``ComputeManagerRegistration`` between all instances of a compute manager with the same name, and adds a uniqueness constraint on registration names.
+This change requires a migration on the state store, which also prepares registrations left over from v0.8, including those with the ``ERROR`` status, to be joined by v0.9 compute managers.
+
+Compute managers from v0.9 refuse to start against an older server, so upgrade in this order:
+
+1. Stop the API services, then run the migration against the state store::
+
+       $ alchemiscale database migrate v08-to-v09
+
+   The migration can be run more than once.
+   Afterwards, ``alchemiscale database check`` should report no problems.
+
+2. Deploy the v0.9 API services.
+   Compute managers and compute services from v0.8 keep working against them, with two differences:
+
+   * a v0.8 manager shares its registration with any other instance under its name, rather than failing to register;
+   * if a v0.8 manager's registration expires while it runs, it gets an error rather than a ``SHUTDOWN`` instruction, and exits.
+
+   The compute API logs a warning naming each v0.8 compute manager that registers, so any left behind are visible.
+
+3. Upgrade compute managers to v0.9.
+
+To roll the server back to v0.8, stop the API services, and delete compute manager registrations, which v0.8 can't read once v0.9 has written them; v0.8 compute managers register again::
+
+    MATCH (n) WHERE n:ComputeManagerRegistration OR n:ComputeManagerJobRecord
+    DETACH DELETE n
+
 v0.3 to v0.4
 ============
 ``alchemiscale`` v0.4 introduced a ``NetworkMark`` node and relationship for each ``AlchemicalNetwork``, supporting the concept of network state.

@@ -13,6 +13,8 @@ import re
 import hashlib
 
 
+from typing import Any, ClassVar, Literal
+
 from pydantic import BaseModel, ConfigDict, PositiveInt, field_validator
 from gufe.tokenization import GufeTokenizable, GufeKey
 
@@ -120,18 +122,58 @@ class ComputeManagerInstruction(StrEnum):
 
 class ComputeManagerStatus(StrEnum):
     OK = "OK"
+    DEGRADED = "DEGRADED"
     ERROR = "ERROR"
 
 
 class ComputeManagerRegistration(BaseModel):
+    """Registration shared by all instances of a compute manager with the
+    same name.
+
+    Besides its status, the registration holds the pause state that
+    instances share. Fields listed in :attr:`TRANSITION_FIELDS` change only
+    through a compare-and-set on :attr:`version`.
+
+    """
 
     name: str
     uuid: str
     last_status_update: datetime.datetime
     status: str
-    detail: str
-    saturation: float
+    detail: str | None = None
+    saturation: float | None = None
     registered: datetime.datetime
+
+    #: incremented whenever a state transition is applied
+    version: int = 0
+    #: time of the most recent sign of health
+    last_healthy_at: datetime.datetime | None = None
+    #: start of the current backend outage, if any
+    outage_started_at: datetime.datetime | None = None
+    #: why the manager is DEGRADED: "workload", "permanent" or "outage"
+    pause_cause: str | None = None
+    #: current probe backoff, in seconds
+    backoff_seconds: float | None = None
+    #: no probe is sent before this time
+    backoff_until: datetime.datetime | None = None
+    #: name of the outstanding probe job, if any
+    probe_job: str | None = None
+    #: start of probation after a passing probe, if on probation
+    probation_started_at: datetime.datetime | None = None
+    #: compute identities that created or joined the registration
+    identities: list[str] = []
+
+    TRANSITION_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "status",
+            "detail",
+            "pause_cause",
+            "backoff_seconds",
+            "backoff_until",
+            "probe_job",
+            "probation_started_at",
+        }
+    )
 
     def __repr__(self):  # pragma: no cover
         return f"<ComputeManagerRegistration('{str(self)}')>"
@@ -148,6 +190,100 @@ class ComputeManagerRegistration(BaseModel):
 
     def to_compute_manager_id(self):
         return ComputeManagerID("-".join([self.name, self.uuid]))
+
+
+class JobRecordKind(StrEnum):
+    """Kinds of :class:`ComputeManagerJobRecord`."""
+
+    #: the job was seen pending or running
+    ACTIVE = "active"
+    #: the job's compute service was seen registered with the server
+    REGISTERED = "registered"
+    #: the job was found running without a registered compute service
+    UNREGISTERED = "unregistered"
+    #: the job failed
+    FAILURE = "failure"
+    #: the job's terminal state has been handled, or it vanished
+    HANDLED = "handled"
+
+
+class ComputeManagerJobRecord(BaseModel):
+    """A fact about one job of a compute manager, stored on its registration.
+
+    Records are keyed by ``(job_name, kind)`` and merge by union: writing a
+    record that already exists leaves the stored one unchanged.
+
+    """
+
+    job_name: str
+    kind: JobRecordKind
+    #: when the record was first written
+    at: datetime.datetime
+    submitted_at: datetime.datetime | None = None
+    ended_at: datetime.datetime | None = None
+    #: for FAILURE records, a :class:`alchemiscale.compute.backend.FailureKind` value
+    failure_kind: str | None = None
+    reason: str | None = None
+
+    def to_dict(self):
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, dct):
+        return cls.model_validate(dct)
+
+
+class ComputeManagerState(BaseModel):
+    """A compute manager's registration, together with its job records."""
+
+    registration: ComputeManagerRegistration
+    records: list[ComputeManagerJobRecord] = []
+
+    def to_dict(self):
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, dct):
+        return cls.model_validate(dct)
+
+    def records_of(self, kind: JobRecordKind) -> dict[str, ComputeManagerJobRecord]:
+        """Return the records of one kind, keyed by job name."""
+        return {r.job_name: r for r in self.records if r.kind == kind}
+
+
+class ComputeManagerStateUpdate(BaseModel):
+    """Changes to a compute manager's shared state, sent with a status update.
+
+    Everything except ``transition`` merges without conflict and is always
+    applied. ``transition`` is applied only if ``expected_version`` matches
+    the registration's ``version``.
+
+    """
+
+    #: records to add; existing records are left unchanged
+    records: list[ComputeManagerJobRecord] = []
+    #: ``(job_name, kind)`` pairs of records to remove
+    forget: list[tuple[str, JobRecordKind]] = []
+    #: remove HANDLED records of jobs that ended before this time
+    prune_handled_before: datetime.datetime | None = None
+    #: merged into the registration's ``last_healthy_at`` by maximum
+    last_healthy_at: datetime.datetime | None = None
+    #: ``"start"`` records the start of a backend outage if none is under
+    #: way; ``"clear"`` ends it
+    outage: Literal["start", "clear"] | None = None
+    #: values for :attr:`ComputeManagerRegistration.TRANSITION_FIELDS`,
+    #: other than ``status`` and ``detail``
+    transition: dict[str, Any] = {}
+    #: the registration ``version`` the transition was decided from;
+    #: ``None`` applies the status unconditionally
+    expected_version: int | None = None
+
+    def to_dict(self):
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, dct):
+        return cls.model_validate(dct)
 
 
 class TaskProvenance(BaseModel):

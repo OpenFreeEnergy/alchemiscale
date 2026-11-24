@@ -1,0 +1,22 @@
+**Added:**
+
+* ``DEGRADED`` ``ComputeManagerStatus``, for a compute manager that has paused creating compute services but keeps running. It requires both a saturation and a detail.
+* ``POST /computemanager/{id}/state`` on the compute API, and ``AlchemiscaleComputeManagerClient.update_state``, which update a compute manager's status and merge changes into the state its instances share. State transitions are applied by compare-and-set on the registration's ``version``.
+* ``ComputeManagerRegistration.identities``, the compute identities that created or joined the registration.
+* The compute API logs a warning when a compute manager older than v0.9 registers.
+* ``alchemiscale database migrate v08-to-v09``, which prepares compute manager registrations from v0.8 and adds a uniqueness constraint on their names.
+
+**Changed:**
+
+* All instances of a compute manager with the same name share one registration. Registering joins a live registration, and returns its ID, instead of failing with a 422.
+* A compute manager registration whose last status update is older than ``ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS`` is treated as gone, whatever its status: registering replaces it, and the instruction and status endpoints return a 404. A ``ComputeManager`` that gets a 404 registers again rather than shutting down.
+* The ``ERROR`` status no longer prevents a compute manager from registering.
+* Deregistering a compute manager leaves the shared registration in place to expire, and always succeeds.
+* The compute API finds compute manager registrations by name alone, so an instance can keep using its own ID after joining, as v0.8 compute managers do.
+* A compute service can register while its compute manager's registration is missing; it is attached once the registration is recreated.
+* The compute manager instruction includes the manager's shared state.
+
+**Deprecated:**
+
+* ``steal`` when registering a compute manager, and ``clear_error``: registering always succeeds.
+* ``ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR``, which is no longer used; setting it emits a ``DeprecationWarning``.

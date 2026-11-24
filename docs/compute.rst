@@ -210,15 +210,37 @@ Information of existing services and current workload is reported to the manager
 2. ``SKIP``: the manager should take no action
 
 After either instruction, a manager is expected to provide a status update to the compute API.
-
-The compute manager endpoints return a 404 when the manager isn't registered, and a 422 when the request conflicts with the registration's state, for example clearing the error of a manager that doesn't have the ``ERROR`` status.
-A manager that receives a 404 while requesting an instruction shuts down.
-The status can either be:
+The status can be:
 
 1. ``OK``: the manager is working as expected, requires a saturation value (ratio of active services to the maximum number of services allowed by the manager)
-2. ``ERROR``: the manager experienced an error and will shut down locally, requires a detail string explaining why the ``ERROR`` state was entered
+2. ``DEGRADED``: the manager has paused creating compute services, but keeps running; requires a saturation value and a detail string explaining why
+3. ``ERROR``: the manager experienced an error and will shut down locally, requires a detail string explaining why the ``ERROR`` state was entered
 
 Currently, these supporting data are only used by administrators for introspection, though this might change in the future.
+
+Registrations
+=============
+
+All instances of a compute manager running under the same name share one registration.
+The first instance to register creates it, and later instances join it, so a rolling update, ``replicas: 2`` or an accidental second launch doesn't conflict with a running instance.
+Compute services belong to the registration rather than to an instance, so every instance counts the services any of them created.
+
+Each status update from any instance renews the registration.
+A registration that hasn't been updated within ``ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS`` is stale, whatever its status.
+The compute API treats a stale registration as gone: the next instance to register replaces it, and an instance requesting an instruction or updating its status gets a 404, re-registers, and carries on.
+Set ``ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS`` to a small multiple of the managers' ``sleep_interval``: it's how long a registration outlives a manager that was killed.
+
+The compute API finds a registration by the manager's name alone: the UUID in a compute manager ID identifies the instance or registration that created it, but an instance can keep using its own ID after joining, or after its registration was replaced.
+The identities that created or joined a registration are recorded in its ``identities``.
+
+Everything stored on a registration, including its job records and pause state, goes when it expires.
+A compute service may start while its manager's registration is missing, for instance while it is being recreated; the service registers anyway, and is attached to the registration once there is one.
+
+A manager that exits deregisters, but the shared registration is left to expire, since other instances may still be renewing it.
+Deregistering therefore always succeeds, whether or not the registration exists.
+The ``ERROR`` status never prevents a manager from registering, so ``clear_error`` and ``steal`` are no longer needed; both are deprecated, and will be removed in a future release, as will ``ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR``, which no longer has any effect.
+
+The compute manager endpoints return a 404 when the manager isn't registered, and a 422 when the request conflicts with the registration's state.
 
 Before registering, a compute manager checks the alchemiscale version the server reports from its ``/info`` endpoint.
 If the server is older than the oldest version the manager supports, the manager exits with a message naming both versions.
