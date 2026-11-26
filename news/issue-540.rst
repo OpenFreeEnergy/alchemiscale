@@ -7,3 +7,4 @@
 **Changed:**
 
 * ``GET /info`` on the user and compute APIs returns the server's alchemiscale version, as ``{"version": "<version>"}``.
+* The ``alchemiscale-server`` and ``alchemiscale-compute`` Docker images are built with their alchemiscale version, passed in as the ``SETUPTOOLS_SCM_PRETEND_VERSION`` build argument; without it they report version 0.0.0, which compute managers accept with a warning.

@@ -516,10 +516,7 @@ def deregister_computemanager(
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
-    try:
-        n4js.deregister_computemanager(compute_manager_id)
-    except ComputeManagerNotFoundError as e:
-        raise _compute_manager_http_exception(e)
+    n4js.deregister_computemanager(compute_manager_id)
     return compute_manager_id
 
 
