@@ -65,6 +65,11 @@ files = ["alchemiscale"]
 ignore_missing_imports = true
 
 [tool.coverage.run]
+# the client tests run API servers in forked processes; measure those too,
+# and save their data when the tests terminate them
+concurrency = ["thread", "multiprocessing"]
+parallel = true
+sigterm = true
 omit = [
     "*/_version.py",
     "alchemiscale/tests/*",
