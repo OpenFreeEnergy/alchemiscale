@@ -517,6 +517,12 @@ def register_computemanager(
             f"Compute manager '{compute_manager_id}' registered by "
             f"'{token.entity}' is older than 0.9; upgrade it"
         )
+    if steal:
+        logger.warning(
+            f"Compute manager '{compute_manager_id}' registered by "
+            f"'{token.entity}' asked to steal its registration, which is "
+            "deprecated and ignored: registering always succeeds"
+        )
 
     now = datetime.datetime.now(tz=datetime.UTC)
     cm_registration = ComputeManagerRegistration(
@@ -531,7 +537,6 @@ def register_computemanager(
 
     return n4js.register_computemanager(
         cm_registration,
-        steal=steal,
         expire_time=_manager_expire_time(settings),
         identity=token.entity,
         error_history=settings.ALCHEMISCALE_COMPUTE_API_MANAGER_ERROR_HISTORY,
@@ -734,6 +739,11 @@ def clear_error_computemanager(
         with n4js.transaction() as tx:
             compute_manager_id = n4js.get_compute_manager_id(
                 name=compute_manager_name, tx=tx
+            )
+            logger.warning(
+                f"Clearing the ERROR registration of compute manager "
+                f"'{compute_manager_name}', which is deprecated: an ERROR "
+                "registration no longer prevents registering"
             )
             n4js.clear_errored_computemanager(compute_manager_id, tx=tx)
     except (ComputeManagerNotFoundError, ComputeManagerStateError) as e:

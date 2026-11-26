@@ -458,6 +458,8 @@ def _format_compute_manager_status(status: dict) -> str:
             "last_healthy_at",
             "outage_started_at",
             "pause_cause",
+            "paused_at",
+            "backoff_seconds",
             "backoff_until",
             "probe_job",
             "probation_started_at",
@@ -509,12 +511,20 @@ def status(name, api_url, identifier, key, as_json):
 @click.argument("name")
 @compute_api_client_params
 def probe(name, api_url, identifier, key):
-    from .compute.client import AlchemiscaleComputeManagerClient
+    from .compute.client import (
+        AlchemiscaleComputeManagerClient,
+        AlchemiscaleComputeManagerClientError,
+    )
 
     client = AlchemiscaleComputeManagerClient(
         api_url, identifier, key, use_local_cache=False
     )
-    client.request_probe(name)
+    try:
+        client.request_probe(name)
+    except AlchemiscaleComputeManagerClientError as e:
+        if e.status_code not in (404, 422):
+            raise
+        raise click.ClickException(str(e))
     click.echo(f"Compute manager '{name}' will probe on its next cycle")
 
 

@@ -261,6 +261,41 @@ class TestMaintenance:
         assert not after.records_of(JobRecordKind.FAILURE)
         assert after.registration.last_healthy_at == before.registration.last_healthy_at
 
+    def test_relisted_job_kept(self, n4js_fresh, manager, backend, caplog):
+        # a live job missing from one listing, as when SLURM's accounting
+        # lags, is taken to have disappeared, but isn't cancelled when it
+        # comes back
+        manager.cycle()
+        name = backend.names()[0]
+        run_job(n4js_fresh, backend, name)
+        manager.client.num_tasks = 0
+        manager.cycle()
+
+        job = backend.jobs.pop(name)
+        manager.cycle()
+        assert name in get_state(manager).records_of(JobRecordKind.HANDLED)
+
+        backend.jobs[name] = job
+        manager.cycle()
+        assert name in backend.jobs
+        assert "listed again" in caplog.text
+
+        manager.cycle()
+        state = get_state(manager)
+        assert name not in state.records_of(JobRecordKind.HANDLED)
+        assert name in state.records_of(JobRecordKind.ACTIVE)
+
+    def test_registered_between_cycles(self, n4js_fresh, manager, backend):
+        # a service that registers and finishes between two cycles is still
+        # a sign of health
+        manager.cycle()
+        name = backend.names()[0]
+        run_job(n4js_fresh, backend, name)
+        finish_job(n4js_fresh, backend, name)
+        ended_at = backend.jobs[name].ended_at
+        manager.cycle()
+        assert get_state(manager).registration.last_healthy_at == ended_at
+
     def test_infrastructure_failure(self, n4js_fresh, manager, backend):
         manager.cycle()
         name = backend.names()[0]
@@ -306,6 +341,42 @@ class TestMaintenance:
         assert manager.cycle()
         assert not backend.jobs
         assert "skipping maintenance" in caplog.text
+        # status is still posted, which keeps the registration alive
+        assert manager.client.posted
+
+    def test_registration_lost_before_posting(self, n4js_fresh, manager, backend):
+        manager.cycle()
+        name = backend.names()[0]
+        backend.fail(name)
+
+        # the registration expires during the cycle
+        list_jobs = backend.list_jobs
+
+        def expire():
+            n4js_fresh.execute_query(
+                "MATCH (n:ComputeManagerRegistration) DETACH DELETE n"
+            )
+            return list_jobs()
+
+        backend.list_jobs = expire
+        old_id = manager.compute_manager_id
+        assert manager.cycle()
+        # the outcome wasn't stored, so the job is kept to handle again
+        assert name in backend.jobs
+        assert manager.compute_manager_id != old_id
+
+        backend.list_jobs = list_jobs
+        manager.cycle()
+        assert name not in backend.jobs
+        assert name in get_state(manager).records_of(JobRecordKind.FAILURE)
+
+    def test_adopts_replaced_registration(self, n4js_fresh, manager, backend):
+        # another instance replaced the expired registration
+        n4js_fresh.execute_query("MATCH (n:ComputeManagerRegistration) DETACH DELETE n")
+        other = make_manager(n4js_fresh, FakeComputeBackend())
+        manager.cycle()
+        assert manager.compute_manager_id == other.compute_manager_id
+        assert backend.compute_manager_id == other.compute_manager_id
 
 
 class TestRegistrationCheck:
@@ -717,6 +788,51 @@ class TestRecovery:
         assert reg.probe_job is None
         assert reg.backoff_seconds == 2 * backoff
 
+    def test_probe_without_verdict(self, n4js_fresh, manager, backend):
+        # a probe preempted before its service registered shows nothing
+        # about the configuration; the backoff stays, and it probes again
+        backoff = status_of(manager).backoff_seconds
+        expire_backoff(n4js_fresh, manager)
+        jobs = set(backend.names())
+        manager.cycle()
+        (probe,) = set(backend.names()) - jobs
+
+        backend.fail(probe, FailureKind.INFRASTRUCTURE, "preempted")
+        manager.cycle()
+        reg = status_of(manager)
+        assert reg.status == "DEGRADED"
+        assert reg.probe_job is None
+        assert reg.backoff_seconds == backoff
+
+        manager.cycle()
+        assert status_of(manager).probe_job not in (None, probe)
+
+    def test_leftover_success_does_not_end_probation(self, n4js_fresh, backend):
+        manager = make_manager(n4js_fresh, backend, max_failed_jobs=0)
+        # a job submitted before the pause, whose service registered
+        manager.client.num_tasks = 1
+        manager.cycle()
+        (leftover,) = backend.names()
+        run_job(n4js_fresh, backend, leftover)
+        manager.cycle()
+        manager.client.num_tasks = 10
+
+        fail_jobs(n4js_fresh, manager, backend, 1)
+        manager.cycle()
+        assert status_of(manager).status == "DEGRADED"
+
+        expire_backoff(n4js_fresh, manager)
+        jobs = set(backend.names())
+        manager.cycle()
+        (probe,) = set(backend.names()) - jobs
+        run_job(n4js_fresh, backend, probe)
+        manager.cycle()
+        assert status_of(manager).probation_started_at is not None
+
+        finish_job(n4js_fresh, backend, leftover)
+        manager.cycle()
+        assert status_of(manager).probation_started_at is not None
+
     def test_backoff_capped(self, n4js_fresh, manager, backend):
         manager.settings.max_backoff = 2
         for _ in range(3):
@@ -780,6 +896,16 @@ class TestBackendErrors:
         run_job(n4js_fresh, backend, probe)
         manager.cycle()
         assert status_of(manager).status == "OK"
+
+    def test_permanent_error_on_remove(self, n4js_fresh, manager, backend):
+        backend.remove_error = PermanentBackendError("forbidden: cannot delete jobs")
+        fail_jobs(n4js_fresh, manager, backend, 1)
+        manager.cycle()
+        manager.cycle()
+        reg = status_of(manager)
+        assert reg.status == "DEGRADED"
+        assert reg.pause_cause == "permanent"
+        assert "cannot delete jobs" in reg.detail
 
     def test_permanent_error_on_list(self, manager, backend):
         backend.list_error = PermanentBackendError("forbidden: cannot list jobs")
@@ -926,6 +1052,17 @@ class TestUnexpectedErrors:
         reg = status_of(manager)
         assert reg.status == "OK"
         assert reg.probation_started_at is not None
+
+    def test_registration_kept_alive(self, n4js_fresh, backend):
+        # erroring cycles post nothing themselves, but still renew the
+        # registration, so it doesn't expire while they last
+        manager = make_manager(n4js_fresh, backend, max_cycle_errors=100)
+        manager.cycle()
+        backend.list_error = RuntimeError("bug in the backend")
+        before = status_of(manager).last_status_update
+        assert manager._cycle_through_errors()
+        assert status_of(manager).last_status_update > before
+        assert manager._cycle_errors == 1
 
 
 class TestInfrastructureFailures:

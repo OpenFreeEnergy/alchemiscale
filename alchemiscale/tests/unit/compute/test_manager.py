@@ -12,10 +12,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from alchemiscale.base.client import AlchemiscaleBaseClient
+from alchemiscale.base.client import AlchemiscaleBaseClient, AlchemiscaleConnectionError
 from alchemiscale.compute import manager as manager_module
 from alchemiscale.compute.backend import is_own_job_name, make_job_name
-from alchemiscale.base.client import AlchemiscaleConnectionError
 from alchemiscale.compute.client import AlchemiscaleComputeManagerClientError
 from alchemiscale.compute.manager import (
     AuthenticationFailedError,
@@ -61,6 +60,7 @@ def _make_manager(
     mgr = ComputeManager.__new__(ComputeManager)
     mgr._cycle_errors = 0
     mgr._last_state = None
+    mgr._remove_error = None
     mgr.settings = settings
     mgr.service_settings = service_settings
     return mgr
@@ -180,6 +180,22 @@ class TestServerVersionCheck:
         with pytest.raises(IncompatibleServerError, match="older than 0.9.0"):
             mgr._check_server_version()
 
+    def test_invalid_version(self, client_version):
+        mgr = self._manager_with_server({"version": "unknown"})
+        with pytest.raises(IncompatibleServerError, match="invalid version"):
+            mgr._check_server_version()
+
+    def test_server_without_version_information(self, client_version):
+        mgr = self._manager_with_server({"version": "0.0.0"})
+        mgr._check_server_version()
+        mgr.logger.warning.assert_called_once()
+
+    def test_local_labels_ignored(self, client_version):
+        # a dirty checkout of the same commit as the server
+        client_version("0.8.2.dev3+gabc1234.d20261123")
+        mgr = self._manager_with_server({"version": "0.8.2.dev3+gabc1234"})
+        mgr._check_server_version()
+
     def test_development_builds(self, client_version):
         # a development client accepts a server at least as new as itself
         client_version("0.8.2.dev3+gabc1234")
@@ -298,10 +314,14 @@ class TestUnexpectedErrors:
         mgr = self._manager()
         for _ in range(2):
             assert mgr._cycle_through_errors() is True
-        mgr.client.update_state.assert_not_called()
+        # each erroring cycle renews the registration, changing nothing else
+        for call in mgr.client.update_state.call_args_list:
+            assert call.args[1] == ComputeManagerStatus.OK
+            assert not call.kwargs["state_update"].transition
+            assert call.kwargs["state_update"].expected_version == 7
 
         assert mgr._cycle_through_errors() is True
-        (call,) = mgr.client.update_state.call_args_list
+        call = mgr.client.update_state.call_args
         assert call.args[1] == ComputeManagerStatus.DEGRADED
         assert "3 cycles in a row" in call.kwargs["detail"]
         assert "RuntimeError('bug')" in call.kwargs["detail"]
@@ -310,28 +330,63 @@ class TestUnexpectedErrors:
         assert update.transition["pause_cause"] == "error"
         assert update.transition["backoff_seconds"] == 10
 
-        # further errors don't pause again
+        # a pause that wasn't applied is tried again
         assert mgr._cycle_through_errors() is True
-        assert mgr.client.update_state.call_count == 1
-
-    def test_success_resets_count(self):
-        mgr = self._manager()
-        mgr._cycle_through_errors()
-        mgr._cycle_through_errors()
-        mgr.cycle.side_effect = None
-        mgr.cycle.return_value = True
-        assert mgr._cycle_through_errors() is True
-        mgr.cycle.side_effect = RuntimeError("bug")
-        mgr._cycle_through_errors()
-        mgr._cycle_through_errors()
-        mgr.client.update_state.assert_not_called()
+        call = mgr.client.update_state.call_args
+        assert call.args[1] == ComputeManagerStatus.DEGRADED
+        assert "4 cycles in a row" in call.kwargs["detail"]
 
     def test_already_paused(self):
         mgr = self._manager(status="DEGRADED", max_cycle_errors=1)
         mgr._cycle_through_errors()
-        mgr.client.update_state.assert_not_called()
+        call = mgr.client.update_state.call_args
+        assert call.args[1] == ComputeManagerStatus.DEGRADED
+        assert not call.kwargs["state_update"].transition
+
+    @pytest.mark.parametrize("status_code, counted", [(422, True), (503, False)])
+    def test_rejected_requests_counted(self, status_code, counted):
+        mgr = self._manager()
+        mgr.cycle.side_effect = AlchemiscaleComputeManagerClientError(
+            "rejected", status_code=status_code
+        )
+        assert mgr._cycle_through_errors() is True
+        assert mgr._cycle_errors == (1 if counted else 0)
 
     def test_report_fails(self):
         mgr = self._manager(max_cycle_errors=1)
         mgr.client.update_state.side_effect = ConnectionError("down")
         assert mgr._cycle_through_errors() is True
+
+
+class TestStartupRetries:
+    """At startup, the manager waits for an unreachable or failing server."""
+
+    @staticmethod
+    def _manager():
+        mgr = _make_manager()
+        mgr.settings.sleep_interval = 0
+        mgr.int_sleep = MagicMock()
+        mgr.logger = MagicMock()
+        return mgr
+
+    def test_retries_until_reachable(self):
+        mgr = self._manager()
+        call = MagicMock(
+            side_effect=[
+                AlchemiscaleConnectionError("down"),
+                AlchemiscaleComputeManagerClientError("bad gateway", status_code=502),
+                "done",
+            ]
+        )
+        assert mgr._when_reachable(call) == "done"
+        assert mgr.int_sleep.call_count == 2
+
+    def test_rejection_raised(self):
+        mgr = self._manager()
+        call = MagicMock(
+            side_effect=AlchemiscaleComputeManagerClientError(
+                "unauthorized", status_code=401
+            )
+        )
+        with pytest.raises(AlchemiscaleComputeManagerClientError):
+            mgr._when_reachable(call)

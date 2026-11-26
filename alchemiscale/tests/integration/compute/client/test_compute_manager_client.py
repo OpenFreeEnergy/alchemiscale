@@ -4,6 +4,7 @@ from time import sleep
 import pytest
 
 from alchemiscale.compute import client
+from alchemiscale.migrations import v08_to_v09
 from alchemiscale.storage.models import (
     ComputeManagerStateUpdate,
     ComputeManagerID,
@@ -82,12 +83,12 @@ class TestComputeManagerClient:
             compute_manager_id_1
         )
 
-        # steal is deprecated, and replaces the registration
+        # steal is deprecated, and ignored
         with pytest.warns(DeprecationWarning, match="steal"):
             returned_id = compute_manager_client.register(
                 compute_manager_id_2, steal=True
             )
-        assert compute_manager_id_2 == returned_id
+        assert returned_id == compute_manager_id_1
 
     def test_deregistration(
         self,
@@ -257,8 +258,8 @@ class TestComputeManagerRegistrationStates:
     def manager_id(self, n4js_preloaded, compute_manager_client, request):
         compute_manager_id = ComputeManagerID.new_from_name("testmanager")
         state = request.param
-        if state == "v08 ERROR":
-            # as 0.8 wrote it, before migration: no version or pause state
+        if state == "migrated v08 ERROR":
+            # as 0.8 wrote it, then migrated
             now = datetime.datetime.now(tz=datetime.UTC)
             n4js_preloaded.execute_query(
                 """
@@ -270,6 +271,7 @@ class TestComputeManagerRegistrationStates:
                 now=now.isoformat(),
                 **compute_manager_id.to_dict(),
             )
+            v08_to_v09.migrate(n4js_preloaded)
         elif state != "none":
             compute_manager_client.register(compute_manager_id)
         match state:
@@ -298,7 +300,7 @@ class TestComputeManagerRegistrationStates:
                 )
         return state, compute_manager_id
 
-    STATES = ["none", "OK", "DEGRADED", "ERROR", "stale", "v08 ERROR"]
+    STATES = ["none", "OK", "DEGRADED", "ERROR", "stale", "migrated v08 ERROR"]
     # states in which the endpoints find no registration
     MISSING = ("none", "stale")
 
@@ -355,7 +357,7 @@ class TestComputeManagerRegistrationStates:
                 ) as excinfo:
                     compute_manager_client.clear_error(compute_manager_id.name)
                 assert excinfo.value.status_code == 422
-            case "ERROR" | "v08 ERROR":
+            case "ERROR" | "migrated v08 ERROR":
                 with pytest.warns(DeprecationWarning, match="clear_error"):
                     compute_manager_client.clear_error(compute_manager_id.name)
                 with pytest.raises(client.ComputeManagerNotRegisteredError):
@@ -363,19 +365,20 @@ class TestComputeManagerRegistrationStates:
 
     @pytest.mark.parametrize("manager_id", STATES, indirect=True)
     def test_register_steal(self, compute_manager_client, manager_id):
+        # steal is ignored: registering joins a live registration
         state, compute_manager_id = manager_id
         new_id = ComputeManagerID.new_from_name(compute_manager_id.name)
+        expected = new_id if state in self.MISSING else compute_manager_id
         with pytest.warns(DeprecationWarning):
-            assert compute_manager_client.register(new_id, steal=True) == new_id
+            assert compute_manager_client.register(new_id, steal=True) == expected
 
     @pytest.mark.parametrize("manager_id", STATES, indirect=True)
     def test_register(self, compute_manager_client, manager_id):
         # registering always succeeds, joining a live registration
         state, compute_manager_id = manager_id
         new_id = ComputeManagerID.new_from_name(compute_manager_id.name)
-        # stale and pre-0.9 registrations are replaced rather than joined
-        replaced = state in ("none", "stale", "v08 ERROR")
-        expected = new_id if replaced else compute_manager_id
+        # stale registrations are replaced rather than joined
+        expected = new_id if state in self.MISSING else compute_manager_id
         assert compute_manager_client.register(new_id) == expected
 
     @pytest.mark.parametrize("manager_id", ["OK", "DEGRADED"], indirect=True)

@@ -65,7 +65,6 @@ class StoreClient:
                 status=ComputeManagerStatus.OK,
                 saturation=0,
             ),
-            steal=steal,
             expire_time=self._expire_time(),
         )
 
