@@ -1510,6 +1510,29 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             create_subgraph(tx, Subgraph() | node)
 
+            # record that the job running the service registered, since a
+            # short-lived service may come and go between its manager's cycles
+            if compute_service_registration.manager_name:
+                tx.run(
+                    """
+                    MATCH (cmr:ComputeManagerRegistration {name: $manager_name})
+                    SET cmr.last_status_update = cmr.last_status_update
+                    WITH cmr
+                    WHERE NOT EXISTS {
+                        MATCH (cmr)-[:RECORDS]->(:ComputeManagerJobRecord
+                            {job_name: $job_name, kind: $handled})
+                    }
+                    MERGE (cmr)-[:RECORDS]->(r:ComputeManagerJobRecord
+                        {job_name: $job_name, kind: $registered})
+                    ON CREATE SET r.at = datetime($now)
+                    """,
+                    manager_name=compute_service_registration.manager_name,
+                    job_name=compute_service_registration.identifier.name,
+                    handled=JobRecordKind.HANDLED.value,
+                    registered=JobRecordKind.REGISTERED.value,
+                    now=compute_service_registration.registered.isoformat(),
+                )
+
         return compute_service_registration.identifier
 
     def deregister_computeservice(self, compute_service_id: ComputeServiceID):

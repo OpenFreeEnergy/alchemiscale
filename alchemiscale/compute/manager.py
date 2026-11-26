@@ -4,8 +4,9 @@
 
 """
 
-from abc import abstractmethod
 from contextlib import contextmanager
+from dataclasses import dataclass, field
+import datetime
 from importlib.metadata import version
 import logging
 import time
@@ -15,7 +16,22 @@ from packaging.version import InvalidVersion, Version
 from ..storage.models import (
     ComputeManagerID,
     ComputeManagerInstruction,
+    ComputeManagerJobRecord,
+    ComputeManagerState,
+    ComputeManagerStateUpdate,
     ComputeManagerStatus,
+    ComputeServiceID,
+    JobRecordKind,
+)
+from .backend import (
+    BackendError,
+    ComputeBackend,
+    FailureKind,
+    Job,
+    JobState,
+    PermanentBackendError,
+    TransientBackendError,
+    make_job_name,
 )
 from .client import (
     AlchemiscaleComputeManagerClient,
@@ -36,20 +52,71 @@ class IncompatibleServerError(RuntimeError):
     """Raised when the alchemiscale server is too old for this compute manager."""
 
 
+def _utcnow() -> datetime.datetime:
+    return datetime.datetime.now(tz=datetime.UTC)
+
+
+@dataclass
+class Reconciliation:
+    """What one cycle learned by comparing the backend's jobs with the
+    manager's shared state."""
+
+    #: records to merge into the shared state
+    records: list[ComputeManagerJobRecord] = field(default_factory=list)
+    #: records to remove from the shared state
+    forget: list[tuple[str, JobRecordKind]] = field(default_factory=list)
+    #: time of the most recent sign of health found this cycle
+    last_healthy_at: datetime.datetime | None = None
+    #: jobs to remove once the records are stored
+    to_remove: list[Job] = field(default_factory=list)
+    #: names of jobs still pending or running
+    active: set[str] = field(default_factory=set)
+    #: whether any job is still pending
+    pending: bool = False
+    #: WORKLOAD failures found this cycle
+    workload_failures: list[ComputeManagerJobRecord] = field(default_factory=list)
+
+    def record(self, job_name: str, kind: JobRecordKind, now, **kwargs):
+        self.records.append(
+            ComputeManagerJobRecord(job_name=job_name, kind=kind, at=now, **kwargs)
+        )
+
+    def healthy(self, at: datetime.datetime):
+        if self.last_healthy_at is None or at > self.last_healthy_at:
+            self.last_healthy_at = at
+
+
 class ComputeManager:
+    """Autoscales compute services on a batch system, through a
+    :class:`~alchemiscale.compute.backend.ComputeBackend`.
+
+    Each cycle, whatever the instruction from the server, the manager lists
+    the backend's jobs, handles each terminal job once, checks that running
+    jobs' compute services have registered, and, if there is work and
+    capacity, submits new jobs. Facts about jobs are kept on the
+    registration, which all instances of the manager share, so that several
+    instances under one name behave like one manager.
+
+    """
 
     compute_manager_id: ComputeManagerID
     client: AlchemiscaleComputeManagerClient
     service_settings: ComputeServiceSettings
     settings: ComputeManagerSettings
+    backend: ComputeBackend
 
     def __init__(
-        self, settings: ComputeManagerSettings, service_settings: ComputeServiceSettings
+        self,
+        settings: ComputeManagerSettings,
+        service_settings: ComputeServiceSettings,
+        backend: ComputeBackend,
     ):
         self.settings = settings
+        self.backend = backend
         self.compute_manager_id = ComputeManagerID.new_from_name(self.settings.name)
         self.service_settings = service_settings
         self.service_settings.compute_manager_id = self.compute_manager_id
+        self.backend.compute_manager_id = self.compute_manager_id
         self.client = AlchemiscaleComputeManagerClient(
             api_url=self.service_settings.api_url,
             identifier=self.service_settings.identifier,
@@ -138,10 +205,26 @@ class ComputeManager:
             self.logger.error(f"Registration failed: '{e}'")
             raise e
 
-        if compute_manager_id != self.compute_manager_id:
-            self.logger.info(f"Using registration '{compute_manager_id}'")
+        self._adopt(compute_manager_id)
+
+    def _register_again(self):
+        # the registration expired, for example after a network partition;
+        # join or recreate it, and carry on next cycle
+        self.logger.warning(
+            f"'{self.compute_manager_id}' is no longer registered with the "
+            "server; registering again"
+        )
+        self._register()
+
+    def _adopt(self, compute_manager_id: ComputeManagerID):
+        """Use the ID of the registration this manager belongs to, which
+        changes when another instance replaces an expired registration."""
+        if compute_manager_id == self.compute_manager_id:
+            return
+        self.logger.info(f"Using registration '{compute_manager_id}'")
         self.compute_manager_id = compute_manager_id
         self.service_settings.compute_manager_id = compute_manager_id
+        self.backend.compute_manager_id = compute_manager_id
         if isinstance(self.logger, logging.LoggerAdapter):
             self.logger.extra["compute_manager_id"] = compute_manager_id
 
@@ -187,6 +270,12 @@ class ComputeManager:
             self.logger.error(str(e))
             raise
 
+        try:
+            self.backend.validate()
+        except BackendError as e:
+            self.logger.error(f"Invalid backend configuration: {e}")
+            raise
+
         with self._running(steal=steal):
             try:
                 count = 0
@@ -228,39 +317,6 @@ class ComputeManager:
 
                 raise
 
-    @abstractmethod
-    def create_compute_services(self, data: dict, target: int) -> int:
-        """Submit up to ``target`` new compute services and return the actual
-        number created.
-
-        Called by :meth:`cycle` when scaling up is warranted. ``target`` is the
-        per-cycle sizing decision computed by :meth:`_compute_jobs_to_create`,
-        which already accounts for the number of waiting tasks, the per-cycle
-        rate limit (``max_submit_per_cycle``), the remaining capacity
-        (``max_compute_services - len(compute_service_ids)``), and the
-        per-service ``claim_limit``.
-
-        Subclasses still own backend-specific gating (e.g. checking whether
-        any previously submitted jobs are still pending in the batch system,
-        running health checks). ``target`` is an upper bound, not a guarantee.
-
-        Parameters
-        ----------
-        data
-            Payload from the OK ``ComputeManagerInstruction``. Includes
-            ``compute_service_ids`` and ``num_tasks`` at minimum.
-        target
-            Upper bound on the number of services to create this cycle.
-            Always ``>= 1`` when this method is called; the cycle short-
-            circuits and never calls in if there is no work or no capacity.
-
-        Returns
-        -------
-        int
-            Number of compute services actually created.
-        """
-        raise NotImplementedError
-
     def _compute_jobs_to_create(self, num_tasks: int, num_active_services: int) -> int:
         """Decide how many new compute services to create this cycle.
 
@@ -275,17 +331,13 @@ class ComputeManager:
         to zero (e.g. a single task with ``claim_limit=2``): rather than
         stalling, create one service and let the next cycle catch up.
 
-        Subclasses should rarely override this. The default rule is the
-        universal autoscaling sizing logic; backend-specific gating (e.g.
-        "skip this cycle if any submitted jobs are still pending") belongs
-        in :meth:`create_compute_services`, not here.
-
         Parameters
         ----------
         num_tasks
             Number of tasks waiting on the server.
         num_active_services
-            Number of compute services currently registered with the server.
+            Number of distinct names across pending and running jobs and
+            compute services registered with the server.
 
         Returns
         -------
@@ -317,6 +369,7 @@ class ComputeManager:
         self._stop = True
 
     def cycle(self) -> bool:
+        """Run one cycle; return ``False`` if the manager should stop."""
 
         if self._stop:
             return False
@@ -329,64 +382,329 @@ class ComputeManager:
                 self.compute_manager_id,
             )
         except ComputeManagerNotRegisteredError:
-            # the registration expired, for example after a network partition;
-            # join or recreate it, and carry on next cycle
-            self.logger.warning(
-                f"'{self.compute_manager_id}' is no longer registered with the "
-                "server; registering again"
-            )
-            self._register()
+            self._register_again()
             return True
-        match instruction:
-            case ComputeManagerInstruction.OK:
-                total_services = len(data["compute_service_ids"])
-                num_tasks = data["num_tasks"]
-                self.logger.info(
-                    f"Received instruction '{instruction}', {num_tasks} tasks available"
-                )
-                if (
-                    total_services < self.settings.max_compute_services
-                    and num_tasks > 0
-                ):
-                    target = self._compute_jobs_to_create(
-                        num_tasks=num_tasks,
-                        num_active_services=total_services,
-                    )
-                    self.logger.info(
-                        f"Sizing: num_tasks={num_tasks}, "
-                        f"max_submit_per_cycle={self.settings.max_submit_per_cycle}, "
-                        f"remaining_capacity="
-                        f"{self.settings.max_compute_services - total_services}, "
-                        f"claim_limit={self.service_settings.claim_limit} "
-                        f"-> target={target}"
-                    )
-                    if target > 0:
-                        new_services = self.create_compute_services(data, target)
-                        total_services += new_services
-                        if new_services:
-                            self.logger.info(
-                                f"Created {new_services} new compute service(s)"
-                            )
-                        else:
-                            self.logger.info("No new compute services created")
-                    else:
-                        self.logger.info(
-                            "Sizing returned 0; no compute services created"
-                        )
-            case ComputeManagerInstruction.SKIP:
-                total_services = len(data["compute_service_ids"])
-                self.logger.info("Received skip instruction")
-            case ComputeManagerInstruction.SHUTDOWN:
-                shutdown_message = data["message"]
-                self.logger.info(f'Received shutdown message: "{shutdown_message}"')
-                return False
-        self.logger.info(f"Updating manager status at '{self.client.api_url}'")
-        self.client.update_status(
-            self.compute_manager_id,
-            ComputeManagerStatus.OK,
-            saturation=total_services / self.settings.max_compute_services,
-        )
+
+        if instruction == ComputeManagerInstruction.SHUTDOWN:
+            self.logger.info(f'Received shutdown message: "{data["message"]}"')
+            return False
+
+        state: ComputeManagerState = data["state"]
+        self._adopt(state.registration.to_compute_manager_id())
+        num_tasks = data.get("num_tasks", 0)
+        registered = {
+            ComputeServiceID(csid).name for csid in data["compute_service_ids"]
+        }
+        if instruction == ComputeManagerInstruction.SKIP:
+            self.logger.info("Received skip instruction")
+        else:
+            self.logger.info(
+                f"Received instruction '{instruction}', {num_tasks} tasks available"
+            )
+
+        now = _utcnow()
+        update = ComputeManagerStateUpdate(expected_version=state.registration.version)
+
+        # the state was read before listing jobs, so a job another instance
+        # recorded as submitted is already visible to the backend
+        try:
+            jobs = self.backend.list_jobs()
+        except BackendError as e:
+            self.logger.warning(f"Could not list jobs; skipping maintenance: {e}")
+            jobs = None
+
+        if jobs is not None:
+            reconciliation = self._reconcile(jobs, state, registered, now)
+            active = reconciliation.active
+        else:
+            reconciliation = Reconciliation()
+            # without the backend's view, assume recorded jobs are still active
+            active = set(state.records_of(JobRecordKind.ACTIVE))
+
+        update.records += reconciliation.records
+        update.forget += reconciliation.forget
+        update.last_healthy_at = reconciliation.last_healthy_at
+
+        in_use = active | registered
+
+        if (
+            instruction == ComputeManagerInstruction.OK
+            and jobs is not None
+            and not reconciliation.pending
+        ):
+            submitted = self._submit(
+                self._compute_jobs_to_create(num_tasks, len(in_use)), now
+            )
+            in_use |= {record.job_name for record in submitted}
+            update.records += submitted
+        elif reconciliation.pending:
+            self.logger.info("Jobs are still pending; not submitting")
+
+        try:
+            self._post_state(
+                ComputeManagerStatus.OK, None, self._saturation(len(in_use)), update
+            )
+        except ComputeManagerNotRegisteredError:
+            # the outcomes weren't stored, so the jobs stay to be handled again
+            self._register_again()
+            return True
+
+        # remove jobs only now that their outcomes are stored
+        self._remove(reconciliation.to_remove)
+
         return True
+
+    def _saturation(self, in_use: int) -> float:
+        return min(1.0, in_use / self.settings.max_compute_services)
+
+    def _post_state(
+        self,
+        status: ComputeManagerStatus,
+        detail: str | None,
+        saturation: float,
+        update: ComputeManagerStateUpdate,
+    ) -> tuple[bool, ComputeManagerState]:
+        self.logger.info(f"Updating manager status at '{self.client.api_url}'")
+        applied, state = self.client.update_state(
+            self.compute_manager_id,
+            status,
+            detail=detail,
+            saturation=saturation,
+            state_update=update,
+        )
+        if not applied:
+            self.logger.info(
+                "Another instance changed the shared state this cycle; "
+                "reconsidering next cycle"
+            )
+        return applied, state
+
+    def _reconcile(
+        self,
+        jobs: list[Job],
+        state: ComputeManagerState,
+        registered: set[str],
+        now: datetime.datetime,
+    ) -> Reconciliation:
+        """Compare the backend's jobs with the shared state.
+
+        Each terminal job is handled once: its outcome is recorded, and it is
+        removed. Running jobs whose compute service hasn't registered are
+        checked against the registration grace period.
+
+        """
+        result = Reconciliation()
+        handled = state.records_of(JobRecordKind.HANDLED)
+        failed = state.records_of(JobRecordKind.FAILURE)
+        recorded_active = state.records_of(JobRecordKind.ACTIVE)
+        seen_registered = state.records_of(JobRecordKind.REGISTERED)
+        unregistered = state.records_of(JobRecordKind.UNREGISTERED)
+        listed = {job.name for job in jobs}
+
+        for job in jobs:
+            if job.name in handled:
+                if job.state.terminal or job.name in failed:
+                    # removing again is harmless, and finishes a removal that
+                    # failed or a job cancelled for not registering
+                    result.to_remove.append(job)
+                    continue
+                # a live job missing from one listing, as when the batch
+                # system's accounting lags, was taken to have disappeared
+                self.logger.info(f"Job '{job.name}' is listed again; still active")
+                result.forget.append((job.name, JobRecordKind.HANDLED))
+
+            if job.state.terminal:
+                self._handle_terminal(
+                    job,
+                    job.name in seen_registered or job.name in registered,
+                    result,
+                    now,
+                )
+                result.to_remove.append(job)
+                continue
+
+            result.active.add(job.name)
+            if job.state == JobState.PENDING:
+                result.pending = True
+
+            if job.name not in recorded_active:
+                result.record(
+                    job.name, JobRecordKind.ACTIVE, now, submitted_at=job.submitted_at
+                )
+
+            if job.name in registered:
+                if job.name not in seen_registered:
+                    result.record(job.name, JobRecordKind.REGISTERED, now)
+                if job.name in unregistered:
+                    result.forget.append((job.name, JobRecordKind.UNREGISTERED))
+                continue
+
+            # a job whose service has registered before may be ending: its
+            # service has deregistered while the batch system still reports
+            # it running
+            if (
+                job.state == JobState.RUNNING
+                and job.started_at is not None
+                and job.name not in seen_registered
+            ):
+                self._check_registration(job, unregistered.get(job.name), result, now)
+
+        # jobs that disappeared without being seen in a terminal state
+        for name in recorded_active:
+            if name not in listed and name not in handled:
+                self.logger.warning(
+                    f"Job '{name}' disappeared without a final state; its outcome "
+                    "is unknown, and it counts as neither a failure nor healthy"
+                )
+                result.record(name, JobRecordKind.HANDLED, now, ended_at=now)
+
+        # a handled job's record is needed while the backend may still list
+        # it: until it's gone, without a lookback, or for the lookback after
+        # it ended
+        lookback = self.backend.finished_job_lookback
+        for name, record in handled.items():
+            if (
+                name not in listed
+                if lookback is None
+                else (record.ended_at or record.at) < now - lookback
+            ):
+                result.forget.append((name, JobRecordKind.HANDLED))
+
+        return result
+
+    def _handle_terminal(
+        self,
+        job: Job,
+        seen_registered: bool,
+        result: Reconciliation,
+        now: datetime.datetime,
+    ):
+        ended_at = job.ended_at or now
+
+        match job.state:
+            case JobState.SUCCEEDED if seen_registered:
+                self.logger.info(f"Job '{job.name}' succeeded")
+                result.healthy(ended_at)
+            case JobState.SUCCEEDED:
+                self.logger.warning(
+                    f"Job '{job.name}' succeeded, but its compute service was never "
+                    "seen registered; check that the job starts a compute service "
+                    "registering under the job's name"
+                )
+            case JobState.FAILED:
+                kind = job.failure or FailureKind.WORKLOAD
+                # a failure after the service registered, such as a GPU lost
+                # mid-run, is diagnosed differently from a broken template
+                after = (
+                    "after its compute service registered"
+                    if seen_registered
+                    else "before its compute service registered"
+                )
+                reason = f"{after}: {job.reason}" if job.reason else after
+                record = ComputeManagerJobRecord(
+                    job_name=job.name,
+                    kind=JobRecordKind.FAILURE,
+                    at=now,
+                    submitted_at=job.submitted_at,
+                    ended_at=ended_at,
+                    failure_kind=kind.value,
+                    reason=reason,
+                )
+                result.records.append(record)
+                if kind == FailureKind.WORKLOAD:
+                    self.logger.warning(f"Job '{job.name}' failed {reason}")
+                    result.workload_failures.append(record)
+                else:
+                    self.logger.info(
+                        f"Job '{job.name}' failed {reason}; the failure is outside "
+                        "its control, and isn't counted"
+                    )
+
+        result.record(job.name, JobRecordKind.HANDLED, now, ended_at=ended_at)
+
+    def _check_registration(
+        self,
+        job: Job,
+        unregistered: ComputeManagerJobRecord | None,
+        result: Reconciliation,
+        now: datetime.datetime,
+    ):
+        """Check that a running job's compute service has registered.
+
+        A job is flagged only after two checks find it unregistered, at least
+        ``registration_grace_period`` apart, counted from when it started
+        running. A flagged job is recorded as a WORKLOAD failure and removed.
+
+        """
+        grace = datetime.timedelta(seconds=self.settings.registration_grace_period)
+        if now - job.started_at < grace:
+            return
+
+        if unregistered is None:
+            self.logger.info(
+                f"Job '{job.name}' is running, but its compute service hasn't "
+                "registered; checking again next cycle"
+            )
+            result.record(job.name, JobRecordKind.UNREGISTERED, now)
+            return
+
+        if now - unregistered.at < grace:
+            return
+
+        reason = (
+            f"running since {job.started_at.isoformat()} without its compute "
+            "service registering with the server"
+        )
+        self.logger.warning(f"Job '{job.name}' is {reason}; removing it")
+        record = ComputeManagerJobRecord(
+            job_name=job.name,
+            kind=JobRecordKind.FAILURE,
+            at=now,
+            submitted_at=job.submitted_at,
+            ended_at=now,
+            failure_kind=FailureKind.WORKLOAD.value,
+            reason=reason,
+        )
+        result.records.append(record)
+        result.workload_failures.append(record)
+        result.record(job.name, JobRecordKind.HANDLED, now, ended_at=now)
+        result.active.discard(job.name)
+        result.to_remove.append(job)
+
+    def _submit(
+        self, target: int, now: datetime.datetime
+    ) -> list[ComputeManagerJobRecord]:
+        """Submit up to ``target`` jobs, returning ACTIVE records for those
+        the backend accepted."""
+        submitted = []
+        for _ in range(target):
+            name = make_job_name(self.settings.name)
+            try:
+                self.backend.submit(name)
+            except TransientBackendError as e:
+                self.logger.info(f"Submission not accepted; trying next cycle: {e}")
+                break
+            except PermanentBackendError as e:
+                self.logger.error(f"Submission failed: {e}")
+                break
+
+            self.logger.info(f"Submitted job '{name}'")
+            submitted.append(
+                ComputeManagerJobRecord(
+                    job_name=name, kind=JobRecordKind.ACTIVE, at=now, submitted_at=now
+                )
+            )
+
+        return submitted
+
+    def _remove(self, jobs: list[Job]):
+        for job in jobs:
+            try:
+                self.backend.remove(job)
+            except BackendError as e:
+                self.logger.warning(
+                    f"Could not remove job '{job.name}'; retrying next cycle: {e}"
+                )
 
     def clear_error(self):
         """Deprecated: an ERROR registration no longer prevents a compute
