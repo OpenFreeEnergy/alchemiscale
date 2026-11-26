@@ -17,6 +17,7 @@ from ..storage.models import (
     ComputeManagerID,
     ComputeManagerInstruction,
     ComputeManagerJobRecord,
+    ComputeManagerRegistration,
     ComputeManagerState,
     ComputeManagerStateUpdate,
     ComputeManagerStatus,
@@ -33,6 +34,7 @@ from .backend import (
     TransientBackendError,
     make_job_name,
 )
+from ..base.client import AlchemiscaleConnectionError
 from .client import (
     AlchemiscaleComputeManagerClient,
     AlchemiscaleComputeManagerClientError,
@@ -52,6 +54,10 @@ class IncompatibleServerError(RuntimeError):
     """Raised when the alchemiscale server is too old for this compute manager."""
 
 
+class AuthenticationFailedError(RuntimeError):
+    """Raised when the compute manager can't authenticate with the server."""
+
+
 def _utcnow() -> datetime.datetime:
     return datetime.datetime.now(tz=datetime.UTC)
 
@@ -67,6 +73,8 @@ class Reconciliation:
     forget: list[tuple[str, JobRecordKind]] = field(default_factory=list)
     #: time of the most recent sign of health found this cycle
     last_healthy_at: datetime.datetime | None = None
+    #: when the jobs that were signs of health this cycle were submitted
+    healthy_submitted_at: list[datetime.datetime] = field(default_factory=list)
     #: jobs to remove once the records are stored
     to_remove: list[Job] = field(default_factory=list)
     #: names of jobs still pending or running
@@ -81,9 +89,382 @@ class Reconciliation:
             ComputeManagerJobRecord(job_name=job_name, kind=kind, at=now, **kwargs)
         )
 
-    def healthy(self, at: datetime.datetime):
+    def healthy(self, at: datetime.datetime, submitted_at: datetime.datetime):
+        self.healthy_submitted_at.append(submitted_at)
         if self.last_healthy_at is None or at > self.last_healthy_at:
             self.last_healthy_at = at
+
+
+def _later(a: datetime.datetime | None, b: datetime.datetime | None):
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return max(a, b)
+
+
+def _server_side(error: AlchemiscaleComputeManagerClientError) -> bool:
+    """Whether a failed request is the server's trouble, to wait out, rather
+    than a request the server rejects."""
+    return error.status_code is None or error.status_code >= 500
+
+
+def _next_backoff(reg: ComputeManagerRegistration, settings) -> float:
+    if reg.backoff_seconds:
+        backoff = reg.backoff_seconds * 2
+    else:
+        backoff = settings.sleep_interval
+    return min(backoff, settings.max_backoff)
+
+
+class _Cycle:
+    """One cycle's decisions: reconciling jobs, applying the failure policy,
+    and pausing, probing and resuming.
+
+    Every decision is made from the state read at the start of the cycle and
+    the jobs listed during it, so that instances under one name behave like
+    one manager. State transitions are sent with the version the state was
+    read at, and lost if another instance changed it first.
+
+    """
+
+    def __init__(
+        self,
+        manager: "ComputeManager",
+        state: ComputeManagerState,
+        registered: set[str],
+        has_work: bool,
+        num_tasks: int,
+    ):
+        self.manager = manager
+        self.settings = manager.settings
+        self.backend = manager.backend
+        self.logger = manager.logger
+        self.state = state
+        self.reg = state.registration
+        self.registered = registered
+        self.has_work = has_work
+        self.num_tasks = num_tasks
+        self.now = _utcnow()
+
+        self.update = ComputeManagerStateUpdate(expected_version=self.reg.version)
+        self.transition = self.update.transition
+        self.reconciliation = Reconciliation()
+        self.in_use: set[str] = set()
+        self.jobs: list[Job] | None = None
+
+        # a manager left in ERROR by an instance that exited is resumed
+        if self.reg.status == ComputeManagerStatus.DEGRADED:
+            self.status, self.detail = ComputeManagerStatus.DEGRADED, self.reg.detail
+        else:
+            self.status, self.detail = ComputeManagerStatus.OK, None
+
+    @property
+    def paused(self) -> bool:
+        return self.status == ComputeManagerStatus.DEGRADED
+
+    def run(self):
+        list_error = None
+        try:
+            self.jobs = self.backend.list_jobs()
+        except BackendError as e:
+            self.logger.warning(f"Could not list jobs; skipping maintenance: {e}")
+            list_error = e
+
+        if self.jobs is not None:
+            self.reconciliation = self.manager._reconcile(
+                self.jobs, self.state, self.registered, self.now
+            )
+            active = self.reconciliation.active
+            if self.reg.outage_started_at is not None:
+                self.logger.info("Backend calls are succeeding again")
+                self.update.outage = "clear"
+        else:
+            # without the backend's view, assume recorded jobs are still active
+            active = set(self.state.records_of(JobRecordKind.ACTIVE))
+            if isinstance(list_error, TransientBackendError):
+                self.update.outage = "start"
+
+        self.update.records += self.reconciliation.records
+        self.update.forget += self.reconciliation.forget
+        self.update.last_healthy_at = self.reconciliation.last_healthy_at
+        self.in_use = active | self.registered
+
+        if self.paused:
+            self.while_paused()
+        else:
+            self.while_running(list_error)
+
+    # facts
+
+    @property
+    def last_healthy_at(self) -> datetime.datetime | None:
+        return _later(self.reg.last_healthy_at, self.reconciliation.last_healthy_at)
+
+    def counted_failures(self) -> list[ComputeManagerJobRecord]:
+        """WORKLOAD failures since the last sign of health, stored or found
+        this cycle; derived from records, so nothing is lost or counted twice
+        when instances race."""
+        failures = self.state.records_of(JobRecordKind.FAILURE) | {
+            r.job_name: r for r in self.reconciliation.workload_failures
+        }
+        healthy_at = self.last_healthy_at
+        return sorted(
+            (
+                r
+                for r in failures.values()
+                if r.failure_kind == FailureKind.WORKLOAD.value
+                and (healthy_at is None or (r.ended_at or r.at) > healthy_at)
+            ),
+            key=lambda r: r.ended_at or r.at,
+        )
+
+    def only_infrastructure_failures(self) -> bool:
+        """Whether jobs ended this cycle, and all failed for INFRASTRUCTURE
+        reasons, as when they keep landing on faulty nodes."""
+        ended = [
+            r for r in self.reconciliation.records if r.kind == JobRecordKind.HANDLED
+        ]
+        failures = [
+            r
+            for r in self.reconciliation.records
+            if r.kind == JobRecordKind.FAILURE
+            and r.failure_kind == FailureKind.INFRASTRUCTURE.value
+        ]
+        return bool(failures) and len(failures) == len(ended)
+
+    def outage_duration(self) -> datetime.timedelta | None:
+        if self.update.outage != "start":
+            return None
+        return self.now - (self.reg.outage_started_at or self.now)
+
+    # transitions
+
+    def next_backoff(self) -> float:
+        return _next_backoff(self.reg, self.settings)
+
+    def pause(self, cause: str, detail: str):
+        backoff = self.next_backoff()
+        self.logger.warning(
+            f"Pausing: {detail}. Probing again in {backoff:.0f} seconds"
+        )
+        self.status, self.detail = ComputeManagerStatus.DEGRADED, detail
+        self.transition.update(
+            pause_cause=cause,
+            paused_at=self.now,
+            backoff_seconds=backoff,
+            backoff_until=self.now + datetime.timedelta(seconds=backoff),
+            probe_job=None,
+            probation_started_at=None,
+        )
+
+    def resume(self, probation: bool):
+        self.status, self.detail = ComputeManagerStatus.OK, None
+        self.transition.update(pause_cause=None, backoff_until=None, probe_job=None)
+        if probation:
+            self.event("Probe passed; resuming on probation")
+            self.transition.update(probation_started_at=self.now)
+        else:
+            self.event("A job submitted before the pause succeeded; resuming")
+            self.transition.update(
+                paused_at=None, backoff_seconds=None, probation_started_at=None
+            )
+
+    def probe_failed(self, reason: str):
+        backoff = self.next_backoff()
+        self.event(
+            f"Probe failed: {reason}. Probing again in {backoff:.0f} seconds",
+            logging.WARNING,
+        )
+        self.transition.update(
+            probe_job=None,
+            backoff_seconds=backoff,
+            backoff_until=self.now + datetime.timedelta(seconds=backoff),
+        )
+
+    # policy
+
+    def while_running(self, list_error: BackendError | None):
+        if isinstance(list_error, PermanentBackendError):
+            self.pause("permanent", f"Backend error: {list_error}")
+            return
+
+        remove_error = self.manager._remove_error
+        if remove_error is not None:
+            self.pause("permanent", f"Backend error on removal: {remove_error}")
+            return
+
+        outage = self.outage_duration()
+        if outage is not None and outage.total_seconds() > (
+            self.settings.max_backend_outage
+        ):
+            self.pause(
+                "outage",
+                f"Backend calls have failed for {outage.total_seconds():.0f} "
+                f"seconds, longer than max_backend_outage="
+                f"{self.settings.max_backend_outage}: {list_error}",
+            )
+            return
+
+        failures = self.counted_failures()
+        on_probation = self.reg.probation_started_at is not None
+        if on_probation:
+            # jobs left over from before the pause can't end probation
+            since = self.reg.paused_at or self.reg.probation_started_at
+            probation_failures = [
+                r for r in failures if r.submitted_at and r.submitted_at >= since
+            ]
+            if probation_failures:
+                last = probation_failures[-1]
+                self.pause(
+                    "workload",
+                    f"Job '{last.job_name}' failed on probation"
+                    + (f": {last.reason}" if last.reason else ""),
+                )
+                return
+
+        # on probation, the failures that caused the pause are still on
+        # record until a sign of health; only probation failures count
+        limit = self.settings.max_failed_jobs
+        if not on_probation and limit is not None and len(failures) > limit:
+            last = failures[-1]
+            self.pause(
+                "workload",
+                f"{len(failures)} jobs failed since the last healthy job, more "
+                f"than max_failed_jobs={limit}; most recent: '{last.job_name}'"
+                + (f": {last.reason}" if last.reason else ""),
+            )
+            return
+
+        if on_probation and any(
+            submitted_at >= since
+            for submitted_at in self.reconciliation.healthy_submitted_at
+        ):
+            self.event("A job succeeded; probation over")
+            self.transition.update(
+                probation_started_at=None, paused_at=None, backoff_seconds=None
+            )
+
+        if self.jobs is None or not self.has_work:
+            return
+        if self.reconciliation.pending:
+            self.logger.info("Jobs are still pending; not submitting")
+            return
+
+        target = self.manager._compute_jobs_to_create(self.num_tasks, len(self.in_use))
+        if target > 1 and self.only_infrastructure_failures():
+            full, target = target, target // 2
+            self.logger.warning(
+                "Every job that ended this cycle failed for reasons outside its "
+                f"control; submitting {target} rather than {full}"
+            )
+        submitted, error = self.manager._submit(target, self.now)
+        self.accept(submitted)
+        if error is not None:
+            self.pause("permanent", f"Backend error on submission: {error}")
+
+    def while_paused(self):
+        reg = self.reg
+
+        # a sign of health from a job still running from before the pause
+        # shows the configuration works
+        healthy_at = self.last_healthy_at
+        if healthy_at and reg.paused_at and healthy_at > reg.paused_at:
+            self.resume(probation=False)
+            return
+
+        if reg.probe_job is not None:
+            verdict = self.probe_verdict(reg.probe_job)
+            if verdict is True:
+                self.resume(probation=True)
+            elif verdict is False:
+                # the backoff stays as it is, and the next cycle probes again
+                self.event(
+                    f"Probe job '{reg.probe_job}' ended without showing whether "
+                    "the configuration works; probing again"
+                )
+                self.transition.update(probe_job=None)
+            elif verdict is not None:
+                self.probe_failed(verdict)
+            else:
+                self.logger.info(f"Waiting on probe job '{reg.probe_job}'")
+            return
+
+        if reg.backoff_until is not None and self.now < reg.backoff_until:
+            self.logger.info(
+                f"Paused ({self.detail}); next probe after "
+                f"{reg.backoff_until.isoformat()}"
+            )
+            return
+
+        if reg.pause_cause == "error":
+            # the probe is the cycle itself, which got this far
+            self.resume(probation=True)
+            return
+
+        if reg.pause_cause == "outage":
+            # the probe is the cycle's own backend calls
+            if self.jobs is not None:
+                self.resume(probation=True)
+            else:
+                self.probe_failed("backend calls still failing")
+            return
+
+        if self.jobs is None:
+            self.logger.info("Paused; can't list jobs, so not probing")
+            return
+        # a probe job with nothing to claim proves nothing
+        if not self.has_work:
+            self.logger.info("Paused; waiting for work to probe with")
+            return
+
+        submitted, error = self.manager._submit(1, self.now)
+        self.accept(submitted)
+        if error is not None:
+            self.probe_failed(f"submission failed: {error}")
+        elif submitted:
+            self.event(f"Probing with job '{submitted[0].job_name}'")
+            self.transition.update(probe_job=submitted[0].job_name)
+
+    def probe_verdict(self, name: str) -> bool | str | None:
+        """Return ``True`` if the probe job passed, a reason if it failed,
+        ``False`` if it ended without a verdict, as when it was preempted or
+        disappeared, or ``None`` if there's no verdict yet."""
+        failures = self.state.records_of(JobRecordKind.FAILURE) | {
+            r.job_name: r
+            for r in self.reconciliation.records
+            if r.kind == JobRecordKind.FAILURE
+        }
+        if name in failures:
+            if failures[name].failure_kind == FailureKind.INFRASTRUCTURE.value:
+                return False
+            return "the probe job failed"
+
+        if self.jobs is None:
+            return None
+
+        if name in self.registered or name in self.state.records_of(
+            JobRecordKind.REGISTERED
+        ):
+            return True
+
+        listed = {job.name: job for job in self.jobs}
+        if name not in listed:
+            return False
+        if listed[name].state == JobState.SUCCEEDED:
+            return "the probe job ended without its compute service registering"
+
+        return None
+
+    def event(self, message: str, level: int = logging.INFO):
+        """Log an event in the manager's pause and recovery, and record it in
+        the error history with this cycle's transition."""
+        self.logger.log(level, message)
+        self.update.events.append(message)
+
+    def accept(self, submitted: list[ComputeManagerJobRecord]):
+        self.update.records += submitted
+        self.in_use |= {record.job_name for record in submitted}
 
 
 class ComputeManager:
@@ -127,6 +508,9 @@ class ComputeManager:
         )
 
         self._stop = False
+        self._cycle_errors = 0
+        self._last_state: ComputeManagerState | None = None
+        self._remove_error: PermanentBackendError | None = None
         self.int_sleep = InterruptableSleep()
 
         logger = logging.getLogger("AlchemiscaleComputeManager")
@@ -241,7 +625,7 @@ class ComputeManager:
         registered = False
 
         try:
-            self._register(steal=steal)
+            self._when_reachable(lambda: self._register(steal=steal))
             registered = True
 
             self.logger.info(f"Registered compute manager '{self.compute_manager_id}'")
@@ -265,10 +649,13 @@ class ComputeManager:
         self.logger.info(f"Starting up compute manager '{self.settings.name}'")
 
         try:
-            self._check_server_version()
+            self._when_reachable(self._check_server_version)
         except IncompatibleServerError as e:
             self.logger.error(str(e))
             raise
+        except SleepInterrupted:
+            self.logger.info("Compute manager stopping.")
+            return
 
         try:
             self.backend.validate()
@@ -281,7 +668,7 @@ class ComputeManager:
                 count = 0
                 self.logger.info("Starting main loop")
 
-                while self.cycle():
+                while self._cycle_through_errors():
                     count += 1
 
                     if max_cycles and count >= max_cycles:
@@ -299,23 +686,115 @@ class ComputeManager:
             except KeyboardInterrupt:
                 self.logger.info("Caught SIGINT/Keyboard interrupt.")
 
-            except Exception as e:
-                self.logger.error(f"Unknown exception raised: '{str(e)}'")
-                self.logger.info("Updating manager status to 'ERROR'")
-
-                try:
-                    self.client.update_status(
-                        self.compute_manager_id,
-                        ComputeManagerStatus.ERROR,
-                        detail=repr(e),
-                    )
-                except ComputeManagerNotRegisteredError:
-                    self.logger.warning(
-                        f"Could not report the error: '{self.compute_manager_id}' "
-                        "is no longer registered with the server"
-                    )
-
+            except AuthenticationFailedError as e:
+                self.logger.error(str(e))
                 raise
+
+    def _when_reachable(self, call):
+        """Call ``call``, retrying while the server is unreachable or failing."""
+        while True:
+            try:
+                return call()
+            except AlchemiscaleConnectionError as e:
+                error = e
+            except AlchemiscaleComputeManagerClientError as e:
+                if not _server_side(e):
+                    raise
+                error = e
+            self.logger.warning(
+                f"Could not reach the server; retrying in "
+                f"{self.settings.sleep_interval} seconds: {error}"
+            )
+            self.int_sleep(self.settings.sleep_interval)
+
+    def _cycle_through_errors(self) -> bool:
+        """Run a cycle, skipping the rest of it on an error.
+
+        The manager keeps running through server outages, backend errors,
+        which pause it, and unexpected exceptions, which pause it once
+        ``max_cycle_errors`` cycles in a row raise one. It exits only if
+        authentication fails.
+
+        """
+        try:
+            return self.cycle()
+        except AlchemiscaleComputeManagerClientError as e:
+            if e.status_code == 401:
+                raise AuthenticationFailedError(
+                    f"Authentication against '{self.client.api_url}' failed: {e}"
+                ) from e
+            if not _server_side(e):
+                self._unexpected_error(e)
+                return True
+            self.logger.warning(f"Request to the server failed; skipping cycle: {e}")
+        except AlchemiscaleConnectionError as e:
+            self.logger.warning(f"Could not reach the server; skipping cycle: {e}")
+        except Exception as e:
+            self._unexpected_error(e)
+        return True
+
+    def _unexpected_error(self, error: Exception):
+        """Count a cycle that raised an unexpected exception, such as a bug or
+        a request the server rejects, and pause once ``max_cycle_errors``
+        cycles in a row have.
+
+        The cycle posted nothing, so the registration is renewed here.
+
+        """
+        self._cycle_errors += 1
+        self.logger.error(
+            f"Unexpected error, {self._cycle_errors} cycle(s) in a row; "
+            f"skipping cycle: {error!r}",
+            exc_info=error,
+        )
+
+        state = self._last_state
+        if state is None:
+            # nothing read yet; the registration was just renewed by registering
+            return
+
+        reg = state.registration
+        update = ComputeManagerStateUpdate(expected_version=reg.version)
+        status, detail = reg.status, reg.detail
+        if (
+            self._cycle_errors >= self.settings.max_cycle_errors
+            and reg.status == ComputeManagerStatus.OK
+        ):
+            now = _utcnow()
+            backoff = _next_backoff(reg, self.settings)
+            status = ComputeManagerStatus.DEGRADED
+            detail = (
+                f"{self._cycle_errors} cycles in a row failed with an unexpected "
+                f"error: {error!r}"
+            )
+            self.logger.warning(
+                f"Pausing: {detail}. Probing again in {backoff:.0f} seconds"
+            )
+            update.transition = {
+                "pause_cause": "error",
+                "paused_at": now,
+                "backoff_seconds": backoff,
+                "backoff_until": now + datetime.timedelta(seconds=backoff),
+                "probe_job": None,
+                "probation_started_at": None,
+            }
+
+        try:
+            applied, _ = self.client.update_state(
+                self.compute_manager_id,
+                status,
+                detail=detail,
+                saturation=reg.saturation or 0.0,
+                state_update=update,
+            )
+        except Exception as e:
+            self.logger.warning(f"Could not report to the server: {e!r}")
+            return
+        if update.transition and not applied:
+            self.logger.info(
+                "Another instance changed the shared state; pausing next time "
+                "if the errors continue"
+            )
 
     def _compute_jobs_to_create(self, num_tasks: int, num_active_services: int) -> int:
         """Decide how many new compute services to create this cycle.
@@ -391,6 +870,7 @@ class ComputeManager:
 
         state: ComputeManagerState = data["state"]
         self._adopt(state.registration.to_compute_manager_id())
+        self._last_state = state
         num_tasks = data.get("num_tasks", 0)
         registered = {
             ComputeServiceID(csid).name for csid in data["compute_service_ids"]
@@ -402,47 +882,21 @@ class ComputeManager:
                 f"Received instruction '{instruction}', {num_tasks} tasks available"
             )
 
-        now = _utcnow()
-        update = ComputeManagerStateUpdate(expected_version=state.registration.version)
-
-        # the state was read before listing jobs, so a job another instance
-        # recorded as submitted is already visible to the backend
-        try:
-            jobs = self.backend.list_jobs()
-        except BackendError as e:
-            self.logger.warning(f"Could not list jobs; skipping maintenance: {e}")
-            jobs = None
-
-        if jobs is not None:
-            reconciliation = self._reconcile(jobs, state, registered, now)
-            active = reconciliation.active
-        else:
-            reconciliation = Reconciliation()
-            # without the backend's view, assume recorded jobs are still active
-            active = set(state.records_of(JobRecordKind.ACTIVE))
-
-        update.records += reconciliation.records
-        update.forget += reconciliation.forget
-        update.last_healthy_at = reconciliation.last_healthy_at
-
-        in_use = active | registered
-
-        if (
-            instruction == ComputeManagerInstruction.OK
-            and jobs is not None
-            and not reconciliation.pending
-        ):
-            submitted = self._submit(
-                self._compute_jobs_to_create(num_tasks, len(in_use)), now
-            )
-            in_use |= {record.job_name for record in submitted}
-            update.records += submitted
-        elif reconciliation.pending:
-            self.logger.info("Jobs are still pending; not submitting")
+        cycle = _Cycle(
+            manager=self,
+            state=state,
+            registered=registered,
+            has_work=instruction == ComputeManagerInstruction.OK and num_tasks > 0,
+            num_tasks=num_tasks,
+        )
+        cycle.run()
 
         try:
             self._post_state(
-                ComputeManagerStatus.OK, None, self._saturation(len(in_use)), update
+                cycle.status,
+                cycle.detail,
+                self._saturation(len(cycle.in_use)),
+                cycle.update,
             )
         except ComputeManagerNotRegisteredError:
             # the outcomes weren't stored, so the jobs stay to be handled again
@@ -450,8 +904,10 @@ class ComputeManager:
             return True
 
         # remove jobs only now that their outcomes are stored
-        self._remove(reconciliation.to_remove)
+        self._remove(cycle.reconciliation.to_remove)
 
+        # only a cycle that got all the way through ends a run of errors
+        self._cycle_errors = 0
         return True
 
     def _saturation(self, in_use: int) -> float:
@@ -584,7 +1040,7 @@ class ComputeManager:
         match job.state:
             case JobState.SUCCEEDED if seen_registered:
                 self.logger.info(f"Job '{job.name}' succeeded")
-                result.healthy(ended_at)
+                result.healthy(ended_at, job.submitted_at)
             case JobState.SUCCEEDED:
                 self.logger.warning(
                     f"Job '{job.name}' succeeded, but its compute service was never "
@@ -673,9 +1129,13 @@ class ComputeManager:
 
     def _submit(
         self, target: int, now: datetime.datetime
-    ) -> list[ComputeManagerJobRecord]:
-        """Submit up to ``target`` jobs, returning ACTIVE records for those
-        the backend accepted."""
+    ) -> tuple[list[ComputeManagerJobRecord], PermanentBackendError | None]:
+        """Submit up to ``target`` jobs.
+
+        Returns ACTIVE records for the jobs the backend accepted, and the
+        :class:`PermanentBackendError` that stopped submission, if any.
+
+        """
         submitted = []
         for _ in range(target):
             name = make_job_name(self.settings.name)
@@ -686,7 +1146,7 @@ class ComputeManager:
                 break
             except PermanentBackendError as e:
                 self.logger.error(f"Submission failed: {e}")
-                break
+                return submitted, e
 
             self.logger.info(f"Submitted job '{name}'")
             submitted.append(
@@ -695,9 +1155,12 @@ class ComputeManager:
                 )
             )
 
-        return submitted
+        return submitted, None
 
     def _remove(self, jobs: list[Job]):
+        """Remove jobs, keeping a :class:`PermanentBackendError` for the next
+        cycle to pause on."""
+        self._remove_error = None
         for job in jobs:
             try:
                 self.backend.remove(job)
@@ -705,6 +1168,8 @@ class ComputeManager:
                 self.logger.warning(
                     f"Could not remove job '{job.name}'; retrying next cycle: {e}"
                 )
+                if isinstance(e, PermanentBackendError):
+                    self._remove_error = e
 
     def clear_error(self):
         """Deprecated: an ERROR registration no longer prevents a compute

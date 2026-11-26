@@ -6,15 +6,27 @@ API. Integration coverage of the cycle loop lives in
 ``tests/integration/compute/client/test_compute_manager.py``.
 """
 
+import datetime
+
 from unittest.mock import MagicMock
 
 import pytest
 
-from alchemiscale.base.client import AlchemiscaleBaseClient
+from alchemiscale.base.client import AlchemiscaleBaseClient, AlchemiscaleConnectionError
 from alchemiscale.compute import manager as manager_module
 from alchemiscale.compute.backend import is_own_job_name, make_job_name
-from alchemiscale.compute.manager import ComputeManager, IncompatibleServerError
-from alchemiscale.storage.models import ComputeServiceID
+from alchemiscale.compute.client import AlchemiscaleComputeManagerClientError
+from alchemiscale.compute.manager import (
+    AuthenticationFailedError,
+    ComputeManager,
+    IncompatibleServerError,
+)
+from alchemiscale.storage.models import (
+    ComputeManagerRegistration,
+    ComputeManagerState,
+    ComputeManagerStatus,
+    ComputeServiceID,
+)
 from alchemiscale.compute.settings import (
     ComputeManagerSettings,
     ComputeServiceSettings,
@@ -46,6 +58,9 @@ def _make_manager(
     service_settings.claim_limit = claim_limit
 
     mgr = ComputeManager.__new__(ComputeManager)
+    mgr._cycle_errors = 0
+    mgr._last_state = None
+    mgr._remove_error = None
     mgr.settings = settings
     mgr.service_settings = service_settings
     return mgr
@@ -231,3 +246,147 @@ class TestJobNames:
         # the compute service a job starts registers under the job's name
         name = make_job_name("foo.bar")
         assert ComputeServiceID.new_from_name(name).name == name
+
+
+class TestServerErrors:
+    """The manager keeps cycling through server errors, but exits if it
+    can't authenticate."""
+
+    @staticmethod
+    def _manager(error):
+        mgr = _make_manager()
+        mgr.client = MagicMock()
+        mgr.client.api_url = "http://server/"
+        mgr.logger = MagicMock()
+        mgr.cycle = MagicMock(side_effect=error)
+        return mgr
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            AlchemiscaleComputeManagerClientError("bad gateway", status_code=502),
+            AlchemiscaleComputeManagerClientError("server error", status_code=500),
+            AlchemiscaleConnectionError("connection refused"),
+        ],
+    )
+    def test_skips_cycle(self, error):
+        mgr = self._manager(error)
+        assert mgr._cycle_through_errors() is True
+        mgr.logger.warning.assert_called_once()
+
+    def test_authentication_failure(self):
+        mgr = self._manager(
+            AlchemiscaleComputeManagerClientError("unauthorized", status_code=401)
+        )
+        with pytest.raises(AuthenticationFailedError):
+            mgr._cycle_through_errors()
+
+
+class TestUnexpectedErrors:
+    """An unexpected exception skips the cycle; enough in a row pause the
+    manager, which never exits for them."""
+
+    @staticmethod
+    def _manager(status="OK", max_cycle_errors=3):
+        mgr = _make_manager()
+        mgr.settings.max_cycle_errors = max_cycle_errors
+        mgr.settings.sleep_interval = 10
+        mgr.client = MagicMock()
+        mgr.client.api_url = "http://server/"
+        mgr.logger = MagicMock()
+        mgr.compute_manager_id = "testmgr-" + "0" * 32
+        now = datetime.datetime.now(tz=datetime.UTC)
+        mgr._last_state = ComputeManagerState(
+            registration=ComputeManagerRegistration(
+                name="testmgr",
+                uuid="0" * 32,
+                registered=now,
+                last_status_update=now,
+                status=status,
+                saturation=0.5,
+                version=7,
+            )
+        )
+        mgr.cycle = MagicMock(side_effect=RuntimeError("bug"))
+        return mgr
+
+    def test_pauses_after_max_cycle_errors(self):
+        mgr = self._manager()
+        for _ in range(2):
+            assert mgr._cycle_through_errors() is True
+        # each erroring cycle renews the registration, changing nothing else
+        for call in mgr.client.update_state.call_args_list:
+            assert call.args[1] == ComputeManagerStatus.OK
+            assert not call.kwargs["state_update"].transition
+            assert call.kwargs["state_update"].expected_version == 7
+
+        assert mgr._cycle_through_errors() is True
+        call = mgr.client.update_state.call_args
+        assert call.args[1] == ComputeManagerStatus.DEGRADED
+        assert "3 cycles in a row" in call.kwargs["detail"]
+        assert "RuntimeError('bug')" in call.kwargs["detail"]
+        update = call.kwargs["state_update"]
+        assert update.expected_version == 7
+        assert update.transition["pause_cause"] == "error"
+        assert update.transition["backoff_seconds"] == 10
+
+        # a pause that wasn't applied is tried again
+        assert mgr._cycle_through_errors() is True
+        call = mgr.client.update_state.call_args
+        assert call.args[1] == ComputeManagerStatus.DEGRADED
+        assert "4 cycles in a row" in call.kwargs["detail"]
+
+    def test_already_paused(self):
+        mgr = self._manager(status="DEGRADED", max_cycle_errors=1)
+        mgr._cycle_through_errors()
+        call = mgr.client.update_state.call_args
+        assert call.args[1] == ComputeManagerStatus.DEGRADED
+        assert not call.kwargs["state_update"].transition
+
+    @pytest.mark.parametrize("status_code, counted", [(422, True), (503, False)])
+    def test_rejected_requests_counted(self, status_code, counted):
+        mgr = self._manager()
+        mgr.cycle.side_effect = AlchemiscaleComputeManagerClientError(
+            "rejected", status_code=status_code
+        )
+        assert mgr._cycle_through_errors() is True
+        assert mgr._cycle_errors == (1 if counted else 0)
+
+    def test_report_fails(self):
+        mgr = self._manager(max_cycle_errors=1)
+        mgr.client.update_state.side_effect = ConnectionError("down")
+        assert mgr._cycle_through_errors() is True
+
+
+class TestStartupRetries:
+    """At startup, the manager waits for an unreachable or failing server."""
+
+    @staticmethod
+    def _manager():
+        mgr = _make_manager()
+        mgr.settings.sleep_interval = 0
+        mgr.int_sleep = MagicMock()
+        mgr.logger = MagicMock()
+        return mgr
+
+    def test_retries_until_reachable(self):
+        mgr = self._manager()
+        call = MagicMock(
+            side_effect=[
+                AlchemiscaleConnectionError("down"),
+                AlchemiscaleComputeManagerClientError("bad gateway", status_code=502),
+                "done",
+            ]
+        )
+        assert mgr._when_reachable(call) == "done"
+        assert mgr.int_sleep.call_count == 2
+
+    def test_rejection_raised(self):
+        mgr = self._manager()
+        call = MagicMock(
+            side_effect=AlchemiscaleComputeManagerClientError(
+                "unauthorized", status_code=401
+            )
+        )
+        with pytest.raises(AlchemiscaleComputeManagerClientError):
+            mgr._when_reachable(call)

@@ -705,6 +705,22 @@ def get_computemanager(
     )
 
 
+@router.post("/computemanager/{compute_manager_name}/probe")
+def probe_computemanager(
+    compute_manager_name: str,
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
+):
+    """Have a paused (``DEGRADED``) compute manager probe on its next cycle,
+    rather than waiting for its backoff to expire."""
+    try:
+        return n4js.request_compute_manager_probe(
+            compute_manager_name, expire_time=_manager_expire_time(settings)
+        )
+    except (ComputeManagerNotFoundError, ComputeManagerStateError) as e:
+        raise _compute_manager_http_exception(e)
+
+
 @router.post("/computemanager/{compute_manager_name}/clear_error")
 def clear_error_computemanager(
     compute_manager_name: str,

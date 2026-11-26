@@ -150,8 +150,12 @@ class ComputeManagerRegistration(BaseModel):
     last_healthy_at: datetime.datetime | None = None
     #: start of the current backend outage, if any
     outage_started_at: datetime.datetime | None = None
-    #: why the manager is DEGRADED: "workload", "permanent" or "outage"
+    #: why the manager is DEGRADED: "workload", "permanent", "outage" or
+    #: "error"
     pause_cause: str | None = None
+    #: when the manager last paused; kept through probation, so that jobs
+    #: submitted before the pause can't end it
+    paused_at: datetime.datetime | None = None
     #: current probe backoff, in seconds
     backoff_seconds: float | None = None
     #: no probe is sent before this time
@@ -168,6 +172,7 @@ class ComputeManagerRegistration(BaseModel):
             "status",
             "detail",
             "pause_cause",
+            "paused_at",
             "backoff_seconds",
             "backoff_until",
             "probe_job",

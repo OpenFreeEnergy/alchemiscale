@@ -209,15 +209,18 @@ class TestComputeManager:
         network_tyk2,
         scope_test,
     ):
+        # an unexpected exception skips the cycle; enough in a row pause the
+        # manager, which keeps running
         LocalProcessBackend.exception = RuntimeError("Unexpected failure in manager")
+        manager.settings.max_cycle_errors = 1
 
-        with pytest.raises(RuntimeError):
-            manager.start(max_cycles=1)
+        manager.start(max_cycles=1)
 
         query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
         record = n4js_preloaded.execute_query(query).records[0]["cmr"]
-        assert record["status"] == ComputeManagerStatus.ERROR
-        assert record["detail"] == "RuntimeError('Unexpected failure in manager')"
+        assert record["status"] == ComputeManagerStatus.DEGRADED
+        assert record["pause_cause"] == "error"
+        assert "RuntimeError('Unexpected failure in manager')" in record["detail"]
 
     def test_clear_error(
         self,
@@ -226,10 +229,13 @@ class TestComputeManager:
         network_tyk2,
         scope_test,
     ):
-        LocalProcessBackend.exception = RuntimeError("Unexpected failure in manager")
-
-        with pytest.raises(RuntimeError):
-            manager.start(max_cycles=1)
+        # an ERROR registration, as a 0.8 manager leaves behind
+        manager._register()
+        manager.client.update_status(
+            manager.compute_manager_id,
+            ComputeManagerStatus.ERROR,
+            detail="RuntimeError('Unexpected failure in manager')",
+        )
 
         query = """
         MATCH (cmr:ComputeManagerRegistration {status: "ERROR"})
@@ -237,7 +243,8 @@ class TestComputeManager:
         """
 
         assert n4js_preloaded.execute_query(query).records
-        manager.clear_error()
+        with pytest.warns(DeprecationWarning):
+            manager.clear_error()
         assert not n4js_preloaded.execute_query(query).records
 
     def test_manager_keyboard_interrupt(

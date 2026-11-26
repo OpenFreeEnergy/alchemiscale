@@ -1,0 +1,20 @@
+**Added:**
+
+* Compute managers pause, reporting ``DEGRADED``, instead of exiting when more than ``max_failed_jobs`` jobs fail with a ``WORKLOAD`` failure since the last sign of health, when the backend raises a ``PermanentBackendError``, or when backend calls keep failing for longer than ``max_backend_outage`` seconds. A paused manager probes with a single job after a backoff that starts at ``sleep_interval`` and doubles, up to ``max_backoff``, and resumes on probation once the probe's compute service registers.
+* ``ComputeManagerSettings.max_failed_jobs``, ``max_backend_outage``, ``max_backoff`` and ``max_cycle_errors``.
+* An unexpected exception during a cycle, or a request the server rejects, is logged with its traceback and skips the cycle, which still renews the registration; after ``max_cycle_errors`` cycles in a row, the manager pauses.
+* A probe job that fails for ``INFRASTRUCTURE`` reasons, or disappears, is inconclusive: the manager probes again without lengthening the backoff.
+* When every job that ended in a cycle failed for ``INFRASTRUCTURE`` reasons, the manager submits half as many jobs that cycle.
+* Probing, resuming and the end of probation are recorded in the manager's error history.
+* ``alchemiscale compute manager probe``, ``AlchemiscaleComputeManagerClient.request_probe`` and ``POST /computemanager/{name}/probe``, to have a paused compute manager probe on its next cycle.
+
+**Changed:**
+
+* Pause state is kept on the shared registration, so every instance under a name pauses and resumes together, and a restarted manager stays paused.
+* Compute managers skip a cycle when the server can't be reached or fails, wait for the server at startup, and exit only when backend validation fails at startup or authentication fails. They no longer report ``ERROR``.
+* A ``PermanentBackendError`` from ``remove()`` pauses the manager on the next cycle.
+* ``alchemiscale compute manager status`` shows when the manager paused and its backoff, and ``alchemiscale compute manager probe`` reports a refused request without a traceback.
+
+**Deprecated:**
+
+* The ``ERROR`` ``ComputeManagerStatus``, now reported only by v0.8 compute managers.

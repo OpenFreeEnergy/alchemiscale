@@ -355,6 +355,13 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         }
 
     @_not_registered_on_404
+    def request_probe(self, compute_manager_name: str) -> ComputeManagerID:
+        """Have a paused (``DEGRADED``) compute manager probe on its next
+        cycle, rather than waiting for its backoff to expire."""
+        res = self._post_resource(f"/computemanager/{compute_manager_name}/probe", {})
+        return ComputeManagerID(res)
+
+    @_not_registered_on_404
     def clear_error(self, compute_manager_name: str):
         """Remove the ERROR registration under ``compute_manager_name``.
 

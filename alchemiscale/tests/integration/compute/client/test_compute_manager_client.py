@@ -465,3 +465,40 @@ class TestComputeManagerStatus:
         with pytest.raises(client.AlchemiscaleComputeManagerClientError) as excinfo:
             compute_manager_client.get_status("1nvalid-name")
         assert excinfo.value.status_code == 422
+
+    def test_request_probe(self, n4js_preloaded, compute_manager_client):
+        with pytest.raises(client.ComputeManagerNotRegisteredError):
+            compute_manager_client.request_probe("testmanager")
+
+        compute_manager_id = compute_manager_client.register(
+            ComputeManagerID.new_from_name("testmanager")
+        )
+
+        # only a paused manager can be asked to probe
+        with pytest.raises(client.AlchemiscaleComputeManagerClientError) as excinfo:
+            compute_manager_client.request_probe("testmanager")
+        assert excinfo.value.status_code == 422
+
+        later = datetime.datetime.now(tz=datetime.UTC) + datetime.timedelta(hours=1)
+        compute_manager_client.update_state(
+            compute_manager_id,
+            ComputeManagerStatus.DEGRADED,
+            detail="paused",
+            saturation=0,
+            state_update=ComputeManagerStateUpdate(
+                transition={
+                    "pause_cause": "workload",
+                    "backoff_until": later,
+                    "probe_job": "testmanager." + "0" * 32,
+                }
+            ),
+        )
+
+        assert compute_manager_client.request_probe("testmanager") == (
+            compute_manager_id
+        )
+        registration = compute_manager_client.get_status("testmanager")[
+            "state"
+        ].registration
+        assert registration.backoff_until < later
+        assert registration.probe_job is None

@@ -213,8 +213,8 @@ After either instruction, a manager is expected to provide a status update to th
 The status can be:
 
 1. ``OK``: the manager is working as expected, requires a saturation value (ratio of active services to the maximum number of services allowed by the manager)
-2. ``DEGRADED``: the manager has paused creating compute services, but keeps running; requires a saturation value and a detail string explaining why
-3. ``ERROR``: deprecated; compute managers before v0.9 reported it when they shut down after an error, with a detail string explaining why
+2. ``DEGRADED``: the manager has paused creating compute services, but keeps running; requires a saturation value and a detail string explaining why (see `Pausing and recovery`_)
+3. ``ERROR``: deprecated; v0.9 compute managers pause with ``DEGRADED`` instead, and only v0.8 managers report it, when they exit on an error. It requires a detail string explaining why the ``ERROR`` state was entered
 
 Currently, these supporting data are only used by administrators for introspection, though this might change in the future.
 
@@ -295,6 +295,63 @@ Each failure's reason says whether the job failed before or after its compute se
 A running job whose compute service hasn't registered within ``registration_grace_period`` seconds of the job starting is checked again on the next cycle.
 Once two checks at least ``registration_grace_period`` apart find it unregistered, it is removed and recorded as a ``WORKLOAD`` failure.
 The grace period is counted from when the job started running, not from submission, since a job may wait in a queue for hours.
+
+Pausing and recovery
+====================
+
+A compute manager pauses, rather than exiting, when the jobs it submits keep failing or its batch system can't be used.
+While paused it reports ``DEGRADED`` with a detail explaining why, submits no new jobs, and keeps cycling: handling finished jobs, checking registrations, and renewing its registration.
+The pause is stored on the shared registration, so every instance under the name pauses, and a restarted manager stays paused.
+
+A manager pauses when:
+
+``workload``
+    more than ``max_failed_jobs`` jobs (5 by default) have failed with a ``WORKLOAD`` failure since the last sign of health.
+    ``0`` pauses on the first failure, and ``None`` never pauses for job failures.
+    The count is derived from the failure records on the registration, so failures found by different instances add up, and none is counted twice.
+
+``permanent``
+    the backend raises a :class:`~alchemiscale.compute.backend.PermanentBackendError`, such as an invalid partition or missing permissions, when listing, submitting or removing jobs.
+
+``outage``
+    the backend has kept raising :class:`~alchemiscale.compute.backend.TransientBackendError` for longer than ``max_backend_outage`` seconds (900 by default).
+
+``error``
+    ``max_cycle_errors`` cycles in a row (3 by default) raised an unexpected exception, such as a bug in the backend, or made a request the server rejected.
+    Each such cycle is logged with its traceback and skipped, and still renews the registration.
+
+Once paused, the manager waits for a backoff before probing.
+The backoff starts at ``sleep_interval`` and doubles each time the manager pauses or a probe fails, up to ``max_backoff`` seconds (3600 by default).
+
+For an outage, the probe is the cycle's own backend calls: once they succeed, the manager resumes.
+For an unexpected exception, the probe is the cycle itself: once one runs without raising, the manager resumes.
+Otherwise, the probe is a single job, submitted only when the instruction is ``OK`` and there are tasks to claim, since a job with nothing to do proves nothing.
+The probe passes once its compute service registers with the server, and fails if the job fails or succeeds first, or can't be submitted.
+A probe that fails for ``INFRASTRUCTURE`` reasons, or disappears, shows nothing about the configuration; the backoff stays as it is, and the manager probes again.
+A probe that stays pending keeps the manager paused, however long it waits: on a busy queue it runs eventually, keeping its place, and a probe the batch system can never place points at a configuration that should stay paused.
+
+A manager that passes a probe resumes on probation: it sizes submissions normally, but a single ``WORKLOAD`` failure of a job submitted since the pause pauses it again, with double the backoff.
+The next sign of health from a job submitted since the pause ends probation and resets the backoff.
+A sign of health from a job left running from before the pause ends the pause straight away.
+
+The manager itself exits only when ``validate()`` fails at startup or it can't authenticate with the server.
+Server outages and server errors skip the cycle; at startup, the manager waits for the server, retrying every ``sleep_interval`` seconds.
+
+Pausing, probing and resuming are recorded in the manager's error history (see `Inspecting a compute manager`_).
+The pause lives on the shared registration, so restarting the manager doesn't reset it, but it goes if the registration expires because no instance has run for ``ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS``; the reset is recorded in the error history.
+
+``INFRASTRUCTURE`` failures never pause the manager.
+When every job that ended in a cycle failed that way, as when jobs keep landing on faulty nodes, the manager submits half as many jobs that cycle, and logs a warning.
+
+Pausing catches jobs that fail, not tasks that fail.
+A job whose compute service registers, runs tasks that all fail, say on a faulty GPU, and exits cleanly is a sign of health, as is one that finds no tasks and exits.
+
+To have a paused manager probe on its next cycle, rather than waiting out its backoff, for instance after fixing its configuration::
+
+    $ alchemiscale compute manager probe <name> --api-url <compute API URL> \
+          --identifier <compute identity> --key <key>
+
+The same is available from ``AlchemiscaleComputeManagerClient.request_probe``, and from ``POST /computemanager/{name}/probe`` on the compute API.
 
 Creating a compute manager
 ==========================
