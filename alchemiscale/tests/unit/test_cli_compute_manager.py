@@ -30,12 +30,14 @@ def _status(registered: bool):
                 saturation=0.5,
                 pause_cause="workload",
                 backoff_until=NOW,
+                identities=["compute-a", "compute-b"],
             )
         )
     return {
         "name": "testmanager",
         "state": state,
         "expired": False,
+        "failure_count": 6 if registered else None,
         "errors": [
             ComputeManagerError(
                 name="testmanager",
@@ -57,6 +59,8 @@ def test_status(monkeypatch):
     assert result.exit_code == 0, result.output
     assert "status:             DEGRADED" in result.output
     assert "pause_cause:        workload" in result.output
+    assert "identities:         compute-a, compute-b" in result.output
+    assert "failed jobs:        6" in result.output
     assert "DEGRADED: 6 failed jobs since the last healthy one" in result.output
 
 

@@ -3719,13 +3719,6 @@ class TestNeo4jStore(TestStateStore):
             )
             assert n4js.register_computemanager(cmr_2) == id_1
 
-            # steal replaces even a live registration
-            assert (
-                n4js.register_computemanager(cmr_2, steal=True)
-                == cmr_2.to_compute_manager_id()
-            )
-            assert not self.confirm_is_registered(n4js, id_1)
-
         def test_register_stale(self, n4js: Neo4jStore):
             cmr_1 = self.compute_manager_registration_from_name("testmanager")
             id_1 = n4js.register_computemanager(cmr_1)
@@ -3759,27 +3752,8 @@ class TestNeo4jStore(TestStateStore):
             )
             assert id_2 == cmr_2.to_compute_manager_id()
             assert not self.confirm_is_registered(n4js, id_1)
-            assert n4js.get_compute_manager_status(id_2) == ComputeManagerStatus.OK
-
-        def test_register_old_shape(self, n4js: Neo4jStore):
-            # a registration written before 0.9 has no version, and is replaced
-            cmr_1 = self.compute_manager_registration_from_name("testmanager")
-            id_1 = n4js.register_computemanager(cmr_1)
-            n4js.execute_query(
-                "MATCH (cmr:ComputeManagerRegistration) REMOVE cmr.version"
-            )
-
-            cmr_2 = self.compute_manager_registration_from_name("testmanager")
-            assert n4js.register_computemanager(cmr_2) == cmr_2.to_compute_manager_id()
-            assert not self.confirm_is_registered(n4js, id_1)
-
-        def test_register_steal_unregistered(self, n4js: Neo4jStore):
-            # stealing a name with no existing registration simply registers
-            cmr: ComputeManagerRegistration = (
-                self.compute_manager_registration_from_name("testmanager")
-            )
-            n4js.register_computemanager(cmr, steal=True)
-            assert self.confirm_registration_contents(n4js, cmr)
+            state = n4js.get_compute_manager_state(id_2)
+            assert state.registration.status == ComputeManagerStatus.OK
 
         def test_deregister(self, n4js: Neo4jStore):
             cmr: ComputeManagerRegistration = (
@@ -3826,31 +3800,27 @@ class TestNeo4jStore(TestStateStore):
             for _ in range(3):
                 self.create_compute_service(n4js, compute_manager_id)
 
-            # get all CSR claiming to be managed by name,
-            # along with any cmr that actually manages it
-            query = """
-            MATCH (csr: ComputeServiceRegistration {manager_name: $manager_name})
-            OPTIONAL MATCH (cmr: ComputeManagerRegistration)-[:MANAGES]->(csr)
-            RETURN csr, cmr
-            """
+            def services(compute_manager_id):
+                _, data = n4js.get_computemanager_instruction(
+                    compute_manager_id,
+                    datetime.datetime.now(tz=datetime.UTC),
+                    3,
+                    [Scope()],
+                    [],
+                )
+                return data["compute_service_ids"]
 
-            records = n4js.execute_query(
-                query, manager_name=compute_manager_id.name
-            ).records
-            assert len(records) == 3
-            for record in records:
-                assert record["csr"] is not None and record["cmr"] is not None
+            assert len(services(compute_manager_id)) == 3
 
             # a new registration replacing this one takes over its services
             cmr_2 = self.compute_manager_registration_from_name("testmanager")
-            n4js.register_computemanager(cmr_2, steal=True)
-
-            records = n4js.execute_query(
-                query, manager_name=compute_manager_id.name
-            ).records
-            assert len(records) == 3
-            for record in records:
-                assert record["cmr"]["uuid"] == cmr_2.uuid
+            id_2 = n4js.register_computemanager(
+                cmr_2,
+                expire_time=datetime.datetime.now(tz=datetime.UTC)
+                + timedelta(seconds=1),
+            )
+            assert id_2 == cmr_2.to_compute_manager_id()
+            assert len(services(id_2)) == 3
 
         def test_clear_errored(self, n4js: Neo4jStore):
             cmr: ComputeManagerRegistration = (
@@ -3891,7 +3861,6 @@ class TestNeo4jStore(TestStateStore):
 
             calls = [
                 lambda: n4js.get_compute_manager_id("testmanager"),
-                lambda: n4js.get_compute_manager_status(compute_manager_id),
                 lambda: n4js.get_compute_manager_state(compute_manager_id),
                 lambda: n4js.clear_errored_computemanager(compute_manager_id),
                 lambda: n4js.update_compute_manager_status(
@@ -3905,8 +3874,11 @@ class TestNeo4jStore(TestStateStore):
                 with pytest.raises(ComputeManagerNotFoundError):
                     call()
 
-            # register_computemanager with steal and nothing to steal
-            assert n4js.register_computemanager(cmr, steal=True) == compute_manager_id
+            # deregistering does nothing
+            n4js.deregister_computemanager(compute_manager_id)
+
+            # registering with nothing to join creates the registration
+            assert n4js.register_computemanager(cmr) == compute_manager_id
 
         def test_get_instruction(
             self, n4js: Neo4jStore, scope_test: Scope, network_tyk2: AlchemicalNetwork
@@ -4150,22 +4122,16 @@ class TestNeo4jStore(TestStateStore):
             # assert the manager is no longer registered
             assert not self.confirm_is_registered(n4js, compute_manager_id)
 
-            # get all compute services and their possible managers
-            query = """
-            MATCH (csr: ComputeServiceRegistration {manager_name: $manager_name})
-            OPTIONAL MATCH (cmr: ComputeManagerRegistration)-[:MANAGES]->(csr)
-            RETURN csr, cmr
-            """
-
+            # the compute services still exist, even though the manager was
+            # removed
             records = n4js.execute_query(
-                query, manager_name=compute_manager_id.name
+                """
+                MATCH (csr:ComputeServiceRegistration {manager_name: $manager_name})
+                RETURN csr
+                """,
+                manager_name=compute_manager_id.name,
             ).records
-
-            # check that the compute services still exist, even though
-            # the manager was removed
-            for record in records:
-                _csr, _cmr = record["csr"], record["cmr"]
-                assert _csr is not None and _cmr is None
+            assert len(records) == 3
 
         @staticmethod
         def record(job_name, kind, **kwargs):
@@ -4251,6 +4217,39 @@ class TestNeo4jStore(TestStateStore):
                     ),
                 )
 
+        def test_state_compare_and_set_replaced(self, n4js: Neo4jStore):
+            # a transition decided from a registration since replaced isn't
+            # applied, though the new registration has the same version
+            cmr_1 = self.compute_manager_registration_from_name("testmanager")
+            id_1 = n4js.register_computemanager(cmr_1)
+            cmr_2 = self.compute_manager_registration_from_name("testmanager")
+            id_2 = n4js.register_computemanager(
+                cmr_2,
+                expire_time=datetime.datetime.now(tz=datetime.UTC)
+                + timedelta(seconds=1),
+            )
+            assert id_2 != id_1
+
+            applied, state = n4js.update_compute_manager_status(
+                id_1,
+                ComputeManagerStatus.DEGRADED,
+                detail="too many failures",
+                saturation=0.5,
+                state_update=ComputeManagerStateUpdate(expected_version=0),
+            )
+            assert not applied
+            assert state.registration.uuid == cmr_2.uuid
+            assert state.registration.status == ComputeManagerStatus.OK
+
+        def test_expire_after_renewal(self, n4js: Neo4jStore):
+            # a registration renewed since it was found stale isn't expired
+            cmr = self.compute_manager_registration_from_name("testmanager")
+            compute_manager_id = n4js.register_computemanager(cmr)
+            n4js.expire_computemanager_registrations(
+                datetime.datetime.now(tz=datetime.UTC) - timedelta(hours=1)
+            )
+            assert self.confirm_is_registered(n4js, compute_manager_id)
+
         def test_error_history(self, n4js: Neo4jStore):
             cmr = self.compute_manager_registration_from_name("testmanager")
             compute_manager_id = n4js.register_computemanager(cmr)
@@ -4284,7 +4283,8 @@ class TestNeo4jStore(TestStateStore):
             # errors outlive the registration
             n4js.register_computemanager(
                 self.compute_manager_registration_from_name("testmanager"),
-                steal=True,
+                expire_time=datetime.datetime.now(tz=datetime.UTC)
+                + timedelta(seconds=1),
             )
             assert len(n4js.get_compute_manager_errors("testmanager")) == 3
 
@@ -4322,6 +4322,18 @@ class TestNeo4jStore(TestStateStore):
             assert not update("Probe passed", 99)
             errors = n4js.get_compute_manager_errors("testmanager")
             assert [(e.status, e.detail) for e in errors] == [("OK", "Probe passed")]
+
+            # entries recorded together keep their order, and are trimmed in it
+            n4js.update_compute_manager_status(
+                compute_manager_id,
+                ComputeManagerStatus.DEGRADED,
+                detail="paused",
+                saturation=0,
+                state_update=ComputeManagerStateUpdate(events=["first", "second"]),
+                error_history=3,
+            )
+            errors = n4js.get_compute_manager_errors("testmanager")
+            assert [e.detail for e in errors] == ["second", "first", "paused"]
 
         @pytest.mark.parametrize("by", ["expiry", "register"])
         def test_pause_reset_noted(self, n4js: Neo4jStore, by):
@@ -4450,13 +4462,14 @@ class TestNeo4jStore(TestStateStore):
             )
             assert [r.kind for r in state.records] == [JobRecordKind.HANDLED]
 
-            # handled records are pruned past the backend's lookback
-            state = update(prune_handled_before=now + timedelta(seconds=1))
-            assert not state.records
-
             # forget removes specific records
             update(records=[self.record("testmanager.c", JobRecordKind.UNREGISTERED)])
-            state = update(forget=[("testmanager.c", JobRecordKind.UNREGISTERED)])
+            state = update(
+                forget=[
+                    ("testmanager.b", JobRecordKind.HANDLED),
+                    ("testmanager.c", JobRecordKind.UNREGISTERED),
+                ]
+            )
             assert not state.records
 
             # an outage starts once, and clears
@@ -4471,7 +4484,11 @@ class TestNeo4jStore(TestStateStore):
             # replacing the registration removes its records
             update(records=[self.record("testmanager.d", JobRecordKind.ACTIVE)])
             cmr_2 = self.compute_manager_registration_from_name("testmanager")
-            id_2 = n4js.register_computemanager(cmr_2, steal=True)
+            id_2 = n4js.register_computemanager(
+                cmr_2,
+                expire_time=datetime.datetime.now(tz=datetime.UTC)
+                + timedelta(seconds=1),
+            )
             assert not n4js.get_compute_manager_state(id_2).records
             assert not n4js.execute_query(
                 "MATCH (r:ComputeManagerJobRecord) RETURN r"
