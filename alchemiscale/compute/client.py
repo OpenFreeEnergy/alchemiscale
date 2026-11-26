@@ -226,7 +226,6 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         )
         return ComputeManagerID(res)
 
-    @_not_registered_on_404
     def deregister(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
         res = self._post_resource(
             f"/computemanager/{compute_manager_id}/deregister", {}
@@ -253,20 +252,18 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
                 "instruction": "OK",
                 "compute_service_ids": ids,
                 "num_tasks": num_tasks,
+                "state": state,
             }:
-                data = {"compute_service_ids": ids, "num_tasks": num_tasks}
-                if "state" in instruction_data:
-                    data["state"] = ComputeManagerState.from_dict(
-                        instruction_data["state"]
-                    )
-                return ComputeManagerInstruction.OK, data
-            case {"instruction": "SKIP", "compute_service_ids": ids}:
-                data = {"compute_service_ids": ids}
-                if "state" in instruction_data:
-                    data["state"] = ComputeManagerState.from_dict(
-                        instruction_data["state"]
-                    )
-                return ComputeManagerInstruction.SKIP, data
+                return ComputeManagerInstruction.OK, {
+                    "compute_service_ids": ids,
+                    "num_tasks": num_tasks,
+                    "state": ComputeManagerState.from_dict(state),
+                }
+            case {"instruction": "SKIP", "compute_service_ids": ids, "state": state}:
+                return ComputeManagerInstruction.SKIP, {
+                    "compute_service_ids": ids,
+                    "state": ComputeManagerState.from_dict(state),
+                }
             case {"instruction": "SHUTDOWN", "message": message}:
                 return ComputeManagerInstruction.SHUTDOWN, {"message": message}
             case _:

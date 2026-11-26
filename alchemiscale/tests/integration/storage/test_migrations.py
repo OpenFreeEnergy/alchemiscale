@@ -41,12 +41,21 @@ def test_v08_to_v09(n4jstore_settings):
             """,
             identifier="duplicated.x-" + "d" * 32,
         )
+        # v0.8 attached compute services through MANAGES
+        n4js.execute_query(
+            """
+            MATCH (cmr:ComputeManagerRegistration {uuid: $uuid}),
+                  (csr:ComputeServiceRegistration)
+            CREATE (cmr)-[:MANAGES]->(csr)
+            """,
+            uuid="b" * 32,
+        )
 
         v08_to_v09.migrate(n4js)
 
         records = n4js.execute_query("""
             MATCH (cmr:ComputeManagerRegistration)
-            OPTIONAL MATCH (cmr)-[:MANAGES]->(csr:ComputeServiceRegistration)
+            OPTIONAL MATCH (csr:ComputeServiceRegistration {manager_name: cmr.name})
             RETURN cmr.name AS name, cmr.uuid AS uuid, cmr.status AS status,
                    cmr.version AS version, count(csr) AS services
             ORDER BY name
@@ -70,6 +79,7 @@ def test_v08_to_v09(n4jstore_settings):
             },
         ]
 
+        assert not n4js.execute_query("MATCH ()-[rel:MANAGES]->() RETURN rel").records
         assert n4js.check() is None
 
         # running it again changes nothing

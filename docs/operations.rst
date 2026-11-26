@@ -139,10 +139,11 @@ Compute managers from v0.9 refuse to start against an older server, so upgrade i
 
 3. Upgrade compute managers to v0.9.
 
-To roll the server back to v0.8, stop the API services, and delete compute manager registrations, which v0.8 can't read once v0.9 has written them; v0.8 compute managers register again::
+To roll the server back to v0.8, stop the API services, delete compute manager registrations, which v0.8 can't read once v0.9 has written them, and drop the uniqueness constraint, which ``alchemiscale database check`` in v0.8 doesn't expect; v0.8 compute managers register again, and take over their compute services::
 
     MATCH (n) WHERE n:ComputeManagerRegistration OR n:ComputeManagerJobRecord
-    DETACH DELETE n
+    DETACH DELETE n;
+    DROP CONSTRAINT compute_manager_registration_name IF EXISTS;
 
 v0.3 to v0.4
 ============

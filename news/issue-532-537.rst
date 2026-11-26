@@ -1,10 +1,10 @@
 **Added:**
 
 * ``DEGRADED`` ``ComputeManagerStatus``, for a compute manager that has paused creating compute services but keeps running. It requires both a saturation and a detail.
-* ``POST /computemanager/{id}/state`` on the compute API, and ``AlchemiscaleComputeManagerClient.update_state``, which update a compute manager's status and merge changes into the state its instances share. State transitions are applied by compare-and-set on the registration's ``version``.
+* ``POST /computemanager/{id}/state`` on the compute API, and ``AlchemiscaleComputeManagerClient.update_state``, which update a compute manager's status and merge changes into the state its instances share. State transitions are applied by compare-and-set on the registration's ``version`` and uuid.
 * ``ComputeManagerRegistration.identities``, the compute identities that created or joined the registration.
 * The compute API logs a warning when a compute manager older than v0.9 registers.
-* ``alchemiscale database migrate v08-to-v09``, which prepares compute manager registrations from v0.8 and adds a uniqueness constraint on their names.
+* ``alchemiscale database migrate v08-to-v09``, which prepares compute manager registrations from v0.8 and adds a uniqueness constraint on their names. It is required before running the v0.9 API services.
 
 **Changed:**
 
@@ -13,10 +13,14 @@
 * The ``ERROR`` status no longer prevents a compute manager from registering.
 * Deregistering a compute manager leaves the shared registration in place to expire, and always succeeds.
 * The compute API finds compute manager registrations by name alone, so an instance can keep using its own ID after joining, as v0.8 compute managers do.
-* A compute service can register while its compute manager's registration is missing; it is attached once the registration is recreated.
+* Compute services belong to the compute manager registration under their ``manager_name``, rather than through a ``MANAGES`` relationship, which the migration removes. A compute service can register while its compute manager's registration is missing, and belongs to the registration once it is recreated.
 * The compute manager instruction includes the manager's shared state.
 
 **Deprecated:**
 
-* ``steal`` when registering a compute manager, and ``clear_error``: registering always succeeds.
-* ``ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR``, which is no longer used; setting it emits a ``DeprecationWarning``.
+* ``steal`` when registering a compute manager, which is now ignored, and ``clear_error``: registering always succeeds. The compute API logs a warning when either is used.
+* ``ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR``, which is no longer used; setting it logs a warning.
+
+**Removed:**
+
+* ``Neo4jStore.get_compute_manager_status``; use ``get_compute_manager_state``.

@@ -5,7 +5,7 @@
 """
 
 from functools import lru_cache
-import warnings
+import logging
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -98,13 +98,12 @@ class ComputeAPISettings(BaseAPISettings):
         if "ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR" in (
             self.model_fields_set
         ):
-            warnings.warn(
+            # a DeprecationWarning would be hidden by the default filters
+            logging.getLogger(__name__).warning(
                 "ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR is "
                 "deprecated and has no effect; compute manager registrations "
                 "of any status expire after "
-                "ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS",
-                DeprecationWarning,
-                stacklevel=2,
+                "ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS"
             )
         return self
 

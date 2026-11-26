@@ -170,6 +170,22 @@ class TestServerVersionCheck:
         with pytest.raises(IncompatibleServerError, match="older than 0.9.0"):
             mgr._check_server_version()
 
+    def test_invalid_version(self, client_version):
+        mgr = self._manager_with_server({"version": "unknown"})
+        with pytest.raises(IncompatibleServerError, match="invalid version"):
+            mgr._check_server_version()
+
+    def test_server_without_version_information(self, client_version):
+        mgr = self._manager_with_server({"version": "0.0.0"})
+        mgr._check_server_version()
+        mgr.logger.warning.assert_called_once()
+
+    def test_local_labels_ignored(self, client_version):
+        # a dirty checkout of the same commit as the server
+        client_version("0.8.2.dev3+gabc1234.d20261123")
+        mgr = self._manager_with_server({"version": "0.8.2.dev3+gabc1234"})
+        mgr._check_server_version()
+
     def test_development_builds(self, client_version):
         # a development client accepts a server at least as new as itself
         client_version("0.8.2.dev3+gabc1234")

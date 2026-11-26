@@ -15,6 +15,8 @@ def migrate(n4js: Neo4jStore):
       name, since instances of a compute manager now share one registration
     - gives existing ComputeManagerRegistrations a ``version``, so they are
       joined rather than replaced when a v0.9 compute manager registers
+    - removes MANAGES relationships, since compute services now belong to the
+      registration under their ``manager_name``
     - adds the uniqueness constraint on ComputeManagerRegistration names
 
     Registrations with the ERROR status are kept: they no longer prevent a
@@ -41,11 +43,11 @@ def migrate(n4js: Neo4jStore):
     """
     n4js.execute_query(q)
 
-    # re-attach compute services to the surviving registration for their name
+    # compute services now belong to the registration under their
+    # manager_name, rather than through a MANAGES relationship
     q = """
-    MATCH (csr:ComputeServiceRegistration),
-          (cmr:ComputeManagerRegistration {name: csr.manager_name})
-    MERGE (cmr)-[:MANAGES]->(csr)
+    MATCH (:ComputeManagerRegistration)-[rel:MANAGES]->(:ComputeServiceRegistration)
+    DELETE rel
     """
     n4js.execute_query(q)
 

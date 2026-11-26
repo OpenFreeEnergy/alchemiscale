@@ -256,7 +256,8 @@ class ComputeManagerStateUpdate(BaseModel):
 
     Everything except ``transition`` merges without conflict and is always
     applied. ``transition`` is applied only if ``expected_version`` matches
-    the registration's ``version``.
+    the registration's ``version``, and the update is for the registration's
+    uuid.
 
     """
 
@@ -264,8 +265,6 @@ class ComputeManagerStateUpdate(BaseModel):
     records: list[ComputeManagerJobRecord] = []
     #: ``(job_name, kind)`` pairs of records to remove
     forget: list[tuple[str, JobRecordKind]] = []
-    #: remove HANDLED records of jobs that ended before this time
-    prune_handled_before: datetime.datetime | None = None
     #: merged into the registration's ``last_healthy_at`` by maximum
     last_healthy_at: datetime.datetime | None = None
     #: ``"start"`` records the start of a backend outage if none is under

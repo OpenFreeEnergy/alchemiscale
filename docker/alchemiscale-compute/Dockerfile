@@ -17,6 +17,9 @@ RUN micromamba install -y -n base git -f /tmp/env.yaml && \
 # Ensure that conda environment is automatically activated
 # https://github.com/mamba-org/micromamba-docker#running-commands-in-dockerfile-within-the-conda-environment
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
+# the source is copied without its git history, so the version is passed in;
+# without it, the package reports version 0.0.0
+ARG SETUPTOOLS_SCM_PRETEND_VERSION
 RUN python -m pip install --no-deps -e .
 
 WORKDIR /home/mambauser

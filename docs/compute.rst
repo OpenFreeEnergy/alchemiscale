@@ -214,7 +214,7 @@ The status can be:
 
 1. ``OK``: the manager is working as expected, requires a saturation value (ratio of active services to the maximum number of services allowed by the manager)
 2. ``DEGRADED``: the manager has paused creating compute services, but keeps running; requires a saturation value and a detail string explaining why
-3. ``ERROR``: the manager experienced an error and will shut down locally, requires a detail string explaining why the ``ERROR`` state was entered
+3. ``ERROR``: deprecated; compute managers before v0.9 reported it when they shut down after an error, with a detail string explaining why
 
 Currently, these supporting data are only used by administrators for introspection, though this might change in the future.
 
@@ -234,11 +234,13 @@ The compute API finds a registration by the manager's name alone: the UUID in a 
 The identities that created or joined a registration are recorded in its ``identities``.
 
 Everything stored on a registration, including its job records and pause state, goes when it expires.
-A compute service may start while its manager's registration is missing, for instance while it is being recreated; the service registers anyway, and is attached to the registration once there is one.
+A compute service may start while its manager's registration is missing, for instance while it is being recreated; the service registers anyway, and belongs to the registration once there is one, since services belong to the registration under their manager's name.
 
 A manager that exits deregisters, but the shared registration is left to expire, since other instances may still be renewing it.
 Deregistering therefore always succeeds, whether or not the registration exists.
 The ``ERROR`` status never prevents a manager from registering, so ``clear_error`` and ``steal`` are no longer needed; both are deprecated, and will be removed in a future release, as will ``ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR``, which no longer has any effect.
+``steal`` is ignored: registering with it joins a live registration like any other.
+The compute API logs a warning whenever either is used, or the setting is set.
 
 The compute manager endpoints return a 404 when the manager isn't registered, and a 422 when the request conflicts with the registration's state.
 
