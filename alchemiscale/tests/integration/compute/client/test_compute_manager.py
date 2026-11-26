@@ -7,6 +7,7 @@ import sys
 import signal
 
 from multiprocessing import Process
+from unittest.mock import MagicMock
 
 from neo4j.time import DateTime
 
@@ -79,6 +80,17 @@ class LocalTestingComputeManager(ComputeManager):
             service.start()
         except KeyboardInterrupt:
             pass
+
+
+def spy_deregister(manager: ComputeManager) -> MagicMock:
+    """Record calls to the manager client's ``deregister``.
+
+    Registrations are shared and expire rather than being deleted, so
+    whether the manager deregistered can't be seen in the state store.
+    """
+    deregister = MagicMock(wraps=manager.client.deregister)
+    manager.client.deregister = deregister
+    return deregister
 
 
 @pytest.fixture()
@@ -211,10 +223,10 @@ class TestComputeManager:
     ):
         caplog.set_level(logging.INFO, logger=manager.logger.name)
         LocalTestingComputeManager.exception = KeyboardInterrupt
+        deregister = spy_deregister(manager)
 
         manager.start(max_cycles=1)
-        query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
-        assert not n4js_preloaded.execute_query(query).records
+        deregister.assert_called_once_with(manager.compute_manager_id)
 
         assert "Caught SIGINT/Keyboard interrupt" in caplog.text
 
@@ -246,16 +258,18 @@ class TestComputeManager:
         caplog.set_level(logging.INFO, logger=manager.logger.name)
         manager._register()
 
-        new_uuid = str(uuid4())
+        # the registration is gone, as after it expired and was swept
+        n4js_preloaded.execute_query(
+            "MATCH (cmr:ComputeManagerRegistration) DETACH DELETE cmr"
+        )
 
-        query = """MATCH (cmr:ComputeManagerRegistration)
-        SET cmr.uuid = $new_uuid
-        """
-
-        n4js_preloaded.execute_query(query, new_uuid=new_uuid)
-        assert manager.cycle() is False
-
-        assert "is no longer registered with the server" in caplog.text
+        # the manager registers again, and carries on
+        assert manager.cycle() is True
+        assert "registering again" in caplog.text
+        state = n4js_preloaded.get_compute_manager_state(manager.compute_manager_id)
+        assert state.registration.uuid == manager.compute_manager_id.uuid
+        assert manager.service_settings.compute_manager_id == manager.compute_manager_id
+        assert manager.cycle() is True
 
     def test_manager_interruptible_sleep(
         self,
@@ -283,6 +297,7 @@ class TestComputeManager:
         # stop() would not take effect until this elapsed and this test would
         # time out waiting on the thread to join
         manager.settings.sleep_interval = 300
+        deregister = spy_deregister(manager)
 
         thread = threading.Thread(target=manager.start)
         thread.start()
@@ -308,8 +323,7 @@ class TestComputeManager:
             thread.join(timeout=30)
 
         # the manager should have deregistered itself on the way out
-        query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
-        assert not n4js_preloaded.execute_query(query).records
+        deregister.assert_called_once_with(manager.compute_manager_id)
 
     def test_manager_start_deregisters_if_interrupted_during_startup_setup(
         self,
@@ -331,23 +345,16 @@ class TestComputeManager:
             raise KeyboardInterrupt
 
         monkeypatch.setattr(manager.int_sleep, "clear", interrupt_after_registration)
-
-        query = """MATCH (cmr:ComputeManagerRegistration) RETURN cmr"""
+        deregister = spy_deregister(manager)
 
         try:
-            try:
-                manager.start(max_cycles=1)
-            except KeyboardInterrupt:
-                pass
+            manager.start(max_cycles=1)
+        except KeyboardInterrupt:
+            pass
 
-            assert interrupted
+        assert interrupted
 
-            # This should fail without the fix: the manager registered, then the
-            # simulated interrupt skipped the finally block, leaving an orphaned
-            # ComputeManagerRegistration.
-            assert not n4js_preloaded.execute_query(query).records
-
-        finally:
-            # Keep the failing test from poisoning later tests.
-            if n4js_preloaded.execute_query(query).records:
-                manager._deregister()
+        # This should fail without the fix: the manager registered, then the
+        # simulated interrupt skipped the finally block, so the manager never
+        # deregistered.
+        deregister.assert_called_once_with(manager.compute_manager_id)

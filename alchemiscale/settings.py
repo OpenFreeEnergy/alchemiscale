@@ -5,7 +5,9 @@
 """
 
 from functools import lru_cache
+import logging
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -83,8 +85,27 @@ class ComputeAPISettings(BaseAPISettings):
     ALCHEMISCALE_COMPUTE_API_REGISTRATION_EXPIRE_SECONDS: int = 1800
     ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS: int = 600
     ALCHEMISCALE_COMPUTE_API_MAX_FAILURES: int = 3
+    # a compute manager registration not updated within this many seconds is
+    # stale, whatever its status; set it to a small multiple of the managers'
+    # ``sleep_interval``, since it is how long a replacement for a killed
+    # manager starts from scratch rather than joining its state
     ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS: int = 3600
+    # deprecated and unused: ERROR registrations expire like any other
     ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR: int = 86400
+
+    @model_validator(mode="after")
+    def _warn_deprecated(self):
+        if "ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR" in (
+            self.model_fields_set
+        ):
+            # a DeprecationWarning would be hidden by the default filters
+            logging.getLogger(__name__).warning(
+                "ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR is "
+                "deprecated and has no effect; compute manager registrations "
+                "of any status expire after "
+                "ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS"
+            )
+        return self
 
 
 @lru_cache

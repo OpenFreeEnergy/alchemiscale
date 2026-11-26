@@ -7,12 +7,14 @@
 from importlib.metadata import version
 import json
 import datetime
+import logging
 from datetime import timedelta
 import random
 
-from fastapi import FastAPI, APIRouter, Body, Depends, HTTPException, Request
+from fastapi import FastAPI, APIRouter, Body, Depends, Header, HTTPException, Request
 from fastapi import status as http_status
 from fastapi.middleware.gzip import GZipMiddleware
+from pydantic import ValidationError
 from gufe.tokenization import JSON_HANDLER
 from gufe.protocols import ProtocolDAGResult
 from starlette.concurrency import run_in_threadpool
@@ -51,12 +53,16 @@ from ..storage.models import (
     ComputeManagerRegistration,
     ComputeServiceRegistration,
     ComputeManagerStatus,
+    ComputeManagerState,
+    ComputeManagerStateUpdate,
 )
 from ..models import Scope, ScopedKey
 from ..security.models import (
     TokenData,
     CredentialedComputeIdentity,
 )
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AlchemiscaleComputeAPI")
 app.dependency_overrides[get_base_api_settings] = get_compute_api_settings
@@ -478,15 +484,45 @@ def _compute_manager_http_exception(e: Exception) -> HTTPException:
     return HTTPException(status_code=status_code, detail=str(e))
 
 
+def _manager_expire_time(settings: ComputeAPISettings) -> datetime.datetime:
+    """Return the time before which a compute manager registration's last
+    status update makes it stale."""
+    return datetime.datetime.now(tz=datetime.UTC) - timedelta(
+        seconds=settings.ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS
+    )
+
+
 @router.post("/computemanager/{compute_manager_id}/register")
 def register_computemanager(
     compute_manager_id,
     *,
     steal: bool = Body(False, embed=True),
+    client_version: str | None = Header(None, alias="X-Alchemiscale-Version"),
     n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
+    token: TokenData = Depends(get_token_data_depends),
 ):
+    """Register a compute manager instance, joining the registration under
+    its name if there is a live one.
 
+    Returns the ID of the registration, which is the ID to use for all other
+    requests; it differs from the requested ID if a registration was joined.
+
+    """
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+
+    # clients before 0.9 send no version
+    if client_version is None:
+        logger.warning(
+            f"Compute manager '{compute_manager_id}' registered by "
+            f"'{token.entity}' is older than 0.9; upgrade it"
+        )
+    if steal:
+        logger.warning(
+            f"Compute manager '{compute_manager_id}' registered by "
+            f"'{token.entity}' asked to steal its registration, which is "
+            "deprecated and ignored: registering always succeeds"
+        )
 
     now = datetime.datetime.now(tz=datetime.UTC)
     cm_registration = ComputeManagerRegistration(
@@ -495,19 +531,15 @@ def register_computemanager(
         registered=now,
         last_status_update=now,
         status=ComputeManagerStatus.OK,
-        detail="",
+        detail=None,
         saturation=0,
     )
 
-    try:
-        compute_manager_id_ = n4js.register_computemanager(cm_registration, steal=steal)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e),
-        )
-
-    return compute_manager_id_
+    return n4js.register_computemanager(
+        cm_registration,
+        expire_time=_manager_expire_time(settings),
+        identity=token.entity,
+    )
 
 
 @router.post("/computemanager/{compute_manager_id}/deregister")
@@ -515,6 +547,12 @@ def deregister_computemanager(
     compute_manager_id,
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
+    """Confirm that a compute manager instance is leaving.
+
+    The shared registration is left in place, and expires once no instance
+    updates it, so this succeeds whether or not the registration exists.
+
+    """
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
     n4js.deregister_computemanager(compute_manager_id)
     return compute_manager_id
@@ -546,11 +584,41 @@ def get_instruction_computemanager(
             settings.ALCHEMISCALE_COMPUTE_API_MAX_FAILURES,
             query_scopes,
             protocols,
+            expire_time=_manager_expire_time(settings),
         )
     except ComputeManagerNotFoundError as e:
         raise _compute_manager_http_exception(e)
     payload["instruction"] = str(instruction)
     return payload
+
+
+def _update_compute_manager_status(
+    n4js: Neo4jStore,
+    settings: ComputeAPISettings,
+    compute_manager_id: ComputeManagerID,
+    status: str,
+    detail: str | None,
+    saturation: float | None,
+    state_update: ComputeManagerStateUpdate | None = None,
+) -> tuple[bool, ComputeManagerState]:
+    expire_time = _manager_expire_time(settings)
+    try:
+        result = n4js.update_compute_manager_status(
+            compute_manager_id,
+            status,
+            detail,
+            saturation,
+            expire_time=expire_time,
+            state_update=state_update,
+        )
+    except (ValueError, ComputeManagerNotFoundError) as e:
+        raise _compute_manager_http_exception(e)
+
+    # remove registrations no instance has renewed, including this one's
+    # predecessors under other names
+    n4js.expire_computemanager_registrations(expire_time)
+
+    return result
 
 
 @router.post("/computemanager/{compute_manager_id}/status")
@@ -563,24 +631,47 @@ def update_status_computemanager(
     n4js: Neo4jStore = Depends(get_n4js_depends),
     settings: ComputeAPISettings = Depends(get_base_api_settings),
 ):
-    expire_seconds = settings.ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS
-    expire_seconds_errored = (
-        settings.ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR
+    """Update a compute manager's status unconditionally, renewing its
+    registration."""
+    compute_manager_id = process_compute_manager_id_string(compute_manager_id)
+    _update_compute_manager_status(
+        n4js, settings, compute_manager_id, status, detail, saturation
     )
+    return compute_manager_id
+
+
+@router.post("/computemanager/{compute_manager_id}/state")
+def update_state_computemanager(
+    compute_manager_id,
+    *,
+    status: str = Body(),
+    detail: str | None = Body(None),
+    saturation: float | None = Body(None),
+    state_update: dict = Body({}),
+    n4js: Neo4jStore = Depends(get_n4js_depends),
+    settings: ComputeAPISettings = Depends(get_base_api_settings),
+):
+    """Update a compute manager's status, renewing its registration, and
+    merge changes into its shared state.
+
+    The status, detail and ``state_update["transition"]`` are applied only if
+    ``state_update["expected_version"]`` matches the registration's version.
+    Returns whether they were applied, as ``"applied"``, and the manager's
+    state after the update, as ``"state"``.
+
+    """
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
     try:
-        n4js.update_compute_manager_status(
-            compute_manager_id, status, detail, saturation
+        state_update_ = ComputeManagerStateUpdate.from_dict(state_update)
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
         )
-        now = datetime.datetime.now(tz=datetime.UTC)
-        n4js.expire_computemanager_registrations(
-            now - timedelta(seconds=expire_seconds),
-            now - timedelta(seconds=expire_seconds_errored),
-        )
-    except (ValueError, ComputeManagerNotFoundError) as e:
-        raise _compute_manager_http_exception(e)
 
-    return compute_manager_id
+    applied, state = _update_compute_manager_status(
+        n4js, settings, compute_manager_id, status, detail, saturation, state_update_
+    )
+    return {"applied": applied, "state": state.to_dict()}
 
 
 @router.post("/computemanager/{compute_manager_name}/clear_error")
@@ -601,6 +692,11 @@ def clear_error_computemanager(
         with n4js.transaction() as tx:
             compute_manager_id = n4js.get_compute_manager_id(
                 name=compute_manager_name, tx=tx
+            )
+            logger.warning(
+                f"Clearing the ERROR registration of compute manager "
+                f"'{compute_manager_name}', which is deprecated: an ERROR "
+                "registration no longer prevents registering"
             )
             n4js.clear_errored_computemanager(compute_manager_id, tx=tx)
     except (ComputeManagerNotFoundError, ComputeManagerStateError) as e:

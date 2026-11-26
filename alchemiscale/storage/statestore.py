@@ -28,6 +28,7 @@ from gufe.tokenization import GufeTokenizable, GufeKey, JSON_HANDLER, KeyedChain
 from gufe.protocols import ProtocolUnitFailure
 
 from neo4j import Transaction, GraphDatabase, Driver, NotificationDisabledClassification
+from neo4j.exceptions import ConstraintError
 
 from stratocaster.base import Strategy
 
@@ -38,6 +39,10 @@ from .models import (
     ComputeManagerInstruction,
     ComputeManagerStatus,
     ComputeManagerID,
+    ComputeManagerJobRecord,
+    ComputeManagerState,
+    ComputeManagerStateUpdate,
+    JobRecordKind,
     NetworkMark,
     NetworkStateEnum,
     ProtocolDAGResultRef,
@@ -154,6 +159,10 @@ class Neo4jStore(AlchemiscaleStateStore):
         "ComputeServiceRegistration": {
             "name": "compute_service_registration_identifier",
             "property": "identifier",
+        },
+        "ComputeManagerRegistration": {
+            "name": "compute_manager_registration_name",
+            "property": "name",
         },
     }
 
@@ -1500,22 +1509,6 @@ class Neo4jStore(AlchemiscaleStateStore):
         with self.transaction() as tx:
             create_subgraph(tx, Subgraph() | node)
 
-            if compute_service_registration.manager_name:
-                query = """
-                MATCH (cmr:ComputeManagerRegistration {name: $manager_name}),
-                      (csr:ComputeServiceRegistration {manager_name: $manager_name,
-                                                       identifier: $identifier})
-                CREATE (cmr)-[rel:MANAGES]->(csr)
-                RETURN cmr, rel, csr
-                """
-                results = tx.run(
-                    query,
-                    manager_name=compute_service_registration.manager_name,
-                    identifier=compute_service_registration.identifier,
-                )
-                if not len(list(results)):
-                    raise ValueError("Could not find ComputeManagerRegistration")
-
         return compute_service_registration.identifier
 
     def deregister_computeservice(self, compute_service_id: ComputeServiceID):
@@ -1675,164 +1668,250 @@ class Neo4jStore(AlchemiscaleStateStore):
 
     ## compute manager
 
+    @staticmethod
+    def _native_props(node) -> dict:
+        return {
+            key: value.to_native() if hasattr(value, "to_native") else value
+            for key, value in dict(node).items()
+        }
+
+    @classmethod
+    def _registration_from_node(cls, node) -> ComputeManagerRegistration:
+        return ComputeManagerRegistration.from_dict(cls._native_props(node))
+
+    @classmethod
+    def _job_record_from_node(cls, node) -> ComputeManagerJobRecord:
+        return ComputeManagerJobRecord.from_dict(cls._native_props(node))
+
+    @staticmethod
+    def _is_stale(
+        registration: ComputeManagerRegistration,
+        expire_time: datetime.datetime | None,
+    ) -> bool:
+        return expire_time is not None and registration.last_status_update < expire_time
+
+    @chainable
+    def _delete_computemanager_registration(self, name: str, tx=None):
+        """Delete the registration under ``name``, with its job records."""
+        query = """
+        MATCH (cmr:ComputeManagerRegistration {name: $name})
+        OPTIONAL MATCH (cmr)-[:RECORDS]->(r:ComputeManagerJobRecord)
+        DETACH DELETE r, cmr
+        """
+        tx.run(query, name=name)
+
+    @chainable
+    def _get_live_registration(
+        self,
+        compute_manager_id: ComputeManagerID,
+        expire_time: datetime.datetime | None,
+        lock: bool = False,
+        tx=None,
+    ) -> ComputeManagerRegistration:
+        """Return the registration matching ``compute_manager_id``.
+
+        With ``lock``, the write lock on the registration is taken before it
+        is read, so that concurrent updates are serialized.
+
+        Registrations are looked up by name alone: names are unique, and the
+        UUID in ``compute_manager_id`` may be that of an instance which
+        joined, or of a registration since replaced.
+
+        A registration whose last status update is older than
+        ``expire_time`` is stale, and treated as missing. It is replaced by
+        the next registration under its name, or removed by
+        :meth:`expire_computemanager_registrations`.
+
+        Raises
+        ------
+        ComputeManagerNotFoundError
+            Raised when no live registration matches ``compute_manager_id``.
+
+        """
+        query = """
+        MATCH (cmr:ComputeManagerRegistration {name: $name})
+        %s
+        RETURN cmr
+        """ % ("SET cmr.last_status_update = cmr.last_status_update" if lock else "")
+        records = tx.run(query, name=compute_manager_id.name).to_eager_result().records
+        if not records:
+            raise ComputeManagerNotFoundError(
+                f"No compute manager registered as '{compute_manager_id}'"
+            )
+
+        registration = self._registration_from_node(records[0]["cmr"])
+        if self._is_stale(registration, expire_time):
+            raise ComputeManagerNotFoundError(
+                f"The registration '{compute_manager_id}' expired; its last status "
+                f"update was at {registration.last_status_update.isoformat()}"
+            )
+
+        return registration
+
+    @chainable
+    def _get_job_records(
+        self, compute_manager_id: ComputeManagerID, tx=None
+    ) -> list[ComputeManagerJobRecord]:
+        query = """
+        MATCH (:ComputeManagerRegistration {name: $name})
+              -[:RECORDS]->(r:ComputeManagerJobRecord)
+        RETURN r
+        """
+        records = (
+            tx.run(query, **compute_manager_id.to_dict()).to_eager_result().records
+        )
+        return [self._job_record_from_node(rec["r"]) for rec in records]
+
     def register_computemanager(
         self,
         compute_manager_registration: ComputeManagerRegistration,
-        steal: bool = False,
+        expire_time: datetime.datetime | None = None,
+        identity: str | None = None,
     ) -> ComputeManagerID:
-        """Register a compute manager with the statestore.
+        """Register a compute manager, or join its existing registration.
+
+        All instances of a compute manager with the same name share one
+        registration. If a live registration exists under the name, it is
+        renewed and its ID returned. Otherwise a new registration is created
+        from ``compute_manager_registration``, replacing any stale one.
+
+        A registration's status never prevents registering.
 
         Parameters
         ----------
         compute_manager_registration
-            The compute manager registration.
-
-        steal
-            Whether or not to steal the registration from an existing
-            registration.
+            The registration to create if there is no live one under its
+            name.
+        expire_time
+            A registration whose last status update is older than this is
+            stale, and is replaced. If ``None``, registrations don't go
+            stale.
+        identity
+            The identity registering; recorded in the registration's
+            ``identities``.
 
         Returns
         -------
         compute_manager_id
-            The compute manager ID string containing the name and the
-            UUID.
-
-        Raises
-        ------
-        ValueError
-            Raised when a compute manager is already registered with
-            the provided name.
+            The ID of the registration, which differs from
+            ``compute_manager_registration``'s if an existing one was joined.
 
         """
+        name = compute_manager_registration.name
+        now = datetime.datetime.now(tz=datetime.UTC)
 
-        # first check if a compute manager with the given name is
-        # already registered
-        existing_registration = self._find_compute_manager_id(
-            compute_manager_registration.name
-        )
+        # two instances creating the registration at once is resolved by the
+        # uniqueness constraint on the name: the second retries, and joins
+        for attempt in range(2):
+            try:
+                with self.transaction() as tx:
+                    query = """
+                    MATCH (cmr:ComputeManagerRegistration {name: $name})
+                    SET cmr.last_status_update = cmr.last_status_update
+                    RETURN cmr
+                    """
+                    records = tx.run(query, name=name).to_eager_result().records
 
-        if steal and existing_registration:
-            self.deregister_computemanager(existing_registration)
-            existing_registration = self._find_compute_manager_id(
-                compute_manager_registration.name
-            )
+                    if records:
+                        node = records[0]["cmr"]
+                        if not self._is_stale(
+                            self._registration_from_node(node), expire_time
+                        ):
+                            tx.run(
+                                """
+                                MATCH (cmr:ComputeManagerRegistration {name: $name})
+                                SET cmr.last_status_update = datetime($now),
+                                    cmr.identities = CASE
+                                        WHEN $identity IS NULL
+                                          OR $identity IN coalesce(cmr.identities, [])
+                                        THEN cmr.identities
+                                        ELSE coalesce(cmr.identities, []) + $identity
+                                    END
+                                """,
+                                name=name,
+                                now=now.isoformat(),
+                                identity=identity,
+                            )
+                            return ComputeManagerID(f"{name}-{node['uuid']}")
 
-        if existing_registration:
-            status = self.get_compute_manager_status(existing_registration)
-            raise ValueError(
-                f"ComputeManager with this name is already registered with status {status}"
-            )
+                        self._delete_computemanager_registration(name, tx=tx)
 
-        with self.transaction() as tx:
+                    if identity is not None:
+                        compute_manager_registration = (
+                            compute_manager_registration.model_copy(
+                                update={"identities": [identity]}
+                            )
+                        )
+                    node = Node(
+                        "ComputeManagerRegistration",
+                        **compute_manager_registration.to_dict(),
+                    )
+                    create_subgraph(tx, Subgraph() | node)
 
-            # create the registrattion for the manager and merge it into
-            # the database
-            node = Node(
-                "ComputeManagerRegistration", **compute_manager_registration.to_dict()
-            )
+                return compute_manager_registration.to_compute_manager_id()
 
-            create_subgraph(tx, Subgraph() | node)
-
-            # check for orphaned compute services that were previously
-            # managed by a manager with the same name; reattach if found
-            reattach_compute_service_query = """
-            MATCH (csr:ComputeServiceRegistration {manager_name: $manager_name}),
-                  (cmr:ComputeManagerRegistration {name: $manager_name,
-                                                   uuid: $uuid})
-            CREATE (cmr)-[rel:MANAGES]->(csr)
-            """
-
-            tx.run(
-                reattach_compute_service_query,
-                manager_name=compute_manager_registration.name,
-                uuid=compute_manager_registration.uuid,
-            )
-
-        compute_manager_id = ComputeManagerID(
-            compute_manager_registration.name + "-" + compute_manager_registration.uuid
-        )
-
-        return compute_manager_id
+            except ConstraintError:
+                if attempt:
+                    raise
 
     def deregister_computemanager(self, compute_manager_id: ComputeManagerID):
-        """Remove the compute manager registration from the statestore.
+        """Confirm that a compute manager instance is leaving its registration.
 
-        Uses the name and UUID from a ComputeManagerID to deregister a
-        compute manager's registration. The registration node and its
-        MANAGES relationships are removed as long as the registration does
-        not have the ERROR status. Does nothing if no registration matches.
+        The registration is shared by every instance of the manager, and the
+        server can't tell whether other instances are still renewing it, so
+        it is left in place to expire once no instance updates it.
 
         Parameters
         ----------
         compute_manager_id
             The compute manager ID string containing the name and the UUID.
 
-        """
-        name, uuid = compute_manager_id.name, compute_manager_id.uuid
+        Does nothing, whether or not the registration exists: it is the same
+        for 0.8 compute managers, which expect their registration deleted.
 
-        query = """
-        MATCH (cmr:ComputeManagerRegistration {name: $name, uuid: $uuid})
-        WHERE cmr.status <> "ERROR"
-        DETACH DELETE cmr
         """
 
-        self.execute_query(query, name=name, uuid=uuid)
-
-    def expire_computemanager_registrations(
-        self, expire_time_ok: datetime.datetime, expire_time_error: datetime.datetime
-    ):
-        """Remove expired compute managers from the statestore.
-
-        This method checks the status of compute managers and removes
-        those that have expired based on their last status update
-        time.
+    def expire_computemanager_registrations(self, expire_time: datetime.datetime):
+        """Remove compute manager registrations whose last status update is
+        older than ``expire_time``, whatever their status.
 
         Parameters
         ----------
-        expire_time_ok
-            The expiration time for "OK" compute managers. Managers with a last
-            update time earlier than the expiration cutoff will be removed.
-
-        expire_time_error
-            The expiration time for "ERROR" compute managers. Managers
-            with a last update time earlier than the expiration cutoff will be
-            removed.
+        expire_time
+            Registrations last updated before this time are removed.
 
         """
-
-        # Match all expired ComputeManagerRegistration nodes based on
-        # their status and detach delete them.
         query = """
         MATCH (cmr:ComputeManagerRegistration)
-        WHERE (cmr.last_status_update < datetime($expire_time_ok) AND
-               cmr.status = $ok_status)
-              OR
-              (cmr.last_status_update < datetime($expire_time_error) AND
-               cmr.status = $error_status)
-        DETACH DELETE cmr
+        WHERE cmr.last_status_update < datetime($expire_time)
+        RETURN cmr.name AS name
         """
-
-        params = {
-            "ok_status": ComputeManagerStatus.OK.value,
-            "error_status": ComputeManagerStatus.ERROR.value,
-            "expire_time_ok": expire_time_ok.isoformat(),
-            "expire_time_error": expire_time_error.isoformat(),
-        }
-
-        results = self.execute_query(query, **params)
-
-    @chainable
-    def _find_compute_manager_id(self, name: str, tx=None) -> ComputeManagerID | None:
-        """Return the ID registered under ``name``, or ``None`` if there is none."""
-        query = """
-        MATCH (cmr:ComputeManagerRegistration {name: $name})
-        RETURN cmr.uuid AS uuid
-        """
-        records = tx.run(query, name=name).to_eager_result().records
-        if not records:
-            return None
-        uuid = records[0]["uuid"]
-        return ComputeManagerID(f"{name}-{uuid}")
+        with self.transaction() as tx:
+            names = [
+                record["name"]
+                for record in tx.run(query, expire_time=expire_time.isoformat())
+                .to_eager_result()
+                .records
+            ]
+            for name in names:
+                # take the write lock, and check again: the registration may
+                # have been renewed or replaced since it was read
+                records = (
+                    tx.run(
+                        """
+                        MATCH (cmr:ComputeManagerRegistration {name: $name})
+                        SET cmr.last_status_update = cmr.last_status_update
+                        RETURN cmr
+                        """,
+                        name=name,
+                    )
+                    .to_eager_result()
+                    .records
+                )
+                if records and self._is_stale(
+                    self._registration_from_node(records[0]["cmr"]), expire_time
+                ):
+                    self._delete_computemanager_registration(name, tx=tx)
 
     @chainable
     def get_compute_manager_id(self, name: str, tx=None) -> ComputeManagerID:
@@ -1844,45 +1923,41 @@ class Neo4jStore(AlchemiscaleStateStore):
             Raised when no compute manager is registered under ``name``.
 
         """
-        compute_manager_id = self._find_compute_manager_id(name, tx=tx)
-        if compute_manager_id is None:
-            raise ComputeManagerNotFoundError(
-                f"No compute manager registered with name '{name}'"
-            )
-        return compute_manager_id
+        return self._get_live_registration(
+            ComputeManagerID.new_from_name(name), None, tx=tx
+        ).to_compute_manager_id()
 
     @chainable
-    def get_compute_manager_status(
-        self, compute_manager_id: ComputeManagerID, tx=None
-    ) -> ComputeManagerStatus:
-        """Return the status of the given compute manager registration.
+    def get_compute_manager_state(
+        self,
+        compute_manager_id: ComputeManagerID,
+        expire_time: datetime.datetime | None = None,
+        tx=None,
+    ) -> ComputeManagerState:
+        """Return a compute manager's registration and job records.
 
         Raises
         ------
         ComputeManagerNotFoundError
-            Raised when no registration matches ``compute_manager_id``.
+            Raised when no live registration matches ``compute_manager_id``.
 
         """
-        query = """
-        MATCH (cmr:ComputeManagerRegistration {name: $name, uuid: $uuid})
-        RETURN cmr.status as status
-        """
-        records = (
-            tx.run(query, name=compute_manager_id.name, uuid=compute_manager_id.uuid)
-            .to_eager_result()
-            .records
+        registration = self._get_live_registration(
+            compute_manager_id, expire_time, tx=tx
         )
-        if not records:
-            raise ComputeManagerNotFoundError(
-                f"No compute manager registered as '{compute_manager_id}'"
-            )
-        return ComputeManagerStatus(records[0]["status"])
+        return ComputeManagerState(
+            registration=registration,
+            records=self._get_job_records(compute_manager_id, tx=tx),
+        )
 
     @chainable
     def clear_errored_computemanager(
         self, compute_manager_id: ComputeManagerID, tx=None
     ):
         """Remove a compute manager with an ERROR status.
+
+        Deprecated: an ERROR registration no longer prevents a compute
+        manager from registering.
 
         Parameters
         ----------
@@ -1897,19 +1972,14 @@ class Neo4jStore(AlchemiscaleStateStore):
         ComputeManagerStateError
             Raised when the registration does not have the ERROR status.
         """
-        status = self.get_compute_manager_status(compute_manager_id, tx=tx)
+        status = self._get_live_registration(compute_manager_id, None, tx=tx).status
         if status != ComputeManagerStatus.ERROR:
             raise ComputeManagerStateError(
                 f"Compute manager '{compute_manager_id}' has status {status}, not "
                 f"{ComputeManagerStatus.ERROR}"
             )
 
-        query = """
-        MATCH (cmr:ComputeManagerRegistration {name: $name, uuid: $uuid})
-        DETACH DELETE cmr
-        """
-
-        tx.run(query, **compute_manager_id.to_dict())
+        self._delete_computemanager_registration(compute_manager_id.name, tx=tx)
 
     def get_computemanager_instruction(
         self,
@@ -1918,6 +1988,7 @@ class Neo4jStore(AlchemiscaleStateStore):
         max_failures: int,
         scopes: list[Scope],
         protocols: list[str],
+        expire_time: datetime.datetime | None = None,
     ) -> tuple[ComputeManagerInstruction, dict]:
         """Return an instruction for a compute manager based on the contents of the statestore.
 
@@ -1925,6 +1996,9 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         1. "OK" with a list of ComputeServiceIDs and the number of available tasks
         2. "SKIP" with a list of ComputeServiceIDs
+
+        In both cases, the data also includes the manager's shared state as
+        ``"state"``, a :class:`ComputeManagerState` in dict form.
 
         Parameters
         ----------
@@ -1949,6 +2023,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         protocols
             A list of Protocols to filter on. An empty list will not filter.
 
+        expire_time
+            A registration whose last status update is older than this is
+            stale, and is treated as missing. If ``None``, registrations
+            don't go stale.
+
         Returns
         -------
         A tuple with whose first value is the instruction enumeration
@@ -1958,60 +2037,44 @@ class Neo4jStore(AlchemiscaleStateStore):
         Raises
         ------
         ComputeManagerNotFoundError
-            Raised when no registration matches ``compute_manager_id``.
+            Raised when no live registration matches ``compute_manager_id``.
 
         """
-
-        name, uuid = compute_manager_id.name, compute_manager_id.uuid
-
-        # get the target compute manager along with any compute
-        # services it might manage. Expected structure of output when
-        # a manager is found:
-        #
-        # With no managed services:
-        # +--------------+-----------+
-        # | csm          | csr_id    |
-        # +--------------+-----------+
-        # | <manager_id> | None      |
-        # +--------------+-----------+
-        #
-        # With N (one or more) managed services
-        # +--------------+------------------------+
-        # | csm          | csr_id                 |
-        # +--------------+------------------------+
-        # | <manager_id> | <ComputeServiceID-1>   |
-        # | <manager_id> | <ComputeServiceID-2>   |
-        # | <manager_id> | <ComputeServiceID-...> |
-        # | <manager_id> | <ComputeServiceID-N-1> |
-        # | <manager_id> | <ComputeServiceID-N>   |
-        # +--------------+------------------------+
-
-        query = """
-        MATCH (csm:ComputeManagerRegistration {name: $name,
-                                               uuid: $uuid})
-        OPTIONAL MATCH (csm)-[rel:MANAGES]->(csr:ComputeServiceRegistration)
-        RETURN csm, csr.identifier as csr_id
-        """
-
-        results = self.execute_query(query, name=name, uuid=uuid)
-
-        if len(results.records) == 0:
-            raise ComputeManagerNotFoundError(
-                f"No compute manager registered as '{compute_manager_id}'"
+        with self.transaction() as tx:
+            state = self.get_compute_manager_state(
+                compute_manager_id, expire_time, tx=tx
             )
 
-        csr_ids = []
-        for record in results.records:
-            # if the manager has managed services
-            if csr_id := record["csr_id"]:
-                csr_ids.append(ComputeServiceID(csr_id))
+            query = """
+            MATCH (csr:ComputeServiceRegistration {manager_name: $name})
+            RETURN csr.identifier as csr_id
+            """
+            records = (
+                tx.run(query, name=compute_manager_id.name).to_eager_result().records
+            )
+
+        csr_ids = [ComputeServiceID(record["csr_id"]) for record in records]
 
         if csr_ids:
             if not all(
                 self.compute_services_can_claim(csr_ids, forgive_time, max_failures)
             ):
-                return ComputeManagerInstruction.SKIP, {"compute_service_ids": csr_ids}
+                return ComputeManagerInstruction.SKIP, {
+                    "compute_service_ids": csr_ids,
+                    "state": state.to_dict(),
+                }
 
+        num_tasks = self._count_claimable_tasks(scopes, protocols)
+
+        return ComputeManagerInstruction.OK, {
+            "compute_service_ids": csr_ids,
+            "num_tasks": num_tasks,
+            "state": state.to_dict(),
+        }
+
+    def _count_claimable_tasks(self, scopes: list[Scope], protocols: list[str]) -> int:
+        """Return the number of waiting, actioned Tasks in ``scopes`` that
+        perform one of ``protocols`` (or any Protocol, if empty)."""
         # determine how many tasks are available
         tasks = []
         for scope in scopes:
@@ -2064,10 +2127,55 @@ class Neo4jStore(AlchemiscaleStateStore):
             result = self.execute_query(query, **params)
             tasks += [record["task"] for record in result.records]
 
-        return ComputeManagerInstruction.OK, {
-            "compute_service_ids": csr_ids,
-            "num_tasks": len(set(tasks)),
-        }
+        return len(set(tasks))
+
+    @staticmethod
+    def _validate_compute_manager_status(
+        status: ComputeManagerStatus | str,
+        detail: str | None,
+        saturation: float | None,
+    ) -> ComputeManagerStatus:
+        try:
+            status = ComputeManagerStatus(status)
+        except ValueError:
+            raise ValueError(f'"{status}" is not a valid ComputeManagerStatus')
+
+        match status:
+            case ComputeManagerStatus.OK:
+                if saturation is None:
+                    raise ValueError(
+                        f"saturation is required for the '{ComputeManagerStatus.OK}' status"
+                    )
+                if detail:
+                    raise ValueError(
+                        f"detail should only be provided for the "
+                        f"'{ComputeManagerStatus.DEGRADED}' and "
+                        f"'{ComputeManagerStatus.ERROR}' statuses"
+                    )
+            case ComputeManagerStatus.DEGRADED:
+                if saturation is None:
+                    raise ValueError(
+                        f"saturation is required for the '{ComputeManagerStatus.DEGRADED}' status"
+                    )
+                if not detail:
+                    raise ValueError(
+                        f"detail is required for the '{ComputeManagerStatus.DEGRADED}' status"
+                    )
+            case ComputeManagerStatus.ERROR:
+                if saturation is not None:
+                    raise ValueError(
+                        f"saturation should not be provided for the "
+                        f"'{ComputeManagerStatus.ERROR}' status"
+                    )
+                if not detail:
+                    raise ValueError(
+                        f"detail is required for the '{ComputeManagerStatus.ERROR}' status"
+                    )
+
+        if saturation is not None and not 0 <= saturation <= 1:
+            raise ValueError("saturation must be between 0 and 1")
+
+        return status
 
     def update_compute_manager_status(
         self,
@@ -2076,12 +2184,22 @@ class Neo4jStore(AlchemiscaleStateStore):
         detail: str | None = None,
         saturation: float | None = None,
         update_time: datetime.datetime | None = None,
-    ):
-        """Update the status of a compute manager.
+        expire_time: datetime.datetime | None = None,
+        state_update: ComputeManagerStateUpdate | None = None,
+    ) -> tuple[bool, ComputeManagerState]:
+        """Update the status of a compute manager, renewing its registration,
+        and merge changes into its shared state.
 
         Statuses can either be passed in as strings or instances of
         the ComputeManagerStatus enumeration, though the latter is
         safer and preferred.
+
+        The registration's last status update time and saturation are always
+        updated, and the mergeable parts of ``state_update`` always applied.
+        The status, detail and ``state_update.transition`` are a state
+        transition: if ``state_update.expected_version`` is given, they are
+        applied only if it matches the registration's version, which is then
+        incremented if anything changed.
 
         Parameters
         ----------
@@ -2091,90 +2209,211 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         status
             An instance of the ComputeManagerStatus string
-            enumeration, whose supported values are "OK" and
+            enumeration, whose supported values are "OK", "DEGRADED" and
             "ERROR".
 
         detail
             A message to be included with the status update. This is
-            only allowed and required by the ERROR status. This
-            message should indicate to administrators why the compute
-            manager entered the ERROR status.
+            required by the DEGRADED and ERROR statuses, and not allowed
+            with OK. This message should indicate to administrators why
+            the compute manager entered the status.
+
+        saturation
+            The ratio of the manager's compute services to the most it may
+            have. Required by OK and DEGRADED, and not allowed with ERROR.
 
         update_time
             The time to set as the last status update time in the
             database. Defaults to None, which will use the current
             time when updating.
 
+        expire_time
+            A registration whose last status update is older than this is
+            stale, and is treated as missing. If ``None``, registrations
+            don't go stale.
+
+        state_update
+            Changes to merge into the manager's shared state.
+
+        Returns
+        -------
+        applied
+            Whether the status and transition were applied.
+        state
+            The manager's state after the update.
+
         Raises
         ------
         ValueError
             Raised when the status, detail or saturation is invalid.
         ComputeManagerNotFoundError
-            Raised when no registration matches ``compute_manager_id``.
+            Raised when no live registration matches ``compute_manager_id``.
 
         """
-        # validate the status string/enum
-        try:
-            status = ComputeManagerStatus(status)
-        except ValueError:
-            raise ValueError(f'"{status}" is not a valid ComputeManagerStatus')
+        status = self._validate_compute_manager_status(status, detail, saturation)
+        state_update = state_update or ComputeManagerStateUpdate()
 
-        # only match to valid states
-        match status:
-            case ComputeManagerStatus.OK:
-                # OK requires saturation
-                if saturation is None:
-                    raise ValueError(
-                        f"saturation is required for the '{ComputeManagerStatus.OK}' status"
-                    )
-                # OK disallows detail
-                if detail:
-                    raise ValueError(
-                        f"detail should only be provided for the '{ComputeManagerStatus.ERROR}' status"
-                    )
-            case ComputeManagerStatus.ERROR:
-                # ERROR disallows saturation
-                if saturation is not None:
-                    raise ValueError(
-                        f"saturation should only be provided for the '{ComputeManagerStatus.OK}' status"
-                    )
-                # ERROR requires detail
-                if not detail:
-                    raise ValueError(
-                        f"detail is required for the '{ComputeManagerStatus.ERROR}' status"
-                    )
-
-        name, uuid = compute_manager_id.name, compute_manager_id.uuid
-
-        if saturation is not None:
-            if not 0 <= saturation <= 1:
-                raise ValueError("saturation must be between 0 and 1")
-
-        query = """
-        MATCH (cmr: ComputeManagerRegistration {name: $name, uuid: $uuid})
-        SET cmr.status = $status
-        SET cmr.detail = $detail
-        SET cmr.saturation = $saturation
-        SET cmr.last_status_update = datetime($update_time)
-        RETURN cmr
-        """
-
-        results = self.execute_query(
-            query,
-            uuid=uuid,
-            name=name,
-            status=status.value,
-            detail=detail,
-            saturation=saturation,
-            update_time=(
-                update_time or datetime.datetime.now(tz=datetime.UTC)
-            ).isoformat(),
+        invalid = set(state_update.transition) - (
+            ComputeManagerRegistration.TRANSITION_FIELDS - {"status", "detail"}
         )
-
-        if len(results.records) == 0:
-            raise ComputeManagerNotFoundError(
-                f"No compute manager registered as '{compute_manager_id}'"
+        if invalid:
+            raise ValueError(
+                f"Not transition fields of a compute manager registration: {sorted(invalid)}"
             )
+
+        now = update_time or datetime.datetime.now(tz=datetime.UTC)
+
+        with self.transaction() as tx:
+            registration = self._get_live_registration(
+                compute_manager_id, expire_time, lock=True, tx=tx
+            )
+
+            # state transition, under compare-and-set; a registration
+            # recreated under the same name starts its version again, so the
+            # uuid must match too
+            applied = state_update.expected_version is None or (
+                state_update.expected_version == registration.version
+                and compute_manager_id.uuid == registration.uuid
+            )
+            changes = {}
+            if applied:
+                current = registration.to_dict()
+                proposed = ComputeManagerRegistration.from_dict(
+                    current
+                    | {"status": status.value, "detail": detail}
+                    | state_update.transition
+                ).to_dict()
+                changes = {
+                    field: proposed[field]
+                    for field in ComputeManagerRegistration.TRANSITION_FIELDS
+                    if proposed[field] != current[field]
+                }
+
+            last_healthy_at = state_update.last_healthy_at
+            tx.run(
+                """
+                MATCH (cmr:ComputeManagerRegistration {name: $name})
+                WITH cmr, datetime($healthy) AS healthy
+                SET cmr += $changes,
+                    cmr.version = cmr.version + $bump,
+                    cmr.last_status_update = datetime($now),
+                    cmr.saturation = $saturation,
+                    cmr.last_healthy_at = CASE
+                        WHEN cmr.last_healthy_at IS NULL
+                          OR cmr.last_healthy_at < healthy
+                        THEN healthy ELSE cmr.last_healthy_at END,
+                    cmr.outage_started_at = CASE $outage
+                        WHEN "start"
+                        THEN coalesce(cmr.outage_started_at, datetime($now))
+                        WHEN "clear" THEN null
+                        ELSE cmr.outage_started_at END
+                """,
+                name=compute_manager_id.name,
+                changes=changes,
+                bump=1 if changes else 0,
+                now=now.isoformat(),
+                saturation=saturation,
+                healthy=last_healthy_at.isoformat() if last_healthy_at else None,
+                outage=state_update.outage,
+            )
+
+            self._merge_job_records(compute_manager_id, state_update, tx=tx)
+
+            state = self.get_compute_manager_state(compute_manager_id, tx=tx)
+
+        return applied, state
+
+    @chainable
+    def _merge_job_records(
+        self,
+        compute_manager_id: ComputeManagerID,
+        state_update: ComputeManagerStateUpdate,
+        tx=None,
+    ):
+        """Merge the job records in ``state_update`` into a registration.
+
+        Records already stored are left unchanged. A HANDLED record replaces
+        the job's ACTIVE, REGISTERED and UNREGISTERED records, and those are
+        not added for a job that is already handled. FAILURE records older
+        than the registration's ``last_healthy_at`` no longer count, and are
+        removed.
+
+        """
+        ident = compute_manager_id.to_dict()
+        transient = [
+            JobRecordKind.ACTIVE.value,
+            JobRecordKind.REGISTERED.value,
+            JobRecordKind.UNREGISTERED.value,
+        ]
+
+        def props(record: ComputeManagerJobRecord) -> dict:
+            dct = record.model_dump()
+            dct["kind"] = record.kind.value
+            for key, value in dct.items():
+                if isinstance(value, datetime.datetime):
+                    dct[key] = value.isoformat()
+            return dct
+
+        if state_update.records:
+            tx.run(
+                """
+                MATCH (cmr:ComputeManagerRegistration {name: $name})
+                UNWIND $records AS rec
+                OPTIONAL MATCH (cmr)-[:RECORDS]->(handled:ComputeManagerJobRecord
+                    {job_name: rec.job_name, kind: $handled})
+                WITH cmr, rec, handled
+                WHERE NOT (rec.kind IN $transient AND handled IS NOT NULL)
+                MERGE (cmr)-[:RECORDS]->(r:ComputeManagerJobRecord
+                    {job_name: rec.job_name, kind: rec.kind})
+                ON CREATE SET
+                    r.at = datetime(rec.at),
+                    r.submitted_at = datetime(rec.submitted_at),
+                    r.ended_at = datetime(rec.ended_at),
+                    r.failure_kind = rec.failure_kind,
+                    r.reason = rec.reason
+                """,
+                records=[props(r) for r in state_update.records],
+                handled=JobRecordKind.HANDLED.value,
+                transient=transient,
+                **ident,
+            )
+
+        handled_jobs = [
+            r.job_name for r in state_update.records if r.kind == JobRecordKind.HANDLED
+        ]
+        forget = [
+            {"job_name": job_name, "kind": kind.value}
+            for job_name, kind in state_update.forget
+        ] + [
+            {"job_name": job_name, "kind": kind}
+            for job_name in handled_jobs
+            for kind in transient
+        ]
+        if forget:
+            tx.run(
+                """
+                UNWIND $forget AS f
+                MATCH (:ComputeManagerRegistration {name: $name})
+                      -[:RECORDS]->(r:ComputeManagerJobRecord
+                          {job_name: f.job_name, kind: f.kind})
+                DETACH DELETE r
+                """,
+                forget=forget,
+                **ident,
+            )
+
+        tx.run(
+            """
+            MATCH (cmr:ComputeManagerRegistration {name: $name})
+                  -[:RECORDS]->(r:ComputeManagerJobRecord {kind: $failure})
+            WHERE cmr.last_healthy_at IS NOT NULL
+              AND r.ended_at IS NOT NULL
+              AND r.ended_at <= cmr.last_healthy_at
+            DETACH DELETE r
+            """,
+            failure=JobRecordKind.FAILURE.value,
+            **ident,
+        )
 
     ## task hubs
 
