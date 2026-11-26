@@ -1758,39 +1758,25 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Remove the compute manager registration from the statestore.
 
         Uses the name and UUID from a ComputeManagerID to deregister a
-        compute manager's registration. First, the MANAGES
-        relationship with compute services' registration are
-        removed. After this, the compute manager registration node is
-        removed as long as the registration does not have the ERROR
-        status.
+        compute manager's registration. The registration node and its
+        MANAGES relationships are removed as long as the registration does
+        not have the ERROR status. Does nothing if no registration matches.
 
         Parameters
         ----------
         compute_manager_id
             The compute manager ID string containing the name and the UUID.
 
-        Raises
-        ------
-        ComputeManagerNotFoundError
-            Raised when no registration matches ``compute_manager_id``.
-
         """
         name, uuid = compute_manager_id.name, compute_manager_id.uuid
 
         query = """
         MATCH (cmr:ComputeManagerRegistration {name: $name, uuid: $uuid})
-        WITH cmr, cmr.status AS status
-        FOREACH (_ IN CASE WHEN status <> "ERROR" THEN [1] ELSE [] END |
-            DETACH DELETE cmr
-        )
-        RETURN status
+        WHERE cmr.status <> "ERROR"
+        DETACH DELETE cmr
         """
 
-        records = self.execute_query(query, name=name, uuid=uuid).records
-        if not records:
-            raise ComputeManagerNotFoundError(
-                f"No compute manager registered as '{compute_manager_id}'"
-            )
+        self.execute_query(query, name=name, uuid=uuid)
 
     def expire_computemanager_registrations(
         self, expire_time_ok: datetime.datetime, expire_time_error: datetime.datetime
@@ -1935,11 +1921,10 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> tuple[ComputeManagerInstruction, dict]:
         """Return an instruction for a compute manager based on the contents of the statestore.
 
-        This method returns one of three instructions along with supporting data:
+        This method returns one of two instructions along with supporting data:
 
         1. "OK" with a list of ComputeServiceIDs and the number of available tasks
         2. "SKIP" with a list of ComputeServiceIDs
-        3. "SHUTDOWN" with an error message
 
         Parameters
         ----------

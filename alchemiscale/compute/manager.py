@@ -77,12 +77,7 @@ class ComputeManager:
             raise e
 
     def _deregister(self):
-        try:
-            self.client.deregister(self.compute_manager_id)
-        except ComputeManagerNotRegisteredError:
-            self.logger.warning(
-                f"'{self.compute_manager_id}' was no longer registered with the server"
-            )
+        self.client.deregister(self.compute_manager_id)
 
     @contextmanager
     def _running(self, steal=False):

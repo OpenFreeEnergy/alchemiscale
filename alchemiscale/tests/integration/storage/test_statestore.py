@@ -3861,7 +3861,6 @@ class TestNeo4jStore(TestStateStore):
             calls = [
                 lambda: n4js.get_compute_manager_id("testmanager"),
                 lambda: n4js.get_compute_manager_status(compute_manager_id),
-                lambda: n4js.deregister_computemanager(compute_manager_id),
                 lambda: n4js.clear_errored_computemanager(compute_manager_id),
                 lambda: n4js.update_compute_manager_status(
                     compute_manager_id, ComputeManagerStatus.OK, saturation=0
@@ -3873,6 +3872,9 @@ class TestNeo4jStore(TestStateStore):
             for call in calls:
                 with pytest.raises(ComputeManagerNotFoundError):
                     call()
+
+            # deregistering does nothing
+            n4js.deregister_computemanager(compute_manager_id)
 
             # register_computemanager with steal and nothing to steal
             assert n4js.register_computemanager(cmr, steal=True) == compute_manager_id

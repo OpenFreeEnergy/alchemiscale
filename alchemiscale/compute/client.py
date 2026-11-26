@@ -207,7 +207,6 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         )
         return ComputeManagerID(res)
 
-    @_not_registered_on_404
     def deregister(self, compute_manager_id: ComputeManagerID) -> ComputeManagerID:
         res = self._post_resource(
             f"/computemanager/{compute_manager_id}/deregister", {}

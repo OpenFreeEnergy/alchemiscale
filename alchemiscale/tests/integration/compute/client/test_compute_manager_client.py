@@ -255,15 +255,10 @@ class TestComputeManagerRegistrationStates:
 
     @pytest.mark.parametrize("manager_id", STATES, indirect=True)
     def test_deregister(self, compute_manager_client, manager_id):
-        state, compute_manager_id = manager_id
-        if state == "none":
-            with pytest.raises(client.ComputeManagerNotRegisteredError):
-                compute_manager_client.deregister(compute_manager_id)
-        else:
-            assert (
-                compute_manager_client.deregister(compute_manager_id)
-                == compute_manager_id
-            )
+        _, compute_manager_id = manager_id
+        assert (
+            compute_manager_client.deregister(compute_manager_id) == compute_manager_id
+        )
 
     @pytest.mark.parametrize("manager_id", STATES, indirect=True)
     def test_get_instruction(self, compute_manager_client, manager_id):
