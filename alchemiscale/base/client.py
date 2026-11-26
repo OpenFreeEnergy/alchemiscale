@@ -5,6 +5,7 @@
 """
 
 import asyncio
+from importlib.metadata import version
 import contextvars
 import threading
 import time
@@ -22,6 +23,7 @@ from diskcache import Cache
 
 import requests
 import httpx
+from packaging.version import Version
 
 from gufe.tokenization import GufeTokenizable, JSON_HANDLER
 
@@ -423,6 +425,8 @@ class AlchemiscaleBaseClient:
         self._headers = {
             "Authorization": f"Bearer {self._jwtoken}",
             "Content-type": "application/json",
+            # lets the server tell client versions apart
+            "X-Alchemiscale-Version": version("alchemiscale"),
         }
 
     def _use_token(f):
@@ -469,6 +473,8 @@ class AlchemiscaleBaseClient:
         self._headers = {
             "Authorization": f"Bearer {self._jwtoken}",
             "Content-Type": "application/json",
+            # lets the server tell client versions apart
+            "X-Alchemiscale-Version": version("alchemiscale"),
         }
 
     def _use_token_async(f):
@@ -719,6 +725,18 @@ class AlchemiscaleBaseClient:
     @_retry
     def get_info(self):
         return self._get_resource("/info")
+
+    def get_server_version(self) -> Version | None:
+        """Return the alchemiscale version of the API server.
+
+        Returns ``None`` if the server doesn't report its version, which
+        servers older than 0.9.0 don't.
+
+        """
+        server_version = self.get_info().get("version")
+        if server_version is None:
+            return None
+        return Version(server_version)
 
     @_retry
     @_use_token

@@ -6,8 +6,11 @@
 
 from abc import abstractmethod
 from contextlib import contextmanager
+from importlib.metadata import version
 import logging
 import time
+
+from packaging.version import InvalidVersion, Version
 
 from ..storage.models import (
     ComputeManagerID,
@@ -21,6 +24,16 @@ from .client import (
 )
 from .settings import ComputeManagerSettings, ComputeServiceSettings
 from ..sleep import InterruptableSleep, SleepInterrupted
+
+#: The oldest alchemiscale server this compute manager can work with.
+MIN_SERVER_VERSION = Version("0.9.0")
+# reported by a build without version information, such as a source checkout
+# without its git history
+UNKNOWN_VERSION = Version("0.0.0")
+
+
+class IncompatibleServerError(RuntimeError):
+    """Raised when the alchemiscale server is too old for this compute manager."""
 
 
 class ComputeManager:
@@ -69,6 +82,51 @@ class ComputeManager:
 
         self.logger = logging.LoggerAdapter(logger, extra)
 
+    def _check_server_version(self):
+        """Raise :class:`IncompatibleServerError` if the server is too old.
+
+        A server older than 0.9.0 doesn't report its version, and is
+        treated as too old. A client older than 0.9.0, such as a development
+        build before the release, also accepts a server at least as new as
+        itself, so that unreleased clients and servers built from the same
+        source work together. A server built without version information,
+        which reports 0.0.0, is assumed to be compatible.
+
+        """
+        # local labels (+g<hash>) differ between builds of the same commit
+        client_version = Version(Version(version("alchemiscale")).public)
+        required = min(MIN_SERVER_VERSION, client_version)
+
+        try:
+            server_version = self.client.get_server_version()
+        except InvalidVersion as e:
+            raise IncompatibleServerError(
+                f"The alchemiscale server at '{self.client.api_url}' reported "
+                f"an invalid version: {e}"
+            ) from e
+
+        if server_version == UNKNOWN_VERSION:
+            self.logger.warning(
+                f"The alchemiscale server at '{self.client.api_url}' was built "
+                "without version information; assuming it is compatible"
+            )
+            return
+
+        if server_version is None or server_version < required:
+            reported = (
+                server_version
+                if server_version is not None
+                else "older than 0.9.0, which doesn't report its version"
+            )
+            raise IncompatibleServerError(
+                f"The alchemiscale server at '{self.client.api_url}' is version "
+                f"{reported}, but this compute manager (alchemiscale "
+                f"{client_version}) requires a server of version {required} or "
+                "newer. Upgrade the server before the compute manager."
+            )
+
+        self.logger.info(f"Server version {server_version}")
+
     def _register(self, steal=False):
         try:
             self.client.register(self.compute_manager_id, steal=steal)
@@ -111,6 +169,12 @@ class ComputeManager:
 
     def start(self, max_cycles: int | None = None, steal=False):
         self.logger.info(f"Starting up compute manager '{self.settings.name}'")
+
+        try:
+            self._check_server_version()
+        except IncompatibleServerError as e:
+            self.logger.error(str(e))
+            raise
 
         with self._running(steal=steal):
             try:

@@ -36,6 +36,7 @@ dependencies:
   - bcrypt
   - starlette
   - httpx
+  - packaging
   - cryptography
 
   # openmm protocols
