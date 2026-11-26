@@ -37,7 +37,11 @@ from ..settings import (
     get_compute_api_settings,
     ComputeAPISettings,
 )
-from ..storage.statestore import Neo4jStore
+from ..storage.statestore import (
+    Neo4jStore,
+    ComputeManagerNotFoundError,
+    ComputeManagerStateError,
+)
 from ..storage.objectstore import S3ObjectStore
 from ..storage.models import (
     ProtocolDAGResultRef,
@@ -461,6 +465,18 @@ def process_compute_manager_id_string(
     return compute_manager_id
 
 
+def _compute_manager_http_exception(e: Exception) -> HTTPException:
+    """Translate a statestore error about a compute manager into an HTTPException."""
+    match e:
+        case ComputeManagerNotFoundError():
+            status_code = http_status.HTTP_404_NOT_FOUND
+        case ComputeManagerStateError():
+            status_code = http_status.HTTP_422_UNPROCESSABLE_ENTITY
+        case _:
+            status_code = http_status.HTTP_400_BAD_REQUEST
+    return HTTPException(status_code=status_code, detail=str(e))
+
+
 @router.post("/computemanager/{compute_manager_id}/register")
 def register_computemanager(
     compute_manager_id,
@@ -521,13 +537,17 @@ def get_instruction_computemanager(
 
     compute_manager_id = process_compute_manager_id_string(compute_manager_id)
     now = datetime.datetime.now(tz=datetime.UTC)
-    instruction, payload = n4js.get_computemanager_instruction(
-        compute_manager_id,
-        now - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
-        settings.ALCHEMISCALE_COMPUTE_API_MAX_FAILURES,
-        query_scopes,
-        protocols,
-    )
+    try:
+        instruction, payload = n4js.get_computemanager_instruction(
+            compute_manager_id,
+            now
+            - timedelta(seconds=settings.ALCHEMISCALE_COMPUTE_API_FORGIVE_TIME_SECONDS),
+            settings.ALCHEMISCALE_COMPUTE_API_MAX_FAILURES,
+            query_scopes,
+            protocols,
+        )
+    except ComputeManagerNotFoundError as e:
+        raise _compute_manager_http_exception(e)
     payload["instruction"] = str(instruction)
     return payload
 
@@ -556,11 +576,8 @@ def update_status_computemanager(
             now - timedelta(seconds=expire_seconds),
             now - timedelta(seconds=expire_seconds_errored),
         )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+    except (ValueError, ComputeManagerNotFoundError) as e:
+        raise _compute_manager_http_exception(e)
 
     return compute_manager_id
 
@@ -571,13 +588,22 @@ def clear_error_computemanager(
     n4js: Neo4jStore = Depends(get_n4js_depends),
 ):
     # validate that compute_manager_name is valid
-    ComputeManagerID.new_from_name(compute_manager_name)
-
-    with n4js.transaction() as tx:
-        compute_manager_id = n4js.get_compute_manager_id(
-            name=compute_manager_name, tx=tx
+    try:
+        ComputeManagerID.new_from_name(compute_manager_name)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
         )
-        n4js.clear_errored_computemanager(compute_manager_id, tx=tx)
+
+    try:
+        with n4js.transaction() as tx:
+            compute_manager_id = n4js.get_compute_manager_id(
+                name=compute_manager_name, tx=tx
+            )
+            n4js.clear_errored_computemanager(compute_manager_id, tx=tx)
+    except (ComputeManagerNotFoundError, ComputeManagerStateError) as e:
+        raise _compute_manager_http_exception(e)
 
 
 ### add router

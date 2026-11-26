@@ -78,6 +78,15 @@ def get_n4js(settings: Neo4jStoreSettings):
 class Neo4JStoreError(Exception): ...
 
 
+class ComputeManagerNotFoundError(Neo4JStoreError):
+    """Raised when no compute manager registration matches a request."""
+
+
+class ComputeManagerStateError(Neo4JStoreError):
+    """Raised when a request conflicts with a compute manager registration's
+    current state."""
+
+
 class AlchemiscaleStateStore(abc.ABC): ...
 
 
@@ -1698,13 +1707,13 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         # first check if a compute manager with the given name is
         # already registered
-        existing_registration = self.get_compute_manager_id(
+        existing_registration = self._find_compute_manager_id(
             compute_manager_registration.name
         )
 
         if steal and existing_registration:
             self.deregister_computemanager(existing_registration)
-            existing_registration = self.get_compute_manager_id(
+            existing_registration = self._find_compute_manager_id(
                 compute_manager_registration.name
             )
 
@@ -1749,11 +1758,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         """Remove the compute manager registration from the statestore.
 
         Uses the name and UUID from a ComputeManagerID to deregister a
-        compute manager's registration. First, the MANAGES
-        relationship with compute services' registration are
-        removed. After this, the compute manager registration node is
-        removed as long as the registration does not have the ERROR
-        status.
+        compute manager's registration. The registration node and its
+        MANAGES relationships are removed as long as the registration does
+        not have the ERROR status. Does nothing if no registration matches.
 
         Parameters
         ----------
@@ -1815,7 +1822,8 @@ class Neo4jStore(AlchemiscaleStateStore):
         results = self.execute_query(query, **params)
 
     @chainable
-    def get_compute_manager_id(self, name: str, tx=None):
+    def _find_compute_manager_id(self, name: str, tx=None) -> ComputeManagerID | None:
+        """Return the ID registered under ``name``, or ``None`` if there is none."""
         query = """
         MATCH (cmr:ComputeManagerRegistration {name: $name})
         RETURN cmr.uuid AS uuid
@@ -1823,12 +1831,38 @@ class Neo4jStore(AlchemiscaleStateStore):
         records = tx.run(query, name=name).to_eager_result().records
         if not records:
             return None
-        result = records[0]
-        uuid = result["uuid"]
+        uuid = records[0]["uuid"]
         return ComputeManagerID(f"{name}-{uuid}")
 
     @chainable
-    def get_compute_manager_status(self, compute_manager_id: ComputeManagerID, tx=None):
+    def get_compute_manager_id(self, name: str, tx=None) -> ComputeManagerID:
+        """Return the ID of the compute manager registered under ``name``.
+
+        Raises
+        ------
+        ComputeManagerNotFoundError
+            Raised when no compute manager is registered under ``name``.
+
+        """
+        compute_manager_id = self._find_compute_manager_id(name, tx=tx)
+        if compute_manager_id is None:
+            raise ComputeManagerNotFoundError(
+                f"No compute manager registered with name '{name}'"
+            )
+        return compute_manager_id
+
+    @chainable
+    def get_compute_manager_status(
+        self, compute_manager_id: ComputeManagerID, tx=None
+    ) -> ComputeManagerStatus:
+        """Return the status of the given compute manager registration.
+
+        Raises
+        ------
+        ComputeManagerNotFoundError
+            Raised when no registration matches ``compute_manager_id``.
+
+        """
         query = """
         MATCH (cmr:ComputeManagerRegistration {name: $name, uuid: $uuid})
         RETURN cmr.status as status
@@ -1839,9 +1873,10 @@ class Neo4jStore(AlchemiscaleStateStore):
             .records
         )
         if not records:
-            return None
-        result = records[0]
-        return ComputeManagerStatus(result["status"])
+            raise ComputeManagerNotFoundError(
+                f"No compute manager registered as '{compute_manager_id}'"
+            )
+        return ComputeManagerStatus(records[0]["status"])
 
     @chainable
     def clear_errored_computemanager(
@@ -1857,25 +1892,24 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         Raises
         ------
-        ValueError
-            Raised when the ERROR compute manager cannot be found in
-            the database
+        ComputeManagerNotFoundError
+            Raised when no registration matches ``compute_manager_id``.
+        ComputeManagerStateError
+            Raised when the registration does not have the ERROR status.
         """
+        status = self.get_compute_manager_status(compute_manager_id, tx=tx)
+        if status != ComputeManagerStatus.ERROR:
+            raise ComputeManagerStateError(
+                f"Compute manager '{compute_manager_id}' has status {status}, not "
+                f"{ComputeManagerStatus.ERROR}"
+            )
 
         query = """
-        MATCH (cmr:ComputeManagerRegistration {name: $name, uuid: $uuid, status: $status})
+        MATCH (cmr:ComputeManagerRegistration {name: $name, uuid: $uuid})
         DETACH DELETE cmr
-        RETURN cmr
         """
 
-        results = tx.run(
-            query, status=ComputeManagerStatus.ERROR, **compute_manager_id.to_dict()
-        ).to_eager_result()
-
-        if not results.records:
-            raise ValueError(
-                "Could not find an ERROR compute manager with the provided name and UUID"
-            )
+        tx.run(query, **compute_manager_id.to_dict())
 
     def get_computemanager_instruction(
         self,
@@ -1887,11 +1921,10 @@ class Neo4jStore(AlchemiscaleStateStore):
     ) -> tuple[ComputeManagerInstruction, dict]:
         """Return an instruction for a compute manager based on the contents of the statestore.
 
-        This method returns one of three instructions along with supporting data:
+        This method returns one of two instructions along with supporting data:
 
         1. "OK" with a list of ComputeServiceIDs and the number of available tasks
         2. "SKIP" with a list of ComputeServiceIDs
-        3. "SHUTDOWN" with an error message
 
         Parameters
         ----------
@@ -1921,6 +1954,11 @@ class Neo4jStore(AlchemiscaleStateStore):
         A tuple with whose first value is the instruction enumeration
         and whose second value is data associated with that
         instruction.
+
+        Raises
+        ------
+        ComputeManagerNotFoundError
+            Raised when no registration matches ``compute_manager_id``.
 
         """
 
@@ -1957,10 +1995,10 @@ class Neo4jStore(AlchemiscaleStateStore):
 
         results = self.execute_query(query, name=name, uuid=uuid)
 
-        # no compute manager was found the given name and UUID, issue a SHUTDOWN
         if len(results.records) == 0:
-            msg = "no compute manager was found with the given manager name and UUID"
-            return ComputeManagerInstruction.SHUTDOWN, {"message": msg}
+            raise ComputeManagerNotFoundError(
+                f"No compute manager registered as '{compute_manager_id}'"
+            )
 
         csr_ids = []
         for record in results.records:
@@ -2067,6 +2105,13 @@ class Neo4jStore(AlchemiscaleStateStore):
             database. Defaults to None, which will use the current
             time when updating.
 
+        Raises
+        ------
+        ValueError
+            Raised when the status, detail or saturation is invalid.
+        ComputeManagerNotFoundError
+            Raised when no registration matches ``compute_manager_id``.
+
         """
         # validate the status string/enum
         try:
@@ -2127,8 +2172,9 @@ class Neo4jStore(AlchemiscaleStateStore):
         )
 
         if len(results.records) == 0:
-            msg = f"No record for ComputeManager: {compute_manager_id}"
-            raise ValueError(msg)
+            raise ComputeManagerNotFoundError(
+                f"No compute manager registered as '{compute_manager_id}'"
+            )
 
     ## task hubs
 

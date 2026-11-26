@@ -13,7 +13,11 @@ from gufe import AlchemicalNetwork
 from gufe.tokenization import TOKENIZABLE_REGISTRY
 from gufe.protocols.protocoldag import execute_DAG
 
-from alchemiscale.storage.statestore import Neo4jStore
+from alchemiscale.storage.statestore import (
+    Neo4jStore,
+    ComputeManagerNotFoundError,
+    ComputeManagerStateError,
+)
 from alchemiscale.storage.cypher import cypher_list_from_scoped_keys
 from alchemiscale.storage.models import (
     TaskHub,
@@ -3835,13 +3839,45 @@ class TestNeo4jStore(TestStateStore):
             n4js.clear_errored_computemanager(compute_manager_id)
             assert not self.confirm_is_registered(n4js, compute_manager_id)
 
-            # Attempt to clear the manager again, even though we know
-            # it's not present. This will raise a ValueError.
-            with pytest.raises(
-                ValueError,
-                match="Could not find an ERROR compute manager with the provided name and UUID",
-            ):
+            # clearing a manager that isn't registered
+            with pytest.raises(ComputeManagerNotFoundError):
                 n4js.clear_errored_computemanager(compute_manager_id)
+
+            # clearing a manager without the ERROR status
+            n4js.register_computemanager(cmr)
+            with pytest.raises(ComputeManagerStateError, match="has status OK"):
+                n4js.clear_errored_computemanager(compute_manager_id)
+            assert self.confirm_is_registered(n4js, compute_manager_id)
+
+        def test_missing_registration(self, n4js: Neo4jStore, scope_test: Scope):
+            """Every method that needs a registration raises
+            ComputeManagerNotFoundError when there is none."""
+            cmr: ComputeManagerRegistration = (
+                self.compute_manager_registration_from_name("testmanager")
+            )
+            compute_manager_id = cmr.to_compute_manager_id()
+            now = datetime.datetime.now(tz=datetime.UTC)
+
+            calls = [
+                lambda: n4js.get_compute_manager_id("testmanager"),
+                lambda: n4js.get_compute_manager_status(compute_manager_id),
+                lambda: n4js.clear_errored_computemanager(compute_manager_id),
+                lambda: n4js.update_compute_manager_status(
+                    compute_manager_id, ComputeManagerStatus.OK, saturation=0
+                ),
+                lambda: n4js.get_computemanager_instruction(
+                    compute_manager_id, now, 3, [scope_test], []
+                ),
+            ]
+            for call in calls:
+                with pytest.raises(ComputeManagerNotFoundError):
+                    call()
+
+            # deregistering does nothing
+            n4js.deregister_computemanager(compute_manager_id)
+
+            # register_computemanager with steal and nothing to steal
+            assert n4js.register_computemanager(cmr, steal=True) == compute_manager_id
 
         def test_get_instruction(
             self, n4js: Neo4jStore, scope_test: Scope, network_tyk2: AlchemicalNetwork
@@ -3942,13 +3978,10 @@ class TestNeo4jStore(TestStateStore):
                 "num_tasks": 5,
             }
 
-            # an unregistered compute service is instructed to shutdown
+            # an unregistered compute manager gets no instruction
             n4js.deregister_computemanager(compute_manager_id)
-            instruction, data = get_instruction(forgive_seconds=0)
-            assert instruction == ComputeManagerInstruction.SHUTDOWN
-            assert data == {
-                "message": "no compute manager was found with the given manager name and UUID"
-            }
+            with pytest.raises(ComputeManagerNotFoundError):
+                get_instruction(forgive_seconds=0)
 
         def test_update_status(self, n4js: Neo4jStore):
 
@@ -3958,9 +3991,7 @@ class TestNeo4jStore(TestStateStore):
             compute_manager_id = cmr.to_compute_manager_id()
 
             # attempt to update the status before registering
-            with pytest.raises(
-                ValueError, match=f"No record for ComputeManager: {compute_manager_id}"
-            ):
+            with pytest.raises(ComputeManagerNotFoundError):
                 n4js.update_compute_manager_status(
                     compute_manager_id,
                     ComputeManagerStatus.OK,

@@ -5,6 +5,8 @@
 
 """
 
+from functools import wraps
+
 import zstandard as zstd
 
 from gufe import Transformation
@@ -172,9 +174,30 @@ class AlchemiscaleComputeClient(AlchemiscaleBaseClient):
 class AlchemiscaleComputeManagerClientError(AlchemiscaleBaseClientError): ...
 
 
+class ComputeManagerNotRegisteredError(AlchemiscaleComputeManagerClientError):
+    """Raised when the server has no registration for a compute manager."""
+
+
+def _not_registered_on_404(f):
+    @wraps(f)
+    def _wrapper(self, *args, **kwargs):
+        try:
+            return f(self, *args, **kwargs)
+        except AlchemiscaleComputeManagerClientError as e:
+            if e.status_code == 404:
+                raise ComputeManagerNotRegisteredError(
+                    *e.args, status_code=e.status_code
+                ) from e
+            raise
+
+    return _wrapper
+
+
 class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
 
     _exception = AlchemiscaleComputeManagerClientError
+    # a 404 means the manager isn't registered, which retrying won't change
+    _retry_status_codes = [502, 503, 504]
 
     def register(
         self, compute_manager_id: ComputeManagerID, steal: bool = False
@@ -190,6 +213,7 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
         )
         return ComputeManagerID(res)
 
+    @_not_registered_on_404
     def get_instruction(
         self,
         scopes: list[Scope],
@@ -223,6 +247,7 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
                     f"Received unknown instruction pattern: {instruction_data}"
                 )
 
+    @_not_registered_on_404
     def update_status(
         self,
         compute_manager_id: ComputeManagerID,
@@ -239,6 +264,7 @@ class AlchemiscaleComputeManagerClient(AlchemiscaleBaseClient):
 
         return ComputeManagerID(res)
 
+    @_not_registered_on_404
     def clear_error(self, compute_manager_name: str):
         res = self._post_resource(
             f"/computemanager/{compute_manager_name}/clear_error",

@@ -204,13 +204,15 @@ Compute managers
 Compute manager are dedicated services responsible for creating new compute services in response to the workload present on the statestore.
 These services are designed to loosely manage compute services and are assumed to be unable to communicate with their created services by default.
 This requires that created compute services are short-lived and deregister themselves appropriately.
-Information of existing services and current workload is reported to the manager through an instruction request through the compute API. Managers expect one of three instructions from the alchemiscale:
+Information of existing services and current workload is reported to the manager through an instruction request through the compute API. Managers expect one of two instructions from alchemiscale:
 
 1. ``OK``: the manager may allocate compute resources
 2. ``SKIP``: the manager should take no action
-3. ``SHUTDOWN``: the manager should shut down
 
-In the case of the OK or the SKIP instruction, a manager is expected to provide a status update to the compute API.
+After either instruction, a manager is expected to provide a status update to the compute API.
+
+The compute manager endpoints return a 404 when the manager isn't registered, and a 422 when the request conflicts with the registration's state, for example clearing the error of a manager that doesn't have the ``ERROR`` status.
+A manager that receives a 404 while requesting an instruction shuts down.
 The status can either be:
 
 1. ``OK``: the manager is working as expected, requires a saturation value (ratio of active services to the maximum number of services allowed by the manager)
