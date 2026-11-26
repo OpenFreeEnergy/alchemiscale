@@ -3816,7 +3816,8 @@ class TestNeo4jStore(TestStateStore):
             cmr_2 = self.compute_manager_registration_from_name("testmanager")
             id_2 = n4js.register_computemanager(
                 cmr_2,
-                expire_time=datetime.datetime.now(tz=datetime.UTC) + timedelta(seconds=1),
+                expire_time=datetime.datetime.now(tz=datetime.UTC)
+                + timedelta(seconds=1),
             )
             assert id_2 == cmr_2.to_compute_manager_id()
             assert len(services(id_2)) == 3
@@ -4249,6 +4250,166 @@ class TestNeo4jStore(TestStateStore):
             )
             assert self.confirm_is_registered(n4js, compute_manager_id)
 
+        def test_error_history(self, n4js: Neo4jStore):
+            cmr = self.compute_manager_registration_from_name("testmanager")
+            compute_manager_id = n4js.register_computemanager(cmr)
+
+            def update(status, detail=None, saturation=None):
+                n4js.update_compute_manager_status(
+                    compute_manager_id,
+                    status,
+                    detail=detail,
+                    saturation=saturation,
+                    error_history=3,
+                )
+
+            # errors are recorded when the status or detail changes, not on
+            # every update
+            update(ComputeManagerStatus.DEGRADED, "paused 1", 0)
+            update(ComputeManagerStatus.DEGRADED, "paused 1", 0)
+            update(ComputeManagerStatus.OK, saturation=0)
+            update(ComputeManagerStatus.DEGRADED, "paused 2", 0)
+            update(ComputeManagerStatus.DEGRADED, "paused 3", 0)
+            update(ComputeManagerStatus.ERROR, "exited")
+
+            # only the most recent are kept, most recent first
+            errors = n4js.get_compute_manager_errors("testmanager")
+            assert [(e.status, e.detail) for e in errors] == [
+                ("ERROR", "exited"),
+                ("DEGRADED", "paused 3"),
+                ("DEGRADED", "paused 2"),
+            ]
+
+            # errors outlive the registration
+            n4js.register_computemanager(
+                self.compute_manager_registration_from_name("testmanager"),
+                expire_time=datetime.datetime.now(tz=datetime.UTC)
+                + timedelta(seconds=1),
+            )
+            assert len(n4js.get_compute_manager_errors("testmanager")) == 3
+
+            overview = n4js.get_compute_manager_overview("testmanager")
+            assert overview["state"]["registration"]["status"] == "OK"
+            assert not overview["expired"]
+            assert len(overview["errors"]) == 3
+
+            n4js.expire_computemanager_registrations(
+                datetime.datetime.now(tz=datetime.UTC) + timedelta(seconds=1)
+            )
+            overview = n4js.get_compute_manager_overview("testmanager")
+            assert overview["state"] is None
+            assert len(overview["errors"]) == 3
+
+        def test_events(self, n4js: Neo4jStore):
+            cmr = self.compute_manager_registration_from_name("testmanager")
+            compute_manager_id = n4js.register_computemanager(cmr)
+
+            def update(event, expected_version):
+                return n4js.update_compute_manager_status(
+                    compute_manager_id,
+                    ComputeManagerStatus.OK,
+                    saturation=0,
+                    state_update=ComputeManagerStateUpdate(
+                        transition={"probation_started_at": None},
+                        expected_version=expected_version,
+                        events=[event],
+                    ),
+                )[0]
+
+            # events are recorded only with a transition that applies, so
+            # instances racing on one transition record it once
+            assert update("Probe passed", 0)
+            assert not update("Probe passed", 99)
+            errors = n4js.get_compute_manager_errors("testmanager")
+            assert [(e.status, e.detail) for e in errors] == [("OK", "Probe passed")]
+
+            # entries recorded together keep their order, and are trimmed in it
+            n4js.update_compute_manager_status(
+                compute_manager_id,
+                ComputeManagerStatus.DEGRADED,
+                detail="paused",
+                saturation=0,
+                state_update=ComputeManagerStateUpdate(events=["first", "second"]),
+                error_history=3,
+            )
+            errors = n4js.get_compute_manager_errors("testmanager")
+            assert [e.detail for e in errors] == ["second", "first", "paused"]
+
+        @pytest.mark.parametrize("by", ["expiry", "register"])
+        def test_pause_reset_noted(self, n4js: Neo4jStore, by):
+            cmr = self.compute_manager_registration_from_name("testmanager")
+            compute_manager_id = n4js.register_computemanager(cmr)
+            n4js.update_compute_manager_status(
+                compute_manager_id, ComputeManagerStatus.DEGRADED, "paused", 0
+            )
+            later = datetime.datetime.now(tz=datetime.UTC) + timedelta(seconds=1)
+            if by == "expiry":
+                n4js.expire_computemanager_registrations(later)
+            else:
+                n4js.register_computemanager(
+                    self.compute_manager_registration_from_name("testmanager"),
+                    expire_time=later,
+                )
+
+            latest = n4js.get_compute_manager_errors("testmanager")[0]
+            assert latest.status == "DEGRADED"
+            assert "pause state was reset" in latest.detail
+            assert "paused" in latest.detail
+
+            # an OK registration expiring isn't noted
+            n4js.expire_computemanager_registrations(
+                datetime.datetime.now(tz=datetime.UTC) + timedelta(seconds=1)
+            )
+            assert n4js.get_compute_manager_errors("testmanager")[0] == latest
+
+        def test_overview_failure_count(self, n4js: Neo4jStore):
+            cmr = self.compute_manager_registration_from_name("testmanager")
+            compute_manager_id = n4js.register_computemanager(cmr)
+            assert (
+                n4js.get_compute_manager_overview("othermanager")["failure_count"]
+                is None
+            )
+            assert (
+                n4js.get_compute_manager_overview("testmanager")["failure_count"] == 0
+            )
+
+            now = datetime.datetime.now(tz=datetime.UTC)
+            records = [
+                self.record(
+                    f"testmanager.{name}",
+                    JobRecordKind.FAILURE,
+                    ended_at=now - timedelta(minutes=minutes),
+                    failure_kind=kind,
+                )
+                for name, minutes, kind in [
+                    ("old", 30, "WORKLOAD"),
+                    ("a", 5, "WORKLOAD"),
+                    ("b", 4, "WORKLOAD"),
+                    ("infra", 3, "INFRASTRUCTURE"),
+                ]
+            ]
+            n4js.update_compute_manager_status(
+                compute_manager_id,
+                ComputeManagerStatus.OK,
+                saturation=0,
+                state_update=ComputeManagerStateUpdate(
+                    records=records, last_healthy_at=now - timedelta(minutes=10)
+                ),
+            )
+            assert (
+                n4js.get_compute_manager_overview("testmanager")["failure_count"] == 2
+            )
+
+        def test_overview_expired(self, n4js: Neo4jStore):
+            cmr = self.compute_manager_registration_from_name("testmanager")
+            n4js.register_computemanager(cmr)
+            overview = n4js.get_compute_manager_overview(
+                "testmanager",
+                expire_time=datetime.datetime.now(tz=datetime.UTC)
+                + timedelta(seconds=1),
+            )
+            assert overview["expired"]
+
         def test_state_merge(self, n4js: Neo4jStore):
             cmr = self.compute_manager_registration_from_name("testmanager")
             compute_manager_id = n4js.register_computemanager(cmr)
@@ -4325,7 +4486,8 @@ class TestNeo4jStore(TestStateStore):
             cmr_2 = self.compute_manager_registration_from_name("testmanager")
             id_2 = n4js.register_computemanager(
                 cmr_2,
-                expire_time=datetime.datetime.now(tz=datetime.UTC) + timedelta(seconds=1),
+                expire_time=datetime.datetime.now(tz=datetime.UTC)
+                + timedelta(seconds=1),
             )
             assert not n4js.get_compute_manager_state(id_2).records
             assert not n4js.execute_query(

@@ -405,6 +405,101 @@ def synchronous(config_file, name, compute_manager_id):
         pass
 
 
+@compute.group(help="Subcommands for inspecting compute managers")
+def manager(): ...
+
+
+def compute_api_client_params(func):
+    api_url = click.option(
+        "--api-url",
+        type=str,
+        envvar="ALCHEMISCALE_URL",
+        help="URL of the compute API [env: ALCHEMISCALE_URL]",
+        required=True,
+    )
+    identifier = click.option(
+        "--identifier",
+        type=str,
+        envvar="ALCHEMISCALE_ID",
+        help="Identifier of the compute identity [env: ALCHEMISCALE_ID]",
+        required=True,
+    )
+    key = click.option(
+        "--key",
+        type=str,
+        envvar="ALCHEMISCALE_KEY",
+        help="Key of the compute identity [env: ALCHEMISCALE_KEY]",
+        required=True,
+    )
+    return api_url(identifier(key(func)))
+
+
+def _format_compute_manager_status(status: dict) -> str:
+    lines = [f"Compute manager '{status['name']}'"]
+
+    state = status["state"]
+    if state is None:
+        lines.append("  not registered")
+    else:
+        reg = state.registration
+        expired = " (expired)" if status["expired"] else ""
+        lines.append(f"  status:             {reg.status}{expired}")
+        if reg.detail:
+            lines.append(f"  detail:             {reg.detail}")
+        if reg.saturation is not None:
+            lines.append(f"  saturation:         {reg.saturation:.2f}")
+        lines.append(f"  registered:         {reg.registered.isoformat()}")
+        if reg.identities:
+            lines.append(f"  identities:         {', '.join(reg.identities)}")
+        if status.get("failure_count") is not None:
+            lines.append(f"  failed jobs:        {status['failure_count']}")
+        lines.append(f"  last status update: {reg.last_status_update.isoformat()}")
+        for field in [
+            "last_healthy_at",
+            "outage_started_at",
+            "pause_cause",
+            "backoff_until",
+            "probe_job",
+            "probation_started_at",
+        ]:
+            value = getattr(reg, field)
+            if value is not None:
+                if hasattr(value, "isoformat"):
+                    value = value.isoformat()
+                lines.append(f"  {field + ':':<19} {value}")
+
+    if status["errors"]:
+        lines.append("Recent errors and events, most recent first:")
+        for error in status["errors"]:
+            lines.append(f"  [{error.time.isoformat()}] {error.status}: {error.detail}")
+    else:
+        lines.append("No recent errors or events")
+
+    return "\n".join(lines)
+
+
+@manager.command(help="Show a compute manager's registration and recent errors.")
+@click.argument("name")
+@compute_api_client_params
+@click.option("--json", "as_json", is_flag=True, help="Print the result as JSON")
+def status(name, api_url, identifier, key, as_json):
+    from .compute.client import AlchemiscaleComputeManagerClient
+
+    client = AlchemiscaleComputeManagerClient(
+        api_url, identifier, key, use_local_cache=False
+    )
+    result = client.get_status(name)
+
+    if as_json:
+        result["state"] = (
+            result["state"].to_dict() if result["state"] is not None else None
+        )
+        result["errors"] = [error.to_dict() for error in result["errors"]]
+        click.echo(json.dumps(result, indent=2))
+    else:
+        click.echo(_format_compute_manager_status(result))
+
+
 @cli.group(help="Subcommands for the database")
 def database(): ...
 

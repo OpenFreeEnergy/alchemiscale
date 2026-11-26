@@ -119,6 +119,7 @@ v0.8 to v0.9
 ============
 ``alchemiscale`` v0.9 shares one ``ComputeManagerRegistration`` between all instances of a compute manager with the same name, and adds a uniqueness constraint on registration names.
 This change requires a migration on the state store, which also prepares registrations left over from v0.8, including those with the ``ERROR`` status, to be joined by v0.9 compute managers.
+The detail of each ``ERROR`` registration is copied into the manager's error history, where ``alchemiscale compute manager status`` can read it.
 
 Compute managers from v0.9 refuse to start against an older server, so upgrade in this order:
 
@@ -144,6 +145,8 @@ To roll the server back to v0.8, stop the API services, delete compute manager r
     MATCH (n) WHERE n:ComputeManagerRegistration OR n:ComputeManagerJobRecord
     DETACH DELETE n;
     DROP CONSTRAINT compute_manager_registration_name IF EXISTS;
+
+Error history, stored as ``ComputeManagerError`` nodes, is ignored by v0.8, and can be kept.
 
 v0.3 to v0.4
 ============

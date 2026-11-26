@@ -7,7 +7,7 @@
 from functools import lru_cache
 import logging
 
-from pydantic import model_validator
+from pydantic import NonNegativeInt, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -90,6 +90,8 @@ class ComputeAPISettings(BaseAPISettings):
     # ``sleep_interval``, since it is how long a replacement for a killed
     # manager starts from scratch rather than joining its state
     ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS: int = 3600
+    # number of recent errors kept for each compute manager name
+    ALCHEMISCALE_COMPUTE_API_MANAGER_ERROR_HISTORY: NonNegativeInt = 20
     # deprecated and unused: ERROR registrations expire like any other
     ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR: int = 86400
 

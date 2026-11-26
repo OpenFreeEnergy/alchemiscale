@@ -192,6 +192,28 @@ class ComputeManagerRegistration(BaseModel):
         return ComputeManagerID("-".join([self.name, self.uuid]))
 
 
+class ComputeManagerError(BaseModel):
+    """An entry in a compute manager's error history, kept by name
+    independently of its registration.
+
+    Besides errors, the history records events in the manager's pause and
+    recovery, such as a probe passing, with the status reported alongside.
+
+    """
+
+    name: str
+    time: datetime.datetime
+    status: str
+    detail: str
+
+    def to_dict(self):
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, dct):
+        return cls.model_validate(dct)
+
+
 class JobRecordKind(StrEnum):
     """Kinds of :class:`ComputeManagerJobRecord`."""
 
@@ -276,6 +298,9 @@ class ComputeManagerStateUpdate(BaseModel):
     #: the registration ``version`` the transition was decided from;
     #: ``None`` applies the status unconditionally
     expected_version: int | None = None
+    #: descriptions of events in the manager's pause and recovery, recorded
+    #: in its error history if the transition is applied
+    events: list[str] = []
 
     def to_dict(self):
         return self.model_dump(mode="json")

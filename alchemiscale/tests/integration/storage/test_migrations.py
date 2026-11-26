@@ -82,8 +82,13 @@ def test_v08_to_v09(n4jstore_settings):
         assert not n4js.execute_query("MATCH ()-[rel:MANAGES]->() RETURN rel").records
         assert n4js.check() is None
 
+        # the ERROR registration's detail is in the error history
+        errors = n4js.get_compute_manager_errors("errored")
+        assert [(e.status, e.detail) for e in errors] == [("ERROR", "broken")]
+
         # running it again changes nothing
         v08_to_v09.migrate(n4js)
+        assert len(n4js.get_compute_manager_errors("errored")) == 1
         assert (
             len(
                 n4js.execute_query(
