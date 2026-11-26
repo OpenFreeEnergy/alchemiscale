@@ -214,7 +214,7 @@ The status can be:
 
 1. ``OK``: the manager is working as expected, requires a saturation value (ratio of active services to the maximum number of services allowed by the manager)
 2. ``DEGRADED``: the manager has paused creating compute services, but keeps running; requires a saturation value and a detail string explaining why
-3. ``ERROR``: the manager experienced an error and will shut down locally, requires a detail string explaining why the ``ERROR`` state was entered
+3. ``ERROR``: deprecated; compute managers before v0.9 reported it when they shut down after an error, with a detail string explaining why
 
 Currently, these supporting data are only used by administrators for introspection, though this might change in the future.
 
@@ -234,11 +234,13 @@ The compute API finds a registration by the manager's name alone: the UUID in a 
 The identities that created or joined a registration are recorded in its ``identities``.
 
 Everything stored on a registration, including its job records and pause state, goes when it expires.
-A compute service may start while its manager's registration is missing, for instance while it is being recreated; the service registers anyway, and is attached to the registration once there is one.
+A compute service may start while its manager's registration is missing, for instance while it is being recreated; the service registers anyway, and belongs to the registration once there is one, since services belong to the registration under their manager's name.
 
 A manager that exits deregisters, but the shared registration is left to expire, since other instances may still be renewing it.
 Deregistering therefore always succeeds, whether or not the registration exists.
 The ``ERROR`` status never prevents a manager from registering, so ``clear_error`` and ``steal`` are no longer needed; both are deprecated, and will be removed in a future release, as will ``ALCHEMISCALE_COMPUTE_API_MANAGER_EXPIRE_SECONDS_ERROR``, which no longer has any effect.
+``steal`` is ignored: registering with it joins a live registration like any other.
+The compute API logs a warning whenever either is used, or the setting is set.
 
 The compute manager endpoints return a 404 when the manager isn't registered, and a 422 when the request conflicts with the registration's state.
 
@@ -281,8 +283,11 @@ Capacity is the number of distinct names across pending and running jobs and reg
 A batch system such as SLURM keeps reporting finished jobs for a while.
 The names of handled jobs are kept on the shared registration, so each terminal job is handled once, by whichever instance sees it first.
 A job that disappears without being seen in a terminal state has an unknown outcome: it is logged, and counts as neither a failure nor a sign of health.
+If it is listed again still pending or running, as when the batch system's accounting lags behind, it is treated as active again rather than removed.
+A handled job's name is kept until the job is no longer listed, or, with a ``finished_job_lookback``, until the lookback has passed since it ended.
 
 A sign of health is a job that succeeded after its compute service was seen registered.
+The server records a compute service registering on its manager's shared registration, so a service that registers and finishes between two cycles is still seen.
 A job that fails with a ``WORKLOAD`` failure (non-zero exit, out of memory) is recorded as a failure; an ``INFRASTRUCTURE`` failure (preemption, a lost node) is recorded, but never counts against the manager.
 A failure the backend can't classify is treated as ``WORKLOAD``.
 Each failure's reason says whether the job failed before or after its compute service registered, which tells a broken template from, say, a GPU lost mid-run.
@@ -301,11 +306,12 @@ A backend implements:
     Check settings and templates at startup. Raising :class:`~alchemiscale.compute.backend.PermanentBackendError` exits the manager.
 
 ``list_jobs()``
-    Return this manager's jobs, read from the batch system, as :class:`~alchemiscale.compute.backend.Job` s with their state, ``submitted_at``, ``started_at`` and ``ended_at``, and for failures a :class:`~alchemiscale.compute.backend.FailureKind`.
+    Return this manager's jobs, read from the batch system, as :class:`~alchemiscale.compute.backend.Job` s with their state, ``submitted_at``, ``started_at`` and ``ended_at`` (timezone-aware), and for failures a :class:`~alchemiscale.compute.backend.FailureKind`.
     Pick out the manager's jobs with :func:`~alchemiscale.compute.backend.is_own_job_name`, rather than keeping them in memory.
 
 ``submit(name)``
     Submit a job named ``name`` that starts a compute service with that name, and with ``compute_manager_id`` set to the backend's ``compute_manager_id`` attribute.
+    A batch system that can't use the name as given, such as Kubernetes, can submit under a derived name, keep ``name`` in the job's metadata, and report it as the job's name.
 
 ``remove(job)``
     Remove a job from the batch system, cancelling it if it is still running.

@@ -11,7 +11,7 @@ from importlib.metadata import version
 import logging
 import time
 
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 
 from ..storage.models import (
     ComputeManagerID,
@@ -43,6 +43,9 @@ from ..sleep import InterruptableSleep, SleepInterrupted
 
 #: The oldest alchemiscale server this compute manager can work with.
 MIN_SERVER_VERSION = Version("0.9.0")
+# reported by a build without version information, such as a source checkout
+# without its git history
+UNKNOWN_VERSION = Version("0.0.0")
 
 
 class IncompatibleServerError(RuntimeError):
@@ -150,15 +153,32 @@ class ComputeManager:
         """Raise :class:`IncompatibleServerError` if the server is too old.
 
         A server older than 0.9.0 doesn't report its version, and is
-        treated as too old. A development build of this client also
-        accepts a server at least as new as itself, so that unreleased
-        clients and servers built from the same source work together.
+        treated as too old. A client older than 0.9.0, such as a development
+        build before the release, also accepts a server at least as new as
+        itself, so that unreleased clients and servers built from the same
+        source work together. A server built without version information,
+        which reports 0.0.0, is assumed to be compatible.
 
         """
-        client_version = Version(version("alchemiscale"))
+        # local labels (+g<hash>) differ between builds of the same commit
+        client_version = Version(Version(version("alchemiscale")).public)
         required = min(MIN_SERVER_VERSION, client_version)
 
-        server_version = self.client.get_server_version()
+        try:
+            server_version = self.client.get_server_version()
+        except InvalidVersion as e:
+            raise IncompatibleServerError(
+                f"The alchemiscale server at '{self.client.api_url}' reported "
+                f"an invalid version: {e}"
+            ) from e
+
+        if server_version == UNKNOWN_VERSION:
+            self.logger.warning(
+                f"The alchemiscale server at '{self.client.api_url}' was built "
+                "without version information; assuming it is compatible"
+            )
+            return
+
         if server_version is None or server_version < required:
             reported = (
                 server_version
@@ -185,8 +205,23 @@ class ComputeManager:
             self.logger.error(f"Registration failed: '{e}'")
             raise e
 
-        if compute_manager_id != self.compute_manager_id:
-            self.logger.info(f"Using registration '{compute_manager_id}'")
+        self._adopt(compute_manager_id)
+
+    def _register_again(self):
+        # the registration expired, for example after a network partition;
+        # join or recreate it, and carry on next cycle
+        self.logger.warning(
+            f"'{self.compute_manager_id}' is no longer registered with the "
+            "server; registering again"
+        )
+        self._register()
+
+    def _adopt(self, compute_manager_id: ComputeManagerID):
+        """Use the ID of the registration this manager belongs to, which
+        changes when another instance replaces an expired registration."""
+        if compute_manager_id == self.compute_manager_id:
+            return
+        self.logger.info(f"Using registration '{compute_manager_id}'")
         self.compute_manager_id = compute_manager_id
         self.service_settings.compute_manager_id = compute_manager_id
         self.backend.compute_manager_id = compute_manager_id
@@ -194,12 +229,7 @@ class ComputeManager:
             self.logger.extra["compute_manager_id"] = compute_manager_id
 
     def _deregister(self):
-        try:
-            self.client.deregister(self.compute_manager_id)
-        except ComputeManagerNotRegisteredError:
-            self.logger.warning(
-                f"'{self.compute_manager_id}' was no longer registered with the server"
-            )
+        self.client.deregister(self.compute_manager_id)
 
     @contextmanager
     def _running(self, steal=False):
@@ -352,13 +382,7 @@ class ComputeManager:
                 self.compute_manager_id,
             )
         except ComputeManagerNotRegisteredError:
-            # the registration expired, for example after a network partition;
-            # join or recreate it, and carry on next cycle
-            self.logger.warning(
-                f"'{self.compute_manager_id}' is no longer registered with the "
-                "server; registering again"
-            )
-            self._register()
+            self._register_again()
             return True
 
         if instruction == ComputeManagerInstruction.SHUTDOWN:
@@ -366,6 +390,7 @@ class ComputeManager:
             return False
 
         state: ComputeManagerState = data["state"]
+        self._adopt(state.registration.to_compute_manager_id())
         num_tasks = data.get("num_tasks", 0)
         registered = {
             ComputeServiceID(csid).name for csid in data["compute_service_ids"]
@@ -399,7 +424,6 @@ class ComputeManager:
         update.records += reconciliation.records
         update.forget += reconciliation.forget
         update.last_healthy_at = reconciliation.last_healthy_at
-        update.prune_handled_before = self._prune_handled_before(now)
 
         in_use = active | registered
 
@@ -416,9 +440,14 @@ class ComputeManager:
         elif reconciliation.pending:
             self.logger.info("Jobs are still pending; not submitting")
 
-        self._post_state(
-            ComputeManagerStatus.OK, None, self._saturation(len(in_use)), update
-        )
+        try:
+            self._post_state(
+                ComputeManagerStatus.OK, None, self._saturation(len(in_use)), update
+            )
+        except ComputeManagerNotRegisteredError:
+            # the outcomes weren't stored, so the jobs stay to be handled again
+            self._register_again()
+            return True
 
         # remove jobs only now that their outcomes are stored
         self._remove(reconciliation.to_remove)
@@ -450,10 +479,6 @@ class ComputeManager:
             )
         return applied, state
 
-    def _prune_handled_before(self, now) -> datetime.datetime | None:
-        lookback = self.backend.finished_job_lookback
-        return now - lookback if lookback is not None else None
-
     def _reconcile(
         self,
         jobs: list[Job],
@@ -470,6 +495,7 @@ class ComputeManager:
         """
         result = Reconciliation()
         handled = state.records_of(JobRecordKind.HANDLED)
+        failed = state.records_of(JobRecordKind.FAILURE)
         recorded_active = state.records_of(JobRecordKind.ACTIVE)
         seen_registered = state.records_of(JobRecordKind.REGISTERED)
         unregistered = state.records_of(JobRecordKind.UNREGISTERED)
@@ -477,10 +503,15 @@ class ComputeManager:
 
         for job in jobs:
             if job.name in handled:
-                # already handled; removing again is harmless, and finishes a
-                # removal that failed or a job cancelled for not registering
-                result.to_remove.append(job)
-                continue
+                if job.state.terminal or job.name in failed:
+                    # removing again is harmless, and finishes a removal that
+                    # failed or a job cancelled for not registering
+                    result.to_remove.append(job)
+                    continue
+                # a live job missing from one listing, as when the batch
+                # system's accounting lags, was taken to have disappeared
+                self.logger.info(f"Job '{job.name}' is listed again; still active")
+                result.forget.append((job.name, JobRecordKind.HANDLED))
 
             if job.state.terminal:
                 self._handle_terminal(
@@ -527,12 +558,17 @@ class ComputeManager:
                 )
                 result.record(name, JobRecordKind.HANDLED, now, ended_at=now)
 
-        # without a lookback, a removed job is gone for good, and its handled
-        # record is no longer needed
-        if self.backend.finished_job_lookback is None:
-            result.forget += [
-                (name, JobRecordKind.HANDLED) for name in handled if name not in listed
-            ]
+        # a handled job's record is needed while the backend may still list
+        # it: until it's gone, without a lookback, or for the lookback after
+        # it ended
+        lookback = self.backend.finished_job_lookback
+        for name, record in handled.items():
+            if (
+                name not in listed
+                if lookback is None
+                else (record.ended_at or record.at) < now - lookback
+            ):
+                result.forget.append((name, JobRecordKind.HANDLED))
 
         return result
 
@@ -544,7 +580,6 @@ class ComputeManager:
         now: datetime.datetime,
     ):
         ended_at = job.ended_at or now
-        reason = f": {job.reason}" if job.reason else ""
 
         match job.state:
             case JobState.SUCCEEDED if seen_registered:
@@ -565,7 +600,7 @@ class ComputeManager:
                     if seen_registered
                     else "before its compute service registered"
                 )
-                reason = f" {after}" + (f": {job.reason}" if job.reason else "")
+                reason = f"{after}: {job.reason}" if job.reason else after
                 record = ComputeManagerJobRecord(
                     job_name=job.name,
                     kind=JobRecordKind.FAILURE,
@@ -573,15 +608,15 @@ class ComputeManager:
                     submitted_at=job.submitted_at,
                     ended_at=ended_at,
                     failure_kind=kind.value,
-                    reason=f"{after}: {job.reason}" if job.reason else after,
+                    reason=reason,
                 )
                 result.records.append(record)
                 if kind == FailureKind.WORKLOAD:
-                    self.logger.warning(f"Job '{job.name}' failed{reason}")
+                    self.logger.warning(f"Job '{job.name}' failed {reason}")
                     result.workload_failures.append(record)
                 else:
                     self.logger.info(
-                        f"Job '{job.name}' failed{reason}; the failure is outside "
+                        f"Job '{job.name}' failed {reason}; the failure is outside "
                         "its control, and isn't counted"
                     )
 

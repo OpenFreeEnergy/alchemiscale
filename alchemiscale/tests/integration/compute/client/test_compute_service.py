@@ -353,8 +353,8 @@ class TestSynchronousComputeService:
 
     def test_missing_compute_manager(self, n4js_preloaded, service):
         # a service may start while its manager's registration is being
-        # recreated after expiring; it registers, and is attached once the
-        # manager registers again
+        # recreated after expiring; it registers, and belongs to the
+        # registration once the manager registers again
         compute_manager_id = ComputeManagerID.new_from_name("testmanager")
         service.settings.compute_manager_id = compute_manager_id
         service._register()
@@ -370,12 +370,10 @@ class TestSynchronousComputeService:
                 saturation=0,
             )
         )
-        managed = n4js_preloaded.execute_query("""
-            MATCH (:ComputeManagerRegistration {name: "testmanager"})
-                  -[:MANAGES]->(csr:ComputeServiceRegistration)
-            RETURN csr.identifier AS identifier
-            """).records
-        assert [r["identifier"] for r in managed] == [str(service.compute_service_id)]
+        _, data = n4js_preloaded.get_computemanager_instruction(
+            compute_manager_id, now, 3, [Scope()], []
+        )
+        assert data["compute_service_ids"] == [service.compute_service_id]
 
     def test_start_non_stop_exit_stops_heartbeat_thread(
         self, compute_client, tmpdir, monkeypatch

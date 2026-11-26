@@ -40,7 +40,12 @@ class FailureKind(StrEnum):
 
 @dataclass
 class Job:
-    """A job of a compute manager, as reported by its backend."""
+    """A job of a compute manager, as reported by its backend.
+
+    Times are timezone-aware; convert naive times reported by the batch
+    system, such as those from ``sacct``, to UTC.
+
+    """
 
     name: str
     state: JobState
@@ -103,8 +108,8 @@ class ComputeBackend(ABC):
     #: ends, or ``None`` if :meth:`remove` deletes it (e.g. Kubernetes).
     finished_job_lookback: timedelta | None = None
 
-    #: The ID of the manager's registration, set by the manager before each
-    #: cycle; pass it to the compute services a job starts, as their
+    #: The ID of the manager's registration, kept up to date by the manager;
+    #: pass it to the compute services a job starts, as their
     #: ``compute_manager_id``.
     compute_manager_id: str | None = None
 
@@ -131,7 +136,10 @@ class ComputeBackend(ABC):
         """Submit a job named ``name`` that starts a compute service
         registering under ``name``.
 
-        Submitting a name that is already submitted does nothing.
+        Submitting a name that is already submitted does nothing. If the batch
+        system can't use ``name`` as given, as Kubernetes object names, which
+        must be lowercase, can't, submit under a name derived from it, keep
+        ``name`` in the job's metadata, and report it as :attr:`Job.name`.
 
         """
 
